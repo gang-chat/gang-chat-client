@@ -1,10 +1,20 @@
 import 'dart:io';
 
+import 'android_system_service.dart';
+
 class ExternalUriLauncher {
-  const ExternalUriLauncher();
+  const ExternalUriLauncher({
+    this.androidSystemService = const AndroidSystemService(),
+  });
+
+  final AndroidSystemService androidSystemService;
 
   Future<void> open(Uri uri) async {
     final value = uri.toString();
+    if (androidSystemService.isSupported) {
+      await androidSystemService.openUri(uri);
+      return;
+    }
     if (Platform.isWindows) {
       await Process.start('rundll32', ['url.dll,FileProtocolHandler', value]);
       return;

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import '../app/live_presence_announcement.dart';
+import 'android_system_service.dart';
 
 /// Free local TTS backed by the operating system's installed voices.
 ///
@@ -12,9 +13,11 @@ import '../app/live_presence_announcement.dart';
 class SystemLivePresenceSpeechPlayer implements LivePresenceSpeechPlayer {
   SystemLivePresenceSpeechPlayer({
     this.pause = const Duration(milliseconds: 280),
+    this.androidSystemService = const AndroidSystemService(),
   });
 
   final Duration pause;
+  final AndroidSystemService androidSystemService;
   bool _disposed = false;
 
   @override
@@ -36,6 +39,12 @@ class SystemLivePresenceSpeechPlayer implements LivePresenceSpeechPlayer {
         await _speakOnMacOS(segments);
       } else if (Platform.isLinux) {
         await _speakOnLinux(segments);
+      } else if (Platform.isAndroid) {
+        await androidSystemService.speak(
+          segments: segments,
+          volume: volume,
+          pause: pause,
+        );
       }
     } catch (_) {
       // Presence speech is best-effort and must never interrupt live controls.
@@ -130,5 +139,10 @@ for ($index = 0; $index -lt $segments.Count; $index++) {
   @override
   Future<void> dispose() async {
     _disposed = true;
+    if (!kIsWeb && Platform.isAndroid) {
+      try {
+        await androidSystemService.disposeSpeech();
+      } catch (_) {}
+    }
   }
 }

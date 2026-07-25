@@ -495,15 +495,43 @@ public class GetUserMediaImpl {
                                 resultError("screenRequestPermissions", "User didn't give permission to capture the screen.", result);
                                 return;
                             }
-                            getDisplayMedia(result, mediaStream, mediaProjectionData);
+                            getDisplayMediaAfterForegroundService(
+                                    result, mediaStream, mediaProjectionData);
                         }
                     });
         } else {
-            getDisplayMedia(result, mediaStream, mediaProjectionData);
+            getDisplayMediaAfterForegroundService(
+                    result, mediaStream, mediaProjectionData);
         }
     }
 
-    private void getDisplayMedia(final Result result, final MediaStream mediaStream, final Intent mediaProjectionData) {
+    private void getDisplayMediaAfterForegroundService(
+            final Result result,
+            final MediaStream mediaStream,
+            final Intent mediaProjectionData) {
+        ScreenCaptureForegroundService.start(
+                applicationContext,
+                started -> {
+                    if (!started) {
+                        resultError(
+                                "getDisplayMedia",
+                                "The media-projection foreground service did not start.",
+                                result);
+                        return;
+                    }
+                    if (GetUserMediaImpl.this.mediaProjectionData == mediaProjectionData) {
+                        // Android 14 treats each consent token as single-use.
+                        // Force a fresh system prompt for the next share.
+                        GetUserMediaImpl.this.mediaProjectionData = null;
+                    }
+                    getDisplayMedia(result, mediaStream, mediaProjectionData);
+                });
+    }
+
+    private void getDisplayMedia(
+            final Result result,
+            final MediaStream mediaStream,
+            final Intent mediaProjectionData) {
         /* Create ScreenCapture */
         VideoTrack displayTrack = null;
         VideoCapturer videoCapturer = null;

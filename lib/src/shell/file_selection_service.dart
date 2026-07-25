@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart' as file_selector;
 
+import 'android_system_service.dart';
+
 class FileTypeGroup {
   const FileTypeGroup({required this.label, required this.extensions});
 
@@ -56,13 +58,20 @@ class SelectedFile {
 }
 
 class SaveFileLocation {
-  const SaveFileLocation({required this.path});
+  const SaveFileLocation({required this.path, this.documentUri});
 
   final String path;
+  final String? documentUri;
+
+  bool get requiresCommit => documentUri != null;
 }
 
 class FileSelectionService {
-  const FileSelectionService();
+  const FileSelectionService({
+    this.androidSystemService = const AndroidSystemService(),
+  });
+
+  final AndroidSystemService androidSystemService;
 
   Future<SelectedFile?> openFile({
     List<FileTypeGroup> acceptedTypeGroups = const [],
@@ -91,6 +100,18 @@ class FileSelectionService {
     List<FileTypeGroup> acceptedTypeGroups = const [],
     String? confirmButtonText,
   }) async {
+    if (androidSystemService.isSupported) {
+      final location = await androidSystemService.createDocument(
+        suggestedName: suggestedName,
+        mimeType: _mimeTypeForSuggestedName(suggestedName),
+      );
+      return location == null
+          ? null
+          : SaveFileLocation(
+              path: location.stagingPath,
+              documentUri: location.uri,
+            );
+    }
     final location = acceptedTypeGroups.isEmpty
         ? await file_selector.getSaveLocation(
             suggestedName: suggestedName,
@@ -120,6 +141,54 @@ class FileSelectionService {
       name: filename,
     ).saveTo(path);
   }
+
+  Future<void> saveBytesToLocation({
+    required Uint8List bytes,
+    required SaveFileLocation location,
+    required String filename,
+    String? mimeType,
+  }) async {
+    final documentUri = location.documentUri;
+    if (documentUri != null) {
+      await androidSystemService.writeDocumentBytes(
+        uri: documentUri,
+        bytes: bytes,
+      );
+      return;
+    }
+    await saveBytesToPath(
+      bytes: bytes,
+      path: location.path,
+      filename: filename,
+      mimeType: mimeType,
+    );
+  }
+
+  Future<void> commitLocation(SaveFileLocation location) async {
+    final documentUri = location.documentUri;
+    if (documentUri == null) return;
+    await androidSystemService.commitDocumentFile(
+      uri: documentUri,
+      stagingPath: location.path,
+    );
+  }
+
+  Future<void> discardLocation(SaveFileLocation location) async {
+    if (!location.requiresCommit) return;
+    await androidSystemService.discardDocumentFile(location.path);
+  }
+
+  Future<String?> saveBytesToDownloads({
+    required Uint8List bytes,
+    required String filename,
+    String? mimeType,
+  }) {
+    return androidSystemService.saveToDownloads(
+      filename: filename,
+      bytes: bytes,
+      mimeType: mimeType ?? _mimeTypeForSuggestedName(filename),
+    );
+  }
 }
 
 List<file_selector.XTypeGroup> _selectorTypeGroups(List<FileTypeGroup> groups) {
@@ -131,4 +200,22 @@ List<file_selector.XTypeGroup> _selectorTypeGroups(List<FileTypeGroup> groups) {
         ),
       )
       .toList(growable: false);
+}
+
+String _mimeTypeForSuggestedName(String filename) {
+  final extension = filename.split('.').last.toLowerCase();
+  return switch (extension) {
+    'png' => 'image/png',
+    'jpg' || 'jpeg' => 'image/jpeg',
+    'webp' => 'image/webp',
+    'gif' => 'image/gif',
+    'zip' => 'application/zip',
+    'mp3' => 'audio/mpeg',
+    'm4a' => 'audio/mp4',
+    'wav' => 'audio/wav',
+    'mp4' => 'video/mp4',
+    'pdf' => 'application/pdf',
+    'txt' => 'text/plain',
+    _ => 'application/octet-stream',
+  };
 }

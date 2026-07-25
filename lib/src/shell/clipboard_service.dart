@@ -3,6 +3,8 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 
+import 'android_system_service.dart';
+
 class ClipboardImageFile {
   const ClipboardImageFile({
     required this.bytes,
@@ -16,7 +18,11 @@ class ClipboardImageFile {
 }
 
 class ClipboardService {
-  const ClipboardService();
+  const ClipboardService({
+    this.androidSystemService = const AndroidSystemService(),
+  });
+
+  final AndroidSystemService androidSystemService;
 
   static const _clipboardFilesChannel = MethodChannel('gang_chat/clipboard');
 
@@ -31,6 +37,16 @@ class ClipboardService {
   }
 
   Future<ClipboardImageFile?> readImageFile() async {
+    if (androidSystemService.isSupported) {
+      final image = await androidSystemService.readClipboardImage();
+      return image == null
+          ? null
+          : ClipboardImageFile(
+              bytes: image.bytes,
+              filename: image.filename,
+              mimeType: image.mimeType,
+            );
+    }
     if (kIsWeb || !(Platform.isWindows || Platform.isMacOS)) return null;
     final result = await _clipboardFilesChannel
         .invokeMapMethod<Object?, Object?>('readImageFile');
@@ -83,6 +99,12 @@ class ClipboardService {
     Uint8List bytes, {
     String mimeType = 'image/png',
   }) async {
+    if (androidSystemService.isSupported) {
+      return androidSystemService.writeClipboardImage(
+        bytes: bytes,
+        mimeType: mimeType,
+      );
+    }
     if (kIsWeb || !(Platform.isWindows || Platform.isMacOS)) return false;
     if (bytes.isEmpty) return false;
     final result = await _clipboardFilesChannel.invokeMethod<bool>(

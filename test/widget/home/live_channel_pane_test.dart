@@ -1168,7 +1168,7 @@ void main() {
     expect(revealOpacity(volumeReveal).opacity, 0);
 
     await hover.moveTo(tester.getCenter(viewersReveal));
-    await tester.pump(const Duration(milliseconds: 180));
+    await tester.pump();
     expect(revealOpacity(labelReveal).opacity, 1);
     expect(revealOpacity(viewersReveal).opacity, 1);
     expect(revealOpacity(exitReveal).opacity, 1);
@@ -1186,6 +1186,74 @@ void main() {
     expect(exitCount, 1);
     await hover.removePointer();
   });
+
+  testWidgets(
+    'full screen controls appear immediately and restart timeout on touch',
+    (tester) async {
+      liveVideoTrackRendererForTest = (track, fit, mirrorLocal) {
+        return const ColoredBox(color: Colors.black);
+      };
+      addTearDown(resetLiveVideoTrackRendererForTest);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ui.uiTheme(),
+          home: LiveFullScreenStage(
+            track: _liveVideoTrack(
+              identity: 'phabe',
+              isScreenShare: true,
+              isLocal: false,
+            ),
+            label: 'Phabe 的屏幕共享',
+            screenShareViewers: [_currentUser.toSummary()],
+            screenShareVolume: 0.75,
+            onScreenShareVolumeChanged: (_) {},
+            onScreenShareMuteToggled: () {},
+            onExit: () {},
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final labelReveal = find.byKey(
+        const ValueKey<String>('live-fullscreen-stage:label-reveal'),
+      );
+      double opacity() => tester
+          .widget<AnimatedOpacity>(
+            find.descendant(
+              of: labelReveal,
+              matching: find.byType(AnimatedOpacity),
+            ),
+          )
+          .opacity;
+
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pump(const Duration(milliseconds: 180));
+      expect(opacity(), 0);
+
+      final touch = await tester.startGesture(
+        tester.getCenter(find.byType(LiveFullScreenStage)),
+        kind: PointerDeviceKind.touch,
+      );
+      await tester.pump();
+      expect(opacity(), 1);
+
+      await tester.pump(const Duration(milliseconds: 2500));
+      await touch.moveBy(const Offset(12, 8));
+      await tester.pump();
+      expect(opacity(), 1);
+
+      await tester.pump(const Duration(milliseconds: 2500));
+      expect(opacity(), 1);
+
+      await touch.up();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 2900));
+      expect(opacity(), 1);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(opacity(), 0);
+    },
+  );
 
   testWidgets('full screen camera label and exit fully auto-hide', (
     tester,

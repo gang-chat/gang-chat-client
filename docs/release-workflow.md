@@ -126,9 +126,48 @@ the workflow input.
 The keystore itself must never be committed; Android keystore file extensions
 and `key.properties` are already ignored by `android/.gitignore`.
 
+### Android offline notifications
+
+The release APK enables Firebase Cloud Messaging only when this repository
+secret is configured:
+
+- `FIREBASE_GOOGLE_SERVICES_JSON_BASE64`: base64-encoded Firebase Android
+  `google-services.json` for package `com.gangchat.client`.
+
+The workflow validates the package name, writes the configuration only for the
+Android build, and removes it during cleanup. If the secret is absent, the APK
+still builds and all foreground/background realtime behavior remains available,
+but notifications cannot wake a terminated process through FCM.
+
+The server needs the matching Firebase project ID and a service-account JSON
+with permission to send FCM HTTP v1 messages:
+
+```json
+{
+  "fcm_project_id": "your-firebase-project-id",
+  "fcm_service_account_file": "/secure/gang-chat-firebase-service-account.json"
+}
+```
+
+Keep the service-account file outside the repository. Restart the server after
+changing either value. Empty values leave offline push disabled without
+affecting chat message delivery.
+
+FCM registration does not create a realtime connection and therefore does not
+mark an account online. Closing the Android process keeps the device
+registration; choosing **退出登录** removes it. The server also binds each
+registration to its login session and ignores revoked or expired sessions.
+
+FCM requires Google Play services. Mainland OPPO devices without Google
+services need an OPPO Push provider implementation and OPPO application
+credentials before process-terminated delivery can work on those devices; the
+server/device registration boundary is provider-aware so that provider can be
+added without changing room-message logic.
+
 ## Secret handling
 
-PFX, P12, App Store Connect P8, Android keystore files, and their passwords must
-be kept outside the repository and backed up in an access-controlled secret
-manager. The private-key file patterns are ignored by Git as a final safeguard,
-but repository ignore rules are not a replacement for secret management.
+PFX, P12, App Store Connect P8, Android keystore files, Firebase service-account
+files, and their passwords must be kept outside the repository and backed up in
+an access-controlled secret manager. The private-key file patterns are ignored
+by Git as a final safeguard, but repository ignore rules are not a replacement
+for secret management.

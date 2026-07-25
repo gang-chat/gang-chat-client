@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'android_system_service.dart';
+
 class FeedbackMailDraft {
   const FeedbackMailDraft({
     required this.from,
@@ -23,7 +25,11 @@ class FeedbackMailDraft {
 }
 
 class FeedbackMailService {
-  const FeedbackMailService();
+  const FeedbackMailService({
+    this.androidSystemService = const AndroidSystemService(),
+  });
+
+  final AndroidSystemService androidSystemService;
 
   Future<void> openDraft(FeedbackMailDraft draft) {
     return openMailto(draft.toMailtoUri());
@@ -31,6 +37,10 @@ class FeedbackMailService {
 
   Future<void> openMailto(Uri uri) async {
     final value = uri.toString();
+    if (androidSystemService.isSupported) {
+      await androidSystemService.openMailto(uri);
+      return;
+    }
     if (Platform.isWindows) {
       await Process.start('rundll32', ['url.dll,FileProtocolHandler', value]);
       return;

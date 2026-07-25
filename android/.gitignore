@@ -12,3 +12,6 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# Injected by local/CI Firebase configuration; never commit project config.
+/app/google-services.json

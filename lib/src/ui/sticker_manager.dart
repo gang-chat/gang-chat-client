@@ -651,9 +651,9 @@ class _StickerManagerPanelState extends State<StickerManagerPanel> {
         );
         return;
       }
-      await widget.fileSelectionService.saveBytesToPath(
+      await widget.fileSelectionService.saveBytesToLocation(
         bytes: file.bytes,
-        path: location.path,
+        location: location,
         filename: file.filename,
         mimeType: file.mimeType,
       );

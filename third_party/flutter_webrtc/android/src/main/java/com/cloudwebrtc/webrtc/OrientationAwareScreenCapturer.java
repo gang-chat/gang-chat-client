@@ -46,6 +46,7 @@ public class OrientationAwareScreenCapturer implements VideoCapturer, VideoSink 
     private boolean isDisposed = false;
     private MediaProjectionManager mediaProjectionManager;
     private WindowManager windowManager;
+    private Context applicationContext;
     private boolean isPortrait;
 
     /**
@@ -102,6 +103,7 @@ public class OrientationAwareScreenCapturer implements VideoCapturer, VideoSink 
             throw new RuntimeException("surfaceTextureHelper not set.");
         }
         this.surfaceTextureHelper = surfaceTextureHelper;
+        this.applicationContext = applicationContext.getApplicationContext();
 
         this.windowManager = (WindowManager) applicationContext.getSystemService(
                 Context.WINDOW_SERVICE);
@@ -123,8 +125,13 @@ public class OrientationAwareScreenCapturer implements VideoCapturer, VideoSink 
             this.width = height;
         }
 
-        mediaProjection = mediaProjectionManager.getMediaProjection(
-                Activity.RESULT_OK, mediaProjectionPermissionResultData);
+        try {
+            mediaProjection = mediaProjectionManager.getMediaProjection(
+                    Activity.RESULT_OK, mediaProjectionPermissionResultData);
+        } catch (RuntimeException error) {
+            ScreenCaptureForegroundService.stop(applicationContext);
+            throw error;
+        }
 
         // Let MediaProjection callback use the SurfaceTextureHelper thread.
         mediaProjection.registerCallback(mediaProjectionCallback, surfaceTextureHelper.getHandler());
@@ -153,6 +160,7 @@ public class OrientationAwareScreenCapturer implements VideoCapturer, VideoSink 
                     mediaProjection.stop();
                     mediaProjection = null;
                 }
+                ScreenCaptureForegroundService.stop(applicationContext);
             }
         });
     }
@@ -160,6 +168,9 @@ public class OrientationAwareScreenCapturer implements VideoCapturer, VideoSink 
     @Override
     public synchronized void dispose() {
         isDisposed = true;
+        if (applicationContext != null) {
+            ScreenCaptureForegroundService.stop(applicationContext);
+        }
     }
 
     /**

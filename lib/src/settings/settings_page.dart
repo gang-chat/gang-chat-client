@@ -36,6 +36,7 @@ import '../protocol/api_client.dart';
 import '../protocol/models.dart';
 import '../protocol/sticker_pack_store.dart';
 import '../shell/clipboard_service.dart';
+import '../shell/android_system_service.dart';
 import '../shell/app_update_gate.dart';
 import '../shell/desktop_window_controller.dart';
 import '../shell/email_verification_flow.dart';
@@ -82,6 +83,7 @@ class SettingsPage extends StatefulWidget {
     this.clipboardService = const ClipboardService(),
     this.fileSelectionService = const FileSelectionService(),
     this.feedbackMailService = const FeedbackMailService(),
+    this.androidSystemService = const AndroidSystemService(),
     this.autoUpdatePromptStore = const LocalAutoUpdatePromptStore(),
     this.installInfoService = const InstallInfoService(),
     this.releaseUpdateService = const ReleaseUpdateService(),
@@ -117,6 +119,7 @@ class SettingsPage extends StatefulWidget {
   final ClipboardService clipboardService;
   final FileSelectionService fileSelectionService;
   final FeedbackMailService feedbackMailService;
+  final AndroidSystemService androidSystemService;
   final AutoUpdatePromptStore autoUpdatePromptStore;
   final InstallInfoService installInfoService;
   final ReleaseUpdateService releaseUpdateService;
@@ -144,7 +147,8 @@ class SettingsPage extends StatefulWidget {
   State<SettingsPage> createState() => _SettingsPageState();
 }
 
-class _SettingsPageState extends State<SettingsPage> {
+class _SettingsPageState extends State<SettingsPage>
+    with WidgetsBindingObserver {
   final _usernameController = TextEditingController();
   final _displayNameController = TextEditingController();
   final _bioController = TextEditingController();
@@ -204,6 +208,9 @@ class _SettingsPageState extends State<SettingsPage> {
   String? _updateDownloadError;
   bool _openingFeedbackMail = false;
   bool _autoPromptUpdates = defaultAutoUpdatePromptEnabled;
+  bool _androidNotificationPreferenceEnabled = true;
+  bool _androidNotificationsAvailable = false;
+  bool _savingAndroidNotifications = false;
   String _lastUpdateDate = installTimeLabel(null);
   Timer? _usernameAvailabilityDebounce;
   int _usernameAvailabilityRequestId = 0;
@@ -284,6 +291,9 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void initState() {
     super.initState();
+    if (widget.androidSystemService.isSupported) {
+      WidgetsBinding.instance.addObserver(this);
+    }
     _user = widget.currentUser;
     _syncUserFields(widget.currentUser);
     _section = widget.initialAppUpdate == null
@@ -291,6 +301,7 @@ class _SettingsPageState extends State<SettingsPage> {
         : SettingsSection.about;
     _availableAppUpdate = widget.initialAppUpdate;
     unawaited(_loadCloseBehavior());
+    unawaited(_loadAndroidNotificationSettings());
     unawaited(_loadAutoUpdatePrompt());
     unawaited(_loadInstallDate());
     unawaited(_loadAccount());
@@ -322,6 +333,9 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   void dispose() {
+    if (widget.androidSystemService.isSupported) {
+      WidgetsBinding.instance.removeObserver(this);
+    }
     unawaited(_stopInputTest(updateState: false));
     unawaited(_stopOutputTest(updateState: false));
     _usernameAvailabilityDebounce?.cancel();
@@ -338,6 +352,14 @@ class _SettingsPageState extends State<SettingsPage> {
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        widget.androidSystemService.isSupported) {
+      unawaited(_loadAndroidNotificationSettings());
+    }
   }
 
   void _syncUserFields(CurrentUser? user) {
@@ -685,6 +707,71 @@ class _SettingsPageState extends State<SettingsPage> {
         _aboutError = '读取自动提示更新失败';
         _markFloatingNoticeEvent('aboutError', _aboutError);
       });
+    }
+  }
+
+  Future<void> _loadAndroidNotificationSettings() async {
+    if (!widget.androidSystemService.isSupported || _isManagingUser) return;
+    try {
+      final values = await Future.wait<bool>([
+        widget.androidSystemService.notificationPreferenceEnabled(),
+        widget.androidSystemService.notificationsEnabled(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _androidNotificationPreferenceEnabled = values[0];
+        _androidNotificationsAvailable = values[1];
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _setAndroidNotificationsEnabled(bool enabled) async {
+    if (_savingAndroidNotifications) return;
+    setState(() => _savingAndroidNotifications = true);
+    try {
+      await widget.androidSystemService.setNotificationPreferenceEnabled(
+        enabled,
+      );
+      var available = false;
+      if (enabled) {
+        available = await widget.androidSystemService
+            .requestNotificationPermission();
+      }
+      if (!mounted) return;
+      setState(() {
+        _androidNotificationPreferenceEnabled = enabled;
+        _androidNotificationsAvailable = available;
+      });
+      final registration = await widget.androidSystemService.pushRegistration();
+      final api = widget.api;
+      if (registration != null && api != null) {
+        await api.upsertPushDevice(
+          provider: registration.provider,
+          installationId: registration.installationId,
+          token: registration.token,
+          enabled: enabled,
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      showFloatingErrorNotice(
+        context,
+        userFacingErrorMessage(error, fallback: '修改系统通知失败'),
+      );
+    } finally {
+      if (mounted) setState(() => _savingAndroidNotifications = false);
+    }
+  }
+
+  Future<void> _openAndroidNotificationSettings() async {
+    try {
+      await widget.androidSystemService.openNotificationSettings();
+    } catch (error) {
+      if (!mounted) return;
+      showFloatingErrorNotice(
+        context,
+        userFacingErrorMessage(error, fallback: '无法打开系统通知设置'),
+      );
     }
   }
 
@@ -1076,7 +1163,10 @@ class _SettingsPageState extends State<SettingsPage> {
         await _loadAccount();
         break;
       case SettingsSection.preferences:
-        await _loadCloseBehavior();
+        await Future.wait<void>([
+          _loadCloseBehavior(),
+          _loadAndroidNotificationSettings(),
+        ]);
         break;
       case SettingsSection.stickers:
         await _loadStickers(forceReload: true);
@@ -2201,9 +2291,9 @@ class _SettingsPageState extends State<SettingsPage> {
         );
         return;
       }
-      await widget.fileSelectionService.saveBytesToPath(
+      await widget.fileSelectionService.saveBytesToLocation(
         bytes: downloaded.bytes,
-        path: location.path,
+        location: location,
         filename: downloaded.filename,
         mimeType: downloaded.mimeType,
       );
@@ -3024,6 +3114,15 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
     );
     try {
+      if (widget.androidSystemService.isSupported) {
+        try {
+          await widget.androidSystemService.requestBluetoothConnectPermission();
+        } catch (_) {
+          // Keep the built-in speaker/microphone list available even when the
+          // user declines nearby-device access.
+        }
+        if (!mounted) return;
+      }
       // macOS reports no audio inputs through flutter_webrtc until a room is
       // joined; LiveAudioDeviceService.enumerateDevices merges the native
       // CoreAudio input list in, so the picker is populated without a room.
@@ -3641,48 +3740,95 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Widget _buildPreferencesContent() {
     final unavailable = !_settingsController.hasApi || _user == null;
+    final androidNotifications =
+        widget.androidSystemService.isSupported && !_isManagingUser;
     return SettingsList(
       children: [
-        _SettingsGroup(
-          title: '关闭方式',
-          trailing: _savingCloseBehavior || _loadingCloseBehavior
-              ? const SizedBox.square(
-                  dimension: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: _cyan,
-                  ),
-                )
-              : null,
-          children: [
-            _SegmentedSetting(
-              key: const ValueKey('settings-close-behavior-segmented'),
-              label: '关闭方式',
-              value: _closeBehavior.storageValue,
-              options: CloseBehavior.values
-                  .map(
-                    (behavior) => _SegmentOption(
-                      value: behavior.storageValue,
-                      label: closeBehaviorLabel(behavior),
+        if (!widget.androidSystemService.isSupported)
+          _SettingsGroup(
+            title: '关闭方式',
+            trailing: _savingCloseBehavior || _loadingCloseBehavior
+                ? const SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: _cyan,
                     ),
                   )
-                  .toList(growable: false),
-              onChanged: _setCloseBehavior,
-              enabled: !_isManagingUser,
-            ),
-            const SizedBox(height: 10),
-            Text(
-              _isManagingUser
-                  ? '该设置仅保存在用户设备，无法远程读取'
-                  : closeBehaviorDescription(_closeBehavior),
-              style: const TextStyle(
-                color: _textSecondary,
-                fontSize: 13,
-                height: 1.45,
+                : null,
+            children: [
+              _SegmentedSetting(
+                key: const ValueKey('settings-close-behavior-segmented'),
+                label: '关闭方式',
+                value: _closeBehavior.storageValue,
+                options: CloseBehavior.values
+                    .map(
+                      (behavior) => _SegmentOption(
+                        value: behavior.storageValue,
+                        label: closeBehaviorLabel(behavior),
+                      ),
+                    )
+                    .toList(growable: false),
+                onChanged: _setCloseBehavior,
+                enabled: !_isManagingUser,
               ),
-            ),
-          ],
-        ),
+              const SizedBox(height: 10),
+              Text(
+                _isManagingUser
+                    ? '该设置仅保存在用户设备，无法远程读取'
+                    : closeBehaviorDescription(_closeBehavior),
+                style: const TextStyle(
+                  color: _textSecondary,
+                  fontSize: 13,
+                  height: 1.45,
+                ),
+              ),
+            ],
+          ),
+        if (androidNotifications)
+          _SettingsGroup(
+            title: '系统通知',
+            trailing: _savingAndroidNotifications
+                ? const SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: _cyan,
+                    ),
+                  )
+                : null,
+            children: [
+              _ToggleSetting(
+                label: '允许房间消息通知',
+                value: _androidNotificationPreferenceEnabled,
+                enabled: !_savingAndroidNotifications,
+                onChanged: (value) =>
+                    unawaited(_setAndroidNotificationsEnabled(value)),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                !_androidNotificationPreferenceEnabled
+                    ? '已在 Gang Chat 中关闭通知'
+                    : _androidNotificationsAvailable
+                    ? '通知已开启；房间设置为“全部”时，后台消息会显示内容和数字角标'
+                    : '系统尚未允许通知，请在 Android 设置中开启',
+                style: const TextStyle(
+                  color: _textSecondary,
+                  fontSize: 13,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Button(
+                  onPressed: _openAndroidNotificationSettings,
+                  icon: const Icon(Icons.notifications_outlined),
+                  child: const Text('系统通知设置'),
+                ),
+              ),
+            ],
+          ),
         if (unavailable)
           const _SettingsEmptyState(text: '语言偏好需要登录后从服务端读取')
         else

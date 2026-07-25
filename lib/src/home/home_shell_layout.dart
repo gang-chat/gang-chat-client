@@ -143,6 +143,7 @@ extension _HomeShellLayout on _HomeShellState {
         audioDeviceStore: widget.audioDeviceStore,
         closeBehaviorStore: widget.closeBehaviorStore,
         languageStore: widget.languageStore,
+        androidSystemService: widget.androidSystemService,
         windowController: widget.windowController,
         initialSection: _settingsAppUpdate == null
             ? SettingsSection.profile
@@ -366,7 +367,7 @@ extension _HomeShellLayout on _HomeShellState {
         onToggleMic: _voiceBlocked ? null : _toggleMicMute,
         onToggleHeadphones: _toggleHeadphonesMute,
         onToggleCamera: () => unawaited(_toggleCamera()),
-        onToggleShare: supportsDesktopScreenShare
+        onToggleShare: supportsLocalScreenShare
             ? () => unawaited(_toggleScreenShare())
             : null,
         musicBox: _musicBox,

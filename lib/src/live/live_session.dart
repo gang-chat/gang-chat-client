@@ -150,6 +150,9 @@ const _ignoredShareWindowNameParts = <String>[
 bool get supportsDesktopScreenShare =>
     !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
 
+bool get supportsLocalScreenShare =>
+    supportsDesktopScreenShare || (!kIsWeb && Platform.isAndroid);
+
 @visibleForTesting
 bool shouldRequestScreenShareAudio({
   required String? sourceId,
@@ -160,7 +163,7 @@ bool shouldRequestScreenShareAudio({
   // native factory/aux participant. getDisplayMedia still receives audio=true
   // so platform capture can be configured, but the returned stream remains
   // video-only and is never published on the main factory.
-  return true;
+  return isDesktopSourcePickerPlatform;
 }
 
 // libwebrtc's RTCDesktopSource thumbnails shear on Retina screens (same stride
@@ -390,6 +393,7 @@ class LiveSession extends ChangeNotifier {
   String? _roomName;
   bool _connecting = false;
   bool _screenSharing = false;
+  Future<void> _localVideoTransitionTail = Future<void>.value();
   bool _localMicrophonePublishUnavailable = false;
   String? _resolvedLiveKitUrl;
   bool _canPublish = true;
@@ -873,7 +877,16 @@ class LiveSession extends ChangeNotifier {
   /// id (see [listScreenSources]); when null the platform default is used.
   /// Returns the resulting share state. Throws if capture fails (e.g. the user
   /// cancels the OS picker) — the caller is responsible for surfacing that.
-  Future<bool> setScreenShareEnabled(bool enabled, {String? sourceId}) async {
+  Future<bool> setScreenShareEnabled(bool enabled, {String? sourceId}) {
+    if (kIsWeb || !Platform.isAndroid) {
+      return _setScreenShareEnabled(enabled, sourceId: sourceId);
+    }
+    return _serializeLocalVideoTransition(
+      () => _setScreenShareEnabled(enabled, sourceId: sourceId),
+    );
+  }
+
+  Future<bool> _setScreenShareEnabled(bool enabled, {String? sourceId}) async {
     final local = _room?.localParticipant;
     if (local == null) return false;
     if (enabled) {
@@ -897,14 +910,16 @@ class LiveSession extends ChangeNotifier {
         isDesktopSourcePickerPlatform: supportsDesktopScreenShare,
         isWindowsDesktop: !kIsWeb && Platform.isWindows,
       );
+      final isAndroid = !kIsWeb && Platform.isAndroid;
+      final maxFrameRate = isAndroid ? 30.0 : 60.0;
       final options = lk.ScreenShareCaptureOptions(
         captureScreenAudio: captureScreenAudio,
         sourceId: sourceId,
-        maxFrameRate: 60.0,
+        maxFrameRate: maxFrameRate,
         params: lk.VideoParameters(
           dimensions: lk.VideoDimensions(target.width, target.height),
-          encoding: const lk.VideoEncoding(
-            maxFramerate: 60,
+          encoding: lk.VideoEncoding(
+            maxFramerate: maxFrameRate.toInt(),
             maxBitrate: 16000 * 1000,
           ),
         ),
@@ -943,9 +958,22 @@ class LiveSession extends ChangeNotifier {
       await local.setScreenShareEnabled(false);
       _screenSharing = false;
       await _stopScreenAudioPublisher();
+      await _awaitAndroidScreenCaptureRelease();
     }
     notifyListeners();
     return _screenSharing;
+  }
+
+  Future<void> _awaitAndroidScreenCaptureRelease() async {
+    if (kIsWeb || !Platform.isAndroid) return;
+    // LiveKit awaits unpublishing, but Android's MediaProjection/virtual
+    // display teardown crosses a native handler thread. Give that thread a
+    // bounded opportunity to remove the publication, followed by a short
+    // platform-only grace period before opening CameraX/WebRTC capture.
+    for (var attempt = 0; attempt < 10 && _localHasScreenShare(); attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 16));
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 160));
   }
 
   /// Set the target max height for the local screen share. Persists in-session;
@@ -1017,15 +1045,32 @@ class LiveSession extends ChangeNotifier {
 
   /// Start or stop the local camera. Returns the resulting state. Throws if
   /// capture fails (no camera, permission denied) — the caller surfaces it.
-  Future<bool> setCameraEnabled(bool enabled) async {
-    final local = _room?.localParticipant;
-    if (local == null) return false;
-    if (enabled && _screenSharing) {
-      await setScreenShareEnabled(false);
+  Future<bool> setCameraEnabled(bool enabled) {
+    Future<bool> operation() async {
+      final local = _room?.localParticipant;
+      if (local == null) return false;
+      if (enabled && _screenSharing) {
+        await _setScreenShareEnabled(false);
+      }
+      await local.setCameraEnabled(enabled);
+      notifyListeners();
+      return enabled;
     }
-    await local.setCameraEnabled(enabled);
-    notifyListeners();
-    return enabled;
+
+    if (kIsWeb || !Platform.isAndroid) return operation();
+    return _serializeLocalVideoTransition(operation);
+  }
+
+  Future<T> _serializeLocalVideoTransition<T>(Future<T> Function() operation) {
+    final result = Completer<T>();
+    _localVideoTransitionTail = _localVideoTransitionTail.then((_) async {
+      try {
+        result.complete(await operation());
+      } catch (error, stackTrace) {
+        result.completeError(error, stackTrace);
+      }
+    });
+    return result.future;
   }
 
   /// Enumerate capturable desktop sources (screens and windows) for the

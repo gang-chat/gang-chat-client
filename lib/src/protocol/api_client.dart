@@ -73,6 +73,24 @@ abstract interface class GangApi {
 
   Future<CurrentUser> me();
 
+  Future<void> upsertPushDevice({
+    required String provider,
+    required String installationId,
+    required String token,
+    required bool enabled,
+  });
+
+  Future<void> updatePushDeviceEnabled({
+    required String provider,
+    required String installationId,
+    required bool enabled,
+  });
+
+  Future<void> deletePushDevice({
+    required String provider,
+    required String installationId,
+  });
+
   Future<CurrentUser> updateAccount({
     String? username,
     String? email,
@@ -556,6 +574,62 @@ class GangApiClient implements GangApi {
       return _httpClient.get(_uri('/me'), headers: _headers(token));
     });
     return CurrentUser.fromJson(decoded);
+  }
+
+  @override
+  Future<void> upsertPushDevice({
+    required String provider,
+    required String installationId,
+    required String token,
+    required bool enabled,
+  }) async {
+    final providerPath = Uri.encodeComponent(provider);
+    final installationPath = Uri.encodeComponent(installationId);
+    await _sendJson((accessToken) {
+      return _httpClient.put(
+        _uri('/me/push-devices/$providerPath/$installationPath'),
+        headers: _headers(accessToken),
+        body: encodeJsonBody({
+          'provider': provider,
+          'installation_id': installationId,
+          'token': token,
+          'platform': 'android',
+          'enabled': enabled,
+        }),
+      );
+    });
+  }
+
+  @override
+  Future<void> updatePushDeviceEnabled({
+    required String provider,
+    required String installationId,
+    required bool enabled,
+  }) async {
+    final providerPath = Uri.encodeComponent(provider);
+    final installationPath = Uri.encodeComponent(installationId);
+    await _sendJson((accessToken) {
+      return _httpClient.patch(
+        _uri('/me/push-devices/$providerPath/$installationPath'),
+        headers: _headers(accessToken),
+        body: encodeJsonBody({'enabled': enabled}),
+      );
+    });
+  }
+
+  @override
+  Future<void> deletePushDevice({
+    required String provider,
+    required String installationId,
+  }) async {
+    final providerPath = Uri.encodeComponent(provider);
+    final installationPath = Uri.encodeComponent(installationId);
+    await _sendJson((accessToken) {
+      return _httpClient.delete(
+        _uri('/me/push-devices/$providerPath/$installationPath'),
+        headers: _headers(accessToken),
+      );
+    });
   }
 
   @override

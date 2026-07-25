@@ -24,6 +24,9 @@ extension _HomeShellRealtime on _HomeShellState {
 
   void _onRealtimeReconnect() {
     if (!mounted) return;
+    unawaited(
+      _androidPushRegistration?.synchronize().catchError((Object _) {}),
+    );
     unawaited(_services.roomReads.retryPending());
     unawaited(_loadServersSilently());
     final selected = _selectedServerId;
@@ -213,10 +216,30 @@ extension _HomeShellRealtime on _HomeShellState {
     if (shouldRefreshMessages) {
       unawaited(_refreshSelectedMessagesSilently(room.id));
     }
-    if (shouldNotifyMessage) _notifyRealtimeRoomMessage();
+    _syncAndroidNotificationState();
+    if (shouldNotifyMessage) _notifyRealtimeRoomMessage(room);
   }
 
-  void _notifyRealtimeRoomMessage() {
+  void _notifyRealtimeRoomMessage(RoomCard room) {
+    final androidSystemService = widget.androidSystemService;
+    if (androidSystemService.isSupported && !_isAppForeground) {
+      final message = room.lastMessage;
+      if (message != null) {
+        unawaited(
+          androidSystemService
+              .showRoomMessage(
+                roomId: room.id,
+                roomName: room.displayName,
+                sender: message.senderDisplayName,
+                body: message.bodyPreview,
+                unreadCount: _androidUnreadCount,
+                messageId: message.id,
+              )
+              .catchError((_) {}),
+        );
+      }
+      return;
+    }
     final volume = _headphonesMuted
         ? 0.0
         : normalizedAudioVolume(_liveSessionController.outputVolume);
@@ -224,6 +247,20 @@ extension _HomeShellRealtime on _HomeShellState {
       _messageNotificationSoundPlayer.play(volume: volume).catchError((_) {}),
     );
     unawaited(widget.windowController.requestMessageAttention());
+  }
+
+  int get _androidUnreadCount =>
+      _servers.fold<int>(0, (total, room) => total + room.unreadCount);
+
+  void _syncAndroidNotificationState() {
+    final service = widget.androidSystemService;
+    if (!service.isSupported) return;
+    for (final room in _servers) {
+      if (room.unreadCount <= 0) {
+        unawaited(service.cancelRoomNotification(room.id).catchError((_) {}));
+      }
+    }
+    unawaited(service.syncBadge(_androidUnreadCount).catchError((_) {}));
   }
 
   String? _latestLoadedServerMessageId() {
@@ -290,6 +327,14 @@ extension _HomeShellRealtime on _HomeShellState {
         _resetMusicBox();
       }
     });
+    if (widget.androidSystemService.isSupported) {
+      unawaited(
+        widget.androidSystemService
+            .cancelRoomNotification(patch.roomId)
+            .catchError((_) {}),
+      );
+      _syncAndroidNotificationState();
+    }
     if (patch.shouldDisconnectLive) {
       unawaited(_liveSessionController.disconnect());
     }

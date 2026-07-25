@@ -163,7 +163,7 @@ void main() {
     expect(sources.map((s) => s.thumbnailKey), ['screen:1', 'window:1']);
   });
 
-  test('screen-share requests audio even with picked desktop sources', () {
+  test('screen-share requests audio only for desktop capture', () {
     expect(
       shouldRequestScreenShareAudio(
         sourceId: 'screen-primary',
@@ -186,7 +186,7 @@ void main() {
         isDesktopSourcePickerPlatform: false,
         isWindowsDesktop: false,
       ),
-      isTrue,
+      isFalse,
     );
   });
 

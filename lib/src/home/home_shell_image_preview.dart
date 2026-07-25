@@ -51,6 +51,26 @@ extension _HomeShellImagePreview on _HomeShellState {
     String suggestedName,
   ) async {
     final bytes = await _fetchImageBytes(url);
+    if (Platform.isAndroid) {
+      try {
+        await _fileSelectionService.saveBytesToDownloads(
+          bytes: bytes,
+          filename: suggestedName,
+        );
+      } on PlatformException catch (error) {
+        if (error.code != 'downloads_unavailable') rethrow;
+        final location = await _fileSelectionService.getSaveLocation(
+          suggestedName: suggestedName,
+        );
+        if (location == null) throw const ImagePreviewActionCancelled();
+        await _fileSelectionService.saveBytesToLocation(
+          bytes: bytes,
+          location: location,
+          filename: suggestedName,
+        );
+      }
+      return;
+    }
     final directory = await _resolveDownloadsDirectory();
     final path = _uniqueDestinationPath(
       directory: directory.path,
@@ -73,9 +93,9 @@ extension _HomeShellImagePreview on _HomeShellState {
       // User cancelled the picker; treat as a silent no-op.
       throw const ImagePreviewActionCancelled();
     }
-    await _fileSelectionService.saveBytesToPath(
+    await _fileSelectionService.saveBytesToLocation(
       bytes: bytes,
-      path: location.path,
+      location: location,
       filename: suggestedName,
     );
   }

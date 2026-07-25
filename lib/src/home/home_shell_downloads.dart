@@ -110,6 +110,7 @@ extension _HomeShellDownloads on _HomeShellState {
       )) {
         return;
       }
+      await _fileSelectionService.commitLocation(location);
       if (!mounted) return;
       _setHomeState(
         () => _applyDownloadPatch(
@@ -140,6 +141,13 @@ extension _HomeShellDownloads on _HomeShellState {
           ),
         ),
       );
+    } finally {
+      try {
+        await _fileSelectionService.discardLocation(location);
+      } catch (_) {
+        // Best-effort cleanup. A completed Android commit already removed the
+        // staging file; cleanup failures must not overwrite download state.
+      }
     }
   }
 

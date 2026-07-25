@@ -764,6 +764,16 @@ extension _HomeShellLiveActions on _HomeShellState {
     final room = _selectedRoom;
     if (room == null || _joiningLive) return;
 
+    if (widget.androidSystemService.isSupported) {
+      try {
+        await widget.androidSystemService.requestBluetoothConnectPermission();
+      } catch (_) {
+        // Speaker/earpiece routing remains usable when nearby-device access is
+        // denied or unavailable.
+      }
+      if (!mounted) return;
+    }
+
     _setHomeState(
       () => _applyLiveJoinStatePatch(
         _liveController.patchJoinStarted(joinedLiveRoomId: _joinedLiveRoomId),
@@ -1130,6 +1140,22 @@ extension _HomeShellLiveActions on _HomeShellState {
   }
 
   Future<void> _toggleCamera() async {
+    final useTransitionGuard =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+    if (!useTransitionGuard) {
+      await _toggleCameraImpl();
+      return;
+    }
+    if (_switchingAndroidLocalVideoSource) return;
+    _switchingAndroidLocalVideoSource = true;
+    try {
+      await _toggleCameraImpl();
+    } finally {
+      _switchingAndroidLocalVideoSource = false;
+    }
+  }
+
+  Future<void> _toggleCameraImpl() async {
     final roomId = _joinedLiveRoomId;
     if (roomId == null ||
         !canPatchSelectedLiveState(
@@ -1168,7 +1194,23 @@ extension _HomeShellLiveActions on _HomeShellState {
   }
 
   Future<void> _toggleScreenShare() async {
-    if (!supportsDesktopScreenShare) return;
+    final useTransitionGuard =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+    if (!useTransitionGuard) {
+      await _toggleScreenShareImpl();
+      return;
+    }
+    if (_switchingAndroidLocalVideoSource) return;
+    _switchingAndroidLocalVideoSource = true;
+    try {
+      await _toggleScreenShareImpl();
+    } finally {
+      _switchingAndroidLocalVideoSource = false;
+    }
+  }
+
+  Future<void> _toggleScreenShareImpl() async {
+    if (!supportsLocalScreenShare) return;
     final roomId = _joinedLiveRoomId;
     if (roomId == null ||
         !canPatchSelectedLiveState(
@@ -1186,14 +1228,18 @@ extension _HomeShellLiveActions on _HomeShellState {
       return;
     }
 
-    final source = await showDialog<ScreenSource>(
-      context: context,
-      builder: (context) => LiveScreenSharePicker(
-        loadSources: _liveSessionController.listScreenSources,
-        refreshThumbnails: _liveSessionController.refreshScreenSourceThumbnails,
-      ),
-    );
-    if (source == null || !mounted) return;
+    ScreenSource? source;
+    if (supportsDesktopScreenShare) {
+      source = await showDialog<ScreenSource>(
+        context: context,
+        builder: (context) => LiveScreenSharePicker(
+          loadSources: _liveSessionController.listScreenSources,
+          refreshThumbnails:
+              _liveSessionController.refreshScreenSourceThumbnails,
+        ),
+      );
+      if (source == null || !mounted) return;
+    }
     if (!canApplyPickedScreenShareSource(
       pickedForRoomId: roomId,
       joinedLiveRoomId: _joinedLiveRoomId,
@@ -1218,7 +1264,7 @@ extension _HomeShellLiveActions on _HomeShellState {
     try {
       await _liveSessionController.setScreenShareEnabled(
         true,
-        sourceId: source.id,
+        sourceId: source?.id,
       );
     } catch (error) {
       if (restoreCameraOnFailure) {

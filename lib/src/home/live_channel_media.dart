@@ -181,6 +181,8 @@ class _LiveFullScreenStageState extends State<LiveFullScreenStage> {
 
   final FocusNode _focusNode = FocusNode(debugLabel: 'LiveFullScreenStage');
   Timer? _controlsHideTimer;
+  Size? _viewportSize;
+  int _controlsTimerGeneration = 0;
   bool _controlsVisible = true;
 
   @override
@@ -201,10 +203,31 @@ class _LiveFullScreenStageState extends State<LiveFullScreenStage> {
     }
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final nextViewportSize = MediaQuery.sizeOf(context);
+    final viewportChanged =
+        _viewportSize != null && _viewportSize != nextViewportSize;
+    _viewportSize = nextViewportSize;
+    if (viewportChanged) {
+      // A rotation or full-screen resize is itself a user-visible transition.
+      // This lifecycle callback already schedules a build, so updating the
+      // field directly avoids a redundant setState during dependency changes.
+      _controlsVisible = true;
+      _scheduleControlsAutoHide();
+    }
+  }
+
   void _scheduleControlsAutoHide() {
+    final generation = ++_controlsTimerGeneration;
     _controlsHideTimer?.cancel();
     _controlsHideTimer = Timer(_controlsAutoHideDelay, () {
-      if (!mounted || !_controlsVisible) return;
+      if (!mounted ||
+          generation != _controlsTimerGeneration ||
+          !_controlsVisible) {
+        return;
+      }
       setState(() => _controlsVisible = false);
     });
   }
@@ -216,6 +239,7 @@ class _LiveFullScreenStageState extends State<LiveFullScreenStage> {
 
   @override
   void dispose() {
+    _controlsTimerGeneration++;
     _controlsHideTimer?.cancel();
     _focusNode.dispose();
     super.dispose();
@@ -234,11 +258,17 @@ class _LiveFullScreenStageState extends State<LiveFullScreenStage> {
         }
       },
       child: MouseRegion(
+        onEnter: (_) => _showControlsAndRestartTimer(),
         onHover: (_) => _showControlsAndRestartTimer(),
         child: Listener(
           behavior: HitTestBehavior.opaque,
           onPointerDown: (_) => _showControlsAndRestartTimer(),
           onPointerMove: (_) => _showControlsAndRestartTimer(),
+          onPointerUp: (_) => _showControlsAndRestartTimer(),
+          onPointerHover: (_) => _showControlsAndRestartTimer(),
+          onPointerPanZoomStart: (_) => _showControlsAndRestartTimer(),
+          onPointerPanZoomUpdate: (_) => _showControlsAndRestartTimer(),
+          onPointerPanZoomEnd: (_) => _showControlsAndRestartTimer(),
           onPointerSignal: (_) => _showControlsAndRestartTimer(),
           child: ColoredBox(
             color: Colors.black,
@@ -526,7 +556,7 @@ class _FullScreenHoverReveal extends StatelessWidget {
       ignoring: !visible,
       child: AnimatedOpacity(
         opacity: visible ? 1 : 0,
-        duration: const Duration(milliseconds: 160),
+        duration: visible ? Duration.zero : const Duration(milliseconds: 160),
         child: child,
       ),
     );

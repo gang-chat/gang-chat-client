@@ -87,6 +87,8 @@ extension _HomeShellRoomActions on _HomeShellState {
           }
         }
       });
+      _syncAndroidNotificationState();
+      _openPendingAndroidNotificationRoom();
     } catch (error) {
       if (!mounted) return;
       _setHomeState(() {
@@ -148,6 +150,10 @@ extension _HomeShellRoomActions on _HomeShellState {
       );
       _loadingRoom = true;
     });
+    if (widget.androidSystemService.isSupported) {
+      unawaited(widget.androidSystemService.cancelRoomNotification(server.id));
+      _syncAndroidNotificationState();
+    }
 
     try {
       final snapshot = await _roomsController.openRoom(server.id);
@@ -265,6 +271,18 @@ extension _HomeShellRoomActions on _HomeShellState {
   }
 
   Future<void> _logout() async {
+    if (widget.androidSystemService.isSupported) {
+      try {
+        await _androidPushRegistration?.unregister();
+      } catch (_) {
+        // The server also ignores devices attached to the revoked session, so
+        // logout remains safe when this best-effort cleanup is offline.
+      }
+      try {
+        await widget.androidSystemService.clearMessageNotifications();
+        await widget.androidSystemService.enterForeground();
+      } catch (_) {}
+    }
     await _leaveLiveForSessionEnd(
       disconnectTimeout: const Duration(seconds: 1),
     );

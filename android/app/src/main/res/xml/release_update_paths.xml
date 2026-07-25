@@ -3,4 +3,7 @@
     <cache-path
         name="release_updates"
         path="release-updates/" />
+    <cache-path
+        name="clipboard_images"
+        path="clipboard-images/" />
 </paths>

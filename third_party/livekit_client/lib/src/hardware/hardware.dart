@@ -114,8 +114,10 @@ class Hardware {
   }
 
   Future<void> selectAudioOutput(MediaDevice device) async {
-    if (!lkPlatformIsDesktop()) {
-      logger.warning('selectAudioOutput is only supported on Desktop');
+    if (!lkPlatformIsDesktop() && !lkPlatformIs(PlatformType.android)) {
+      logger.warning(
+        'selectAudioOutput is only supported on Desktop and Android',
+      );
       return;
     }
     selectedAudioOutput = device;
@@ -123,8 +125,10 @@ class Hardware {
   }
 
   Future<void> selectAudioInput(MediaDevice device) async {
-    if (lkPlatformIs(PlatformType.web) || lkPlatformIsMobile()) {
-      logger.warning('selectAudioInput is only supported on Windows/macOS');
+    if (lkPlatformIs(PlatformType.web) || lkPlatformIs(PlatformType.iOS)) {
+      logger.warning(
+        'selectAudioInput is not supported on Web or iOS',
+      );
       return;
     }
     selectedAudioInput = device;

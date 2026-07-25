@@ -9,6 +9,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private var updateInstaller: AndroidUpdateInstaller? = null
+    private var systemBridge: AndroidSystemBridge? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -27,16 +28,51 @@ class MainActivity : FlutterActivity() {
                 AndroidUpdateInstaller.channelName,
             ).setMethodCallHandler(installer::handleMethodCall)
         }
+        systemBridge = AndroidSystemBridge(this).also { bridge ->
+            bridge.attach(
+                MethodChannel(
+                    flutterEngine.dartExecutor.binaryMessenger,
+                    AndroidSystemBridge.channelName,
+                ),
+            )
+            bridge.handleIntent(intent)
+        }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (systemBridge?.onActivityResult(requestCode, resultCode, data) == true) return
         updateInstaller?.onActivityResult(requestCode)
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        systemBridge?.onRequestPermissionsResult(requestCode)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        systemBridge?.handleIntent(intent)
     }
 
     override fun onResume() {
         super.onResume()
         updateInstaller?.onResume()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        GangChatAppVisibility.isForeground = true
+    }
+
+    override fun onStop() {
+        GangChatAppVisibility.isForeground = false
+        super.onStop()
     }
 
     @Suppress("DEPRECATION")
@@ -46,5 +82,9 @@ class MainActivity : FlutterActivity() {
         } else {
             windowManager.defaultDisplay.rotation
         }
+    }
+
+    companion object {
+        const val notificationRoomIdExtra = "gang_chat_notification_room_id"
     }
 }

@@ -13,6 +13,7 @@ import '../app/app_update.dart';
 import '../app/audio_device_state.dart'
     show rememberedAudioVolume, restoredAudioVolume;
 import '../app/audio_levels.dart';
+import '../app/android_push_registration_controller.dart';
 import '../app/authenticated_app_services.dart';
 import '../app/authenticated_app_context.dart';
 import '../app/close_behavior.dart';
@@ -63,6 +64,7 @@ import '../protocol/api_client.dart'
 import '../protocol/models.dart';
 import '../settings/settings_page.dart';
 import '../shell/clipboard_service.dart';
+import '../shell/android_system_service.dart';
 import '../shell/desktop_window_controller.dart';
 import '../shell/file_drop_service.dart';
 import '../shell/file_selection_service.dart';
@@ -143,6 +145,7 @@ class HomeShell extends StatefulWidget {
     this.livePresenceSpeechPlayer,
     this.messageNotificationSoundPlayer,
     this.realtime,
+    this.androidSystemService = const AndroidSystemService(),
     this.detectedAppUpdate,
     this.onDetectedAppUpdateShown,
   });
@@ -157,6 +160,7 @@ class HomeShell extends StatefulWidget {
   final LivePresenceSpeechPlayer? livePresenceSpeechPlayer;
   final MessageNotificationSoundPlayer? messageNotificationSoundPlayer;
   final RealtimeService? realtime;
+  final AndroidSystemService androidSystemService;
   final AvailableAppUpdate? detectedAppUpdate;
   final VoidCallback? onDetectedAppUpdateShown;
 
@@ -164,7 +168,7 @@ class HomeShell extends StatefulWidget {
   State<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
+class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   late AuthenticatedAppServices _services;
   late CurrentUser _currentUser;
   final _MentionTextEditingController _composerController =
@@ -179,6 +183,10 @@ class _HomeShellState extends State<HomeShell> {
   bool _accountSuspensionLogoutInProgress = false;
   StreamSubscription<RealtimeConnectionStatus>? _realtimeStatusEvents;
   StreamSubscription<FileDropEvent>? _fileDropEvents;
+  StreamSubscription<String>? _androidNotificationSelections;
+  AndroidPushRegistrationController? _androidPushRegistration;
+  bool _isAppForeground = true;
+  String? _pendingNotificationRoomId;
 
   List<RoomCard> _servers = const [];
   bool _loadingServers = false;
@@ -281,6 +289,7 @@ class _HomeShellState extends State<HomeShell> {
   double _lastScreenShareVolumeBeforeMute = _defaultLiveVolumeRestore;
   bool _cameraOn = false;
   bool _screenSharing = false;
+  bool _switchingAndroidLocalVideoSource = false;
   bool _voiceBlocked = false;
   final Set<String> _busyLiveMemberRemovalIds = <String>{};
   final Set<String> _busyLiveMemberModerationIds = <String>{};
@@ -336,6 +345,15 @@ class _HomeShellState extends State<HomeShell> {
   @override
   void initState() {
     super.initState();
+    if (widget.androidSystemService.isSupported) {
+      WidgetsBinding.instance.addObserver(this);
+      _androidNotificationSelections = widget
+          .androidSystemService
+          .selectedNotificationRoomIds
+          .listen(_handleAndroidNotificationRoomSelected);
+      unawaited(_takeInitialAndroidNotification());
+      unawaited(_ensureAndroidNotificationPermission());
+    }
     _currentUser = widget.app.currentUser;
     _livePresenceSoundPlayer =
         widget.livePresenceSoundPlayer ?? LivePresenceSoundService();
@@ -354,6 +372,7 @@ class _HomeShellState extends State<HomeShell> {
     _voicePlaybackService.state.addListener(_handleVoicePlaybackChanged);
     widget.app.serverClock.addListener(_handleServerClockChanged);
     _installServices();
+    _installAndroidPushRegistration();
     _attachLiveSessionCallbacks();
     widget.windowController.setCloseRequestHandler(_handleWindowCloseRequest);
     widget.windowController.setTrayExitHandler(_exitApplication);
@@ -402,8 +421,11 @@ class _HomeShellState extends State<HomeShell> {
     oldWidget.app.serverClock.removeListener(_handleServerClockChanged);
     widget.app.serverClock.addListener(_handleServerClockChanged);
     _detachLiveSessionCallbacks();
+    unawaited(_androidPushRegistration?.dispose());
+    _androidPushRegistration = null;
     _services.close();
     _installServices();
+    _installAndroidPushRegistration();
     _messageNotificationTracker.clear();
     _attachLiveSessionCallbacks();
     _startRealtime();
@@ -464,6 +486,7 @@ class _HomeShellState extends State<HomeShell> {
       _headphonesMuted = false;
       _cameraOn = false;
       _screenSharing = false;
+      _switchingAndroidLocalVideoSource = false;
       _voiceBlocked = false;
       _resetMusicBox();
       _searchQuery = '';
@@ -484,6 +507,15 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   void dispose() {
+    if (widget.androidSystemService.isSupported) {
+      WidgetsBinding.instance.removeObserver(this);
+      unawaited(widget.androidSystemService.enterForeground());
+    }
+    final androidNotificationSelections = _androidNotificationSelections;
+    if (androidNotificationSelections != null) {
+      unawaited(androidNotificationSelections.cancel());
+    }
+    unawaited(_androidPushRegistration?.dispose());
     final realtimeEvents = _realtimeEvents;
     if (realtimeEvents != null) unawaited(realtimeEvents.cancel());
     final realtimeStatusEvents = _realtimeStatusEvents;
@@ -517,6 +549,70 @@ class _HomeShellState extends State<HomeShell> {
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!widget.androidSystemService.isSupported) return;
+    switch (state) {
+      case AppLifecycleState.resumed:
+        _isAppForeground = true;
+        unawaited(widget.androidSystemService.enterForeground());
+        unawaited(_takeInitialAndroidNotification());
+        unawaited(
+          _androidPushRegistration?.synchronize().catchError((Object _) {}),
+        );
+        break;
+      case AppLifecycleState.paused:
+      case AppLifecycleState.hidden:
+        _isAppForeground = false;
+        unawaited(widget.androidSystemService.enterBackground());
+        break;
+      case AppLifecycleState.inactive:
+        // Start while the activity is still visible. Android 12+ rejects most
+        // foreground-service starts after the app is already backgrounded.
+        unawaited(widget.androidSystemService.enterBackground());
+        break;
+      case AppLifecycleState.detached:
+        break;
+    }
+  }
+
+  Future<void> _takeInitialAndroidNotification() async {
+    try {
+      final roomId = await widget.androidSystemService
+          .takeInitialNotificationRoomId();
+      if (roomId != null) _handleAndroidNotificationRoomSelected(roomId);
+    } catch (_) {}
+  }
+
+  Future<void> _ensureAndroidNotificationPermission() async {
+    try {
+      if (!await widget.androidSystemService.notificationPreferenceEnabled()) {
+        return;
+      }
+      await widget.androidSystemService.requestNotificationPermission();
+    } catch (_) {}
+  }
+
+  void _handleAndroidNotificationRoomSelected(String roomId) {
+    if (!mounted || roomId.trim().isEmpty) return;
+    final room = _servers.cast<RoomCard?>().firstWhere(
+      (candidate) => candidate?.id == roomId,
+      orElse: () => null,
+    );
+    if (room == null) {
+      _pendingNotificationRoomId = roomId;
+      return;
+    }
+    _pendingNotificationRoomId = null;
+    unawaited(_openRoom(room, openContent: true));
+  }
+
+  void _openPendingAndroidNotificationRoom() {
+    final roomId = _pendingNotificationRoomId;
+    if (roomId == null) return;
+    _handleAndroidNotificationRoomSelected(roomId);
+  }
+
   void _installServices() {
     _services = AuthenticatedAppServices(
       widget.app,
@@ -524,6 +620,16 @@ class _HomeShellState extends State<HomeShell> {
       liveSessionController: widget.liveSessionController,
       realtime: widget.realtime,
     );
+  }
+
+  void _installAndroidPushRegistration() {
+    if (!widget.androidSystemService.isSupported) return;
+    final controller = AndroidPushRegistrationController(
+      api: _services.api,
+      androidSystemService: widget.androidSystemService,
+    );
+    _androidPushRegistration = controller;
+    unawaited(controller.start().catchError((Object _) {}));
   }
 
   void _handleServerClockChanged() {
