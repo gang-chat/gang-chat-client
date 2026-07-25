@@ -629,6 +629,7 @@ void registerShellSettingsWidgetTests() {
 
     final feedbackDrafts = <FeedbackMailDraft>[];
     final autoUpdateWrites = <bool>[];
+    var updateCheckRequests = 0;
     final api = GangApiClient(
       baseUrl: 'http://example.test/api/v1',
       accessTokenProvider: ({bool forceRefresh = false}) async =>
@@ -666,6 +667,7 @@ void registerShellSettingsWidgetTests() {
           ),
           releaseUpdateService: ReleaseUpdateService(
             httpClient: MockClient((request) async {
+              updateCheckRequests += 1;
               return http.Response('''
                 <ListBucketResult>
                   <Contents><Key>releases/GangChat_v0.4.0.exe</Key></Contents>
@@ -696,6 +698,11 @@ void registerShellSettingsWidgetTests() {
     expect(find.widgetWithText(ui.Button, '检查更新'), findsOneWidget);
     expect(find.widgetWithText(ui.Button, '意见反馈'), findsOneWidget);
 
+    await tester.tap(find.byTooltip('刷新设置'));
+    await tester.pumpAndSettle();
+
+    expect(updateCheckRequests, 0);
+
     final autoUpdateSwitch = find.descendant(
       of: find.ancestor(of: find.text('自动提示更新'), matching: find.byType(Row)),
       matching: find.byType(ui.UiSwitch),
@@ -712,6 +719,7 @@ void registerShellSettingsWidgetTests() {
     await tester.tap(find.widgetWithText(ui.Button, '检查更新'));
     await tester.pumpAndSettle();
 
+    expect(updateCheckRequests, 1);
     expect(find.text('当前已是最新版本'), findsWidgets);
 
     await tester.tap(find.widgetWithText(ui.Button, '意见反馈'));

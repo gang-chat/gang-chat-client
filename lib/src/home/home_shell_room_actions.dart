@@ -236,17 +236,19 @@ extension _HomeShellRoomActions on _HomeShellState {
         builder: (context) => DialogFrame(
           title: '退出登录',
           icon: Icons.logout,
-          actions: [
-            Button(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消'),
-            ),
-            Button(
-              onPressed: () => Navigator.of(context).pop(true),
-              tone: ButtonTone.danger,
-              child: const Text('退出登录'),
-            ),
-          ],
+          actionBar: ResponsiveDialogActionBar(
+            actions: [
+              ResponsiveDialogAction(
+                label: '取消',
+                onPressed: () => Navigator.of(context).pop(false),
+              ),
+              ResponsiveDialogAction(
+                label: '退出登录',
+                onPressed: () => Navigator.of(context).pop(true),
+                tone: ButtonTone.danger,
+              ),
+            ],
+          ),
           child: Text(
             '确认退出当前账号？',
             style: UiTypography.body.copyWith(color: UiColors.textSecondary),

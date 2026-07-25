@@ -195,6 +195,7 @@ class _SettingsPageState extends State<SettingsPage> {
   String? _securityError;
   String? _aboutError;
   String? _notice;
+  bool _loadingAbout = false;
   bool _checkingAppVersion = false;
   AvailableAppUpdate? _availableAppUpdate;
   bool _downloadingAppUpdate = false;
@@ -1087,9 +1088,17 @@ class _SettingsPageState extends State<SettingsPage> {
         await _ensureVoiceInitialized(forceReload: true);
         break;
       case SettingsSection.about:
-        await _checkAppVersion();
+        await _refreshAboutInfo();
         break;
     }
+  }
+
+  Future<void> _refreshAboutInfo() async {
+    if (_loadingAbout) return;
+    setState(() => _loadingAbout = true);
+    await Future.wait([_loadAutoUpdatePrompt(), _loadInstallDate()]);
+    if (!mounted) return;
+    setState(() => _loadingAbout = false);
   }
 
   Future<void> _checkAppVersion() async {
@@ -3413,7 +3422,7 @@ class _SettingsPageState extends State<SettingsPage> {
       loadingStickers: _loadingStickers,
       loadingSessions: _loadingSessions,
       loadingVoice: _loading,
-      loadingAbout: _checkingAppVersion,
+      loadingAbout: _loadingAbout || _checkingAppVersion,
     );
   }
 

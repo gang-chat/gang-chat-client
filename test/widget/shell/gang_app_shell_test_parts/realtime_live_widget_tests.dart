@@ -872,8 +872,17 @@ void registerShellRealtimeLiveWidgetTests() {
 
     expect(logoutCount, 0);
     expect(find.text('确认退出当前账号？'), findsOneWidget);
-    expect(find.widgetWithText(ui.Button, '取消'), findsOneWidget);
-    expect(find.widgetWithText(ui.Button, '退出登录'), findsOneWidget);
+    final cancelLogout = find.widgetWithText(ui.Button, '取消');
+    final confirmLogout = find.widgetWithText(ui.Button, '退出登录');
+    expect(cancelLogout, findsOneWidget);
+    expect(confirmLogout, findsOneWidget);
+    final cancelLogoutRect = tester.getRect(cancelLogout);
+    final confirmLogoutRect = tester.getRect(confirmLogout);
+    expect(
+      cancelLogoutRect.center.dy,
+      closeTo(confirmLogoutRect.center.dy, 0.01),
+    );
+    expect(cancelLogoutRect.right, lessThan(confirmLogoutRect.left));
     expect(
       tester
           .widget<Icon>(
