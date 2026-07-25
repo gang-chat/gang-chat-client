@@ -251,7 +251,6 @@ class _LiveChannelPaneState extends State<LiveChannelPane> {
           currentUserId: widget.currentUser.id,
           localParticipantReady: widget.joined && !widget.joining,
           connectedParticipantIds: widget.connectedParticipantIds,
-          liveKitMicMutedByParticipantId: widget.liveKitMicMutedByParticipantId,
         )
         .where((p) => p.user.id != musicBoxBotIdentity)
         .toList();

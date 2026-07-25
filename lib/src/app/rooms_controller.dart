@@ -1198,10 +1198,12 @@ class RoomsController {
   RoomLiveRefreshPatch? patchSelectedLiveRefreshed({
     required LiveState live,
     required String? selectedRoomId,
+    LiveState? currentLive,
   }) {
     if (!canApplyLiveRefresh(live: live, selectedRoomId: selectedRoomId)) {
       return null;
     }
+    if (_isOlderLiveSnapshot(live, currentLive)) return null;
     return RoomLiveRefreshPatch(live: live);
   }
 
@@ -1403,11 +1405,20 @@ class RoomsController {
         ?.cast<Map<String, dynamic>>()
         .map(UserSummary.fromJson)
         .toList();
+    final parsedSelectedLive = selectedRoomId == roomId && liveJson != null
+        ? LiveState.fromJson(liveJson)
+        : null;
+    final staleSelectedLive =
+        parsedSelectedLive != null &&
+        _isOlderLiveSnapshot(parsedSelectedLive, previousLive);
 
     var nextRooms = rooms;
     final idx = rooms.indexWhere((room) => room.id == roomId);
     if (idx >= 0 && count != null) {
       final existing = rooms[idx];
+      final effectiveCount = staleSelectedLive
+          ? previousLive!.participantCount
+          : count;
       nextRooms = [...rooms];
       nextRooms[idx] = RoomCard(
         id: existing.id,
@@ -1422,8 +1433,10 @@ class RoomsController {
         defaultAvatarKey: existing.defaultAvatarKey,
         memberCount: existing.memberCount,
         onlineMemberCount: existing.onlineMemberCount,
-        liveParticipantCount: count,
-        liveAvatarPreview: preview ?? existing.liveAvatarPreview,
+        liveParticipantCount: effectiveCount,
+        liveAvatarPreview: staleSelectedLive
+            ? existing.liveAvatarPreview
+            : preview ?? existing.liveAvatarPreview,
         lastMessage: existing.lastMessage,
         unreadCount: existing.unreadCount,
         hasUnreadCount: existing.hasUnreadCount,
@@ -1436,9 +1449,7 @@ class RoomsController {
       nextRooms = orderedRoomCards(nextRooms);
     }
 
-    var selectedLive = selectedRoomId == roomId && liveJson != null
-        ? LiveState.fromJson(liveJson)
-        : null;
+    var selectedLive = staleSelectedLive ? null : parsedSelectedLive;
     if (selectedLive != null && previousLive?.roomId == roomId) {
       selectedLive = _mergeLiveParticipantUsers(
         selectedLive,
@@ -1484,6 +1495,11 @@ class RoomsController {
       rooms: nextRooms,
       selectedLive: selectedLive,
     );
+  }
+
+  bool _isOlderLiveSnapshot(LiveState incoming, LiveState? current) {
+    return current?.roomId == incoming.roomId &&
+        incoming.updatedAt.isBefore(current!.updatedAt);
   }
 
   LiveState _mergeLiveParticipantUsers(

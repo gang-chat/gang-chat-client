@@ -64,6 +64,7 @@ extension _HomeShellRealtime on _HomeShellState {
       final patch = _roomsController.patchSelectedLiveRefreshed(
         live: live,
         selectedRoomId: _selectedServerId,
+        currentLive: _live,
       );
       if (patch == null) return;
       _setHomeState(() => _live = patch.live);

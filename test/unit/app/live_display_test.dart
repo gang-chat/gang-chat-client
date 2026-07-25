@@ -88,14 +88,13 @@ void main() {
         currentUserId: 'missing',
         localParticipantReady: true,
         connectedParticipantIds: {'alice'},
-        liveKitMicMutedByParticipantId: {'alice': false},
       ).map((participant) => participant.user.id),
       ['alice', 'bob'],
     );
   });
 
   test(
-    'visible live participants keep connected muted placeholders hidden',
+    'visible live participants show connected muted users after reconnect',
     () {
       final live = _liveWithParticipants([
         _participant('alice', connectionState: 'joining', micMuted: true),
@@ -108,9 +107,8 @@ void main() {
           currentUserId: 'missing',
           localParticipantReady: true,
           connectedParticipantIds: {'alice'},
-          liveKitMicMutedByParticipantId: {'alice': true},
         ).map((participant) => participant.user.id),
-        ['bob'],
+        ['alice', 'bob'],
       );
     },
   );
@@ -602,15 +600,24 @@ void main() {
     },
   );
 
-  test('liveParticipantTileState can use confirmed LiveKit mic state', () {
+  test('liveParticipantTileState keeps logical mute authoritative', () {
     final state = liveParticipantTileState(
       _participant('alice', micMuted: true),
       speaking: false,
       liveKitMicMuted: false,
     );
 
-    expect(state.micMutedForDisplay, isFalse);
+    expect(state.micMutedForDisplay, isTrue);
     expect(state.micActive, isFalse);
+
+    final trackMuted = liveParticipantTileState(
+      _participant('alice'),
+      speaking: true,
+      liveKitMicMuted: true,
+    );
+
+    expect(trackMuted.micMutedForDisplay, isTrue);
+    expect(trackMuted.micActive, isFalse);
 
     final moderated = liveParticipantTileState(
       _participant('alice', micMuted: true, voiceBlocked: true),

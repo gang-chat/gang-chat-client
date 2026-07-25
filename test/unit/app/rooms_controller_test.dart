@@ -248,6 +248,18 @@ void main() {
       ),
       isNull,
     );
+    final newerLive = LiveState.fromJson({
+      ..._liveJson(participantCount: 3),
+      'updated_at': '2026-06-04T00:00:02Z',
+    });
+    expect(
+      controller.patchSelectedLiveRefreshed(
+        live: live,
+        selectedRoomId: 'room_1',
+        currentLive: newerLive,
+      ),
+      isNull,
+    );
   });
 
   test(
@@ -969,6 +981,36 @@ void main() {
       patch!.selectedLive!.participants.single.user.roomDisplayName,
       'Room Me',
     );
+  });
+
+  test('patchLiveSnapshot ignores an older selected-room live snapshot', () {
+    final api = GangApiClient(
+      baseUrl: 'http://example.test/api/v1',
+      accessTokenProvider: ({bool forceRefresh = false}) async => 'token',
+      httpClient: MockClient((request) async {
+        fail('Patch test should not call the API: ${request.url}');
+      }),
+    );
+    addTearDown(api.close);
+    final controller = RoomsController(api: api);
+    final previousLive = LiveState.fromJson({
+      ..._liveJsonWithParticipants(['me', 'other']),
+      'updated_at': '2026-06-04T00:00:02Z',
+    });
+    final staleData = _liveSnapshotData(['other']);
+
+    final patch = controller.patchLiveSnapshot(
+      rooms: [_roomCard('room_1', liveParticipantCount: 2)],
+      selectedRoomId: 'room_1',
+      data: staleData,
+      joinedLiveRoomId: 'room_1',
+      currentUserId: 'me',
+      previousLive: previousLive,
+    );
+
+    expect(patch, isNotNull);
+    expect(patch!.selectedLive, isNull);
+    expect(patch.rooms.single.liveParticipantCount, 2);
   });
 
   test('patchRoomUpdated updates selected room counts and reload hint', () {

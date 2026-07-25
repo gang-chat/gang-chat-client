@@ -113,7 +113,6 @@ List<LiveParticipant> visibleLiveParticipantsForStage(
   required String currentUserId,
   required bool localParticipantReady,
   Set<String> connectedParticipantIds = const <String>{},
-  Map<String, bool> liveKitMicMutedByParticipantId = const <String, bool>{},
 }) {
   return [
     for (final participant in participants)
@@ -121,7 +120,6 @@ List<LiveParticipant> visibleLiveParticipantsForStage(
           liveParticipantVisibleInRoster(
             participant,
             connectedParticipantIds: connectedParticipantIds,
-            liveKitMicMutedByParticipantId: liveKitMicMutedByParticipantId,
           ))
         participant,
   ];
@@ -135,11 +133,12 @@ bool liveParticipantConnectionReady(LiveParticipant participant) {
 bool liveParticipantVisibleInRoster(
   LiveParticipant participant, {
   Set<String> connectedParticipantIds = const <String>{},
-  Map<String, bool> liveKitMicMutedByParticipantId = const <String, bool>{},
 }) {
+  // The server can still report "joining" during a reconnect. LiveKit room
+  // membership is enough to prove the remote participant is present; mic
+  // mute is an independent state and must never decide roster visibility.
   return liveParticipantConnectionReady(participant) ||
-      (connectedParticipantIds.contains(participant.user.id) &&
-          liveKitMicMutedByParticipantId[participant.user.id] == false);
+      connectedParticipantIds.contains(participant.user.id);
 }
 
 bool liveStateMissingConnectedParticipants(
@@ -159,10 +158,15 @@ LiveParticipantTileState liveParticipantTileState(
   bool? liveKitMicMuted,
 }) {
   final broadcasting = participant.cameraOn || participant.screenSharing;
+  // App mute uses capture gain 0 while deliberately leaving the published
+  // LiveKit microphone track enabled. The server snapshot is therefore the
+  // authority for logical mute; an actually muted/missing track can only make
+  // the display more conservative, never override a logical mute to "open".
   final micMutedForDisplay =
       participant.micBlocked ||
       participant.voiceBlocked ||
-      (liveKitMicMuted ?? participant.micMuted);
+      participant.micMuted ||
+      liveKitMicMuted == true;
   return LiveParticipantTileState(
     broadcasting: broadcasting,
     highlighted: speaking || broadcasting,

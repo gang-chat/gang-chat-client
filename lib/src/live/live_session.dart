@@ -1194,6 +1194,8 @@ class LiveSession extends ChangeNotifier {
     }
     if (event is lk.RoomReconnectedEvent) {
       _presenceCallbacksEnabled = true;
+      _refreshAllMicStates();
+      notifyListeners();
       return;
     }
     if (event is lk.ActiveSpeakersChangedEvent) {

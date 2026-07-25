@@ -305,45 +305,44 @@ void main() {
     );
   });
 
-  testWidgets(
-    'joining remote member confirmed unmuted by LiveKit shows open mic',
-    (tester) async {
-      final searchController = TextEditingController();
-      addTearDown(searchController.dispose);
-      final remoteUser = _user('phabe', 'Phabe', roomRole: 'member');
-      final live = _liveState([
-        _participant(
-          id: 'live_phabe',
-          user: remoteUser,
-          micMuted: true,
-          connectionState: 'joining',
-        ),
-      ]);
+  testWidgets('connected muted member remains visible and shows muted mic', (
+    tester,
+  ) async {
+    final searchController = TextEditingController();
+    addTearDown(searchController.dispose);
+    final remoteUser = _user('phabe', 'Phabe', roomRole: 'member');
+    final live = _liveState([
+      _participant(
+        id: 'live_phabe',
+        user: remoteUser,
+        micMuted: true,
+        connectionState: 'joining',
+      ),
+    ]);
 
-      await tester.pumpWidget(
-        _host(
-          searchController: searchController,
-          live: live,
-          connectedParticipantIds: const {'phabe'},
-          liveKitMicMutedByParticipantId: const {'phabe': false},
-        ),
-      );
+    await tester.pumpWidget(
+      _host(
+        searchController: searchController,
+        live: live,
+        connectedParticipantIds: const {'phabe'},
+        liveKitMicMutedByParticipantId: const {'phabe': false},
+      ),
+    );
 
-      final micButton = find.byKey(
-        const ValueKey<String>('live-member-status:mic:phabe'),
-      );
-      expect(find.text('Phabe'), findsOneWidget);
-      expect(micButton, findsOneWidget);
-      expect(
-        find.descendant(of: micButton, matching: find.byIcon(Icons.mic)),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(of: micButton, matching: find.byIcon(Icons.mic_off)),
-        findsNothing,
-      );
-    },
-  );
+    final micButton = find.byKey(
+      const ValueKey<String>('live-member-status:mic:phabe'),
+    );
+    expect(find.text('Phabe'), findsOneWidget);
+    expect(micButton, findsOneWidget);
+    expect(
+      find.descendant(of: micButton, matching: find.byIcon(Icons.mic_off)),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: micButton, matching: find.byIcon(Icons.mic)),
+      findsNothing,
+    );
+  });
 
   testWidgets('live member avatar opens a profile card on tap and hover', (
     tester,
