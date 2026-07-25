@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'platform_gestures.dart';
 import 'tokens.dart';
 
 const double _contextMenuScreenPadding = 8;
@@ -49,8 +50,13 @@ class TextFieldEditingShortcuts extends StatefulWidget {
 }
 
 class _TextFieldEditingShortcutsState extends State<TextFieldEditingShortcuts> {
+  late final UiAndroidLongPressTracker _androidLongPressTracker =
+      UiAndroidLongPressTracker(onLongPress: _handleAndroidLongPress);
   TextSelection? _secondaryClickSelection;
   bool _secondaryClickHadFocus = false;
+  TextSelection? _androidPointerDownSelection;
+  bool _androidPointerDownHadFocus = false;
+  bool _androidLongPressEnabled = false;
   String? _lastControllerText;
   int _secondaryClickRestoreGeneration = 0;
   bool _trackingGlobalPointers = false;
@@ -82,6 +88,7 @@ class _TextFieldEditingShortcutsState extends State<TextFieldEditingShortcuts> {
 
   @override
   void dispose() {
+    _androidLongPressTracker.cancel();
     _clearSecondaryClickProtection();
     widget.controller?.removeListener(_handleControllerSelectionChanged);
     widget.focusNode?.removeListener(_handleFocusChanged);
@@ -90,6 +97,8 @@ class _TextFieldEditingShortcutsState extends State<TextFieldEditingShortcuts> {
 
   @override
   Widget build(BuildContext context) {
+    _androidLongPressEnabled =
+        Theme.of(context).platform == TargetPlatform.android;
     final child = Actions(
       actions: <Type, Action<Intent>>{
         _RedoShortcutIntent: CallbackAction<_RedoShortcutIntent>(
@@ -110,8 +119,10 @@ class _TextFieldEditingShortcutsState extends State<TextFieldEditingShortcuts> {
     if (widget.controller == null && widget.focusNode == null) return child;
     return Listener(
       onPointerDown: _handlePointerDown,
+      onPointerMove: _androidLongPressTracker.handlePointerMove,
       onPointerUp: _handlePointerUp,
-      onPointerCancel: (_) {
+      onPointerCancel: (event) {
+        _androidLongPressTracker.handlePointerCancel(event);
         _clearSecondaryClickProtection();
       },
       child: child,
@@ -121,8 +132,17 @@ class _TextFieldEditingShortcutsState extends State<TextFieldEditingShortcuts> {
   void _handlePointerDown(PointerDownEvent event) {
     if ((event.buttons & kSecondaryMouseButton) == 0) {
       _clearSecondaryClickProtection();
+      _androidPointerDownSelection = _validSelection(
+        widget.controller?.selection,
+      );
+      _androidPointerDownHadFocus = widget.focusNode?.hasFocus ?? false;
+      _androidLongPressTracker.handlePointerDown(
+        event,
+        enabled: _androidLongPressEnabled,
+      );
       return;
     }
+    _androidLongPressTracker.cancel();
     final currentSelection = _validSelection(widget.controller?.selection);
     _secondaryClickSelection =
         _nonCollapsedSelection(currentSelection) ??
@@ -139,8 +159,26 @@ class _TextFieldEditingShortcutsState extends State<TextFieldEditingShortcuts> {
   }
 
   void _handlePointerUp(PointerUpEvent event) {
+    _androidLongPressTracker.handlePointerUp(event);
     if (!_hasSecondaryClickProtection) return;
     _restoreSecondaryClickEditingState();
+  }
+
+  void _handleAndroidLongPress(Offset _) {
+    if (!mounted || !_androidLongPressEnabled) return;
+    final pointerDownSelection = _androidPointerDownSelection;
+    _secondaryClickSelection =
+        _nonCollapsedSelection(pointerDownSelection) ??
+        _validSelection(widget.secondaryClickSelection?.call()) ??
+        pointerDownSelection;
+    _secondaryClickHadFocus = _androidPointerDownHadFocus;
+    if (!_hasSecondaryClickProtection) {
+      _clearSecondaryClickProtection();
+      return;
+    }
+    final generation = _beginSecondaryClickSelectionProtection();
+    _restoreSecondaryClickEditingState();
+    _scheduleSecondaryClickEditingStateRestore(generation);
   }
 
   bool get _hasSecondaryClickProtection =>

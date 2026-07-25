@@ -48,8 +48,23 @@ class GangApp extends StatelessWidget {
       child: MaterialApp(
         title: 'Gang Chat',
         theme: uiTheme(),
-        builder: (context, child) =>
-            AppNotificationHost(child: child ?? const SizedBox.shrink()),
+        builder: (context, child) {
+          final content = AppNotificationHost(
+            child: child ?? const SizedBox.shrink(),
+          );
+          if (Theme.of(context).platform != TargetPlatform.android) {
+            return content;
+          }
+          // Android reserves a hold for application context menus. Disable
+          // Tooltip's default touch-long-press trigger while retaining the
+          // existing desktop pointer-hover behavior unchanged.
+          return TooltipTheme(
+            data: TooltipTheme.of(
+              context,
+            ).copyWith(triggerMode: TooltipTriggerMode.manual),
+            child: content,
+          );
+        },
         home: _AuthGate(
           tokenStore: tokenStore,
           config: config,

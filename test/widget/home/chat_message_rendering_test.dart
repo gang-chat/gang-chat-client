@@ -1267,6 +1267,33 @@ void main() {
     expect(deleted, isFalse);
   });
 
+  testWidgets('Android text message hold opens the desktop message menu', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(
+        MessageBubbleForTest(
+          message: _message(type: 'text', body: 'copy this'),
+          downloadActions: _downloadActions(),
+          messageActions: ChatMessageActions(
+            onCopy: (_, _) async {},
+            onDeleteForMe: (_, _) async {},
+            onRecall: (_, _) async {},
+            canRecall: (_) => false,
+          ),
+        ),
+        platform: TargetPlatform.android,
+      ),
+    );
+
+    await tester.longPress(find.byType(TextField));
+    await tester.pumpAndSettle();
+
+    expect(find.text('复制'), findsOneWidget);
+    expect(find.text('删除'), findsOneWidget);
+    expect(find.text('全选'), findsNothing);
+  });
+
   testWidgets('message quote shows room name and time and opens source', (
     tester,
   ) async {
@@ -2216,6 +2243,33 @@ void main() {
     expect(find.text('已添加到房间表情包'), findsOneWidget);
   });
 
+  testWidgets('Android sticker hold opens the desktop sticker menu', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(
+        MessageBubbleForTest(
+          message: _stickerMessage(),
+          downloadActions: _downloadActions(),
+          imagePreviewActions: ChatImagePreviewActions(
+            onDownload: (_, _) async {},
+            onSaveAs: (_, _) async {},
+            onCopyToClipboard: (_) async {},
+            onSaveSticker: (_, _) async {},
+            onSaveRoomSticker: (_, _) async {},
+          ),
+        ),
+        platform: TargetPlatform.android,
+      ),
+    );
+
+    await tester.longPress(find.byType(CachedAssetImage));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('添加到我的表情包'), findsOneWidget);
+    expect(find.text('添加到房间表情包'), findsOneWidget);
+  });
+
   testWidgets('sticker context menu hides room action when unavailable', (
     tester,
   ) async {
@@ -2606,9 +2660,9 @@ void main() {
   });
 }
 
-Widget _host(Widget child, {double? height}) {
+Widget _host(Widget child, {double? height, TargetPlatform? platform}) {
   return MaterialApp(
-    theme: ui.uiTheme(),
+    theme: ui.uiTheme().copyWith(platform: platform),
     home: AppConfigScope(
       config: const AppConfig(
         apiBaseUrl: 'https://api.test/api/v1',

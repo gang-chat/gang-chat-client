@@ -827,10 +827,9 @@ class _HistoryMessageRowState extends State<_HistoryMessageRow> {
           const SizedBox(width: 8),
         ],
         Expanded(
-          child: GestureDetector(
-            behavior: HitTestBehavior.translucent,
+          child: UiContextMenuTriggerRegion(
             onTap: widget.selectionMode ? widget.onToggleSelection : null,
-            onSecondaryTapDown: _showContextMenu,
+            onTriggered: _showContextMenu,
             child: surface,
           ),
         ),
@@ -838,7 +837,7 @@ class _HistoryMessageRowState extends State<_HistoryMessageRow> {
     );
   }
 
-  void _showContextMenu(TapDownDetails details) {
+  void _showContextMenu(Offset position) {
     if (widget.selectionMode && !widget.selected) return;
     final items = widget.selectionMode
         ? widget.selectedMessages
@@ -848,7 +847,7 @@ class _HistoryMessageRowState extends State<_HistoryMessageRow> {
     unawaited(
       showUiContextMenu(
         context,
-        position: details.globalPosition,
+        position: position,
         sections: [
           if (items.length == 1)
             UiContextMenuSection([

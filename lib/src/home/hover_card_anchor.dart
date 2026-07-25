@@ -438,6 +438,12 @@ class _HoverCardAnchorState extends State<HoverCardAnchor> {
         child: GestureDetector(
           behavior: HitTestBehavior.translucent,
           onTap: _pinOpen,
+          // On Android a hold is reserved for the desktop-equivalent context
+          // menu. Registering it here also prevents a long hold from falling
+          // through to the tap-to-pin behavior when no context menu exists.
+          onLongPress: Theme.of(context).platform == TargetPlatform.android
+              ? () {}
+              : null,
           child: MouseRegion(
             onEnter: (_) => _enterAnchor(),
             onExit: (_) => _exitAnchor(),

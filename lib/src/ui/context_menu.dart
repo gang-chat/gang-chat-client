@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'platform_gestures.dart';
 import 'tokens.dart';
 
 const double _contextMenuScreenPadding = 8;
@@ -29,6 +30,94 @@ class UiContextMenuItem {
   final bool selected;
   final bool danger;
   final VoidCallback? onPressed;
+}
+
+/// Gives application context-menu targets one platform-consistent trigger.
+///
+/// Secondary mouse click remains available on every platform. Android also
+/// maps a touch/stylus hold to the same callback. The raw pointer tracker is a
+/// fallback for targets containing editable text, whose native long-press
+/// recognizer can otherwise win the gesture arena.
+class UiContextMenuTriggerRegion extends StatefulWidget {
+  const UiContextMenuTriggerRegion({
+    super.key,
+    required this.onTriggered,
+    required this.child,
+    this.onTap,
+    this.behavior = HitTestBehavior.translucent,
+  });
+
+  final ValueChanged<Offset> onTriggered;
+  final VoidCallback? onTap;
+  final HitTestBehavior behavior;
+  final Widget child;
+
+  @override
+  State<UiContextMenuTriggerRegion> createState() =>
+      _UiContextMenuTriggerRegionState();
+}
+
+class _UiContextMenuTriggerRegionState
+    extends State<UiContextMenuTriggerRegion> {
+  late final UiAndroidLongPressTracker _androidLongPressTracker =
+      UiAndroidLongPressTracker(onLongPress: _triggerAndroidLongPress);
+  bool _androidLongPressEnabled = false;
+  bool _triggeredForCurrentPointer = false;
+
+  @override
+  void dispose() {
+    _androidLongPressTracker.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _androidLongPressEnabled =
+        Theme.of(context).platform == TargetPlatform.android;
+    return Listener(
+      onPointerDown: (event) {
+        _triggeredForCurrentPointer = false;
+        _androidLongPressTracker.handlePointerDown(
+          event,
+          enabled: _androidLongPressEnabled,
+        );
+      },
+      onPointerMove: _androidLongPressTracker.handlePointerMove,
+      onPointerUp: (event) {
+        _androidLongPressTracker.handlePointerUp(event);
+        _triggeredForCurrentPointer = false;
+      },
+      onPointerCancel: (event) {
+        _androidLongPressTracker.handlePointerCancel(event);
+        _triggeredForCurrentPointer = false;
+      },
+      child: GestureDetector(
+        behavior: widget.behavior,
+        onTap: widget.onTap,
+        onSecondaryTapDown: (details) =>
+            _trigger(details.globalPosition, androidLongPress: false),
+        onLongPressStart: _androidLongPressEnabled
+            ? (details) =>
+                  _trigger(details.globalPosition, androidLongPress: true)
+            : null,
+        child: widget.child,
+      ),
+    );
+  }
+
+  void _triggerAndroidLongPress(Offset globalPosition) {
+    if (!mounted || !_androidLongPressEnabled) return;
+    _trigger(globalPosition, androidLongPress: true);
+  }
+
+  void _trigger(Offset globalPosition, {required bool androidLongPress}) {
+    if (androidLongPress) {
+      if (_triggeredForCurrentPointer) return;
+      _triggeredForCurrentPointer = true;
+      ContextMenuController.removeAny();
+    }
+    widget.onTriggered(globalPosition);
+  }
 }
 
 Future<void> showUiContextMenu(

@@ -270,6 +270,9 @@ class _HoverInfo extends StatelessWidget {
       message: message,
       preferBelow: true,
       verticalOffset: _controlHoverInfoVerticalOffset,
+      triggerMode: Theme.of(context).platform == TargetPlatform.android
+          ? TooltipTriggerMode.manual
+          : null,
       child: child,
     );
   }
@@ -391,9 +394,9 @@ class _HoverVolumeButtonState extends State<_HoverVolumeButton> {
     _overlayEntry = null;
   }
 
-  void _scheduleHide() {
+  void _scheduleHide({Duration delay = const Duration(milliseconds: 90)}) {
     _hideTimer?.cancel();
-    _hideTimer = Timer(const Duration(milliseconds: 90), () {
+    _hideTimer = Timer(delay, () {
       if (!_targetHovered && !_overlayHovered && !_dragging) {
         _hideOverlay();
       }
@@ -412,6 +415,11 @@ class _HoverVolumeButtonState extends State<_HoverVolumeButton> {
     setState(() => _value = normalized);
     _overlayEntry?.markNeedsBuild();
     widget.onChanged(normalized);
+  }
+
+  void _showOverlayForAndroidLongPress() {
+    _showOverlay();
+    _scheduleHide(delay: const Duration(seconds: 3));
   }
 
   Widget _buildOverlay(
@@ -456,18 +464,25 @@ class _HoverVolumeButtonState extends State<_HoverVolumeButton> {
 
   @override
   Widget build(BuildContext context) {
+    final isAndroid = Theme.of(context).platform == TargetPlatform.android;
     return _HoverInfo(
       message: widget.infoMessage,
-      child: MouseRegion(
-        onEnter: (_) {
-          _targetHovered = true;
-          _showOverlay();
-        },
-        onExit: (_) {
-          _targetHovered = false;
-          _scheduleHide();
-        },
-        child: widget.child,
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onLongPressStart: isAndroid
+            ? (_) => _showOverlayForAndroidLongPress()
+            : null,
+        child: MouseRegion(
+          onEnter: (_) {
+            _targetHovered = true;
+            _showOverlay();
+          },
+          onExit: (_) {
+            _targetHovered = false;
+            _scheduleHide();
+          },
+          child: widget.child,
+        ),
       ),
     );
   }

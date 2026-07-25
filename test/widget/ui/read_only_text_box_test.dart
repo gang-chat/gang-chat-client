@@ -67,12 +67,68 @@ void main() {
     expect(find.text('全选'), findsNothing);
     expect(find.text('复制'), findsNothing);
   });
+
+  testWidgets('Android double tap selects text', (tester) async {
+    await _pumpReadOnlyTextBox(
+      tester,
+      'hello world',
+      platform: TargetPlatform.android,
+    );
+    final field = find.byType(TextField);
+    final rect = tester.getRect(field);
+    final wordPosition = Offset(rect.left + 34, rect.center.dy);
+
+    await tester.tapAt(wordPosition);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tapAt(wordPosition);
+    await tester.pump();
+
+    final selection = tester
+        .state<EditableTextState>(find.byType(EditableText))
+        .textEditingValue
+        .selection;
+    expect(selection.isCollapsed, isFalse);
+  });
+
+  testWidgets('Android hold preserves selection like a desktop right click', (
+    tester,
+  ) async {
+    await _pumpReadOnlyTextBox(
+      tester,
+      'hello world',
+      platform: TargetPlatform.android,
+    );
+    final field = find.byType(TextField);
+    await tester.tap(field);
+    await tester.pump();
+    final editableTextState = tester.state<EditableTextState>(
+      find.byType(EditableText),
+    );
+    const selectedText = TextSelection(baseOffset: 0, extentOffset: 5);
+    editableTextState.userUpdateTextEditingValue(
+      editableTextState.textEditingValue.copyWith(selection: selectedText),
+      SelectionChangedCause.toolbar,
+    );
+    await tester.pump();
+
+    final rect = tester.getRect(field);
+    await tester.longPressAt(Offset(rect.right - 8, rect.center.dy));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(editableTextState.textEditingValue.selection, selectedText);
+    expect(find.text('复制'), findsOneWidget);
+    expect(find.text('Ctrl+C'), findsOneWidget);
+  });
 }
 
-Future<void> _pumpReadOnlyTextBox(WidgetTester tester, String value) {
+Future<void> _pumpReadOnlyTextBox(
+  WidgetTester tester,
+  String value, {
+  TargetPlatform? platform,
+}) {
   return tester.pumpWidget(
     MaterialApp(
-      theme: uiTheme(),
+      theme: uiTheme().copyWith(platform: platform),
       home: Scaffold(
         body: Center(
           child: SizedBox(width: 320, child: ReadOnlyTextBox(value: value)),

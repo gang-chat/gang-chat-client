@@ -100,6 +100,24 @@ Widget _host(
 }
 
 void main() {
+  testWidgets('Android room card opens on tap but not on hold', (tester) async {
+    await tester.pumpWidget(
+      _host(
+        RoomHoverCardForTest(room: _joinedRoom, currentUser: _currentUser),
+        platform: TargetPlatform.android,
+      ),
+    );
+
+    final avatar = find.byType(Avatar).first;
+    await tester.longPress(avatar);
+    await tester.pumpAndSettle();
+    expect(find.text('RID: R10001'), findsNothing);
+
+    await tester.tap(avatar);
+    await tester.pumpAndSettle();
+    expect(find.text('RID: R10001'), findsOneWidget);
+  });
+
   testWidgets('hover over a room avatar reveals the room profile card', (
     tester,
   ) async {
@@ -1579,6 +1597,54 @@ void main() {
     await tester.tap(find.text('删除'));
     await tester.pumpAndSettle();
     expect(deletedItems, ['invite:invite_context_menu']);
+  });
+
+  testWidgets('Android notification hold opens the desktop context menu', (
+    tester,
+  ) async {
+    final invite = RoomInvite(
+      id: 'invite_android_context_menu',
+      status: 'accepted',
+      room: _joinedRoom,
+      inviter: _creator,
+      createdAt: DateTime.utc(2026, 6, 1),
+    );
+
+    await tester.pumpWidget(
+      _host(
+        HomeNotificationsPane(
+          invites: [invite],
+          applications: const [],
+          roomNotifications: const [],
+          loading: false,
+          error: null,
+          busyInviteId: null,
+          busyApplicationId: null,
+          currentUser: _currentUser,
+          onClose: () {},
+          onRefresh: () {},
+          onReviewInvite: (_, _) async {},
+          onWithdrawApplication: (_) async {},
+          onOpenRoom: (_) {},
+          onOpenRoomEvent: (_) {},
+          onCopyNotification: (_) async {},
+          onDeleteNotification: (_) async {},
+        ),
+        platform: TargetPlatform.android,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final row = find.byKey(
+      const ValueKey(
+        'notification-context-row-invite:invite_android_context_menu',
+      ),
+    );
+    await tester.longPress(row);
+    await tester.pumpAndSettle();
+
+    expect(find.text('复制'), findsOneWidget);
+    expect(find.text('删除'), findsOneWidget);
   });
 
   testWidgets(

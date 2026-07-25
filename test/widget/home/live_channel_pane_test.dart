@@ -501,6 +501,50 @@ void main() {
     expect(find.byTooltip('取消静音Phabe音量'), findsNothing);
   });
 
+  testWidgets(
+    'Android hold opens remote volume without toggling the mute button',
+    (tester) async {
+      final searchController = TextEditingController();
+      addTearDown(searchController.dispose);
+      final remoteUser = _user('phabe', 'Phabe', roomRole: 'member');
+      final live = _liveState([
+        _participant(id: 'live_phabe', user: remoteUser),
+      ]);
+      final volumeToggles = <String>[];
+
+      await tester.pumpWidget(
+        _host(
+          searchController: searchController,
+          live: live,
+          height: 600,
+          platform: TargetPlatform.android,
+          participantVoiceVolume: (_) => 0.4,
+          onParticipantVoiceVolumeChanged: (_, _) {},
+          onParticipantVoiceMuteToggled: volumeToggles.add,
+        ),
+      );
+
+      final volumeButton = find.byKey(
+        const ValueKey<String>('live-member-status:voice-volume:phabe'),
+      );
+      final volumeSlider = find.byKey(
+        const ValueKey<String>('live-volume-slider:Phabe语音音量'),
+      );
+      expect(volumeSlider, findsNothing);
+
+      await tester.longPress(volumeButton);
+      await tester.pump();
+
+      expect(volumeSlider, findsOneWidget);
+      expect(volumeToggles, isEmpty);
+      expect(find.byTooltip('静音Phabe音量'), findsNothing);
+
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(volumeSlider, findsNothing);
+    },
+  );
+
   testWidgets('remote live member moderation controls use danger icons', (
     tester,
   ) async {

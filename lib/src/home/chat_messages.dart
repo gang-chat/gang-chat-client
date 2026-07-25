@@ -1749,14 +1749,13 @@ class _MessageContextMenuRegion extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onSecondaryTapDown: (details) {
+    return UiContextMenuTriggerRegion(
+      onTriggered: (position) {
         onContextMenuActiveChanged?.call(true);
         unawaited(
           _showChatMessageContextMenu(
             context: context,
-            position: details.globalPosition,
+            position: position,
             message: message,
             actions: actions,
           ).whenComplete(() => onContextMenuActiveChanged?.call(false)),
@@ -2251,6 +2250,11 @@ class _MessageRow extends StatelessWidget {
       showBorder: false,
     );
 
+    final avatarWithContextMenu = _MessageAvatarMentionMenu(
+      user: message.sender,
+      onMentionUser: message.sender.id == currentUser.id ? null : onMentionUser,
+      child: avatar,
+    );
     final avatarHoverCard = _AvatarHoverCard(
       user: message.sender,
       currentUser: currentUser,
@@ -2259,12 +2263,7 @@ class _MessageRow extends StatelessWidget {
       onEnterCommonRoom: onEnterProfileRoom,
       profileActionBuilder: profileActionBuilder,
       inLive: inLive,
-      child: avatar,
-    );
-    final avatarWithContextMenu = _MessageAvatarMentionMenu(
-      user: message.sender,
-      onMentionUser: message.sender.id == currentUser.id ? null : onMentionUser,
-      child: avatarHoverCard,
+      child: avatarWithContextMenu,
     );
 
     return Row(
@@ -2273,9 +2272,9 @@ class _MessageRow extends StatelessWidget {
           : MainAxisAlignment.start,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (!outgoing) ...[avatarWithContextMenu, const SizedBox(width: 10)],
+        if (!outgoing) ...[avatarHoverCard, const SizedBox(width: 10)],
         bubble,
-        if (outgoing) ...[const SizedBox(width: 10), avatarWithContextMenu],
+        if (outgoing) ...[const SizedBox(width: 10), avatarHoverCard],
       ],
     );
   }
@@ -2297,13 +2296,12 @@ class _MessageAvatarMentionMenu extends StatelessWidget {
     final onMention = onMentionUser;
     if (onMention == null) return child;
     final label = _senderName(user);
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onSecondaryTapDown: (details) {
+    return UiContextMenuTriggerRegion(
+      onTriggered: (position) {
         unawaited(
           showUiContextMenu(
             context,
-            position: details.globalPosition,
+            position: position,
             sections: [
               UiContextMenuSection([
                 UiContextMenuItem(
@@ -2516,11 +2514,24 @@ class _MessageBubble extends StatefulWidget {
 }
 
 class _MessageBubbleState extends State<_MessageBubble> {
+  late final UiAndroidLongPressTracker _androidLongPressTracker =
+      UiAndroidLongPressTracker(onLongPress: _handleAndroidBubbleLongPress);
   bool _textSelectionActive = false;
   bool _contextMenuActive = false;
+  bool _androidLongPressEnabled = false;
+  bool _textSelectionActiveAtPointerDown = false;
+  bool _androidLongPressHandled = false;
+
+  @override
+  void dispose() {
+    _androidLongPressTracker.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    _androidLongPressEnabled =
+        Theme.of(context).platform == TargetPlatform.android;
     final contentKind = message_display.messageContentKind(widget.message);
     final contextMenuActive = _contextMenuActive;
     final backgroundColor = widget.outgoing ? _outgoingBubble : _incomingBubble;
@@ -2563,52 +2574,94 @@ class _MessageBubbleState extends State<_MessageBubble> {
         : UiColors.border;
 
     return Listener(
-      onPointerDown: (event) => _handleBubblePointerDown(event, contentKind),
-      child: AnimatedContainer(
-        key: ValueKey('message-bubble-surface-${widget.message.id}'),
-        duration: widget.mentionTargetsCurrentUser || widget.mentionHighlighted
-            ? Duration.zero
-            : const Duration(milliseconds: 90),
-        curve: Curves.easeOutCubic,
-        decoration: BoxDecoration(
-          color: highlightColor,
-          borderRadius: BorderRadius.circular(UiRadii.lg),
-          border: Border.all(color: borderColor),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-          child: DecoratedBox(
-            key: ValueKey('message-bubble-content-${widget.message.id}'),
-            decoration: BoxDecoration(
-              color: highlightColor,
-              borderRadius: BorderRadius.circular(math.max(0, UiRadii.lg - 5)),
-            ),
-            child: ChatMessageContent(
-              message: widget.message,
-              outgoing: widget.outgoing,
-              timestampNow: widget.timestampNow,
-              showDetailedTimestamps: widget.showDetailedTimestamps,
-              transfer: widget.transfer,
-              fileDownloads: widget.fileDownloads,
-              downloadActions: widget.downloadActions,
-              voicePlaybackActions: widget.voicePlaybackActions,
-              imagePreviewActions: widget.imagePreviewActions,
-              currentUser: widget.currentUser,
-              currentUserMentionIdentity: widget.currentUserMentionIdentity,
-              ownerUserId: widget.ownerUserId,
-              mentionMembers: widget.mentionMembers,
-              mentionHighlighted: widget.mentionHighlighted,
-              onResolveSenderProfile: widget.onResolveSenderProfile,
-              onResolveRoomProfile: widget.onResolveRoomProfile,
-              onEnterProfileRoom: widget.onEnterProfileRoom,
-              profileActionBuilder: widget.profileActionBuilder,
-              isUserInLive: widget.isUserInLive,
-              onSelectionActiveChanged: _handleTextSelectionActiveChanged,
-              onOpenQuote: widget.messageActions.onOpenQuote,
+      onPointerDown: (event) {
+        _handleBubblePointerDown(event, contentKind);
+        _textSelectionActiveAtPointerDown = _textSelectionActive;
+        _androidLongPressHandled = false;
+        _androidLongPressTracker.handlePointerDown(
+          event,
+          enabled: _androidLongPressEnabled,
+        );
+      },
+      onPointerMove: _androidLongPressTracker.handlePointerMove,
+      onPointerUp: (event) {
+        _androidLongPressTracker.handlePointerUp(event);
+        _androidLongPressHandled = false;
+      },
+      onPointerCancel: (event) {
+        _androidLongPressTracker.handlePointerCancel(event);
+        _androidLongPressHandled = false;
+      },
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onLongPressStart: _androidLongPressEnabled
+            ? (details) => _handleAndroidBubbleLongPress(details.globalPosition)
+            : null,
+        child: AnimatedContainer(
+          key: ValueKey('message-bubble-surface-${widget.message.id}'),
+          duration:
+              widget.mentionTargetsCurrentUser || widget.mentionHighlighted
+              ? Duration.zero
+              : const Duration(milliseconds: 90),
+          curve: Curves.easeOutCubic,
+          decoration: BoxDecoration(
+            color: highlightColor,
+            borderRadius: BorderRadius.circular(UiRadii.lg),
+            border: Border.all(color: borderColor),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            child: DecoratedBox(
+              key: ValueKey('message-bubble-content-${widget.message.id}'),
+              decoration: BoxDecoration(
+                color: highlightColor,
+                borderRadius: BorderRadius.circular(
+                  math.max(0, UiRadii.lg - 5),
+                ),
+              ),
+              child: ChatMessageContent(
+                message: widget.message,
+                outgoing: widget.outgoing,
+                timestampNow: widget.timestampNow,
+                showDetailedTimestamps: widget.showDetailedTimestamps,
+                transfer: widget.transfer,
+                fileDownloads: widget.fileDownloads,
+                downloadActions: widget.downloadActions,
+                voicePlaybackActions: widget.voicePlaybackActions,
+                imagePreviewActions: widget.imagePreviewActions,
+                currentUser: widget.currentUser,
+                currentUserMentionIdentity: widget.currentUserMentionIdentity,
+                ownerUserId: widget.ownerUserId,
+                mentionMembers: widget.mentionMembers,
+                mentionHighlighted: widget.mentionHighlighted,
+                onResolveSenderProfile: widget.onResolveSenderProfile,
+                onResolveRoomProfile: widget.onResolveRoomProfile,
+                onEnterProfileRoom: widget.onEnterProfileRoom,
+                profileActionBuilder: widget.profileActionBuilder,
+                isUserInLive: widget.isUserInLive,
+                onSelectionActiveChanged: _handleTextSelectionActiveChanged,
+                onOpenQuote: widget.messageActions.onOpenQuote,
+              ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  void _handleAndroidBubbleLongPress(Offset position) {
+    if (!_androidLongPressEnabled || _androidLongPressHandled) return;
+    _androidLongPressHandled = true;
+    final contentKind = message_display.messageContentKind(widget.message);
+    if (contentKind == message_display.MessageContentKind.text &&
+        _textSelectionActiveAtPointerDown) {
+      return;
+    }
+    ContextMenuController.removeAny();
+    _showBubbleContextMenuAt(
+      position,
+      contentKind,
+      textSelectionActive: _textSelectionActiveAtPointerDown,
     );
   }
 
@@ -2617,15 +2670,27 @@ class _MessageBubbleState extends State<_MessageBubble> {
     message_display.MessageContentKind contentKind,
   ) {
     if ((event.buttons & kSecondaryMouseButton) == 0) return;
+    _showBubbleContextMenuAt(
+      event.position,
+      contentKind,
+      textSelectionActive: _textSelectionActive,
+    );
+  }
+
+  void _showBubbleContextMenuAt(
+    Offset position,
+    message_display.MessageContentKind contentKind, {
+    required bool textSelectionActive,
+  }) {
     if (contentKind == message_display.MessageContentKind.text &&
-        _textSelectionActive) {
+        textSelectionActive) {
       return;
     }
     if (contentKind == message_display.MessageContentKind.sticker) {
       _showContextMenuWithHighlight(
         () => _showStickerContextMenu(
           context: context,
-          position: event.position,
+          position: position,
           message: widget.message,
           attachment: widget.message.stickerAttachment!,
           imagePreviewActions: widget.imagePreviewActions,
@@ -2637,7 +2702,7 @@ class _MessageBubbleState extends State<_MessageBubble> {
     _showContextMenuWithHighlight(
       () => _showChatMessageContextMenu(
         context: context,
-        position: event.position,
+        position: position,
         message: widget.message,
         actions: widget.messageActions,
       ),

@@ -779,15 +779,14 @@ class _NotificationContextMenuRegionState
     final itemSelected = widget.selectedItems.any(
       (selected) => selected.id == widget.item.id,
     );
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
+    return UiContextMenuTriggerRegion(
       onTap: widget.selectionMode ? widget.onToggleSelection : null,
-      onSecondaryTapDown: _showContextMenu,
+      onTriggered: _showContextMenu,
       child: widget.childBuilder(_contextMenuActive || itemSelected),
     );
   }
 
-  void _showContextMenu(TapDownDetails details) {
+  void _showContextMenu(Offset position) {
     final contextItems = widget.selectionMode
         ? widget.selectedItems
         : [widget.item];
@@ -802,7 +801,7 @@ class _NotificationContextMenuRegionState
     unawaited(
       showUiContextMenu(
         context,
-        position: details.globalPosition,
+        position: position,
         sections: [
           if (contextItems.length == 1)
             UiContextMenuSection([
