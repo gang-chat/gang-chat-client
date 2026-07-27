@@ -286,7 +286,30 @@ extension _HomeShellRoomActions on _HomeShellState {
     await _leaveLiveForSessionEnd(
       disconnectTimeout: const Duration(seconds: 1),
     );
+    await _resetLiveAudioPreferencesAfterLogout();
     await widget.app.logout();
+  }
+
+  Future<void> _resetLiveAudioPreferencesAfterLogout() async {
+    if (mounted) {
+      _setHomeState(() {
+        _micMuted = false;
+        _headphonesMuted = false;
+        _voiceBlocked = false;
+      });
+    }
+    try {
+      await _liveSessionController.setInputVolume(_restoredInputVolume());
+    } catch (_) {}
+    try {
+      await _liveSessionController.setOutputVolume(_restoredOutputVolume());
+    } catch (_) {}
+    try {
+      await _liveSessionController.setMicMuted(false);
+    } catch (_) {}
+    try {
+      await _liveSessionController.setOutputMuted(false);
+    } catch (_) {}
   }
 
   Future<void> _leaveLiveForSessionEnd({Duration? disconnectTimeout}) async {

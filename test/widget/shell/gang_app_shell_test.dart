@@ -313,6 +313,10 @@ GangApi _roomsApi({
   var alphaRoomAiVoiceAnnouncementsEnabled =
       initialAlphaRoomAiVoiceAnnouncementsEnabled;
   var alphaRoomNotificationPolicy = 'all';
+  var liveMicMuted = false;
+  var liveHeadphonesMuted = false;
+  var liveCameraOn = false;
+  var liveScreenSharing = false;
   return GangApiClient(
     baseUrl: 'http://example.test/api/v1',
     accessTokenProvider: ({bool forceRefresh = false}) async => 'access-token',
@@ -1114,6 +1118,10 @@ GangApi _roomsApi({
         final participant = _liveParticipantJson(
           user: _currentUserJson,
           liveSessionId: 'live-session-joined',
+          micMuted: liveMicMuted,
+          headphonesMuted: liveHeadphonesMuted,
+          cameraOn: liveCameraOn,
+          screenSharing: liveScreenSharing,
         );
         return _jsonResponse({
           'livekit': {
@@ -1148,13 +1156,26 @@ GangApi _roomsApi({
           'state:${body['connection_state'] ?? 'unchanged'}',
         );
         liveStateUpdates?.add(body);
+        if (body['mic_muted'] case final bool value) {
+          liveMicMuted = value;
+        }
+        if (body['headphones_muted'] case final bool value) {
+          liveHeadphonesMuted = value;
+        }
+        if (body['camera_on'] case final bool value) {
+          liveCameraOn = value;
+        }
+        if (body['screen_sharing'] case final bool value) {
+          liveScreenSharing = value;
+        }
         return _jsonResponse({
           'participant': _liveParticipantJson(
             user: _currentUserJson,
             liveSessionId: 'live-session-joined',
-            micMuted: body['mic_muted'] as bool? ?? false,
-            cameraOn: body['camera_on'] as bool? ?? false,
-            screenSharing: body['screen_sharing'] as bool? ?? false,
+            micMuted: liveMicMuted,
+            headphonesMuted: liveHeadphonesMuted,
+            cameraOn: liveCameraOn,
+            screenSharing: liveScreenSharing,
           ),
         });
       }

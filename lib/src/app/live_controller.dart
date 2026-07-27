@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../protocol/api_client.dart';
 import '../protocol/models.dart';
 import 'room_live_state.dart' as room_live_state;
@@ -60,6 +62,7 @@ enum LiveModerationAction {
 class LiveJoinResultPatch {
   const LiveJoinResultPatch({
     required this.micMuted,
+    required this.headphonesMuted,
     required this.cameraOn,
     required this.screenSharing,
     required this.voiceBlocked,
@@ -68,6 +71,7 @@ class LiveJoinResultPatch {
   });
 
   final bool micMuted;
+  final bool headphonesMuted;
   final bool cameraOn;
   final bool screenSharing;
   final bool voiceBlocked;
@@ -78,6 +82,7 @@ class LiveJoinResultPatch {
 class LiveStateUpdatePatch {
   const LiveStateUpdatePatch({
     required this.micMuted,
+    required this.headphonesMuted,
     required this.cameraOn,
     required this.screenSharing,
     required this.voiceBlocked,
@@ -85,10 +90,40 @@ class LiveStateUpdatePatch {
   });
 
   final bool micMuted;
+  final bool headphonesMuted;
   final bool cameraOn;
   final bool screenSharing;
   final bool voiceBlocked;
   final LiveState? live;
+}
+
+/// Keeps mutations of the current user's live state in request order.
+///
+/// The live endpoint updates a single participant row. Sending optimistic UI
+/// changes concurrently allows an older request to arrive last and overwrite a
+/// newer microphone, headphones, camera, or screen-share choice. Failed
+/// requests are delivered to their caller without breaking later requests.
+class LiveStateRequestQueue {
+  Future<void> _tail = Future<void>.value();
+  int _pendingCount = 0;
+
+  bool get isIdle => _pendingCount == 0;
+
+  Future<T> run<T>(Future<T> Function() request) {
+    final completer = Completer<T>();
+    _pendingCount += 1;
+    _tail = _tail.then((_) async {
+      try {
+        final result = await request();
+        _pendingCount -= 1;
+        completer.complete(result);
+      } catch (error, stackTrace) {
+        _pendingCount -= 1;
+        completer.completeError(error, stackTrace);
+      }
+    });
+    return completer.future;
+  }
 }
 
 class LiveJoinStatePatch {
@@ -352,6 +387,7 @@ class LiveController {
     final live = _replaceParticipantInLive(result.live, participant);
     return LiveJoinResultPatch(
       micMuted: participant.micMuted,
+      headphonesMuted: participant.headphonesMuted,
       cameraOn: participant.cameraOn,
       screenSharing: participant.screenSharing,
       voiceBlocked: participant.voiceBlocked,
@@ -407,6 +443,7 @@ class LiveController {
     final normalized = liveParticipantWithExclusiveMedia(participant);
     return LiveStateUpdatePatch(
       micMuted: normalized.micMuted,
+      headphonesMuted: normalized.headphonesMuted,
       cameraOn: normalized.cameraOn,
       screenSharing: normalized.screenSharing,
       voiceBlocked: normalized.voiceBlocked,

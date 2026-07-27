@@ -298,134 +298,150 @@ class _LiveChannelPaneState extends State<LiveChannelPane> {
                 _LiveRoomHeader(title: widget.title),
                 const SizedBox(height: 16),
                 Expanded(
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Positioned.fill(
-                        child: Column(
-                          children: [
-                            if (stageTrack != null) ...[
-                              Expanded(
-                                flex: 3,
-                                child: _LiveMediaStage(
-                                  track: stageTrack,
-                                  renderVideo: !widget.suspendStageVideo,
-                                  label: liveStageTrackLabel(
-                                    widget.live,
-                                    stageTrack,
+                  child: LayoutBuilder(
+                    builder: (context, stageConstraints) {
+                      final musicBoxPanelHeight =
+                          stageConstraints.maxHeight <
+                              _musicBoxMinComfortableHeight
+                          ? _musicBoxMinComfortableHeight
+                          : stageConstraints.maxHeight;
+                      return Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Positioned.fill(
+                            child: Column(
+                              children: [
+                                if (stageTrack != null) ...[
+                                  Expanded(
+                                    flex: 3,
+                                    child: _LiveMediaStage(
+                                      track: stageTrack,
+                                      renderVideo: !widget.suspendStageVideo,
+                                      label: liveStageTrackLabel(
+                                        widget.live,
+                                        stageTrack,
+                                      ),
+                                      screenShareViewers:
+                                          stageTrack.isScreenShare
+                                          ? live_display.liveScreenShareViewers(
+                                              widget.live,
+                                              stageTrack.identity,
+                                            )
+                                          : const <UserSummary>[],
+                                      screenShareVolume:
+                                          widget.screenShareVolume,
+                                      cameraMirrored:
+                                          live_display
+                                              .liveParticipantByUserId(
+                                                widget.live,
+                                                stageTrack.identity,
+                                              )
+                                              ?.cameraMirrored ??
+                                          false,
+                                      onFlipCamera: stageTrack.isLocal
+                                          ? widget.onFlipCamera
+                                          : null,
+                                      onSetLocalCameraMirrored:
+                                          widget.onSetLocalCameraMirrored,
+                                      onExit: _exitStage,
+                                      onFullScreen: () =>
+                                          widget.onEnterFullScreen(stageTrack),
+                                      onScreenShareVolumeChanged:
+                                          widget.onScreenShareVolumeChanged,
+                                      onScreenShareMuteToggled:
+                                          widget.onScreenShareMuteToggled,
+                                    ),
                                   ),
-                                  screenShareViewers: stageTrack.isScreenShare
-                                      ? live_display.liveScreenShareViewers(
-                                          widget.live,
-                                          stageTrack.identity,
-                                        )
-                                      : const <UserSummary>[],
-                                  screenShareVolume: widget.screenShareVolume,
-                                  cameraMirrored:
-                                      live_display
-                                          .liveParticipantByUserId(
-                                            widget.live,
-                                            stageTrack.identity,
-                                          )
-                                          ?.cameraMirrored ??
-                                      false,
-                                  onFlipCamera: stageTrack.isLocal
-                                      ? widget.onFlipCamera
-                                      : null,
-                                  onSetLocalCameraMirrored:
-                                      widget.onSetLocalCameraMirrored,
-                                  onExit: _exitStage,
-                                  onFullScreen: () =>
-                                      widget.onEnterFullScreen(stageTrack),
-                                  onScreenShareVolumeChanged:
-                                      widget.onScreenShareVolumeChanged,
-                                  onScreenShareMuteToggled:
-                                      widget.onScreenShareMuteToggled,
+                                  const SizedBox(height: 14),
+                                ],
+                                Expanded(
+                                  flex: stageTrack == null ? 1 : 2,
+                                  child: _LiveMemberStage(
+                                    participants: participants,
+                                    currentUser: widget.currentUser,
+                                    localMicMuted: widget.micMuted,
+                                    localHeadphonesMuted:
+                                        widget.headphonesMuted,
+                                    speakingUserIds: widget.speakingUserIds,
+                                    liveKitMicMutedByParticipantId:
+                                        widget.liveKitMicMutedByParticipantId,
+                                    videoTracks: widget.videoTracks,
+                                    stageTrack: stageTrack,
+                                    onSelectStage: _selectStage,
+                                    onSelectScreenShareStage:
+                                        _selectScreenShareStage,
+                                    onSelectCameraStage: _selectCameraStage,
+                                    onToggleMic: widget.onToggleMic,
+                                    onToggleHeadphones:
+                                        widget.onToggleHeadphones,
+                                    participantVoiceVolume:
+                                        widget.participantVoiceVolume,
+                                    onParticipantVoiceVolumeChanged:
+                                        widget.onParticipantVoiceVolumeChanged,
+                                    onParticipantVoiceMuteToggled:
+                                        widget.onParticipantVoiceMuteToggled,
+                                    canModerateParticipant:
+                                        widget.canModerateParticipant,
+                                    onToggleParticipantMicModeration:
+                                        widget.onToggleParticipantMicModeration,
+                                    onToggleParticipantHeadphonesModeration: widget
+                                        .onToggleParticipantHeadphonesModeration,
+                                    canRemoveParticipant:
+                                        widget.canRemoveParticipant,
+                                    onRemoveParticipant:
+                                        widget.onRemoveParticipant,
+                                    onResolveParticipantProfile:
+                                        widget.onResolveParticipantProfile,
+                                    onResolveParticipantRoomProfile:
+                                        widget.onResolveParticipantRoomProfile,
+                                    onEnterParticipantProfileRoom:
+                                        widget.onEnterParticipantProfileRoom,
+                                    participantProfileActionBuilder:
+                                        widget.participantProfileActionBuilder,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 14),
-                            ],
-                            Expanded(
-                              flex: stageTrack == null ? 1 : 2,
-                              child: _LiveMemberStage(
-                                participants: participants,
-                                currentUser: widget.currentUser,
-                                localMicMuted: widget.micMuted,
-                                localHeadphonesMuted: widget.headphonesMuted,
-                                speakingUserIds: widget.speakingUserIds,
-                                liveKitMicMutedByParticipantId:
-                                    widget.liveKitMicMutedByParticipantId,
-                                videoTracks: widget.videoTracks,
-                                stageTrack: stageTrack,
-                                onSelectStage: _selectStage,
-                                onSelectScreenShareStage:
-                                    _selectScreenShareStage,
-                                onSelectCameraStage: _selectCameraStage,
-                                onToggleMic: widget.onToggleMic,
-                                onToggleHeadphones: widget.onToggleHeadphones,
-                                participantVoiceVolume:
-                                    widget.participantVoiceVolume,
-                                onParticipantVoiceVolumeChanged:
-                                    widget.onParticipantVoiceVolumeChanged,
-                                onParticipantVoiceMuteToggled:
-                                    widget.onParticipantVoiceMuteToggled,
-                                canModerateParticipant:
-                                    widget.canModerateParticipant,
-                                onToggleParticipantMicModeration:
-                                    widget.onToggleParticipantMicModeration,
-                                onToggleParticipantHeadphonesModeration: widget
-                                    .onToggleParticipantHeadphonesModeration,
-                                canRemoveParticipant:
-                                    widget.canRemoveParticipant,
-                                onRemoveParticipant: widget.onRemoveParticipant,
-                                onResolveParticipantProfile:
-                                    widget.onResolveParticipantProfile,
-                                onResolveParticipantRoomProfile:
-                                    widget.onResolveParticipantRoomProfile,
-                                onEnterParticipantProfileRoom:
-                                    widget.onEnterParticipantProfileRoom,
-                                participantProfileActionBuilder:
-                                    widget.participantProfileActionBuilder,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      // The search + queue panel slides out as a narrow
-                      // right-docked surface over the stage when expanded. The
-                      // compact now-playing strip itself lives inline in the
-                      // control bar below (see _LiveControlBar).
-                      if (musicBoxOpen && musicBox != null)
-                        Positioned(
-                          top: 0,
-                          right: 0,
-                          // Keep the panel inside the stage at every width so
-                          // the complete inline player row remains visible.
-                          bottom: 0,
-                          child: SizedBox(
-                            width: _musicBoxPanelWidth,
-                            child: LiveMusicBoxPanel(
-                              key: const ValueKey<String>(
-                                'live-music-box-panel',
-                              ),
-                              state: musicBox,
-                              searchController: widget.musicBoxSearchController,
-                              searchResults: widget.musicBoxSearchResults,
-                              searching: widget.musicBoxSearching,
-                              searchError: widget.musicBoxSearchError,
-                              source: widget.musicBoxSource,
-                              onTogglePlayback: widget.onMusicBoxTogglePlayback,
-                              onSkip: widget.onMusicBoxSkip,
-                              onQueueResult: widget.onMusicBoxQueueResult,
-                              onRemoveItem: widget.onMusicBoxRemoveItem,
-                              onSourceChanged: widget.onMusicBoxSourceChanged,
-                              onClose: widget.onToggleMusicBox,
-                              volume: widget.musicBoxVolume,
-                              onVolumeChanged: widget.onMusicBoxVolumeChanged,
+                              ],
                             ),
                           ),
-                        ),
-                    ],
+                          // The search + queue panel slides out as a narrow
+                          // right-docked surface over the stage when expanded. The
+                          // compact now-playing strip itself lives inline in the
+                          // control bar below (see _LiveControlBar).
+                          if (musicBoxOpen && musicBox != null)
+                            Positioned(
+                              right: 0,
+                              bottom: 0,
+                              height: musicBoxPanelHeight,
+                              child: SizedBox(
+                                width: _musicBoxPanelWidth,
+                                child: LiveMusicBoxPanel(
+                                  key: const ValueKey<String>(
+                                    'live-music-box-panel',
+                                  ),
+                                  state: musicBox,
+                                  searchController:
+                                      widget.musicBoxSearchController,
+                                  searchResults: widget.musicBoxSearchResults,
+                                  searching: widget.musicBoxSearching,
+                                  searchError: widget.musicBoxSearchError,
+                                  source: widget.musicBoxSource,
+                                  onTogglePlayback:
+                                      widget.onMusicBoxTogglePlayback,
+                                  onSkip: widget.onMusicBoxSkip,
+                                  onQueueResult: widget.onMusicBoxQueueResult,
+                                  onRemoveItem: widget.onMusicBoxRemoveItem,
+                                  onSourceChanged:
+                                      widget.onMusicBoxSourceChanged,
+                                  onClose: widget.onToggleMusicBox,
+                                  volume: widget.musicBoxVolume,
+                                  onVolumeChanged:
+                                      widget.onMusicBoxVolumeChanged,
+                                ),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(height: 16),

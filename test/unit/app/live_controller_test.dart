@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -9,6 +10,43 @@ import 'package:client/src/protocol/api_client.dart';
 import 'package:client/src/protocol/models.dart';
 
 void main() {
+  test('live state request queue preserves mutation order', () async {
+    final queue = LiveStateRequestQueue();
+    final firstGate = Completer<void>();
+    final started = <int>[];
+
+    final first = queue.run(() async {
+      started.add(1);
+      await firstGate.future;
+      return 'first';
+    });
+    final second = queue.run(() async {
+      started.add(2);
+      return 'second';
+    });
+
+    await Future<void>.delayed(Duration.zero);
+    expect(started, [1]);
+    expect(queue.isIdle, isFalse);
+
+    firstGate.complete();
+    expect(await first, 'first');
+    expect(await second, 'second');
+    expect(started, [1, 2]);
+    expect(queue.isIdle, isTrue);
+  });
+
+  test('live state request queue continues after a failed mutation', () async {
+    final queue = LiveStateRequestQueue();
+
+    final failed = queue.run<void>(() async => throw StateError('failed'));
+    final recovered = queue.run(() async => 2);
+
+    await expectLater(failed, throwsStateError);
+    expect(await recovered, 2);
+    expect(queue.isIdle, isTrue);
+  });
+
   test(
     'live room guards keep room switching and stale async work explicit',
     () {
@@ -467,6 +505,7 @@ void main() {
     );
 
     expect(patch.micMuted, isTrue);
+    expect(patch.headphonesMuted, isFalse);
     expect(patch.cameraOn, isFalse);
     expect(patch.screenSharing, isTrue);
     expect(patch.voiceBlocked, isTrue);
@@ -547,6 +586,7 @@ void main() {
     );
 
     expect(patch.micMuted, isTrue);
+    expect(patch.headphonesMuted, isFalse);
     expect(patch.voiceBlocked, isTrue);
     expect(patch.cameraOn, isFalse);
     expect(patch.screenSharing, isTrue);

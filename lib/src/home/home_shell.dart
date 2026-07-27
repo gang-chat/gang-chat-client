@@ -79,6 +79,7 @@ import 'adaptive_layout.dart';
 import 'chat_pane.dart';
 import 'compact_activity_layout.dart';
 import 'home_content.dart';
+import 'home_keyboard_layout.dart';
 import 'hover_card_anchor.dart';
 import 'home_notifications.dart';
 import 'home_sidebar.dart';
@@ -107,15 +108,19 @@ const _defaultLiveVolumeRestore = 0.5;
 
 Widget _withAndroidBottomSafeArea({
   required bool enabled,
+  bool preserveKeyboardViewport = false,
   required Widget child,
 }) {
   if (!enabled) return child;
-  return SafeArea(
-    top: false,
-    left: false,
-    right: false,
-    bottom: true,
-    child: child,
+  return HomeKeyboardOverlayViewport(
+    enabled: preserveKeyboardViewport,
+    child: SafeArea(
+      top: false,
+      left: false,
+      right: false,
+      bottom: true,
+      child: child,
+    ),
   );
 }
 
@@ -282,8 +287,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   final Map<String, UserSummary> _joinedLiveParticipantUsers = {};
   bool _joiningLive = false;
   bool _syncingLiveConnectedParticipants = false;
-  bool _micMuted = true;
+  bool _micMuted = false;
   bool _headphonesMuted = false;
+  final LiveStateRequestQueue _liveStateRequests = LiveStateRequestQueue();
   double _lastInputVolumeBeforeMute = _defaultLiveVolumeRestore;
   double _lastOutputVolumeBeforeMute = _defaultLiveVolumeRestore;
   double _lastScreenShareVolumeBeforeMute = _defaultLiveVolumeRestore;
@@ -482,7 +488,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       _joinedLivePersonalAiVoiceAnnouncementsEnabled = false;
       _joinedLiveParticipantUsers.clear();
       _joiningLive = false;
-      _micMuted = true;
+      _micMuted = false;
       _headphonesMuted = false;
       _cameraOn = false;
       _screenSharing = false;
@@ -701,35 +707,47 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     final fullScreenTrack = _resolveFullScreenLiveTrack();
     final platform = Theme.of(context).platform;
     final useAndroidLayout = platform == TargetPlatform.android;
+    final liveMusicBoxVisible =
+        _contentMode == _ContentMode.live &&
+        _joinedLiveRoomId == _selectedServerId &&
+        _musicBox?.enabled == true &&
+        _musicBoxOpen;
     final joinedLiveRoom = live_display.joinedLiveRoomSummary(
       joinedLiveRoomId: _joinedLiveRoomId,
       selectedRoom: _selectedRoom,
       rooms: _servers,
     );
-    final _TitleLiveRoomDockBuilder? liveRoomDockBuilder =
-        joinedLiveRoom == null
-        ? null
-        : (maxWidth, {fillAvailable = false}) => _TitleLiveRoomDock(
-            maxWidth: maxWidth,
-            fillAvailable: fillAvailable,
-            room: joinedLiveRoom,
-            micMuted: _micMuted,
-            headphonesMuted: _headphonesMuted,
-            voiceBlocked: _voiceBlocked,
-            interactionLocked: _appUpdateDownloadInProgress,
-            onOpen: () => unawaited(_openJoinedLiveChannel()),
-            onToggleMic: _voiceBlocked ? null : _toggleMicMute,
-            onToggleHeadphones: _toggleHeadphonesMute,
-            onLeave: () => unawaited(_leaveLive()),
-          );
+    Widget liveRoomDockBuilder(double maxWidth, {bool fillAvailable = false}) =>
+        _TitleLiveRoomDock(
+          maxWidth: maxWidth,
+          fillAvailable: fillAvailable,
+          room: joinedLiveRoom,
+          micMuted: _micMuted,
+          headphonesMuted: _headphonesMuted,
+          voiceBlocked: _voiceBlocked,
+          interactionLocked: _appUpdateDownloadInProgress,
+          onOpen: joinedLiveRoom == null
+              ? null
+              : () => unawaited(_openJoinedLiveChannel()),
+          onToggleMic: _voiceBlocked ? null : _toggleMicMute,
+          onToggleHeadphones: _toggleHeadphonesMute,
+          onLeave: joinedLiveRoom == null
+              ? null
+              : () => unawaited(_leaveLive()),
+        );
     return MediaCacheScope(
       cache: _mediaCacheController,
       child: ChatImagePreviewActionsScope(
         actions: _imagePreviewActions,
         child: Scaffold(
           backgroundColor: UiColors.background,
+          resizeToAvoidBottomInset: shouldResizeHomeForKeyboard(
+            platform: platform,
+            liveMusicBoxVisible: liveMusicBoxVisible,
+          ),
           body: _withAndroidBottomSafeArea(
             enabled: useAndroidLayout,
+            preserveKeyboardViewport: liveMusicBoxVisible,
             child: DecoratedBox(
               decoration: BoxDecoration(
                 border: Border.all(color: _windowEdgeBorder),
@@ -742,7 +760,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                   final titleSearchLayout = _homeTitleBarSearchLayout(
                     context,
                     shellConstraints.maxWidth,
-                    hasLiveRoom: liveRoomDockBuilder != null,
+                    hasLiveRoom: true,
                   );
                   final showSearchOverlay =
                       titleSearchLayout != null &&

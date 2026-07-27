@@ -374,6 +374,83 @@ void registerShellRealtimeLiveWidgetTests() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('authoritative live snapshots reconcile local audio controls', (
+    WidgetTester tester,
+  ) async {
+    final realtime = _FakeRealtimeService();
+    final liveSession = _FakeLiveSession();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ui.uiTheme().copyWith(platform: TargetPlatform.windows),
+        home: HomePage(
+          app: _homeTestAppContext(),
+          liveSessionController: _FakeLiveSessionController(
+            session: liveSession,
+          ),
+          realtime: realtime,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Alpha Room'));
+    await tester.pumpAndSettle();
+    await _openLiveChannelFromHeader(tester);
+    await tester.tap(find.widgetWithText(ui.Button, '加入'));
+    await tester.pumpAndSettle();
+    await tester.tap(_liveControl('headphones'));
+    await tester.pumpAndSettle();
+    expect(liveSession.localMicMuted, isTrue);
+    expect(liveSession.outputMutes.last, isTrue);
+
+    realtime.add(
+      RealtimeEvent(
+        type: 'live_participant_updated',
+        data: {
+          'room_id': 'server-alpha',
+          'participant_count': 2,
+          'preview': <Object?>[],
+          'live': {
+            ..._liveStateJson(
+              roomId: 'server-alpha',
+              participantCount: 2,
+              participants: [
+                _liveParticipantJson(
+                  user: _currentUserJson,
+                  liveSessionId: 'live-session-joined',
+                ),
+                _liveParticipantJson(
+                  user: _userJson(
+                    id: 'user-2',
+                    username: 'morgan',
+                    displayName: 'Morgan',
+                  ),
+                  liveSessionId: 'live-session-morgan',
+                  micMuted: true,
+                ),
+              ],
+            ),
+            'updated_at': '2099-06-05T08:00:00Z',
+          },
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(liveSession.localMicMuted, isFalse);
+    expect(liveSession.outputMutes.last, isFalse);
+    final dock = find.byKey(const ValueKey<String>('home-title-live-room'));
+    expect(
+      find.descendant(of: dock, matching: find.byIcon(Icons.mic)),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: dock, matching: find.byIcon(Icons.headphones)),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'Android keeps live state muted when microphone publication fails',
     (WidgetTester tester) async {
@@ -990,12 +1067,16 @@ void registerShellRealtimeLiveWidgetTests() {
     final searchRect = tester.getRect(
       find.byKey(const ValueKey('home-title-search')),
     );
+    final liveDockRect = tester.getRect(
+      find.byKey(const ValueKey<String>('home-title-live-room')),
+    );
 
     expect(find.text('Gang Chat'), findsNothing);
     expect(find.byTooltip('最小化'), findsNothing);
     expect(find.byTooltip('最大化'), findsNothing);
     expect(find.byTooltip('关闭'), findsNothing);
-    expect(searchRect.center.dx, closeTo(400, 0.01));
+    expect(searchRect.center.dx, greaterThan(400));
+    expect(liveDockRect.right, lessThanOrEqualTo(searchRect.left - 14));
     expect(userSummaryRect.top, closeTo(60, 0.01));
     expect(tester.takeException(), isNull);
   });

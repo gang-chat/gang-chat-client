@@ -53,6 +53,138 @@ void main() {
     );
   });
 
+  testWidgets('narrow join and collapse actions are matching labeled rows', (
+    tester,
+  ) async {
+    final searchController = TextEditingController();
+    addTearDown(searchController.dispose);
+
+    await tester.pumpWidget(
+      _host(
+        searchController: searchController,
+        live: _liveState(const []),
+        width: 360,
+        joined: false,
+        platform: TargetPlatform.android,
+      ),
+    );
+
+    final join = find.byKey(const ValueKey<String>('live-control:join'));
+    final collapse = find.byKey(
+      const ValueKey<String>('live-control:collapse'),
+    );
+    final joinRect = tester.getRect(join);
+    final collapseRect = tester.getRect(collapse);
+    expect(
+      find.descendant(of: join, matching: find.text('加入')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: collapse, matching: find.text('收起')),
+      findsOneWidget,
+    );
+    expect(collapseRect.width, closeTo(joinRect.width, 0.01));
+    expect(collapseRect.left, closeTo(joinRect.left, 0.01));
+    expect(collapseRect.top, greaterThan(joinRect.bottom));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('wide join and collapse actions are matching labeled buttons', (
+    tester,
+  ) async {
+    final searchController = TextEditingController();
+    addTearDown(searchController.dispose);
+
+    await tester.pumpWidget(
+      _host(
+        searchController: searchController,
+        live: _liveState(const []),
+        width: 960,
+        joined: false,
+        platform: TargetPlatform.windows,
+      ),
+    );
+
+    final join = find.byKey(const ValueKey<String>('live-control:join'));
+    final collapse = find.byKey(
+      const ValueKey<String>('live-control:collapse'),
+    );
+    expect(
+      find.descendant(of: join, matching: find.text('加入')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: collapse, matching: find.text('收起')),
+      findsOneWidget,
+    );
+    expect(
+      tester.getSize(collapse).width,
+      closeTo(tester.getSize(join).width, 0.01),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('narrow one-line joined controls keep collapse icon-only', (
+    tester,
+  ) async {
+    final searchController = TextEditingController();
+    addTearDown(searchController.dispose);
+
+    await tester.pumpWidget(
+      _host(
+        searchController: searchController,
+        live: _liveState(const []),
+        width: 420,
+        joined: true,
+        platform: TargetPlatform.android,
+      ),
+    );
+
+    final collapse = find.byKey(
+      const ValueKey<String>('live-control:collapse'),
+    );
+    final collapseRect = tester.getRect(collapse);
+    final cameraRect = tester.getRect(
+      find.byKey(const ValueKey<String>('live-control:camera')),
+    );
+    expect(
+      find.descendant(of: collapse, matching: find.text('收起')),
+      findsNothing,
+    );
+    expect(collapseRect.size, cameraRect.size);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('narrow wrapped joined controls give collapse a labeled row', (
+    tester,
+  ) async {
+    final searchController = TextEditingController();
+    addTearDown(searchController.dispose);
+
+    await tester.pumpWidget(
+      _host(
+        searchController: searchController,
+        live: _liveState(const []),
+        width: 360,
+        joined: true,
+        platform: TargetPlatform.android,
+      ),
+    );
+
+    final collapse = find.byKey(
+      const ValueKey<String>('live-control:collapse'),
+    );
+    final leave = find.byKey(const ValueKey<String>('live-control:leave'));
+    final collapseRect = tester.getRect(collapse);
+    expect(
+      find.descendant(of: collapse, matching: find.text('收起')),
+      findsOneWidget,
+    );
+    expect(collapseRect.width, greaterThan(44));
+    expect(collapseRect.top, greaterThan(tester.getRect(leave).bottom));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'current user live member card is square and shows connected statuses',
     (tester) async {
@@ -1905,6 +2037,12 @@ void main() {
         );
         expect(panel, findsOneWidget);
         expect(inlinePlayer, findsOneWidget);
+        expect(
+          tester.getRect(panel).height,
+          greaterThanOrEqualTo(400),
+          reason:
+              '${testCase.label} music box should extend upward instead of scrolling',
+        );
         expect(
           tester.getRect(panel).bottom,
           lessThanOrEqualTo(tester.getRect(inlinePlayer).top),

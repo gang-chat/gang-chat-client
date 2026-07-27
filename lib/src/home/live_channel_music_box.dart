@@ -1,13 +1,9 @@
 part of 'live_channel_pane.dart';
 
-/// Below this docked height the fixed controls (header + vinyl + volume) crowd
-/// out the body, so the console switches to a scrollable layout instead of
-/// overflowing.
+/// Minimum height retained by the docked console. When the live controls need
+/// an extra row, the panel extends upward instead of making the whole console
+/// scroll.
 const double _musicBoxMinComfortableHeight = 400;
-
-/// The body's fixed height inside the compact, scrollable layout — enough to
-/// show the search field plus a few result/queue rows.
-const double _musicBoxCompactBodyHeight = 220;
 
 /// The search field / queue-toggle button height — slimmer than the app-wide
 /// [Input.defaultHeight] to keep the docked panel dense.
@@ -55,6 +51,22 @@ class LiveMusicBoxPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final preserveAndroidSearchFocus =
+        Theme.of(context).platform == TargetPlatform.android;
+    final body = _MusicBoxBody(
+      key: preserveAndroidSearchFocus
+          ? GlobalObjectKey<_MusicBoxBodyState>(searchController)
+          : null,
+      state: state,
+      searchController: searchController,
+      searchResults: searchResults,
+      searching: searching,
+      searchError: searchError,
+      source: source,
+      onQueueResult: onQueueResult,
+      onRemoveItem: onRemoveItem,
+      onSourceChanged: onSourceChanged,
+    );
     return DecoratedBox(
       decoration: BoxDecoration(
         color: UiColors.surface,
@@ -70,56 +82,12 @@ class LiveMusicBoxPanel extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.all(11),
-        // The panel is docked at full stage height. When the stage is short the
-        // fixed controls (header + vinyl + volume) no longer leave room for the
-        // body, so rather than overflow we let the whole console scroll and give
-        // the body its own usable slice.
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final tallEnough =
-                constraints.maxHeight >= _musicBoxMinComfortableHeight;
-            final preserveAndroidSearchFocus =
-                Theme.of(context).platform == TargetPlatform.android;
-            final body = _MusicBoxBody(
-              // Opening the Android keyboard can move this body between the
-              // roomy and compact branches below. Preserve the element so its
-              // internally owned FocusNode stays attached across that move.
-              key: preserveAndroidSearchFocus
-                  ? GlobalObjectKey<_MusicBoxBodyState>(searchController)
-                  : null,
-              state: state,
-              searchController: searchController,
-              searchResults: searchResults,
-              searching: searching,
-              searchError: searchError,
-              source: source,
-              onQueueResult: onQueueResult,
-              onRemoveItem: onRemoveItem,
-              onSourceChanged: onSourceChanged,
-            );
-
-            if (tallEnough) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  ..._controls(),
-                  Expanded(child: body),
-                ],
-              );
-            }
-
-            return SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  ..._controls(),
-                  // Give the body a fixed, scrollable slice so its internal
-                  // search/queue lists stay usable inside the outer scroll view.
-                  SizedBox(height: _musicBoxCompactBodyHeight, child: body),
-                ],
-              ),
-            );
-          },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ..._controls(),
+            Expanded(child: body),
+          ],
         ),
       ),
     );
@@ -728,6 +696,7 @@ class _MusicBoxQueueList extends StatelessWidget {
       );
     }
     return ListView.separated(
+      key: const ValueKey<String>('music-box-queue-list'),
       padding: EdgeInsets.zero,
       itemCount: queue.length,
       separatorBuilder: (_, _) => const SizedBox(height: 8),
@@ -908,6 +877,7 @@ class _MusicBoxSearchList extends StatelessWidget {
       return const _MusicBoxEmpty(icon: Icons.search_off, message: '没有找到相关歌曲');
     }
     return ListView.separated(
+      key: const ValueKey<String>('music-box-search-results-list'),
       padding: EdgeInsets.zero,
       itemCount: results.length,
       separatorBuilder: (_, _) => const SizedBox(height: 8),

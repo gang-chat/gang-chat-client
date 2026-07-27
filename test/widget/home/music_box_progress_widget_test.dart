@@ -13,17 +13,20 @@ Widget _host(
   TextEditingController searchController, {
   TargetPlatform? platform,
   double? height,
+  bool resizeToAvoidBottomInset = true,
+  List<MusicBoxSearchResult> searchResults = const [],
 }) {
   return MaterialApp(
     theme: uiTheme().copyWith(platform: platform),
     home: Scaffold(
+      resizeToAvoidBottomInset: resizeToAvoidBottomInset,
       body: SizedBox(
         width: 360,
         height: height,
         child: LiveMusicBoxPanel(
           state: state,
           searchController: searchController,
-          searchResults: const [],
+          searchResults: searchResults,
           searching: false,
           searchError: null,
           source: 'netease',
@@ -75,8 +78,116 @@ MusicBoxState _state({
 }
 
 void main() {
+  testWidgets('empty music box keeps the whole panel static', (tester) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      _host(
+        _state(playbackState: MusicBoxPlaybackState.stopped, positionMs: 0),
+        controller,
+        platform: TargetPlatform.android,
+        height: 400,
+      ),
+    );
+
+    final verticalPanelScrollViews = tester
+        .widgetList<SingleChildScrollView>(
+          find.descendant(
+            of: find.byType(LiveMusicBoxPanel),
+            matching: find.byType(SingleChildScrollView),
+          ),
+        )
+        .where((view) => view.scrollDirection == Axis.vertical);
+    expect(verticalPanelScrollViews, isEmpty);
+    expect(
+      find.byKey(const ValueKey<String>('music-box-search-results-list')),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('only overflowing search results scroll vertically', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: 'song');
+    addTearDown(controller.dispose);
+    final results = List<MusicBoxSearchResult>.generate(
+      12,
+      (index) => MusicBoxSearchResult(
+        trackId: 'track-$index',
+        name: 'Song $index',
+        artists: const ['Artist'],
+        source: 'netease',
+      ),
+    );
+
+    await tester.pumpWidget(
+      _host(
+        _state(playbackState: MusicBoxPlaybackState.stopped, positionMs: 0),
+        controller,
+        platform: TargetPlatform.android,
+        height: 400,
+        searchResults: results,
+      ),
+    );
+
+    final resultsList = find.byKey(
+      const ValueKey<String>('music-box-search-results-list'),
+    );
+    expect(resultsList, findsOneWidget);
+    final scrollable = find.descendant(
+      of: resultsList,
+      matching: find.byType(Scrollable),
+    );
+    expect(scrollable, findsOneWidget);
+    expect(
+      tester.state<ScrollableState>(scrollable).position.maxScrollExtent,
+      greaterThan(0),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
-    'android search keeps focus when the keyboard compacts the panel',
+    'Android keyboard overlays the room while an already visible search stays put',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(360, 740);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetViewInsets);
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+      final state = _state(
+        playbackState: MusicBoxPlaybackState.stopped,
+        positionMs: 0,
+      );
+
+      await tester.pumpWidget(
+        _host(
+          state,
+          controller,
+          platform: TargetPlatform.android,
+          resizeToAvoidBottomInset: false,
+        ),
+      );
+      final search = find.byType(TextField);
+      final beforeKeyboard = tester.getRect(search);
+
+      await tester.tap(search);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      await tester.pump();
+
+      final withKeyboard = tester.getRect(search);
+      expect(withKeyboard, beforeKeyboard);
+      expect(withKeyboard.bottom, lessThan(740 - 300));
+      expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'android search keeps focus while the panel reaches its minimum height',
     (tester) async {
       final controller = TextEditingController();
       addTearDown(controller.dispose);
@@ -97,7 +208,7 @@ void main() {
       expect(tester.testTextInput.isVisible, isTrue);
 
       await tester.pumpWidget(
-        _host(state, controller, platform: TargetPlatform.android, height: 330),
+        _host(state, controller, platform: TargetPlatform.android, height: 400),
       );
       await tester.pump();
 

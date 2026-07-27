@@ -325,6 +325,7 @@ extension _HomeShellLiveActions on _HomeShellState {
 
   void _applyLiveJoinResultPatch(LiveJoinResultPatch patch) {
     _micMuted = patch.micMuted;
+    _headphonesMuted = patch.headphonesMuted;
     _cameraOn = patch.cameraOn;
     _screenSharing = patch.screenSharing;
     _voiceBlocked = patch.voiceBlocked;
@@ -412,6 +413,34 @@ extension _HomeShellLiveActions on _HomeShellState {
     }
   }
 
+  void _syncLocalAudioFromParticipant(LiveParticipant participant) {
+    final authoritativeMicMuted =
+        participant.micMuted ||
+        participant.micBlocked ||
+        participant.voiceBlocked;
+    final authoritativeHeadphonesMuted =
+        participant.headphonesMuted || participant.headphonesBlocked;
+    if (_micMuted != authoritativeMicMuted) {
+      _setMicMutedLocally(authoritativeMicMuted);
+    }
+    if (_headphonesMuted != authoritativeHeadphonesMuted) {
+      _setHeadphonesMuted(
+        authoritativeHeadphonesMuted,
+        patchState: false,
+        coupleMic: false,
+      );
+    }
+  }
+
+  void _syncJoinedLiveAudioFromSnapshot(LiveState live) {
+    if (!_liveStateRequests.isIdle || _joinedLiveRoomId != live.roomId) return;
+    for (final participant in live.participants) {
+      if (participant.user.id != _currentUser.id) continue;
+      _syncLocalAudioFromParticipant(participant);
+      return;
+    }
+  }
+
   void _toggleMicMute() {
     final muted = !_micMuted;
     final unmuteHeadphones = !muted && _headphonesMuted;
@@ -437,9 +466,10 @@ extension _HomeShellLiveActions on _HomeShellState {
     bool muted, {
     bool syncVolume = true,
     bool patchState = true,
+    bool coupleMic = true,
   }) {
     final headphonesChanged = _headphonesMuted != muted;
-    final muteMic = muted && !_micMuted;
+    final muteMic = coupleMic && muted && !_micMuted;
     if (!headphonesChanged && !muteMic) return;
 
     _setHomeState(() {
@@ -764,6 +794,8 @@ extension _HomeShellLiveActions on _HomeShellState {
   Future<void> _joinLive(String source) async {
     final room = _selectedRoom;
     if (room == null || _joiningLive) return;
+    final desiredMicMuted = _micMuted;
+    final desiredHeadphonesMuted = _headphonesMuted;
 
     if (widget.androidSystemService.isSupported) {
       try {
@@ -818,14 +850,14 @@ extension _HomeShellLiveActions on _HomeShellState {
         result,
         room.id,
       );
+      final joinPatch = _liveController.patchJoinResult(
+        rooms: _servers,
+        result: displayResult,
+      );
       _setHomeState(() {
-        _applyLiveJoinResultPatch(
-          _liveController.patchJoinResult(
-            rooms: _servers,
-            result: displayResult,
-            showMicUnmutedWhenAllowed: true,
-          ),
-        );
+        _applyLiveJoinResultPatch(joinPatch);
+        _micMuted = joinPatch.voiceBlocked ? true : desiredMicMuted;
+        _headphonesMuted = desiredHeadphonesMuted;
         _joinedLivePersonalAiVoiceAnnouncementsEnabled =
             room.aiVoiceAnnouncementsEnabled;
         _joinedLiveParticipantUsers.clear();
@@ -855,11 +887,16 @@ extension _HomeShellLiveActions on _HomeShellState {
         ),
       );
       _playLivePresenceSound(LivePresenceSound.joined);
-      // Publish the ready state atomically so other clients do not render the
-      // server's initial `joining + muted` placeholder as a visible member.
-      await _patchLiveState(
-        micMuted: _voiceBlocked ? null : false,
-        connectionState: 'online',
+      // Publish the user's pre-join audio choices and ready state atomically.
+      // This also restores the last mic/headphones choice after leaving and
+      // prevents the server's initial joining placeholder from leaking into
+      // the visible roster.
+      await _restoreLiveParticipantState(
+        roomId: room.id,
+        micMuted: _voiceBlocked ? true : desiredMicMuted,
+        headphonesMuted: desiredHeadphonesMuted,
+        cameraOn: false,
+        screenSharing: false,
       );
       // Only publish the viewer relation after this participant is online.
       // Otherwise the screen-view snapshot can race the ready-state snapshot
@@ -917,6 +954,7 @@ extension _HomeShellLiveActions on _HomeShellState {
       );
       _setHomeState(() {
         _micMuted = joinPatch.micMuted;
+        _headphonesMuted = joinPatch.headphonesMuted;
         _cameraOn = joinPatch.cameraOn;
         _screenSharing = joinPatch.screenSharing;
         _voiceBlocked = joinPatch.voiceBlocked;
@@ -968,15 +1006,19 @@ extension _HomeShellLiveActions on _HomeShellState {
     required bool screenSharing,
   }) async {
     var restoredCameraOn = cameraOn;
-    try {
-      await _liveSessionController.setOutputMuted(headphonesMuted);
-    } catch (_) {}
-    try {
-      await _liveSessionController.setCameraEnabled(restoredCameraOn);
-    } catch (error) {
-      restoredCameraOn = false;
-      if (mounted) {
-        _setHomeState(() => _roomError = userFacingErrorMessage(error));
+    if (headphonesMuted) {
+      try {
+        await _liveSessionController.setOutputMuted(true);
+      } catch (_) {}
+    }
+    if (restoredCameraOn) {
+      try {
+        await _liveSessionController.setCameraEnabled(true);
+      } catch (error) {
+        restoredCameraOn = false;
+        if (mounted) {
+          _setHomeState(() => _roomError = userFacingErrorMessage(error));
+        }
       }
     }
     if (!screenSharing && _liveSessionController.isScreenSharing) {
@@ -985,47 +1027,55 @@ extension _HomeShellLiveActions on _HomeShellState {
       } catch (_) {}
     }
 
-    final liveKitMicFuture = _liveSessionController
-        .setMicMuted(micMuted)
-        .catchError((_) {});
     try {
-      final participant = await _liveController.updateMyState(
-        roomId: roomId,
-        micMuted: micMuted,
-        headphonesMuted: headphonesMuted,
-        cameraOn: restoredCameraOn,
-        screenSharing: screenSharing,
-        connectionState: 'online',
+      await _liveSessionController.setMicMuted(micMuted);
+    } catch (_) {}
+    final effectiveMicMuted = micMuted == false
+        ? _liveSessionController.localMicMuted
+        : micMuted;
+    try {
+      final participant = await _liveStateRequests.run(
+        () => _liveController.updateMyState(
+          roomId: roomId,
+          micMuted: effectiveMicMuted,
+          headphonesMuted: headphonesMuted,
+          cameraOn: restoredCameraOn,
+          screenSharing: screenSharing,
+          connectionState: 'online',
+        ),
       );
       final displayParticipant = _withCurrentRoomLiveDisplayName(
         participant,
         roomId,
       );
-      await liveKitMicFuture;
       if (shouldSyncLiveKitMicAfterServerPatch(
-        requestedMicMuted: micMuted,
+        requestedMicMuted: effectiveMicMuted,
         serverMicMuted: displayParticipant.micMuted,
       )) {
         try {
           await _liveSessionController.setMicMuted(displayParticipant.micMuted);
         } catch (_) {}
       }
-      if (!mounted || _joinedLiveRoomId != roomId) return;
+      if (!mounted ||
+          _joinedLiveRoomId != roomId ||
+          !_liveStateRequests.isIdle) {
+        return;
+      }
       final updateSelectedLive = _selectedServerId == roomId;
       final patch = _liveController.patchStateUpdate(
         live: updateSelectedLive ? _live : null,
         participant: displayParticipant,
       );
+      _syncLocalAudioFromParticipant(displayParticipant);
       _setHomeState(() {
         _micMuted = patch.micMuted;
-        _headphonesMuted = displayParticipant.headphonesMuted;
+        _headphonesMuted = patch.headphonesMuted;
         _cameraOn = patch.cameraOn;
         _screenSharing = patch.screenSharing;
         _voiceBlocked = patch.voiceBlocked;
         if (updateSelectedLive) _live = patch.live;
       });
     } catch (error) {
-      await liveKitMicFuture;
       if (!mounted || isBenignGoneLiveStatePatch(error)) return;
       _setHomeState(() => _roomError = userFacingErrorMessage(error));
     }
@@ -1068,7 +1118,9 @@ extension _HomeShellLiveActions on _HomeShellState {
 
   Future<void> _notifyLiveLeft(String roomId) async {
     try {
-      await _liveController.leaveLive(roomId: roomId);
+      await _liveStateRequests.run(
+        () => _liveController.leaveLive(roomId: roomId),
+      );
     } catch (error) {
       if (!mounted || isBenignGoneLiveStatePatch(error)) return;
       _setHomeState(() => _roomError = userFacingErrorMessage(error));
@@ -1086,11 +1138,6 @@ extension _HomeShellLiveActions on _HomeShellState {
   }) async {
     final roomId = _joinedLiveRoomId;
     if (roomId == null) return;
-    final updateSelectedLive = canPatchSelectedLiveState(
-      joinedLiveRoomId: roomId,
-      selectedRoomId: _selectedServerId,
-    );
-
     try {
       var effectiveMicMuted = micMuted;
       final shouldApplyLocalMic =
@@ -1103,14 +1150,16 @@ extension _HomeShellLiveActions on _HomeShellState {
           effectiveMicMuted = _liveSessionController.localMicMuted;
         }
       }
-      final participant = await _liveController.updateMyState(
-        roomId: roomId,
-        micMuted: effectiveMicMuted,
-        headphonesMuted: headphonesMuted,
-        cameraOn: cameraOn,
-        cameraMirrored: cameraMirrored,
-        screenSharing: screenSharing,
-        connectionState: connectionState,
+      final participant = await _liveStateRequests.run(
+        () => _liveController.updateMyState(
+          roomId: roomId,
+          micMuted: effectiveMicMuted,
+          headphonesMuted: headphonesMuted,
+          cameraOn: cameraOn,
+          cameraMirrored: cameraMirrored,
+          screenSharing: screenSharing,
+          connectionState: connectionState,
+        ),
       );
       final displayParticipant = _withCurrentRoomLiveDisplayName(
         participant,
@@ -1124,13 +1173,23 @@ extension _HomeShellLiveActions on _HomeShellState {
           await _liveSessionController.setMicMuted(displayParticipant.micMuted);
         } catch (_) {}
       }
-      if (!mounted) return;
+      if (!mounted ||
+          _joinedLiveRoomId != roomId ||
+          !_liveStateRequests.isIdle) {
+        return;
+      }
+      final updateSelectedLive = canPatchSelectedLiveState(
+        joinedLiveRoomId: roomId,
+        selectedRoomId: _selectedServerId,
+      );
       final patch = _liveController.patchStateUpdate(
         live: updateSelectedLive ? _live : null,
         participant: displayParticipant,
       );
+      _syncLocalAudioFromParticipant(displayParticipant);
       _setHomeState(() {
         _micMuted = patch.micMuted;
+        _headphonesMuted = patch.headphonesMuted;
         _cameraOn = patch.cameraOn;
         _screenSharing = patch.screenSharing;
         _voiceBlocked = patch.voiceBlocked;
@@ -1181,15 +1240,21 @@ extension _HomeShellLiveActions on _HomeShellState {
       selectedRoomId: _selectedServerId,
     );
     try {
-      final participant = await _liveController.updateMyState(
-        roomId: roomId,
-        cameraMirrored: mirrored,
+      final participant = await _liveStateRequests.run(
+        () => _liveController.updateMyState(
+          roomId: roomId,
+          cameraMirrored: mirrored,
+        ),
       );
       final displayParticipant = _withCurrentRoomLiveDisplayName(
         participant,
         roomId,
       );
-      if (!mounted) return true;
+      if (!mounted ||
+          _joinedLiveRoomId != roomId ||
+          !_liveStateRequests.isIdle) {
+        return true;
+      }
       final patch = _liveController.patchStateUpdate(
         live: updateSelectedLive ? _live : null,
         participant: displayParticipant,

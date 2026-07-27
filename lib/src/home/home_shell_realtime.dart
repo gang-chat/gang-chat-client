@@ -71,6 +71,7 @@ extension _HomeShellRealtime on _HomeShellState {
       );
       if (patch == null) return;
       _setHomeState(() => _live = patch.live);
+      _syncJoinedLiveAudioFromSnapshot(patch.live);
     } catch (_) {}
   }
 
@@ -150,6 +151,10 @@ extension _HomeShellRealtime on _HomeShellState {
       _servers = patch.rooms;
       if (patch.selectedLive != null) _live = patch.selectedLive;
     });
+    final selectedLive = patch.selectedLive;
+    if (selectedLive != null) {
+      _syncJoinedLiveAudioFromSnapshot(selectedLive);
+    }
   }
 
   void _applyRoomAdded(Map<String, dynamic> data) {

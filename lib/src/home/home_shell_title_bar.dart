@@ -134,7 +134,7 @@ class _HomeTitleBar extends StatefulWidget {
   final DesktopWindowController windowController;
   final TextEditingController searchController;
   final Object searchTapRegionGroup;
-  final _TitleLiveRoomDockBuilder? liveRoomDockBuilder;
+  final _TitleLiveRoomDockBuilder liveRoomDockBuilder;
   final bool interactionLocked;
   final VoidCallback onActivateSearch;
   final VoidCallback onSearchTapOutside;
@@ -206,12 +206,11 @@ class _HomeTitleBarState extends State<_HomeTitleBar> {
             final searchLayout = _homeTitleBarSearchLayout(
               context,
               constraints.maxWidth,
-              hasLiveRoom: widget.liveRoomDockBuilder != null,
+              hasLiveRoom: true,
             );
             final platform = Theme.of(context).platform;
             final narrow = constraints.maxWidth < narrowBreakpoint;
             final showLiveRoom =
-                widget.liveRoomDockBuilder != null &&
                 !(narrow && platform == TargetPlatform.android);
             final placeLiveRoomOnRight = _homeTitleBarPlacesLiveRoomOnRight(
               context,
@@ -276,7 +275,7 @@ class _HomeTitleBarState extends State<_HomeTitleBar> {
                     right: placeLiveRoomOnRight
                         ? _homeTitleBarLiveRoomHorizontalInset
                         : null,
-                    child: widget.liveRoomDockBuilder!(liveRoomMaxWidth),
+                    child: widget.liveRoomDockBuilder(liveRoomMaxWidth),
                   ),
                 if (searchLayout != null)
                   Positioned(
@@ -310,46 +309,21 @@ class _HomeTitleBarState extends State<_HomeTitleBar> {
   }
 }
 
-String? _titleLiveRoomNameForWidth({
-  required String roomName,
+bool _titleLiveTextCanShowCharacter({
+  required String text,
   required TextStyle style,
   required TextDirection textDirection,
   required TextScaler textScaler,
   required double maxWidth,
 }) {
-  if (roomName.isEmpty || maxWidth <= 0) return null;
-
-  final painter = TextPainter(
-    maxLines: 1,
-    textDirection: textDirection,
-    textScaler: textScaler,
-  );
-  bool fits(String value) {
-    painter.text = TextSpan(text: value, style: style);
-    painter.layout();
-    return painter.width.ceilToDouble() +
-            _homeTitleBarLiveRoomTextSafetyWidth <=
-        maxWidth;
-  }
-
-  if (fits(roomName)) return roomName;
-
-  const suffix = '...';
-  final characters = roomName.characters.toList(growable: false);
-  if (characters.isEmpty || !fits('${characters.first}$suffix')) return null;
-
-  var low = 1;
-  var high = characters.length - 1;
-  while (low < high) {
-    final middle = (low + high + 1) ~/ 2;
-    final candidate = '${characters.take(middle).join()}$suffix';
-    if (fits(candidate)) {
-      low = middle;
-    } else {
-      high = middle - 1;
-    }
-  }
-  return '${characters.take(low).join()}$suffix';
+  if (text.isEmpty || maxWidth <= 0) return false;
+  return _titleLiveRoomTextWidth(
+        text: text.characters.first,
+        style: style,
+        textDirection: textDirection,
+        textScaler: textScaler,
+      ) <=
+      maxWidth;
 }
 
 double _titleLiveRoomTextWidth({
@@ -365,6 +339,145 @@ double _titleLiveRoomTextWidth({
     textScaler: textScaler,
   )..layout();
   return painter.width.ceilToDouble() + _homeTitleBarLiveRoomTextSafetyWidth;
+}
+
+class _OverflowMarqueeText extends StatefulWidget {
+  const _OverflowMarqueeText({
+    super.key,
+    required this.text,
+    required this.style,
+  });
+
+  final String text;
+  final TextStyle style;
+
+  @override
+  State<_OverflowMarqueeText> createState() => _OverflowMarqueeTextState();
+}
+
+class _OverflowMarqueeTextState extends State<_OverflowMarqueeText>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  Timer? _pauseTimer;
+  double _configuredViewportWidth = -1;
+  double _scrollDistance = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this)
+      ..addStatusListener(_handleAnimationStatus);
+  }
+
+  @override
+  void didUpdateWidget(_OverflowMarqueeText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.text != widget.text || oldWidget.style != widget.style) {
+      _configuredViewportWidth = -1;
+    }
+  }
+
+  void _handleAnimationStatus(AnimationStatus status) {
+    if (_scrollDistance <= 0) return;
+    if (status == AnimationStatus.completed) {
+      _scheduleAnimation(forward: false);
+    } else if (status == AnimationStatus.dismissed) {
+      _scheduleAnimation(forward: true);
+    }
+  }
+
+  void _scheduleAnimation({required bool forward}) {
+    _pauseTimer?.cancel();
+    _pauseTimer = Timer(const Duration(milliseconds: 850), () {
+      if (!mounted || _scrollDistance <= 0) return;
+      if (forward) {
+        unawaited(_controller.forward());
+      } else {
+        unawaited(_controller.reverse());
+      }
+    });
+  }
+
+  void _configure(double viewportWidth, double scrollDistance) {
+    if ((_configuredViewportWidth - viewportWidth).abs() < 0.1 &&
+        (_scrollDistance - scrollDistance).abs() < 0.1) {
+      return;
+    }
+    _configuredViewportWidth = viewportWidth;
+    _scrollDistance = scrollDistance;
+    _pauseTimer?.cancel();
+    _controller.stop();
+    _controller.reset();
+    if (scrollDistance <= 0) return;
+    final milliseconds = (scrollDistance / 28 * 1000)
+        .clamp(1200.0, 10000.0)
+        .round();
+    _controller.duration = Duration(milliseconds: milliseconds);
+    _scheduleAnimation(forward: true);
+  }
+
+  @override
+  void dispose() {
+    _pauseTimer?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final textDirection = Directionality.of(context);
+    final textScaler = MediaQuery.textScalerOf(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final painter = TextPainter(
+          text: TextSpan(text: widget.text, style: widget.style),
+          maxLines: 1,
+          textDirection: textDirection,
+          textScaler: textScaler,
+        )..layout();
+        final viewportWidth = constraints.maxWidth;
+        final scrollDistance = (painter.width - viewportWidth)
+            .clamp(0.0, double.infinity)
+            .toDouble();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _configure(viewportWidth, scrollDistance);
+        });
+        if (scrollDistance <= 0) {
+          return Text(
+            widget.text,
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.clip,
+            style: widget.style,
+          );
+        }
+        return SizedBox(
+          height: painter.height,
+          child: ClipRect(
+            child: AnimatedBuilder(
+              animation: _controller,
+              child: OverflowBox(
+                alignment: Alignment.centerLeft,
+                minWidth: painter.width,
+                maxWidth: painter.width,
+                child: Text(
+                  widget.text,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.visible,
+                  style: widget.style,
+                ),
+              ),
+              builder: (context, child) => Transform.translate(
+                offset: Offset(-scrollDistance * _controller.value, 0),
+                child: child,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
 
 class _TitleLiveRoomDock extends StatelessWidget {
@@ -384,14 +497,14 @@ class _TitleLiveRoomDock extends StatelessWidget {
 
   final double maxWidth;
   final bool fillAvailable;
-  final live_display.JoinedLiveRoomSummary room;
+  final live_display.JoinedLiveRoomSummary? room;
   final bool micMuted;
   final bool headphonesMuted;
   final bool voiceBlocked;
-  final VoidCallback onOpen;
+  final VoidCallback? onOpen;
   final VoidCallback? onToggleMic;
   final VoidCallback onToggleHeadphones;
-  final VoidCallback onLeave;
+  final VoidCallback? onLeave;
   final bool interactionLocked;
 
   @override
@@ -403,13 +516,16 @@ class _TitleLiveRoomDock extends StatelessWidget {
     const identityGap = 7.0;
     const avatarSize = 20.0;
     const nameActionGap = 8.0;
+    final joined = room != null;
+    final label = room?.displayName ?? '未加入语音频道';
+    final actionCount = joined ? 3 : 2;
     final micControl = live_display.liveMicControlState(
       micMuted: micMuted,
       voiceBlocked: voiceBlocked,
     );
-    final resolvedAvatar = AppConfigScope.of(
-      context,
-    ).resolveAssetUrl(room.avatarUrl);
+    final resolvedAvatar = joined
+        ? AppConfigScope.of(context).resolveAssetUrl(room!.avatarUrl)
+        : null;
     final roomNameStyle = DefaultTextStyle.of(context).style
         .merge(
           UiTypography.label.copyWith(
@@ -421,50 +537,46 @@ class _TitleLiveRoomDock extends StatelessWidget {
     final textDirection = Directionality.of(context);
     final textScaler = MediaQuery.textScalerOf(context);
     final fullRoomNameWidth = _titleLiveRoomTextWidth(
-      text: room.displayName,
+      text: label,
       style: roomNameStyle,
       textDirection: textDirection,
       textScaler: textScaler,
     );
+    final preferredIdentityWidth = joined
+        ? volumeIconSize + identityGap + avatarSize + identityGap
+        : 0.0;
     final preferredWidth =
         (namedLeadingInset +
-                volumeIconSize +
-                identityGap +
-                avatarSize +
-                identityGap +
+                preferredIdentityWidth +
                 fullRoomNameWidth +
                 nameActionGap +
-                _homeTitleBarLiveRoomActionSize * 3 +
+                _homeTitleBarLiveRoomActionSize * actionCount +
                 trailingInset)
             .clamp(_homeTitleBarLiveRoomDefaultWidth, double.infinity)
             .toDouble();
     final width = fillAvailable
         ? maxWidth
         : preferredWidth.clamp(0.0, maxWidth).toDouble();
-    final actionSize = ((width - 32) / 3)
+    final actionSize = ((width - (joined ? 32 : 20)) / actionCount)
         .clamp(
           _homeTitleBarLiveRoomMinActionSize,
           _homeTitleBarLiveRoomActionSize,
         )
         .toDouble();
-    final actionButtonsWidth = actionSize * 3;
+    final actionButtonsWidth = actionSize * actionCount;
     final namedIdentityFixedWidth =
         namedLeadingInset +
-        volumeIconSize +
-        identityGap +
-        avatarSize +
-        identityGap +
+        (joined ? preferredIdentityWidth : 0) +
         nameActionGap +
         actionButtonsWidth +
         trailingInset;
-    final visibleRoomName = _titleLiveRoomNameForWidth(
-      roomName: room.displayName,
+    final showRoomName = _titleLiveTextCanShowCharacter(
+      text: label,
       style: roomNameStyle,
       textDirection: textDirection,
       textScaler: textScaler,
       maxWidth: width - namedIdentityFixedWidth,
     );
-    final showRoomName = visibleRoomName != null;
     final volumeIdentityWidth =
         compactLeadingInset +
         volumeIconSize +
@@ -472,13 +584,14 @@ class _TitleLiveRoomDock extends StatelessWidget {
         avatarSize +
         actionButtonsWidth +
         trailingInset;
-    final showVolumeIcon = showRoomName || width >= volumeIdentityWidth;
+    final showVolumeIcon =
+        joined && (showRoomName || width >= volumeIdentityWidth);
     final dock = Tooltip(
-      message: '打开语音频道',
+      message: joined ? '打开语音频道' : '可在加入前设置麦克风和耳机',
       preferBelow: true,
       verticalOffset: 22,
       child: MouseRegion(
-        cursor: SystemMouseCursors.click,
+        cursor: joined ? SystemMouseCursors.click : SystemMouseCursors.basic,
         child: GestureDetector(
           key: const ValueKey<String>('home-title-live-room'),
           behavior: HitTestBehavior.opaque,
@@ -507,21 +620,22 @@ class _TitleLiveRoomDock extends StatelessWidget {
                       ),
                       const SizedBox(width: identityGap),
                     ],
-                    Avatar(
-                      label: room.avatarLabel,
-                      imageUrl: resolvedAvatar,
-                      defaultAvatarKey: room.defaultAvatarKey,
-                      size: avatarSize,
-                      showBorder: false,
-                    ),
+                    if (joined)
+                      Avatar(
+                        label: room!.avatarLabel,
+                        imageUrl: resolvedAvatar,
+                        defaultAvatarKey: room!.defaultAvatarKey,
+                        size: avatarSize,
+                        showBorder: false,
+                      ),
                     if (showRoomName) ...[
-                      const SizedBox(width: identityGap),
+                      if (joined) const SizedBox(width: identityGap),
                       Expanded(
-                        child: Text(
-                          visibleRoomName,
-                          maxLines: 1,
-                          softWrap: false,
-                          overflow: TextOverflow.clip,
+                        child: _OverflowMarqueeText(
+                          key: const ValueKey<String>(
+                            'home-title-live-room:name',
+                          ),
+                          text: label,
                           style: roomNameStyle,
                         ),
                       ),
@@ -556,14 +670,17 @@ class _TitleLiveRoomDock extends StatelessWidget {
                           : UiColors.accent,
                       onPressed: onToggleHeadphones,
                     ),
-                    _TitleLiveActionButton(
-                      key: const ValueKey<String>('home-title-live-room:leave'),
-                      size: actionSize,
-                      tooltip: '离开语音频道',
-                      icon: Icons.call_end,
-                      color: UiColors.danger,
-                      onPressed: onLeave,
-                    ),
+                    if (joined)
+                      _TitleLiveActionButton(
+                        key: const ValueKey<String>(
+                          'home-title-live-room:leave',
+                        ),
+                        size: actionSize,
+                        tooltip: '离开语音频道',
+                        icon: Icons.call_end,
+                        color: UiColors.danger,
+                        onPressed: onLeave,
+                      ),
                   ],
                 ),
               ),

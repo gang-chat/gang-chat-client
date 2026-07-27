@@ -140,7 +140,75 @@ class _LiveControlBar extends StatelessWidget {
               )
             : null;
 
+        Widget compactCollapseButton({required bool showLabel}) {
+          return _HoverInfo(
+            message: '收起语音频道',
+            child: showLabel
+                ? Button(
+                    key: const ValueKey<String>('live-control:collapse'),
+                    width: double.infinity,
+                    height: _controlButtonSize,
+                    icon: const Icon(Icons.keyboard_arrow_up),
+                    onPressed: onCollapse,
+                    child: const Text('收起'),
+                  )
+                : ButtonIcon(
+                    key: const ValueKey<String>('live-control:collapse'),
+                    icon: const Icon(Icons.keyboard_arrow_up),
+                    onPressed: onCollapse,
+                    size: _controlButtonSize,
+                  ),
+          );
+        }
+
         if (compact) {
+          final joinedControlsFitOneRow =
+              (controls.length + 1) * _controlButtonSize +
+                  controls.length * 10 <=
+              constraints.maxWidth;
+          final controlSection = !joined
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _HoverInfo(
+                      message: joining ? '正在加入语音' : '加入语音频道',
+                      child: Button(
+                        key: const ValueKey<String>('live-control:join'),
+                        width: double.infinity,
+                        height: _controlButtonSize,
+                        loading: joining,
+                        icon: const Icon(Icons.call),
+                        onPressed: onJoin,
+                        child: const Text('加入'),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    compactCollapseButton(showLabel: true),
+                  ],
+                )
+              : joinedControlsFitOneRow
+              ? Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: _withControlGaps([
+                      ...controls,
+                      compactCollapseButton(showLabel: false),
+                    ]),
+                  ),
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: controls,
+                    ),
+                    const SizedBox(height: 10),
+                    compactCollapseButton(showLabel: true),
+                  ],
+                );
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -153,35 +221,7 @@ class _LiveControlBar extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
               ],
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  if (!joined)
-                    _HoverInfo(
-                      message: joining ? '正在加入语音' : '加入语音频道',
-                      child: Button(
-                        height: _controlButtonSize,
-                        loading: joining,
-                        icon: const Icon(Icons.call),
-                        onPressed: onJoin,
-                        child: const Text('加入'),
-                      ),
-                    )
-                  else
-                    ...controls,
-                  _HoverInfo(
-                    message: '收起语音频道',
-                    child: ButtonIcon(
-                      key: const ValueKey<String>('live-control:collapse'),
-                      icon: const Icon(Icons.keyboard_arrow_up),
-                      onPressed: onCollapse,
-                      size: _controlButtonSize,
-                    ),
-                  ),
-                ],
-              ),
+              controlSection,
             ],
           );
         }
@@ -196,6 +236,7 @@ class _LiveControlBar extends StatelessWidget {
               _HoverInfo(
                 message: joining ? '正在加入语音' : '加入语音频道',
                 child: Button(
+                  key: const ValueKey<String>('live-control:join'),
                   height: _controlButtonSize,
                   loading: joining,
                   icon: const Icon(Icons.call),
@@ -210,12 +251,20 @@ class _LiveControlBar extends StatelessWidget {
             ],
             _HoverInfo(
               message: '收起语音频道',
-              child: ButtonIcon(
-                key: const ValueKey<String>('live-control:collapse'),
-                icon: const Icon(Icons.keyboard_arrow_up),
-                onPressed: onCollapse,
-                size: _controlButtonSize,
-              ),
+              child: !joined
+                  ? Button(
+                      key: const ValueKey<String>('live-control:collapse'),
+                      height: _controlButtonSize,
+                      icon: const Icon(Icons.keyboard_arrow_up),
+                      onPressed: onCollapse,
+                      child: const Text('收起'),
+                    )
+                  : ButtonIcon(
+                      key: const ValueKey<String>('live-control:collapse'),
+                      icon: const Icon(Icons.keyboard_arrow_up),
+                      onPressed: onCollapse,
+                      size: _controlButtonSize,
+                    ),
             ),
           ],
         );

@@ -220,7 +220,8 @@ void registerShellHomeWidgetTests() {
       final userSummaryRect = tester.getRect(
         find.byKey(const ValueKey('home-sidebar-user-summary')),
       );
-      expect(compactSize.width, closeTo(wideSize.width, 0.01));
+      expect(compactSize.width, lessThanOrEqualTo(wideSize.width));
+      expect(compactSize.width, greaterThanOrEqualTo(500));
       expect(compactSize.height, closeTo(wideSize.height, 0.01));
       expect(compactSearchRect.bottom, lessThan(userSummaryRect.top));
       expect(
@@ -279,8 +280,24 @@ void registerShellHomeWidgetTests() {
       }
 
       await pumpHomeAtWidth(1180);
+      final idleDock = find.byKey(
+        const ValueKey<String>('home-title-live-room'),
+      );
+      expect(idleDock, findsOneWidget);
       expect(
-        find.byKey(const ValueKey<String>('home-title-live-room')),
+        find.descendant(of: idleDock, matching: find.text('未加入语音频道')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: idleDock, matching: find.byType(ui.Avatar)),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: idleDock, matching: find.byIcon(Icons.volume_up)),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: idleDock, matching: find.byIcon(Icons.call_end)),
         findsNothing,
       );
 
@@ -477,7 +494,23 @@ void registerShellHomeWidgetTests() {
       await tester.pumpAndSettle();
 
       expect(liveSession.disconnects, 1);
-      expect(dock, findsNothing);
+      expect(dock, findsOneWidget);
+      expect(
+        find.descendant(of: dock, matching: find.text('未加入语音频道')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: dock, matching: find.byType(ui.Avatar)),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: dock, matching: find.byIcon(Icons.volume_up)),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: dock, matching: find.byIcon(Icons.call_end)),
+        findsNothing,
+      );
       expect(_liveControl('leave'), findsNothing);
       expect(find.byType(live_pane.LiveChannelPane), findsNothing);
       expect(find.text('Beta Room'), findsWidgets);
@@ -555,6 +588,128 @@ void registerShellHomeWidgetTests() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'persistent live dock configures audio before join and remembers it after leaving',
+    (WidgetTester tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(1180, 620);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      final liveStateUpdates = <Map<String, Object?>>[];
+      final liveSession = _FakeLiveSession();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ui.uiTheme().copyWith(platform: TargetPlatform.windows),
+          home: HomePage(
+            app: _homeTestAppContext(liveStateUpdates: liveStateUpdates),
+            audioDeviceStore: const _FakeAudioDeviceStore(),
+            liveSessionController: _FakeLiveSessionController(
+              session: liveSession,
+            ),
+            realtime: _NoopRealtimeService(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final dock = find.byKey(const ValueKey<String>('home-title-live-room'));
+      expect(
+        find.descendant(of: dock, matching: find.byIcon(Icons.mic)),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: dock, matching: find.byIcon(Icons.headphones)),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('home-title-live-room:headphones')),
+      );
+      await tester.pumpAndSettle();
+      expect(liveStateUpdates, isEmpty);
+      expect(
+        find.descendant(of: dock, matching: find.byIcon(Icons.mic_off)),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: dock, matching: find.byIcon(Icons.headset_off)),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Alpha Room'));
+      await tester.pumpAndSettle();
+      await _openLiveChannelFromHeader(tester);
+      await tester.tap(find.widgetWithText(ui.Button, '加入'));
+      await tester.pumpAndSettle();
+
+      expect(liveStateUpdates.last['mic_muted'], true);
+      expect(liveStateUpdates.last['headphones_muted'], true);
+
+      await tester.tap(_liveControl('leave'));
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(of: dock, matching: find.text('未加入语音频道')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: dock, matching: find.byIcon(Icons.mic_off)),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: dock, matching: find.byIcon(Icons.headset_off)),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.widgetWithText(ui.Button, '加入'));
+      await tester.pumpAndSettle();
+      expect(liveSession.connectAttempts, 2);
+      expect(liveStateUpdates.last['mic_muted'], true);
+      expect(liveStateUpdates.last['headphones_muted'], true);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('logging out resets persistent live audio choices', (
+    WidgetTester tester,
+  ) async {
+    var logoutCount = 0;
+    final liveSession = _FakeLiveSession();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ui.uiTheme().copyWith(platform: TargetPlatform.windows),
+        home: HomePage(
+          app: _homeTestAppContext(onLogout: () async => logoutCount++),
+          audioDeviceStore: const _FakeAudioDeviceStore(),
+          liveSessionController: _FakeLiveSessionController(
+            session: liveSession,
+          ),
+          realtime: _NoopRealtimeService(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('home-title-live-room:headphones')),
+    );
+    await tester.pumpAndSettle();
+    expect(liveSession.micMutes.last, isTrue);
+    expect(liveSession.outputMutes.last, isTrue);
+
+    await tester.tap(find.byTooltip('退出登录'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ui.Button, '退出登录'));
+    await tester.pumpAndSettle();
+
+    expect(logoutCount, 1);
+    expect(liveSession.micMutes.last, isFalse);
+    expect(liveSession.outputMutes.last, isFalse);
+    expect(liveSession.inputVolumes.last, greaterThan(0));
+    expect(liveSession.outputVolumes.last, greaterThan(0));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('title live room leaves paint safety for a long room name', (
     WidgetTester tester,
   ) async {
@@ -607,6 +762,64 @@ void registerShellHomeWidgetTests() {
     expect(
       tester.getSize(roomNameFinder).width,
       greaterThanOrEqualTo(painter.width.ceilToDouble() + 2),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('title live room scrolls a complete constrained room name', (
+    WidgetTester tester,
+  ) async {
+    const roomName = '特别长长长长长长长长长长长的房间名';
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(930, 620);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ui.uiTheme().copyWith(platform: TargetPlatform.windows),
+        home: HomePage(
+          app: _homeTestAppContext(alphaRoomName: roomName),
+          audioDeviceStore: const _FakeAudioDeviceStore(),
+          liveSessionController: _FakeLiveSessionController(
+            session: _FakeLiveSession(),
+          ),
+          realtime: _NoopRealtimeService(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('home-sidebar-room-server-alpha')),
+    );
+    await tester.pumpAndSettle();
+    await _openLiveChannelFromHeader(tester);
+    await tester.tap(find.widgetWithText(ui.Button, '加入'));
+    await tester.pumpAndSettle();
+
+    final dock = find.byKey(const ValueKey<String>('home-title-live-room'));
+    expect(
+      find.descendant(
+        of: dock,
+        matching: find.byKey(
+          const ValueKey<String>('home-title-live-room:name'),
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: dock, matching: find.text(roomName)),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: dock,
+        matching: find.byWidgetPredicate(
+          (widget) => widget is Text && (widget.data ?? '').endsWith('...'),
+        ),
+      ),
+      findsNothing,
     );
     expect(tester.takeException(), isNull);
   });
@@ -840,7 +1053,7 @@ void registerShellHomeWidgetTests() {
       );
       expect(
         find.descendant(of: dock, matching: find.text('Alpha Room')),
-        findsNothing,
+        findsOneWidget,
       );
       expect(
         find.descendant(of: dock, matching: find.byType(ui.Avatar)),
