@@ -1437,6 +1437,11 @@ void main() {
           expect(request.method, 'POST');
           expect(request.url.path, '/api/v1/rooms/room_1/live/join');
           expect(request.headers['authorization'], 'Bearer token');
+          expect(jsonDecode(request.body), containsPair('mic_muted', true));
+          expect(
+            jsonDecode(request.body),
+            containsPair('headphones_muted', true),
+          );
           idempotencyKeys.add(request.headers['idempotency-key']!);
 
           if (requests == 1) {
@@ -1455,6 +1460,8 @@ void main() {
         roomId: 'room_1',
         clientLiveSessionId: 'clive_1',
         source: 'room_card_speaker',
+        micMuted: true,
+        headphonesMuted: true,
       );
 
       expect(requests, 2);

@@ -212,11 +212,15 @@ class LiveController {
   Future<LiveJoinResult> joinLive({
     required String roomId,
     required String source,
+    required bool micMuted,
+    required bool headphonesMuted,
   }) {
     return api.joinLive(
       roomId: roomId,
       clientLiveSessionId: newClientId('clive'),
       source: source,
+      micMuted: micMuted,
+      headphonesMuted: headphonesMuted,
     );
   }
 

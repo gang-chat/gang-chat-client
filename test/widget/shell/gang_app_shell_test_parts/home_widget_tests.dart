@@ -595,6 +595,7 @@ void registerShellHomeWidgetTests() {
       tester.view.physicalSize = const Size(1180, 620);
       addTearDown(tester.view.resetDevicePixelRatio);
       addTearDown(tester.view.resetPhysicalSize);
+      final liveJoinRequests = <Map<String, Object?>>[];
       final liveStateUpdates = <Map<String, Object?>>[];
       final liveSession = _FakeLiveSession();
 
@@ -602,7 +603,10 @@ void registerShellHomeWidgetTests() {
         MaterialApp(
           theme: ui.uiTheme().copyWith(platform: TargetPlatform.windows),
           home: HomePage(
-            app: _homeTestAppContext(liveStateUpdates: liveStateUpdates),
+            app: _homeTestAppContext(
+              liveJoinRequests: liveJoinRequests,
+              liveStateUpdates: liveStateUpdates,
+            ),
             audioDeviceStore: const _FakeAudioDeviceStore(),
             liveSessionController: _FakeLiveSessionController(
               session: liveSession,
@@ -643,6 +647,8 @@ void registerShellHomeWidgetTests() {
       await tester.tap(find.widgetWithText(ui.Button, '加入'));
       await tester.pumpAndSettle();
 
+      expect(liveJoinRequests.single['mic_muted'], true);
+      expect(liveJoinRequests.single['headphones_muted'], true);
       expect(liveStateUpdates.last['mic_muted'], true);
       expect(liveStateUpdates.last['headphones_muted'], true);
 
@@ -664,6 +670,8 @@ void registerShellHomeWidgetTests() {
       await tester.tap(find.widgetWithText(ui.Button, '加入'));
       await tester.pumpAndSettle();
       expect(liveSession.connectAttempts, 2);
+      expect(liveJoinRequests.last['mic_muted'], true);
+      expect(liveJoinRequests.last['headphones_muted'], true);
       expect(liveStateUpdates.last['mic_muted'], true);
       expect(liveStateUpdates.last['headphones_muted'], true);
       expect(tester.takeException(), isNull);
@@ -766,7 +774,7 @@ void registerShellHomeWidgetTests() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('title live room scrolls a complete constrained room name', (
+  testWidgets('title live room scrolls a constrained room name both ways', (
     WidgetTester tester,
   ) async {
     const roomName = '特别长长长长长长长长长长长的房间名';
@@ -821,7 +829,30 @@ void registerShellHomeWidgetTests() {
       ),
       findsNothing,
     );
+    final marqueeTrack = find.byKey(
+      const ValueKey<String>('home-title-live-room:marquee-track'),
+    );
+    expect(marqueeTrack, findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 900));
+    await tester.pump(const Duration(milliseconds: 400));
+    final firstOffset = tester.widget<Transform>(marqueeTrack).transform[12];
+    await tester.pump(const Duration(milliseconds: 400));
+    final secondOffset = tester.widget<Transform>(marqueeTrack).transform[12];
+    expect(firstOffset, lessThan(0));
+    expect(secondOffset, lessThan(firstOffset));
+    await tester.pump(const Duration(seconds: 12));
+    final completedOffset = tester
+        .widget<Transform>(marqueeTrack)
+        .transform[12];
+    expect(completedOffset, lessThan(secondOffset));
+    await tester.pump(const Duration(milliseconds: 900));
+    await tester.pump(const Duration(milliseconds: 400));
+    final reversingOffset = tester
+        .widget<Transform>(marqueeTrack)
+        .transform[12];
+    expect(reversingOffset, greaterThan(completedOffset));
     expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets(

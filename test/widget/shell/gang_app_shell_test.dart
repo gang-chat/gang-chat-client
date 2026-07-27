@@ -1112,9 +1112,15 @@ GangApi _roomsApi({
       }
       if (request.url.path == '/api/v1/rooms/server-alpha/live/join') {
         liveOperationLog?.add('join');
-        liveJoinRequests?.add(
-          jsonDecode(utf8.decode(request.bodyBytes)) as Map<String, Object?>,
-        );
+        final body =
+            jsonDecode(utf8.decode(request.bodyBytes)) as Map<String, Object?>;
+        liveJoinRequests?.add(body);
+        if (body['mic_muted'] case final bool value) {
+          liveMicMuted = value;
+        }
+        if (body['headphones_muted'] case final bool value) {
+          liveHeadphonesMuted = value;
+        }
         final participant = _liveParticipantJson(
           user: _currentUserJson,
           liveSessionId: 'live-session-joined',

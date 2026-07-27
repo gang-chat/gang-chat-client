@@ -844,6 +844,8 @@ extension _HomeShellLiveActions on _HomeShellState {
       final result = await _liveController.joinLive(
         roomId: room.id,
         source: source,
+        micMuted: _voiceBlocked ? true : desiredMicMuted,
+        headphonesMuted: desiredHeadphonesMuted,
       );
       if (!mounted) return;
       final displayResult = _withCurrentRoomLiveDisplayNameInJoinResult(
@@ -941,6 +943,8 @@ extension _HomeShellLiveActions on _HomeShellState {
       final result = await _liveController.joinLive(
         roomId: roomId,
         source: 'reconnect',
+        micMuted: previousMicMuted,
+        headphonesMuted: previousHeadphonesMuted,
       );
       if (!mounted || _joinedLiveRoomId != roomId) return;
 

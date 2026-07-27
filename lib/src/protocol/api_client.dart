@@ -489,6 +489,8 @@ abstract interface class GangApi {
     required String roomId,
     required String clientLiveSessionId,
     required String source,
+    required bool micMuted,
+    required bool headphonesMuted,
     String? idempotencyKey,
   });
 
@@ -2072,6 +2074,8 @@ class GangApiClient implements GangApi {
     required String roomId,
     required String clientLiveSessionId,
     required String source,
+    required bool micMuted,
+    required bool headphonesMuted,
     String? idempotencyKey,
   }) {
     final requestIdempotencyKey = idempotencyKey ?? newUuid();
@@ -2082,6 +2086,8 @@ class GangApiClient implements GangApi {
         body: encodeJsonBody({
           'client_live_session_id': clientLiveSessionId,
           'source': source,
+          'mic_muted': micMuted,
+          'headphones_muted': headphonesMuted,
         }),
       );
     }, retryTransientFailures: true).then(LiveJoinResult.fromJson);

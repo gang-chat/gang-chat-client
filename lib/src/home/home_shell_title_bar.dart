@@ -469,6 +469,9 @@ class _OverflowMarqueeTextState extends State<_OverflowMarqueeText>
                 ),
               ),
               builder: (context, child) => Transform.translate(
+                key: const ValueKey<String>(
+                  'home-title-live-room:marquee-track',
+                ),
                 offset: Offset(-scrollDistance * _controller.value, 0),
                 child: child,
               ),
