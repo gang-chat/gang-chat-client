@@ -629,6 +629,31 @@ void main() {
     expect(moderated.micActive, isFalse);
   });
 
+  test(
+    'liveParticipantTileState ignores provisional LiveKit mute while joining',
+    () {
+      final joining = liveParticipantTileState(
+        _participant('alice', connectionState: 'joining'),
+        speaking: false,
+        liveKitMicMuted: true,
+      );
+      final online = liveParticipantTileState(
+        _participant('alice', connectionState: 'online'),
+        speaking: false,
+        liveKitMicMuted: true,
+      );
+      final logicallyMuted = liveParticipantTileState(
+        _participant('alice', connectionState: 'joining', micMuted: true),
+        speaking: false,
+        liveKitMicMuted: true,
+      );
+
+      expect(joining.micMutedForDisplay, isFalse);
+      expect(online.micMutedForDisplay, isTrue);
+      expect(logicallyMuted.micMutedForDisplay, isTrue);
+    },
+  );
+
   test('live control display helpers describe toggled states', () {
     final mutedMic = liveMicControlState(micMuted: true, voiceBlocked: false);
     expect(mutedMic.mutedForDisplay, isTrue);

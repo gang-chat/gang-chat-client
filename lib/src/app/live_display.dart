@@ -160,13 +160,19 @@ LiveParticipantTileState liveParticipantTileState(
   final broadcasting = participant.cameraOn || participant.screenSharing;
   // App mute uses capture gain 0 while deliberately leaving the published
   // LiveKit microphone track enabled. The server snapshot is therefore the
-  // authority for logical mute; an actually muted/missing track can only make
-  // the display more conservative, never override a logical mute to "open".
+  // authority for logical mute. A newly connected LiveKit participant exists
+  // briefly before its microphone publication arrives, which LiveKit reports
+  // as muted. Only let media state tighten the display after the participant
+  // has completed the app-level join; otherwise an open-mic join visibly
+  // flashes as muted. A real publish failure is reported to the server before
+  // connection_state becomes ready, so it still renders muted.
+  final liveKitMicMutedForDisplay =
+      liveParticipantConnectionReady(participant) && liveKitMicMuted == true;
   final micMutedForDisplay =
       participant.micBlocked ||
       participant.voiceBlocked ||
       participant.micMuted ||
-      liveKitMicMuted == true;
+      liveKitMicMutedForDisplay;
   return LiveParticipantTileState(
     broadcasting: broadcasting,
     highlighted: speaking || broadcasting,

@@ -477,6 +477,43 @@ void main() {
     );
   });
 
+  testWidgets('joining open member ignores provisional LiveKit mic mute', (
+    tester,
+  ) async {
+    final searchController = TextEditingController();
+    addTearDown(searchController.dispose);
+    final live = _liveState([
+      _participant(
+        id: 'live_phabe',
+        user: _user('phabe', 'Phabe', roomRole: 'member'),
+        connectionState: 'joining',
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      _host(
+        searchController: searchController,
+        live: live,
+        connectedParticipantIds: const {'phabe'},
+        liveKitMicMutedByParticipantId: const {'phabe': true},
+      ),
+    );
+
+    final micButton = find.byKey(
+      const ValueKey<String>('live-member-status:mic:phabe'),
+    );
+    expect(find.text('Phabe'), findsOneWidget);
+    expect(
+      find.descendant(of: micButton, matching: find.byIcon(Icons.mic)),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: micButton, matching: find.byIcon(Icons.mic_off)),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('live member avatar opens a profile card on tap and hover', (
     tester,
   ) async {
