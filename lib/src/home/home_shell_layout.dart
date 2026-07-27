@@ -359,6 +359,10 @@ extension _HomeShellLayout on _HomeShellState {
             _liveSessionController.micMutedByIdentity,
         videoTracks: _liveSessionController.videoTracks,
         stageSelection: _liveStageSelections[_selectedServerId],
+        suspendStageVideo:
+            !kIsWeb &&
+            Theme.of(context).platform == TargetPlatform.windows &&
+            _fullScreenLiveTrack != null,
         onStageSelectionChanged: _setLiveStageSelection,
         onEnterFullScreen: _enterLiveFullScreen,
         onBackToChat: _openChat,

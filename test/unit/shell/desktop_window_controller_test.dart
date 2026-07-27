@@ -54,6 +54,36 @@ void main() {
 
     expect(calls, isEmpty);
   });
+
+  test('full-screen media brackets the Windows power request', () async {
+    final calls = <MethodCall>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    final controller = _SupportedDesktopWindowController(trayChannel: channel);
+
+    await controller.setFullScreenMediaPlaybackActive(true);
+    await controller.setFullScreenMediaPlaybackActive(false);
+
+    expect(calls, hasLength(2));
+    expect(calls[0].method, 'setMediaPlaybackActive');
+    expect(calls[0].arguments, isTrue);
+    expect(calls[1].method, 'setMediaPlaybackActive');
+    expect(calls[1].arguments, isFalse);
+  });
+
+  test('full-screen media power request ignores channel failures', () async {
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      throw PlatformException(code: 'unavailable');
+    });
+    final controller = _SupportedDesktopWindowController(trayChannel: channel);
+
+    await expectLater(
+      controller.setFullScreenMediaPlaybackActive(true),
+      completes,
+    );
+  });
 }
 
 class _SupportedDesktopWindowController extends DesktopWindowController {
@@ -64,4 +94,7 @@ class _SupportedDesktopWindowController extends DesktopWindowController {
 
   @override
   bool get supportsNativeTray => true;
+
+  @override
+  bool get supportsWindowsPowerRequests => true;
 }

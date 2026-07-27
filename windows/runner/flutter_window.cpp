@@ -46,6 +46,7 @@ constexpr char kDefaultOutputDeviceChangedMethod[] =
 constexpr char kTrayInitializeMethod[] = "initialize";
 constexpr char kTrayDisposeMethod[] = "dispose";
 constexpr char kTrayRequestAttentionMethod[] = "requestAttention";
+constexpr char kSetMediaPlaybackActiveMethod[] = "setMediaPlaybackActive";
 constexpr char kTrayOpenMethod[] = "open";
 constexpr char kTrayExitMethod[] = "exit";
 constexpr wchar_t kFileDropWindowProp[] = L"GangChatFileDropWindow";
@@ -1189,8 +1190,35 @@ void FlutterWindow::RegisterTrayChannel() {
           result->Success(flutter::EncodableValue());
           return;
         }
+        if (call.method_name() == kSetMediaPlaybackActiveMethod) {
+          const auto* active = std::get_if<bool>(call.arguments());
+          if (!active) {
+            result->Error("invalid_arguments", "Expected an active boolean");
+            return;
+          }
+          if (!SetMediaPlaybackActive(*active)) {
+            result->Error("power_request_failed",
+                          "SetThreadExecutionState failed");
+            return;
+          }
+          result->Success(flutter::EncodableValue());
+          return;
+        }
         result->NotImplemented();
       });
+}
+
+bool FlutterWindow::SetMediaPlaybackActive(bool active) {
+  EXECUTION_STATE flags = ES_CONTINUOUS;
+  if (active) {
+    flags = static_cast<EXECUTION_STATE>(
+        flags | ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED);
+  }
+  if (SetThreadExecutionState(flags) == 0) {
+    return false;
+  }
+  media_playback_active_ = active;
+  return true;
 }
 
 bool FlutterWindow::ShowTrayIcon() {
@@ -1618,6 +1646,9 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  if (media_playback_active_) {
+    SetMediaPlaybackActive(false);
+  }
   if (flutter_controller_) {
     RemoveTrayIcon();
     DetachAudioDeviceNotifications();

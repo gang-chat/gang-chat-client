@@ -74,10 +74,12 @@ class FlutterWebRTCPluginImpl : public FlutterWebRTCPlugin {
 
  private:
   std::unique_ptr<MethodChannel> channel_;
-  std::unique_ptr<FlutterWebRTC> webrtc_;
   BinaryMessenger* messenger_;
   TextureRegistrar* textures_;
   std::unique_ptr<TaskRunner> task_runner_;
+  // Must be destroyed before task_runner_: libwebrtc shutdown can still emit
+  // an event while it removes its global log sink.
+  std::unique_ptr<FlutterWebRTC> webrtc_;
 };
 
 }  // namespace flutter_webrtc_plugin

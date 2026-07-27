@@ -82,6 +82,7 @@ class LiveChannelPane extends StatefulWidget {
     required this.liveKitMicMutedByParticipantId,
     required this.videoTracks,
     required this.stageSelection,
+    this.suspendStageVideo = false,
     required this.onStageSelectionChanged,
     required this.onEnterFullScreen,
     required this.onBackToChat,
@@ -144,6 +145,13 @@ class LiveChannelPane extends StatefulWidget {
   final Map<String, bool> liveKitMicMutedByParticipantId;
   final List<LiveVideoTrack> videoTracks;
   final LiveStageSelection? stageSelection;
+
+  /// Keeps the stage chrome mounted while releasing its native video texture.
+  ///
+  /// Windows uses this while the same track is rendered by the full-screen
+  /// overlay. Keeping both renderers alive doubles the per-frame ARGB copy and
+  /// leaves two native texture consumers attached across display transitions.
+  final bool suspendStageVideo;
   final ValueChanged<LiveStageSelection?> onStageSelectionChanged;
   final ValueChanged<LiveVideoTrack> onEnterFullScreen;
   final VoidCallback onBackToChat;
@@ -301,6 +309,7 @@ class _LiveChannelPaneState extends State<LiveChannelPane> {
                                 flex: 3,
                                 child: _LiveMediaStage(
                                   track: stageTrack,
+                                  renderVideo: !widget.suspendStageVideo,
                                   label: liveStageTrackLabel(
                                     widget.live,
                                     stageTrack,

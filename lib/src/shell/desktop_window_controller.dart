@@ -54,6 +54,9 @@ class DesktopWindowController {
 
   bool get supportsNativeTray => supportsWindowManagement && Platform.isWindows;
 
+  bool get supportsWindowsPowerRequests =>
+      supportsWindowManagement && Platform.isWindows;
+
   void setCloseRequestHandler(AppCloseRequestHandler? handler) {
     _closeRequestHandler = handler;
   }
@@ -160,6 +163,19 @@ class DesktopWindowController {
     return _configure(() async {
       if (!supportsNativeTray) return;
       await _trayChannel.invokeMethod<void>('requestAttention');
+    });
+  }
+
+  /// Prevents Windows from entering its idle display/system sleep path while
+  /// full-screen live media is actively being watched.
+  ///
+  /// Display power transitions can invalidate the texture device underneath a
+  /// long-running WebRTC renderer. The request is scoped to full-screen media
+  /// and is always released when that view closes.
+  Future<void> setFullScreenMediaPlaybackActive(bool active) {
+    return _configure(() async {
+      if (!supportsWindowsPowerRequests) return;
+      await _trayChannel.invokeMethod<void>('setMediaPlaybackActive', active);
     });
   }
 

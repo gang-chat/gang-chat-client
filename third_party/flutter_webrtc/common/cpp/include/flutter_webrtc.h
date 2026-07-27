@@ -45,6 +45,9 @@ class FlutterWebRTC : public FlutterWebRTCBase,
  private:
   void initLoggerCallback(RTCLoggingSeverity severity);
   RTCLoggingSeverity str2LogSeverity(std::string str);
+#if defined(_WINDOWS)
+  bool logger_callback_initialized_ = false;
+#endif
 };
 
 }  // namespace flutter_webrtc_plugin

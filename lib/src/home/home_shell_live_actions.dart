@@ -93,6 +93,7 @@ extension _HomeShellLiveActions on _HomeShellState {
   }
 
   Future<void> _setSystemFullScreen(bool fullScreen) async {
+    await widget.windowController.setFullScreenMediaPlaybackActive(fullScreen);
     if (!_supportsWindowManagement) return;
     try {
       if (await windowManager.isFullScreen() != fullScreen) {

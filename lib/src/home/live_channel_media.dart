@@ -25,6 +25,7 @@ class _LiveMediaVideo extends StatelessWidget {
 class _LiveMediaStage extends StatelessWidget {
   const _LiveMediaStage({
     required this.track,
+    required this.renderVideo,
     required this.label,
     required this.screenShareViewers,
     required this.screenShareVolume,
@@ -35,6 +36,7 @@ class _LiveMediaStage extends StatelessWidget {
   });
 
   final LiveVideoTrack track;
+  final bool renderVideo;
   final String label;
   final List<UserSummary> screenShareViewers;
   final double screenShareVolume;
@@ -52,7 +54,12 @@ class _LiveMediaStage extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          _LiveMediaVideo(track: track, fit: LiveVideoTrackFit.contain),
+          if (renderVideo)
+            _LiveMediaVideo(track: track, fit: LiveVideoTrackFit.contain)
+          else
+            const SizedBox.expand(
+              key: ValueKey<String>('live-stage:video-suspended'),
+            ),
           Positioned(
             left: 0,
             top: 0,

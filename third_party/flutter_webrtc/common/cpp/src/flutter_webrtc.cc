@@ -1440,6 +1440,14 @@ void FlutterWebRTC::HandleMethodCall(
 }
 
 void FlutterWebRTC::initLoggerCallback(RTCLoggingSeverity severity) {
+#if defined(_WINDOWS)
+  // NativeLogsListener initializes with `none` unless an application opts in.
+  // Installing a no-op sink still makes libwebrtc synchronously remove that
+  // global sink during shutdown; avoid that lifecycle entirely on Windows.
+  if (severity == None && !logger_callback_initialized_) {
+    return;
+  }
+#endif
   if (eventChannelProxy == nullptr) {
     eventChannelProxy = event_channel();
   }
@@ -1450,6 +1458,9 @@ void FlutterWebRTC::initLoggerCallback(RTCLoggingSeverity severity) {
     info[EncodableValue("data")] = message.c_string();
     eventChannelProxy->Success(EncodableValue(info), false);
   });
+#if defined(_WINDOWS)
+  logger_callback_initialized_ = severity != None;
+#endif
 }
 
 RTCLoggingSeverity FlutterWebRTC::str2LogSeverity(std::string str) {

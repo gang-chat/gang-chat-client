@@ -1071,6 +1071,57 @@ void main() {
     await hover.removePointer();
   });
 
+  testWidgets(
+    'suspended stage releases its renderer while preserving the stage surface',
+    (tester) async {
+      final searchController = TextEditingController();
+      addTearDown(searchController.dispose);
+      liveVideoTrackRendererForTest = (track, fit, mirrorLocal) {
+        return ColoredBox(
+          key: ValueKey<String>(
+            'live-video-renderer:${track.identity}:${track.isScreenShare}',
+          ),
+          color: Colors.black,
+        );
+      };
+      addTearDown(resetLiveVideoTrackRendererForTest);
+
+      await tester.pumpWidget(
+        _host(
+          searchController: searchController,
+          live: _liveState(const []),
+          height: 620,
+          videoTracks: [
+            _liveVideoTrack(
+              identity: 'phabe',
+              isScreenShare: true,
+              isLocal: false,
+            ),
+          ],
+          stageSelection: const LiveStageSelection.track(
+            identity: 'phabe',
+            isScreenShare: true,
+          ),
+          suspendStageVideo: true,
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        find.byKey(const ValueKey<String>('live-video-renderer:phabe:true')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('live-stage:video-suspended')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('live-stage:fullscreen')),
+        findsOneWidget,
+      );
+    },
+  );
+
   testWidgets('local screen share stage only shows the exit control', (
     tester,
   ) async {
@@ -1513,6 +1564,7 @@ Widget _host({
   ValueChanged<LiveStageSelection?>? onStageSelectionChanged,
   LiveStageSelection? stageSelection,
   List<LiveVideoTrack> videoTracks = const [],
+  bool suspendStageVideo = false,
   double screenShareVolume = 1,
   ValueChanged<double>? onScreenShareVolumeChanged,
   VoidCallback? onScreenShareMuteToggled,
@@ -1556,6 +1608,7 @@ Widget _host({
             liveKitMicMutedByParticipantId: liveKitMicMutedByParticipantId,
             videoTracks: videoTracks,
             stageSelection: stageSelection ?? const LiveStageSelection.none(),
+            suspendStageVideo: suspendStageVideo,
             onStageSelectionChanged: onStageSelectionChanged ?? (_) {},
             onEnterFullScreen: (_) {},
             onBackToChat: () {},
