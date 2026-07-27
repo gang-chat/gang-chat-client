@@ -430,15 +430,15 @@ class _EditRoomDisplayNameDialogState
     return DialogFrame(
       title: '修改$defaultName的房间内用户名',
       icon: Icons.edit_outlined,
-      actions: [
-        Button(
+      adaptiveActions: [
+        ResponsiveDialogAction(
+          label: '取消',
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
         ),
-        Button(
+        ResponsiveDialogAction(
+          label: '确认修改',
           tone: ButtonTone.primary,
           onPressed: () => Navigator.of(context).pop(_controller.text),
-          child: const Text('确认修改'),
         ),
       ],
       child: Column(

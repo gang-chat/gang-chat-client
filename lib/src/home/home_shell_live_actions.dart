@@ -1292,15 +1292,15 @@ class _LiveMemberRemoveConfirmDialog extends StatelessWidget {
     return DialogFrame(
       title: '踢出语音频道',
       icon: Icons.warning_amber_outlined,
-      actions: [
-        Button(
+      adaptiveActions: [
+        ResponsiveDialogAction(
+          label: '取消',
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('取消'),
         ),
-        Button(
+        ResponsiveDialogAction(
+          label: '踢出',
           tone: ButtonTone.danger,
           onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('踢出'),
         ),
       ],
       child: Text(
@@ -1325,15 +1325,15 @@ class _LiveMemberModerationConfirmDialog extends StatelessWidget {
     return DialogFrame(
       title: _title,
       icon: Icons.warning_amber_outlined,
-      actions: [
-        Button(
+      adaptiveActions: [
+        ResponsiveDialogAction(
+          label: '取消',
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('取消'),
         ),
-        Button(
+        ResponsiveDialogAction(
+          label: _confirmLabel,
           tone: ButtonTone.danger,
           onPressed: () => Navigator.of(context).pop(true),
-          child: Text(_confirmLabel),
         ),
       ],
       child: Text(_body, style: UiTypography.body),

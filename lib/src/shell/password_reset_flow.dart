@@ -214,19 +214,19 @@ class _PasswordResetVerificationDialogState
       title: '邮箱验证',
       icon: Icons.mark_email_read_outlined,
       maxWidth: 420,
-      actions: [
-        Button(
+      adaptiveActions: [
+        ResponsiveDialogAction(
+          label: '取消',
           onPressed: _verifying ? null : () => Navigator.of(context).pop(),
-          child: const Text('取消'),
         ),
-        Button(
-          key: const ValueKey('password-reset-verify-button'),
+        ResponsiveDialogAction(
+          label: '验证',
+          buttonKey: const ValueKey('password-reset-verify-button'),
           onPressed: _verifying || _resending || _challenge == null
               ? null
               : _verify,
           loading: _verifying,
           tone: ButtonTone.primary,
-          child: const Text('验证'),
         ),
       ],
       child: Column(
@@ -331,17 +331,17 @@ class _ResetPasswordDialogState extends State<_ResetPasswordDialog> {
       title: '重置密码',
       icon: Icons.lock_reset_outlined,
       maxWidth: 420,
-      actions: [
-        Button(
+      adaptiveActions: [
+        ResponsiveDialogAction(
+          label: '取消',
           onPressed: _submitting ? null : () => Navigator.of(context).pop(),
-          child: const Text('取消'),
         ),
-        Button(
-          key: const ValueKey('password-reset-submit-button'),
+        ResponsiveDialogAction(
+          label: '重置密码',
+          buttonKey: const ValueKey('password-reset-submit-button'),
           onPressed: _submitting ? null : _submit,
           loading: _submitting,
           tone: ButtonTone.primary,
-          child: const Text('重置密码'),
         ),
       ],
       child: Column(

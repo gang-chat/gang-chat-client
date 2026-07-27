@@ -1214,15 +1214,15 @@ class _HistoryDeleteConfirmDialog extends StatelessWidget {
     return DialogFrame(
       title: messageCount == 1 ? '删除消息记录' : '删除选中的消息记录',
       icon: Icons.warning_amber_outlined,
-      actions: [
-        Button(
+      adaptiveActions: [
+        ResponsiveDialogAction(
+          label: '取消',
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('取消'),
         ),
-        Button(
+        ResponsiveDialogAction(
+          label: '删除',
           tone: ButtonTone.danger,
           onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('删除'),
         ),
       ],
       child: Text(

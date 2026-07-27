@@ -186,7 +186,7 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
     }
     mPeerConnectionObservers.clear();
   }
-  private void initialize(boolean bypassVoiceProcessing, int networkIgnoreMask, boolean forceSWCodec, List<String> forceSWCodecList,
+  private void initialize(boolean bypassVoiceProcessing, boolean androidUseHardwareAudioProcessing, int networkIgnoreMask, boolean forceSWCodec, List<String> forceSWCodecList,
   @Nullable ConstraintsMap androidAudioConfiguration, Severity logSeverity, @Nullable Integer audioSampleRate, @Nullable Integer audioOutputSampleRate) {
     if (mFactory != null) {
       return;
@@ -237,7 +237,8 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
                         .setUseStereoOutput(true)
                         .setAudioSource(MediaRecorder.AudioSource.MIC);
     } else {
-      boolean useHardwareAudioProcessing = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q;
+      boolean useHardwareAudioProcessing = androidUseHardwareAudioProcessing
+              && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q;
       boolean useLowLatency = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O;
       audioDeviceModuleBuilder.setUseHardwareAcousticEchoCanceler(useHardwareAudioProcessing)
                         .setUseLowLatency(useLowLatency)
@@ -408,6 +409,14 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
         if(options.get("bypassVoiceProcessing") != null) {
           enableBypassVoiceProcessing = (boolean)options.get("bypassVoiceProcessing");
         }
+        // Defaults to true for compatibility. Apps can disable vendor hardware
+        // AEC/NS and let WebRTC's software APM handle voice processing on
+        // devices whose built-in effects introduce audible artifacts.
+        boolean androidUseHardwareAudioProcessing = true;
+        if(options.get("androidUseHardwareAudioProcessing") != null) {
+          androidUseHardwareAudioProcessing =
+                  (boolean)options.get("androidUseHardwareAudioProcessing");
+        }
 
         Severity logSeverity = Severity.LS_NONE;
         if (constraintsMap.hasKey("logSeverity")
@@ -428,7 +437,7 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
           audioOutputSampleRate = constraintsMap.getInt("audioOutputSampleRate");
         }
 
-        initialize(enableBypassVoiceProcessing, networkIgnoreMask, forceSWCodec, forceSWCodecList, androidAudioConfiguration, logSeverity, audioSampleRate, audioOutputSampleRate);
+        initialize(enableBypassVoiceProcessing, androidUseHardwareAudioProcessing, networkIgnoreMask, forceSWCodec, forceSWCodecList, androidAudioConfiguration, logSeverity, audioSampleRate, audioOutputSampleRate);
         result.success(null);
         break;
       }

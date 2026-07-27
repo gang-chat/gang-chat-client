@@ -191,16 +191,16 @@ class _EmailVerificationDialogState extends State<_EmailVerificationDialog> {
       title: '邮箱验证',
       icon: Icons.mark_email_read_outlined,
       maxWidth: 420,
-      actions: [
-        Button(
+      adaptiveActions: [
+        ResponsiveDialogAction(
+          label: '取消',
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
         ),
-        Button(
+        ResponsiveDialogAction(
+          label: '验证',
           onPressed: _verifying ? null : _verify,
           tone: ButtonTone.primary,
           loading: _verifying,
-          child: const Text('验证'),
         ),
       ],
       child: Column(

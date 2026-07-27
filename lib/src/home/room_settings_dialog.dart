@@ -347,15 +347,15 @@ class _RoomSettingsDialogState extends State<RoomSettingsDialog> {
       builder: (context) => DialogFrame(
         title: '确认修改加入方式？',
         icon: Icons.warning_amber_outlined,
-        actions: [
-          Button(
+        adaptiveActions: [
+          ResponsiveDialogAction(
+            label: '取消',
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
           ),
-          Button(
+          ResponsiveDialogAction(
+            label: '确认修改',
             tone: ButtonTone.primary,
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('确认修改'),
           ),
         ],
         child: Text(

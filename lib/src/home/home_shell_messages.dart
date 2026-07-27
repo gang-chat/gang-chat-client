@@ -856,15 +856,15 @@ extension _HomeShellMessages on _HomeShellState {
       builder: (context) => DialogFrame(
         title: '删除消息',
         icon: Icons.delete_outline,
-        actions: [
-          Button(
+        adaptiveActions: [
+          ResponsiveDialogAction(
+            label: '取消',
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
           ),
-          Button(
+          ResponsiveDialogAction(
+            label: '删除',
             tone: ButtonTone.danger,
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('删除'),
           ),
         ],
         child: Text('这只会从你的聊天记录中删除，其他人仍然可以看到这条消息。', style: UiTypography.body),
@@ -887,15 +887,15 @@ extension _HomeShellMessages on _HomeShellState {
         builder: (context) => DialogFrame(
           title: '撤回消息',
           icon: Icons.undo_rounded,
-          actions: [
-            Button(
+          adaptiveActions: [
+            ResponsiveDialogAction(
+              label: '取消',
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消'),
             ),
-            Button(
+            ResponsiveDialogAction(
+              label: '撤回',
               tone: ButtonTone.danger,
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('撤回'),
             ),
           ],
           child: Text(

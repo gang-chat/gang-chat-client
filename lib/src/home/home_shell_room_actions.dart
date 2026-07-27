@@ -358,16 +358,16 @@ extension _HomeShellRoomActions on _HomeShellState {
         builder: (context) => DialogFrame(
           title: '正在下载新版本',
           icon: Icons.system_update_alt_outlined,
-          actions: [
-            Button(
+          adaptiveActions: [
+            ResponsiveDialogAction(
+              label: '继续下载',
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('继续下载'),
             ),
-            Button(
+            ResponsiveDialogAction(
+              label: '中断下载并关闭',
               onPressed: () => Navigator.of(context).pop(true),
               tone: ButtonTone.danger,
-              icon: const Icon(Icons.close),
-              child: const Text('中断下载并关闭'),
+              icon: Icons.close,
             ),
           ],
           child: Text(

@@ -240,15 +240,15 @@ class _ConfirmDialog extends StatelessWidget {
     return DialogFrame(
       title: title,
       icon: danger ? Icons.warning_amber_outlined : Icons.info_outline,
-      actions: [
-        Button(
+      adaptiveActions: [
+        ResponsiveDialogAction(
+          label: '取消',
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('取消'),
         ),
-        Button(
+        ResponsiveDialogAction(
+          label: confirmLabel,
           tone: danger ? ButtonTone.danger : ButtonTone.primary,
           onPressed: () => Navigator.of(context).pop(true),
-          child: Text(confirmLabel),
         ),
       ],
       child: Text(message, style: UiTypography.body),
@@ -294,15 +294,15 @@ class _StrongConfirmDialogState extends State<_StrongConfirmDialog> {
     return DialogFrame(
       title: widget.title,
       icon: Icons.warning_amber_outlined,
-      actions: [
-        Button(
+      adaptiveActions: [
+        ResponsiveDialogAction(
+          label: '取消',
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('取消'),
         ),
-        Button(
+        ResponsiveDialogAction(
+          label: widget.confirmLabel,
           tone: ButtonTone.danger,
           onPressed: matches ? () => Navigator.of(context).pop(true) : null,
-          child: Text(widget.confirmLabel),
         ),
       ],
       child: Column(

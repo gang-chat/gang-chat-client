@@ -906,15 +906,15 @@ class _NotificationDeleteConfirmDialog extends StatelessWidget {
     return DialogFrame(
       title: itemCount == 1 ? '删除通知' : '删除选中的通知',
       icon: Icons.warning_amber_outlined,
-      actions: [
-        Button(
+      adaptiveActions: [
+        ResponsiveDialogAction(
+          label: '取消',
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('取消'),
         ),
-        Button(
+        ResponsiveDialogAction(
+          label: '删除',
           tone: ButtonTone.danger,
           onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('删除'),
         ),
       ],
       child: Text(

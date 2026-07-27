@@ -1303,15 +1303,15 @@ class _SettingsPageState extends State<SettingsPage>
       builder: (context) => DialogFrame(
         title: title,
         icon: icon,
-        actions: [
-          Button(
+        adaptiveActions: [
+          ResponsiveDialogAction(
+            label: '取消',
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
           ),
-          Button(
+          ResponsiveDialogAction(
+            label: confirmLabel,
             onPressed: () => Navigator.of(context).pop(true),
             tone: ButtonTone.primary,
-            child: Text(confirmLabel),
           ),
         ],
         child: Text(
@@ -3026,15 +3026,15 @@ class _SettingsPageState extends State<SettingsPage>
       builder: (context) => DialogFrame(
         title: suspending ? '确认封禁账号' : '确认解除封禁',
         icon: suspending ? Icons.block_outlined : Icons.lock_open_outlined,
-        actions: [
-          Button(
+        adaptiveActions: [
+          ResponsiveDialogAction(
+            label: '取消',
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
           ),
-          Button(
+          ResponsiveDialogAction(
+            label: suspending ? '封禁账号' : '解除封禁',
             onPressed: () => Navigator.of(context).pop(true),
             tone: suspending ? ButtonTone.danger : ButtonTone.primary,
-            child: Text(suspending ? '封禁账号' : '解除封禁'),
           ),
         ],
         child: Text(

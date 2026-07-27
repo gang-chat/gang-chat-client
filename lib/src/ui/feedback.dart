@@ -623,6 +623,7 @@ class ResponsiveDialogActionBar extends StatelessWidget {
     if (actions.isEmpty) return const SizedBox.shrink();
     return LayoutBuilder(
       builder: (context, constraints) {
+        final isAndroid = Theme.of(context).platform == TargetPlatform.android;
         final actionWidths = [
           for (final action in actions)
             Button.minimumWidthForLabel(
@@ -632,7 +633,7 @@ class ResponsiveDialogActionBar extends StatelessWidget {
             ),
         ];
         final requiredWithIcons =
-            (expanded
+            (expanded && !isAndroid
                 ? actionWidths.reduce(
                         (left, right) => left > right ? left : right,
                       ) *
@@ -644,7 +645,7 @@ class ResponsiveDialogActionBar extends StatelessWidget {
             Button.minimumWidthForLabel(context, label: action.label),
         ];
         final requiredWithoutIcons =
-            (expanded
+            (expanded && !isAndroid
                 ? actionWidthsWithoutIcons.reduce(
                         (left, right) => left > right ? left : right,
                       ) *
@@ -688,6 +689,36 @@ class ResponsiveDialogActionBar extends StatelessWidget {
         }
 
         if (compact || expanded) {
+          if (isAndroid && constraints.maxWidth.isFinite) {
+            // Android dialog actions use their real content widths when
+            // deciding whether a row fits. Equal-width buttons can truncate a
+            // long label even when the row has enough total space. Give every
+            // action its measured minimum first, then share the spare width so
+            // a fitting row still fills the dialog.
+            final widths = showIcons ? actionWidths : actionWidthsWithoutIcons;
+            final buttonSpace =
+                constraints.maxWidth - (_gap * (actions.length - 1));
+            final naturalWidth = widths.fold<double>(
+              0,
+              (sum, width) => sum + width,
+            );
+            final extraPerButton =
+                ((buttonSpace - naturalWidth) / actions.length).clamp(
+                  0.0,
+                  double.infinity,
+                );
+            return Row(
+              children: [
+                for (final entry in actions.indexed) ...[
+                  if (entry.$1 > 0) const SizedBox(width: _gap),
+                  SizedBox(
+                    width: widths[entry.$1] + extraPerButton,
+                    child: button(entry.$2),
+                  ),
+                ],
+              ],
+            );
+          }
           return Row(
             children: [
               for (final entry in actions.indexed) ...[
@@ -728,19 +759,48 @@ class DialogFrame extends StatelessWidget {
     required this.child,
     this.icon,
     this.actions = const [],
+    this.adaptiveActions = const [],
     this.actionBar,
     this.maxWidth = 480,
-  }) : assert(actions.length == 0 || actionBar == null);
+  }) : assert(actions.length == 0 || adaptiveActions.length == 0),
+       assert(actions.length == 0 || actionBar == null),
+       assert(adaptiveActions.length == 0 || actionBar == null);
 
   final String title;
   final IconData? icon;
   final Widget child;
   final List<Widget> actions;
+
+  /// Standard dialog actions that adapt on Android without changing desktop.
+  ///
+  /// Android measures each label (including text scaling), removes icons first
+  /// when needed, then stacks only if the complete labels still cannot fit.
+  /// Other platforms keep the legacy [Wrap] layout used by [actions].
+  final List<ResponsiveDialogAction> adaptiveActions;
   final Widget? actionBar;
   final double maxWidth;
 
   @override
   Widget build(BuildContext context) {
+    final useAndroidAdaptiveActions =
+        adaptiveActions.isNotEmpty &&
+        Theme.of(context).platform == TargetPlatform.android;
+    final resolvedActionBar = useAndroidAdaptiveActions
+        ? ResponsiveDialogActionBar(expanded: true, actions: adaptiveActions)
+        : actionBar;
+    final resolvedActions = adaptiveActions.isNotEmpty
+        ? [
+            for (final action in adaptiveActions)
+              Button(
+                key: action.buttonKey,
+                onPressed: action.onPressed,
+                tone: action.tone,
+                loading: action.loading,
+                icon: action.icon == null ? null : Icon(action.icon),
+                child: Text(action.label),
+              ),
+          ]
+        : actions;
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
@@ -769,16 +829,17 @@ class DialogFrame extends StatelessWidget {
                 ),
                 const SizedBox(height: 14),
                 child,
-                if (actions.isNotEmpty || actionBar != null) ...[
+                if (resolvedActions.isNotEmpty ||
+                    resolvedActionBar != null) ...[
                   const SizedBox(height: 18),
-                  if (actionBar != null)
-                    actionBar!
+                  if (resolvedActionBar != null)
+                    resolvedActionBar
                   else
                     Wrap(
                       alignment: WrapAlignment.end,
                       spacing: 10,
                       runSpacing: 10,
-                      children: actions,
+                      children: resolvedActions,
                     ),
                 ],
               ],

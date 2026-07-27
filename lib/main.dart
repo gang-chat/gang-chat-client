@@ -6,6 +6,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart' as rtc;
 
 import 'src/auth/token_store.dart';
 import 'src/config/app_config.dart';
+import 'src/live/android_audio_initialization.dart';
 import 'src/shell/app_orientation_controller.dart';
 import 'src/shell/desktop_window_controller.dart';
 import 'src/shell/gang_app.dart';
@@ -25,12 +26,16 @@ Future<void> main(List<String> args) async {
     // A platform orientation failure must not prevent the app from starting.
   }
 
-  // Bypass Apple's voice-processing unit on macOS before the WebRTC factory is
-  // created. On Windows, eagerly touching WebRTC during app launch can make the
-  // OS treat the app as an active communications client and adjust system audio,
-  // so Windows lets the plugin initialize lazily on the first real Live action.
-  if (!kIsWeb && Platform.isMacOS) {
-    await rtc.WebRTC.initialize(options: {'bypassVoiceProcessing': true});
+  // Configure platform audio before the WebRTC factory is created. On Windows,
+  // eagerly touching WebRTC during app launch can make the OS treat the app as
+  // an active communications client and adjust system audio, so Windows keeps
+  // lazy initialization on the first real Live action.
+  if (!kIsWeb) {
+    if (Platform.isMacOS) {
+      await rtc.WebRTC.initialize(options: {'bypassVoiceProcessing': true});
+    } else if (Platform.isAndroid) {
+      await initializeAndroidWebRtcAudio();
+    }
   }
 
   final config = await AppConfig.load();
