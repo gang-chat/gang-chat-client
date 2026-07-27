@@ -110,18 +110,21 @@ void main() {
   });
 
   test(
-    'live participant JSON keeps screen viewers optional and decodes them',
+    'live participant JSON keeps mirror and screen viewers backward compatible',
     () {
       final legacy = LiveParticipant.fromJson(
         _participantJson(user: _userJson('alice')),
       );
       final withViewer = LiveParticipant.fromJson({
         ..._participantJson(user: _userJson('alice')),
+        'camera_mirrored': true,
         'screen_sharing': true,
         'screen_viewers': [_userJson('bob')],
       });
 
       expect(legacy.screenViewers, isEmpty);
+      expect(legacy.cameraMirrored, isFalse);
+      expect(withViewer.cameraMirrored, isTrue);
       expect(withViewer.screenViewers.map((user) => user.id), ['bob']);
     },
   );
@@ -334,6 +337,39 @@ void main() {
 
     expect(body, {'connection_state': 'left'});
     expect(participant.connectionState, 'left');
+  });
+
+  test('camera mirror updates use the existing live state endpoint', () async {
+    Map<String, Object?>? body;
+    final api = GangApiClient(
+      baseUrl: 'http://example.test/api/v1',
+      accessTokenProvider: ({bool forceRefresh = false}) async => 'token',
+      httpClient: MockClient((request) async {
+        expect(request.method, 'PATCH');
+        expect(request.url.path, '/api/v1/rooms/room_1/live/me');
+        body =
+            jsonDecode(utf8.decode(request.bodyBytes)) as Map<String, Object?>;
+        return http.Response(
+          jsonEncode({
+            'participant': {
+              ..._participantJson(user: _userJson('alice')),
+              'camera_on': true,
+              'camera_mirrored': true,
+            },
+          }),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      }),
+    );
+    addTearDown(api.close);
+
+    final participant = await LiveController(
+      api: api,
+    ).updateMyState(roomId: 'room_1', cameraMirrored: true);
+
+    expect(body, {'camera_mirrored': true});
+    expect(participant.cameraMirrored, isTrue);
   });
 
   test(

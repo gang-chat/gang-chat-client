@@ -1970,6 +1970,7 @@ class LiveParticipant {
     this.headphonesListening = true,
     required this.voiceBlocked,
     required this.cameraOn,
+    this.cameraMirrored = false,
     required this.screenSharing,
     this.screenViewers = const <UserSummary>[],
     required this.connectionState,
@@ -1995,6 +1996,7 @@ class LiveParticipant {
   /// servers that don't send the field.
   final bool voiceBlocked;
   final bool cameraOn;
+  final bool cameraMirrored;
   final bool screenSharing;
   final List<UserSummary> screenViewers;
 
@@ -2011,6 +2013,7 @@ class LiveParticipant {
     bool? headphonesListening,
     bool? voiceBlocked,
     bool? cameraOn,
+    bool? cameraMirrored,
     bool? screenSharing,
     List<UserSummary>? screenViewers,
     String? connectionState,
@@ -2026,6 +2029,7 @@ class LiveParticipant {
       headphonesListening: headphonesListening ?? this.headphonesListening,
       voiceBlocked: voiceBlocked ?? this.voiceBlocked,
       cameraOn: cameraOn ?? this.cameraOn,
+      cameraMirrored: cameraMirrored ?? this.cameraMirrored,
       screenSharing: screenSharing ?? this.screenSharing,
       screenViewers: screenViewers ?? this.screenViewers,
       connectionState: connectionState ?? this.connectionState,
@@ -2061,6 +2065,7 @@ class LiveParticipant {
       headphonesListening: json['headphones_listening'] as bool? ?? true,
       voiceBlocked: json['voice_blocked'] as bool? ?? false,
       cameraOn: json['camera_on']! as bool,
+      cameraMirrored: json['camera_mirrored'] as bool? ?? false,
       screenSharing: json['screen_sharing']! as bool,
       screenViewers: _listOfMaps(
         json['screen_viewers'],

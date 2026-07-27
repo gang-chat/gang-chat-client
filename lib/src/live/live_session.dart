@@ -17,6 +17,26 @@ import 'screen_share_quality.dart';
 import 'screen_audio_publisher.dart';
 import 'system_audio_devices.dart';
 
+typedef CameraVideoInputCountProvider = Future<int> Function();
+
+Future<int> _defaultCameraVideoInputCountProvider() async {
+  final devices = await rtc.navigator.mediaDevices.enumerateDevices();
+  return devices
+      .where((device) => device.kind == 'videoinput')
+      .map((device) => device.deviceId)
+      .where((deviceId) => deviceId.isNotEmpty)
+      .toSet()
+      .length;
+}
+
+/// Resolves an Android camera-device probe without treating an unavailable
+/// pre-permission list as confirmed single-camera hardware.
+@visibleForTesting
+bool? cameraFlipAvailabilityFromVideoInputCount(int inputCount) {
+  if (inputCount <= 0) return null;
+  return inputCount > 1;
+}
+
 /// Suffix of the hidden screen-audio aux participant identity
 /// (`<ownerId>--screen-audio`). These participants publish screen-share audio
 /// through an isolated factory and must be filtered out of the UI (they are
@@ -366,6 +386,7 @@ class LiveSession extends ChangeNotifier {
     AudioOutputRebinder? Function(LiveSession session)? outputRebinderFactory,
     AudioDeviceStore? audioDeviceStore,
     ScreenAudioTokenProvider? screenAudioTokenProvider,
+    CameraVideoInputCountProvider? cameraVideoInputCountProvider,
   }) : _inputRebinderFactory =
            inputRebinderFactory ??
            ((session) => _defaultInputRebinderFactory(
@@ -378,7 +399,10 @@ class LiveSession extends ChangeNotifier {
              session,
              audioDeviceStore: audioDeviceStore,
            )),
-       _screenAudioTokenProvider = screenAudioTokenProvider;
+       _screenAudioTokenProvider = screenAudioTokenProvider,
+       _cameraVideoInputCountProvider =
+           cameraVideoInputCountProvider ??
+           _defaultCameraVideoInputCountProvider;
 
   final AudioInputRebinder? Function(LiveSession session) _inputRebinderFactory;
   final AudioOutputRebinder? Function(LiveSession session)
@@ -386,6 +410,7 @@ class LiveSession extends ChangeNotifier {
   AudioInputRebinder? _inputRebinder;
   AudioOutputRebinder? _outputRebinder;
   final ScreenAudioTokenProvider? _screenAudioTokenProvider;
+  final CameraVideoInputCountProvider _cameraVideoInputCountProvider;
   ScreenAudioPublisher? _screenAudioPublisher;
 
   lk.Room? _room;
@@ -393,6 +418,7 @@ class LiveSession extends ChangeNotifier {
   String? _roomName;
   bool _connecting = false;
   bool _screenSharing = false;
+  bool? _cameraFlipAvailable;
   Future<void> _localVideoTransitionTail = Future<void>.value();
   bool _localMicrophonePublishUnavailable = false;
   String? _resolvedLiveKitUrl;
@@ -457,6 +483,14 @@ class LiveSession extends ChangeNotifier {
       _room?.connectionState == lk.ConnectionState.connected;
   bool get isConnecting => _connecting;
   bool get isScreenSharing => _screenSharing;
+
+  /// Whether the current Android device is known to have another camera.
+  ///
+  /// A null/unknown probe remains usable instead of hiding the action: camera
+  /// capture itself is the permission-requesting operation, so the probe only
+  /// runs after a successful capture. Only a confirmed single-camera result
+  /// disables the action.
+  bool get canFlipCamera => _cameraFlipAvailable != false;
   String? get roomName => _roomName;
 
   bool isAttachedToRoom(String roomName) {
@@ -1053,12 +1087,69 @@ class LiveSession extends ChangeNotifier {
         await _setScreenShareEnabled(false);
       }
       await local.setCameraEnabled(enabled);
+      if (enabled) {
+        // setCameraEnabled is intentionally first: on Android it owns the OS
+        // camera-permission prompt. Never interpret a pre-permission empty
+        // device list as proof that the phone has only one camera.
+        await _refreshCameraFlipAvailability();
+      } else {
+        _cameraFlipAvailable = null;
+      }
       notifyListeners();
       return enabled;
     }
 
     if (kIsWeb || !Platform.isAndroid) return operation();
     return _serializeLocalVideoTransition(operation);
+  }
+
+  /// Switches the active local camera between the front and rear positions.
+  /// Returns false when there is no published camera track or the platform
+  /// did not expose camera capture options for that track.
+  Future<bool> flipCamera() {
+    Future<bool> operation() async {
+      final local = _room?.localParticipant;
+      if (local == null) return false;
+      lk.LocalVideoTrack? cameraTrack;
+      for (final publication in local.videoTrackPublications) {
+        if (publication.source != lk.TrackSource.camera) continue;
+        final track = publication.track;
+        if (track is lk.LocalVideoTrack) {
+          cameraTrack = track;
+          break;
+        }
+      }
+      if (cameraTrack == null) return false;
+      final options = cameraTrack.currentOptions;
+      if (options is! lk.CameraCaptureOptions) return false;
+      final nextPosition = options.cameraPosition == lk.CameraPosition.front
+          ? lk.CameraPosition.back
+          : lk.CameraPosition.front;
+      await lk.LocalVideoTrackExt(cameraTrack).setCameraPosition(nextPosition);
+      notifyListeners();
+      return true;
+    }
+
+    if (kIsWeb || !Platform.isAndroid) return operation();
+    return _serializeLocalVideoTransition(operation);
+  }
+
+  Future<void> _refreshCameraFlipAvailability() async {
+    if (kIsWeb || !Platform.isAndroid) {
+      _cameraFlipAvailable = false;
+      return;
+    }
+    try {
+      final inputCount = await _cameraVideoInputCountProvider();
+      _cameraFlipAvailable = cameraFlipAvailabilityFromVideoInputCount(
+        inputCount,
+      );
+    } catch (_) {
+      // Enumeration can still be unavailable on vendor Android builds after
+      // the permission prompt. Keep the action available so a transient probe
+      // failure is not mistaken for confirmed single-camera hardware.
+      _cameraFlipAvailable = null;
+    }
   }
 
   Future<T> _serializeLocalVideoTransition<T>(Future<T> Function() operation) {
@@ -1153,6 +1244,7 @@ class LiveSession extends ChangeNotifier {
     _resolvedLiveKitUrl = null;
     _connecting = false;
     _screenSharing = false;
+    _cameraFlipAvailable = null;
     if (clearWatchedTargets) {
       _watchedScreenShareIdentity = null;
       _watchedCameraIdentity = null;
@@ -1197,6 +1289,7 @@ class LiveSession extends ChangeNotifier {
     _room = null;
     _roomName = null;
     _screenSharing = false;
+    _cameraFlipAvailable = null;
     _watchedScreenShareIdentity = null;
     _watchedCameraIdentity = null;
     _localMicrophonePublishUnavailable = false;

@@ -497,6 +497,7 @@ abstract interface class GangApi {
     bool? micMuted,
     bool? headphonesMuted,
     bool? cameraOn,
+    bool? cameraMirrored,
     bool? screenSharing,
     String? connectionState,
   });
@@ -2102,6 +2103,7 @@ class GangApiClient implements GangApi {
     bool? micMuted,
     bool? headphonesMuted,
     bool? cameraOn,
+    bool? cameraMirrored,
     bool? screenSharing,
     String? connectionState,
   }) async {
@@ -2109,6 +2111,7 @@ class GangApiClient implements GangApi {
     if (micMuted != null) body['mic_muted'] = micMuted;
     if (headphonesMuted != null) body['headphones_muted'] = headphonesMuted;
     if (cameraOn != null) body['camera_on'] = cameraOn;
+    if (cameraMirrored != null) body['camera_mirrored'] = cameraMirrored;
     if (screenSharing != null) body['screen_sharing'] = screenSharing;
     if (connectionState != null) body['connection_state'] = connectionState;
     final decoded = await _sendJson((token) {

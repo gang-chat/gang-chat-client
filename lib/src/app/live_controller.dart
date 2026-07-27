@@ -190,6 +190,7 @@ class LiveController {
     bool? micMuted,
     bool? headphonesMuted,
     bool? cameraOn,
+    bool? cameraMirrored,
     bool? screenSharing,
     String? connectionState,
   }) {
@@ -198,6 +199,7 @@ class LiveController {
       micMuted: micMuted,
       headphonesMuted: headphonesMuted,
       cameraOn: cameraOn,
+      cameraMirrored: cameraMirrored,
       screenSharing: screenSharing,
       connectionState: connectionState,
     );

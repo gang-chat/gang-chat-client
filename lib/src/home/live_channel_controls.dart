@@ -834,6 +834,7 @@ class _InlineMusicBox extends StatelessWidget {
         transport == music_box_display.MusicBoxTransportAction.pause;
 
     return ConstrainedBox(
+      key: const ValueKey<String>('live-control:music-inline'),
       constraints: const BoxConstraints(maxWidth: 280),
       child: SizedBox(
         height: _controlButtonSize,

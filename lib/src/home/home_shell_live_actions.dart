@@ -1079,6 +1079,7 @@ extension _HomeShellLiveActions on _HomeShellState {
     bool? micMuted,
     bool? headphonesMuted,
     bool? cameraOn,
+    bool? cameraMirrored,
     bool? screenSharing,
     String? connectionState,
     bool syncLiveKitMic = true,
@@ -1107,6 +1108,7 @@ extension _HomeShellLiveActions on _HomeShellState {
         micMuted: effectiveMicMuted,
         headphonesMuted: headphonesMuted,
         cameraOn: cameraOn,
+        cameraMirrored: cameraMirrored,
         screenSharing: screenSharing,
         connectionState: connectionState,
       );
@@ -1153,6 +1155,54 @@ extension _HomeShellLiveActions on _HomeShellState {
       await _toggleCameraImpl();
     } finally {
       _switchingAndroidLocalVideoSource = false;
+    }
+  }
+
+  Future<bool> _flipLocalCamera() async {
+    try {
+      final flipped = await _liveSessionController.flipCamera();
+      if (!flipped && mounted) {
+        _setHomeState(() => _roomError = '当前设备无法翻转摄像头');
+      }
+      return flipped;
+    } catch (error) {
+      if (mounted) {
+        _setHomeState(() => _roomError = userFacingErrorMessage(error));
+      }
+      return false;
+    }
+  }
+
+  Future<bool> _setLocalCameraMirrored(bool mirrored) async {
+    final roomId = _joinedLiveRoomId;
+    if (roomId == null) return false;
+    final updateSelectedLive = canPatchSelectedLiveState(
+      joinedLiveRoomId: roomId,
+      selectedRoomId: _selectedServerId,
+    );
+    try {
+      final participant = await _liveController.updateMyState(
+        roomId: roomId,
+        cameraMirrored: mirrored,
+      );
+      final displayParticipant = _withCurrentRoomLiveDisplayName(
+        participant,
+        roomId,
+      );
+      if (!mounted) return true;
+      final patch = _liveController.patchStateUpdate(
+        live: updateSelectedLive ? _live : null,
+        participant: displayParticipant,
+      );
+      _setHomeState(() {
+        if (updateSelectedLive) _live = patch.live;
+      });
+      return displayParticipant.cameraMirrored == mirrored;
+    } catch (error) {
+      if (mounted && !isBenignGoneLiveStatePatch(error)) {
+        _setHomeState(() => _roomError = userFacingErrorMessage(error));
+      }
+      return false;
     }
   }
 

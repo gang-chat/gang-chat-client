@@ -29,9 +29,6 @@ const _memberCardHeight = _memberCardWidth;
 const _controlButtonSize = 44.0;
 const _controlHoverInfoBelowReserve = 4.0;
 const _controlHoverInfoVerticalOffset = 24.0;
-// How far the docked music box panel extends below the stage's bottom edge,
-// reaching down over the control-bar gap to align with the control bar.
-const _musicBoxPanelBottomDrop = 16.0 + _controlButtonSize;
 const _liveRoomBackground = UiColors.surfaceLow;
 const _liveRoomBorder = UiColors.border;
 const _memberSpeakingBackground = Color(0xFF252A34);
@@ -91,6 +88,8 @@ class LiveChannelPane extends StatefulWidget {
     required this.onToggleMic,
     required this.onToggleHeadphones,
     required this.onToggleCamera,
+    required this.onFlipCamera,
+    required this.onSetLocalCameraMirrored,
     required this.onToggleShare,
     required this.musicBox,
     required this.musicBoxOpen,
@@ -160,6 +159,8 @@ class LiveChannelPane extends StatefulWidget {
   final VoidCallback? onToggleMic;
   final VoidCallback onToggleHeadphones;
   final VoidCallback onToggleCamera;
+  final Future<bool> Function()? onFlipCamera;
+  final Future<bool> Function(bool mirrored) onSetLocalCameraMirrored;
   final VoidCallback? onToggleShare;
   final MusicBoxState? musicBox;
   final bool musicBoxOpen;
@@ -267,7 +268,6 @@ class _LiveChannelPaneState extends State<LiveChannelPane> {
     final musicBoxEnabled = musicBox?.enabled ?? false;
     final musicBoxOpen =
         widget.joined && musicBoxEnabled && widget.musicBoxOpen;
-
     return ColoredBox(
       color: UiColors.background,
       child: Padding(
@@ -321,6 +321,19 @@ class _LiveChannelPaneState extends State<LiveChannelPane> {
                                         )
                                       : const <UserSummary>[],
                                   screenShareVolume: widget.screenShareVolume,
+                                  cameraMirrored:
+                                      live_display
+                                          .liveParticipantByUserId(
+                                            widget.live,
+                                            stageTrack.identity,
+                                          )
+                                          ?.cameraMirrored ??
+                                      false,
+                                  onFlipCamera: stageTrack.isLocal
+                                      ? widget.onFlipCamera
+                                      : null,
+                                  onSetLocalCameraMirrored:
+                                      widget.onSetLocalCameraMirrored,
                                   onExit: _exitStage,
                                   onFullScreen: () =>
                                       widget.onEnterFullScreen(stageTrack),
@@ -386,13 +399,15 @@ class _LiveChannelPaneState extends State<LiveChannelPane> {
                         Positioned(
                           top: 0,
                           right: 0,
-                          // Extend the panel down past the stage's bottom edge,
-                          // over the control-bar gap, so it lines up roughly
-                          // with the control bar below.
-                          bottom: -(_musicBoxPanelBottomDrop),
+                          // Keep the panel inside the stage at every width so
+                          // the complete inline player row remains visible.
+                          bottom: 0,
                           child: SizedBox(
                             width: _musicBoxPanelWidth,
                             child: LiveMusicBoxPanel(
+                              key: const ValueKey<String>(
+                                'live-music-box-panel',
+                              ),
                               state: musicBox,
                               searchController: widget.musicBoxSearchController,
                               searchResults: widget.musicBoxSearchResults,

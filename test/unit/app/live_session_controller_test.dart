@@ -109,6 +109,7 @@ void main() {
 
     await controller.setMicMuted(true);
     await controller.setCameraEnabled(true);
+    await controller.flipCamera();
     await controller.setScreenShareEnabled(true, sourceId: 'screen_1');
     await controller.setOutputMuted(true);
     await controller.setInputVolume(0.4);
@@ -118,6 +119,7 @@ void main() {
 
     expect(session.micMutes, [true]);
     expect(session.cameraEnables, [true]);
+    expect(session.cameraFlips, 1);
     expect(session.screenShareEnables, [true]);
     expect(session.screenShareSourceIds, ['screen_1']);
     expect(session.outputMutes, [true]);
@@ -238,6 +240,7 @@ class _FakeLiveSession extends LiveSession {
   final outputMutes = <bool>[];
   final micMutes = <bool>[];
   final cameraEnables = <bool>[];
+  int cameraFlips = 0;
   final screenShareEnables = <bool>[];
   final screenShareSourceIds = <String?>[];
   String? connectedUrl;
@@ -325,6 +328,12 @@ class _FakeLiveSession extends LiveSession {
   Future<bool> setCameraEnabled(bool enabled) async {
     cameraEnables.add(enabled);
     return enabled;
+  }
+
+  @override
+  Future<bool> flipCamera() async {
+    cameraFlips += 1;
+    return true;
   }
 
   @override

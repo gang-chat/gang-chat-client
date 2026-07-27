@@ -78,7 +78,15 @@ class LiveMusicBoxPanel extends StatelessWidget {
           builder: (context, constraints) {
             final tallEnough =
                 constraints.maxHeight >= _musicBoxMinComfortableHeight;
+            final preserveAndroidSearchFocus =
+                Theme.of(context).platform == TargetPlatform.android;
             final body = _MusicBoxBody(
+              // Opening the Android keyboard can move this body between the
+              // roomy and compact branches below. Preserve the element so its
+              // internally owned FocusNode stays attached across that move.
+              key: preserveAndroidSearchFocus
+                  ? GlobalObjectKey<_MusicBoxBodyState>(searchController)
+                  : null,
               state: state,
               searchController: searchController,
               searchResults: searchResults,
@@ -610,6 +618,7 @@ class _MusicBoxProgressBar extends StatelessWidget {
 /// Tabbed lower body: the queue, plus a search field that adds hits to it.
 class _MusicBoxBody extends StatefulWidget {
   const _MusicBoxBody({
+    super.key,
     required this.state,
     required this.searchController,
     required this.searchResults,

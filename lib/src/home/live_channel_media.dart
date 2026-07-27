@@ -3,10 +3,11 @@ part of 'live_channel_pane.dart';
 enum _LiveMediaKind { camera, screenShare }
 
 class _LiveMediaVideo extends StatelessWidget {
-  const _LiveMediaVideo({required this.track, this.fit});
+  const _LiveMediaVideo({required this.track, this.fit, this.mirrored = false});
 
   final LiveVideoTrack track;
   final LiveVideoTrackFit? fit;
+  final bool mirrored;
 
   @override
   Widget build(BuildContext context) {
@@ -17,18 +18,21 @@ class _LiveMediaVideo extends StatelessWidget {
           (track.isScreenShare
               ? LiveVideoTrackFit.contain
               : LiveVideoTrackFit.cover),
-      mirrorLocal: true,
+      mirrored: mirrored,
     );
   }
 }
 
-class _LiveMediaStage extends StatelessWidget {
+class _LiveMediaStage extends StatefulWidget {
   const _LiveMediaStage({
     required this.track,
     required this.renderVideo,
     required this.label,
     required this.screenShareViewers,
     required this.screenShareVolume,
+    required this.cameraMirrored,
+    required this.onFlipCamera,
+    required this.onSetLocalCameraMirrored,
     required this.onExit,
     required this.onFullScreen,
     required this.onScreenShareVolumeChanged,
@@ -40,13 +44,80 @@ class _LiveMediaStage extends StatelessWidget {
   final String label;
   final List<UserSummary> screenShareViewers;
   final double screenShareVolume;
+  final bool cameraMirrored;
+  final Future<bool> Function()? onFlipCamera;
+  final Future<bool> Function(bool mirrored) onSetLocalCameraMirrored;
   final VoidCallback onExit;
   final VoidCallback onFullScreen;
   final ValueChanged<double> onScreenShareVolumeChanged;
   final VoidCallback onScreenShareMuteToggled;
 
   @override
+  State<_LiveMediaStage> createState() => _LiveMediaStageState();
+}
+
+class _LiveMediaStageState extends State<_LiveMediaStage> {
+  bool? _viewerMirrorOverride;
+  bool? _pendingSharedMirror;
+  bool _flippingCamera = false;
+  bool _settingSharedMirror = false;
+
+  bool get _cameraMirrored {
+    if (widget.track.isLocal) {
+      return _pendingSharedMirror ?? widget.cameraMirrored;
+    }
+    return _viewerMirrorOverride ?? widget.cameraMirrored;
+  }
+
+  @override
+  void didUpdateWidget(_LiveMediaStage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final trackChanged =
+        oldWidget.track.identity != widget.track.identity ||
+        oldWidget.track.isScreenShare != widget.track.isScreenShare ||
+        oldWidget.track.isLocal != widget.track.isLocal;
+    if (trackChanged) {
+      _viewerMirrorOverride = null;
+      _pendingSharedMirror = null;
+      _flippingCamera = false;
+      _settingSharedMirror = false;
+      return;
+    }
+    if (_pendingSharedMirror == widget.cameraMirrored) {
+      _pendingSharedMirror = null;
+    }
+  }
+
+  Future<void> _flipCamera() async {
+    final callback = widget.onFlipCamera;
+    if (callback == null || _flippingCamera) return;
+    setState(() => _flippingCamera = true);
+    await callback();
+    if (mounted) setState(() => _flippingCamera = false);
+  }
+
+  Future<void> _toggleMirror() async {
+    final mirrored = !_cameraMirrored;
+    if (!widget.track.isLocal) {
+      setState(() => _viewerMirrorOverride = mirrored);
+      return;
+    }
+    if (_settingSharedMirror) return;
+    setState(() {
+      _settingSharedMirror = true;
+      _pendingSharedMirror = mirrored;
+    });
+    final updated = await widget.onSetLocalCameraMirrored(mirrored);
+    if (!mounted) return;
+    setState(() {
+      _settingSharedMirror = false;
+      if (!updated) _pendingSharedMirror = null;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final track = widget.track;
     final isLocalScreenShare = track.isScreenShare && track.isLocal;
     final isRemoteScreenShare = track.isScreenShare && !track.isLocal;
     final content = ColoredBox(
@@ -54,8 +125,12 @@ class _LiveMediaStage extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          if (renderVideo)
-            _LiveMediaVideo(track: track, fit: LiveVideoTrackFit.contain)
+          if (widget.renderVideo)
+            _LiveMediaVideo(
+              track: track,
+              fit: LiveVideoTrackFit.contain,
+              mirrored: _cameraMirrored,
+            )
           else
             const SizedBox.expand(
               key: ValueKey<String>('live-stage:video-suspended'),
@@ -64,17 +139,19 @@ class _LiveMediaStage extends StatelessWidget {
             left: 0,
             top: 0,
             child: _LiveStageBadge(
-              label: label,
+              label: widget.label,
               kind: track.isScreenShare
                   ? _LiveMediaKind.screenShare
                   : _LiveMediaKind.camera,
             ),
           ),
-          if (track.isScreenShare && screenShareViewers.isNotEmpty)
+          if (track.isScreenShare && widget.screenShareViewers.isNotEmpty)
             Positioned(
               left: 8,
               bottom: 8,
-              child: _ScreenShareViewerPreview(viewers: screenShareViewers),
+              child: _ScreenShareViewerPreview(
+                viewers: widget.screenShareViewers,
+              ),
             ),
           Positioned(
             top: 8,
@@ -86,7 +163,7 @@ class _LiveMediaStage extends StatelessWidget {
                   key: const ValueKey<String>('live-stage:exit'),
                   icon: Icons.close_fullscreen,
                   infoMessage: '退出焦点画面',
-                  onPressed: onExit,
+                  onPressed: widget.onExit,
                 ),
                 if (!isLocalScreenShare) ...[
                   const SizedBox(width: 6),
@@ -94,7 +171,7 @@ class _LiveMediaStage extends StatelessWidget {
                     key: const ValueKey<String>('live-stage:fullscreen'),
                     icon: Icons.fullscreen,
                     infoMessage: '全屏查看',
-                    onPressed: onFullScreen,
+                    onPressed: widget.onFullScreen,
                   ),
                 ],
               ],
@@ -105,9 +182,35 @@ class _LiveMediaStage extends StatelessWidget {
               right: 8,
               bottom: 8,
               child: _StageScreenShareVolumeButton(
-                value: screenShareVolume,
-                onChanged: onScreenShareVolumeChanged,
-                onPressed: onScreenShareMuteToggled,
+                value: widget.screenShareVolume,
+                onChanged: widget.onScreenShareVolumeChanged,
+                onPressed: widget.onScreenShareMuteToggled,
+              ),
+            ),
+          if (!track.isScreenShare)
+            Positioned(
+              right: 8,
+              bottom: 8,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (track.isLocal && widget.onFlipCamera != null) ...[
+                    _StageOverlayIconButton(
+                      key: const ValueKey<String>('live-stage:flip-camera'),
+                      icon: Icons.flip_camera_android,
+                      infoMessage: '翻转摄像头',
+                      onPressed: _flippingCamera ? null : _flipCamera,
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                  _StageOverlayIconButton(
+                    key: const ValueKey<String>('live-stage:mirror-camera'),
+                    icon: Icons.flip,
+                    infoMessage: _cameraMirrored ? '取消镜像' : '镜像',
+                    active: _cameraMirrored,
+                    onPressed: _settingSharedMirror ? null : _toggleMirror,
+                  ),
+                ],
               ),
             ),
         ],
@@ -164,6 +267,7 @@ class LiveFullScreenStage extends StatefulWidget {
     super.key,
     required this.track,
     required this.label,
+    this.cameraMirrored = false,
     this.screenShareViewers = const <UserSummary>[],
     required this.screenShareVolume,
     required this.onScreenShareVolumeChanged,
@@ -173,6 +277,7 @@ class LiveFullScreenStage extends StatefulWidget {
 
   final LiveVideoTrack track;
   final String label;
+  final bool cameraMirrored;
   final List<UserSummary> screenShareViewers;
   final double screenShareVolume;
   final ValueChanged<double> onScreenShareVolumeChanged;
@@ -285,6 +390,7 @@ class _LiveFullScreenStageState extends State<LiveFullScreenStage> {
                 _LiveMediaVideo(
                   track: widget.track,
                   fit: LiveVideoTrackFit.contain,
+                  mirrored: widget.cameraMirrored,
                 ),
                 Positioned(
                   left: 14 + safeInsets.left,
@@ -364,11 +470,13 @@ class _StageOverlayIconButton extends StatefulWidget {
     required this.icon,
     required this.infoMessage,
     required this.onPressed,
+    this.active = false,
   });
 
   final IconData icon;
   final String infoMessage;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
+  final bool active;
 
   @override
   State<_StageOverlayIconButton> createState() =>
@@ -380,16 +488,26 @@ class _StageOverlayIconButtonState extends State<_StageOverlayIconButton> {
 
   @override
   Widget build(BuildContext context) {
+    final enabled = widget.onPressed != null;
     return _HoverInfo(
       message: widget.infoMessage,
       child: MouseRegion(
-        cursor: SystemMouseCursors.click,
+        cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
         onEnter: (_) => setState(() => _hovered = true),
         onExit: (_) => setState(() => _hovered = false),
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: widget.onPressed,
-          child: _StageOverlayIconSurface(icon: widget.icon, hovered: _hovered),
+          child: Semantics(
+            button: true,
+            enabled: enabled,
+            selected: widget.active,
+            child: _StageOverlayIconSurface(
+              icon: widget.icon,
+              hovered: _hovered,
+              active: widget.active,
+            ),
+          ),
         ),
       ),
     );
@@ -397,10 +515,15 @@ class _StageOverlayIconButtonState extends State<_StageOverlayIconButton> {
 }
 
 class _StageOverlayIconSurface extends StatefulWidget {
-  const _StageOverlayIconSurface({required this.icon, this.hovered});
+  const _StageOverlayIconSurface({
+    required this.icon,
+    this.hovered,
+    this.active = false,
+  });
 
   final IconData icon;
   final bool? hovered;
+  final bool active;
 
   @override
   State<_StageOverlayIconSurface> createState() =>
@@ -414,13 +537,14 @@ class _StageOverlayIconSurfaceState extends State<_StageOverlayIconSurface> {
 
   @override
   Widget build(BuildContext context) {
-    final color = _effectiveHovered ? UiColors.accent : UiColors.textSecondary;
+    final highlighted = _effectiveHovered || widget.active;
+    final color = highlighted ? UiColors.accent : UiColors.textSecondary;
     final surface = AnimatedContainer(
       duration: const Duration(milliseconds: 120),
       width: 34,
       height: 34,
       decoration: BoxDecoration(
-        color: _effectiveHovered
+        color: highlighted
             ? UiColors.surface.withValues(alpha: 0.92)
             : UiColors.surface.withValues(alpha: 0.72),
         borderRadius: BorderRadius.circular(UiRadii.md),

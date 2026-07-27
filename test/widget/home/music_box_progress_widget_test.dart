@@ -8,12 +8,18 @@ import 'package:flutter_test/flutter_test.dart';
 /// the snapshot's reported position verbatim and updates only when a fresh
 /// snapshot arrives — no local stepping, no client clock.
 
-Widget _host(MusicBoxState state, TextEditingController searchController) {
+Widget _host(
+  MusicBoxState state,
+  TextEditingController searchController, {
+  TargetPlatform? platform,
+  double? height,
+}) {
   return MaterialApp(
-    theme: uiTheme(),
+    theme: uiTheme().copyWith(platform: platform),
     home: Scaffold(
       body: SizedBox(
         width: 360,
+        height: height,
         child: LiveMusicBoxPanel(
           state: state,
           searchController: searchController,
@@ -69,16 +75,48 @@ MusicBoxState _state({
 }
 
 void main() {
+  testWidgets(
+    'android search keeps focus when the keyboard compacts the panel',
+    (tester) async {
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+      final state = _state(
+        playbackState: MusicBoxPlaybackState.stopped,
+        positionMs: 0,
+      );
+
+      await tester.pumpWidget(
+        _host(state, controller, platform: TargetPlatform.android, height: 460),
+      );
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).focusNode!.hasFocus,
+        isTrue,
+      );
+      expect(tester.testTextInput.isVisible, isTrue);
+
+      await tester.pumpWidget(
+        _host(state, controller, platform: TargetPlatform.android, height: 330),
+      );
+      await tester.pump();
+
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).focusNode!.hasFocus,
+        isTrue,
+      );
+      expect(tester.testTextInput.isVisible, isTrue);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('renders the server-reported position', (tester) async {
     final controller = TextEditingController();
     addTearDown(controller.dispose);
 
     await tester.pumpWidget(
       _host(
-        _state(
-          playbackState: MusicBoxPlaybackState.playing,
-          positionMs: 5000,
-        ),
+        _state(playbackState: MusicBoxPlaybackState.playing, positionMs: 5000),
         controller,
       ),
     );
@@ -94,10 +132,7 @@ void main() {
 
     await tester.pumpWidget(
       _host(
-        _state(
-          playbackState: MusicBoxPlaybackState.playing,
-          positionMs: 5000,
-        ),
+        _state(playbackState: MusicBoxPlaybackState.playing, positionMs: 5000),
         controller,
       ),
     );
@@ -117,10 +152,7 @@ void main() {
 
     await tester.pumpWidget(
       _host(
-        _state(
-          playbackState: MusicBoxPlaybackState.playing,
-          positionMs: 5000,
-        ),
+        _state(playbackState: MusicBoxPlaybackState.playing, positionMs: 5000),
         controller,
       ),
     );
@@ -128,10 +160,7 @@ void main() {
 
     await tester.pumpWidget(
       _host(
-        _state(
-          playbackState: MusicBoxPlaybackState.playing,
-          positionMs: 6000,
-        ),
+        _state(playbackState: MusicBoxPlaybackState.playing, positionMs: 6000),
         controller,
       ),
     );

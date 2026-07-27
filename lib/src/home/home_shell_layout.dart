@@ -371,6 +371,13 @@ extension _HomeShellLayout on _HomeShellState {
         onToggleMic: _voiceBlocked ? null : _toggleMicMute,
         onToggleHeadphones: _toggleHeadphonesMute,
         onToggleCamera: () => unawaited(_toggleCamera()),
+        onFlipCamera:
+            !kIsWeb &&
+                Theme.of(context).platform == TargetPlatform.android &&
+                _liveSessionController.canFlipCamera
+            ? _flipLocalCamera
+            : null,
+        onSetLocalCameraMirrored: _setLocalCameraMirrored,
         onToggleShare: supportsLocalScreenShare
             ? () => unawaited(_toggleScreenShare())
             : null,

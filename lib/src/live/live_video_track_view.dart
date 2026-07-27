@@ -9,7 +9,7 @@ typedef LiveVideoTrackRendererBuilder =
     Widget Function(
       LiveVideoTrack track,
       LiveVideoTrackFit fit,
-      bool mirrorLocal,
+      bool shouldMirror,
     );
 
 @visibleForTesting
@@ -25,32 +25,33 @@ class LiveVideoTrackView extends StatelessWidget {
     super.key,
     required this.track,
     this.fit = LiveVideoTrackFit.contain,
-    this.mirrorLocal = false,
+    this.mirrored = false,
   });
 
   final LiveVideoTrack track;
   final LiveVideoTrackFit fit;
-  final bool mirrorLocal;
+  final bool mirrored;
 
   @override
   Widget build(BuildContext context) {
+    // Mirror state is owned explicitly by the app. Screen shares never mirror,
+    // and camera rendering does not depend on the SDK's platform-specific
+    // automatic policy.
+    final shouldMirror = !track.isScreenShare && mirrored;
     final testRenderer = liveVideoTrackRendererForTest;
     if (testRenderer != null) {
-      return testRenderer(track, fit, mirrorLocal);
+      return testRenderer(track, fit, shouldMirror);
     }
 
-    final mirrorMode = track.isScreenShare
-        ? lk.VideoViewMirrorMode.off
-        : mirrorLocal && track.isLocal
-        ? lk.VideoViewMirrorMode.mirror
-        : lk.VideoViewMirrorMode.auto;
     return lk.VideoTrackRenderer(
       track.track,
       fit: switch (fit) {
         LiveVideoTrackFit.cover => lk.VideoViewFit.cover,
         LiveVideoTrackFit.contain => lk.VideoViewFit.contain,
       },
-      mirrorMode: mirrorMode,
+      mirrorMode: shouldMirror
+          ? lk.VideoViewMirrorMode.mirror
+          : lk.VideoViewMirrorMode.off,
     );
   }
 }

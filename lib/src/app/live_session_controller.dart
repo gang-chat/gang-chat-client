@@ -72,6 +72,7 @@ class LiveSessionController {
   }
 
   bool get isScreenSharing => session.isScreenSharing;
+  bool get canFlipCamera => session.canFlipCamera;
   bool get isConnected => session.isConnected;
   bool get localMicMuted => session.localMicMuted;
   String? get roomName => session.roomName;
@@ -115,6 +116,8 @@ class LiveSessionController {
   Future<void> setCameraEnabled(bool enabled) {
     return session.setCameraEnabled(enabled);
   }
+
+  Future<bool> flipCamera() => session.flipCamera();
 
   Future<void> setScreenShareEnabled(bool enabled, {String? sourceId}) {
     return session.setScreenShareEnabled(enabled, sourceId: sourceId);

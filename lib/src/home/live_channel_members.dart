@@ -238,6 +238,14 @@ class _LiveMemberCard extends StatelessWidget {
     final name = live_display.liveUserDisplayName(participant.user);
     final nameColor = _liveMemberNameColor(participant.user, local: local);
     final previewTrack = this.previewTrack;
+    final androidLocalCameraTap =
+        Theme.of(context).platform == TargetPlatform.android &&
+            local &&
+            previewTrack != null &&
+            previewTrack.isLocal &&
+            !previewTrack.isScreenShare
+        ? () => onSelectPreview(previewTrack)
+        : null;
     final borderColor = state.highlighted
         ? UiColors.borderStrong
         : UiColors.border;
@@ -300,11 +308,18 @@ class _LiveMemberCard extends StatelessWidget {
             )
           : showCameraPreview
           ? previewTrack != null && previewTrack.isScreenShare == false
-                ? _LiveMemberVideo(track: previewTrack)
+                ? _LiveMemberVideo(
+                    track: previewTrack,
+                    mirrored: participant.cameraMirrored,
+                    androidLocalCameraTap: androidLocalCameraTap,
+                  )
                 : const _StoppedLiveMediaThumbnail(
                     kind: _StoppedLiveMediaKind.camera,
                   )
-          : _LiveMemberVideo(track: previewTrack!);
+          : _LiveMemberVideo(
+              track: previewTrack!,
+              mirrored: participant.cameraMirrored,
+            );
       return SizedBox(
         width: _memberCardWidth,
         child: PressableSurface(
@@ -748,9 +763,15 @@ IconData? _participantMetaIcon(
 }
 
 class _LiveMemberVideo extends StatefulWidget {
-  const _LiveMemberVideo({required this.track});
+  const _LiveMemberVideo({
+    required this.track,
+    required this.mirrored,
+    this.androidLocalCameraTap,
+  });
 
   final LiveVideoTrack track;
+  final bool mirrored;
+  final VoidCallback? androidLocalCameraTap;
 
   @override
   State<_LiveMemberVideo> createState() => _LiveMemberVideoState();
@@ -762,7 +783,7 @@ class _LiveMemberVideoState extends State<_LiveMemberVideo> {
   @override
   Widget build(BuildContext context) {
     final track = widget.track;
-    final video = _LiveMediaVideo(track: track);
+    final video = _LiveMediaVideo(track: track, mirrored: widget.mirrored);
     final content = track.isScreenShare
         ? video
         : ClipRRect(
@@ -799,6 +820,21 @@ class _LiveMemberVideoState extends State<_LiveMemberVideo> {
               ),
             ),
           ),
+          if (widget.androidLocalCameraTap != null)
+            Positioned.fill(
+              child: Semantics(
+                button: true,
+                label: '预览自己的摄像头',
+                child: GestureDetector(
+                  key: const ValueKey<String>(
+                    'live-member:android-local-camera-tap',
+                  ),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: widget.androidLocalCameraTap,
+                  child: const SizedBox.expand(),
+                ),
+              ),
+            ),
         ],
       ),
     );

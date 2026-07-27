@@ -818,6 +818,14 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                                 _live,
                                 fullScreenTrack,
                               ),
+                              cameraMirrored:
+                                  live_display
+                                      .liveParticipantByUserId(
+                                        _live,
+                                        fullScreenTrack.identity,
+                                      )
+                                      ?.cameraMirrored ??
+                                  false,
                               screenShareViewers: fullScreenTrack.isScreenShare
                                   ? live_display.liveScreenShareViewers(
                                       _live,

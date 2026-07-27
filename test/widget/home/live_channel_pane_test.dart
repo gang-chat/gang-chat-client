@@ -1,6 +1,7 @@
 import 'dart:ui' show PointerDeviceKind;
 
 import 'package:client/src/config/app_config.dart';
+import 'package:client/src/home/adaptive_layout.dart';
 import 'package:client/src/home/live_channel_pane.dart';
 import 'package:client/src/live/live_session.dart';
 import 'package:client/src/live/live_video_track_view.dart';
@@ -650,6 +651,7 @@ void main() {
         await tester.pumpWidget(
           _host(
             searchController: searchController,
+            platform: TargetPlatform.windows,
             live: live,
             videoTracks: [
               _liveVideoTrack(
@@ -712,6 +714,327 @@ void main() {
       expect(stageSelections, 2);
     },
   );
+
+  testWidgets(
+    'camera thumbnails follow shared mirror state without SDK auto mirror',
+    (tester) async {
+      final searchController = TextEditingController();
+      addTearDown(searchController.dispose);
+      final mirrorByIdentity = <String, bool>{};
+      liveVideoTrackRendererForTest = (track, fit, shouldMirror) {
+        mirrorByIdentity[track.identity] = shouldMirror;
+        return const ColoredBox(color: Colors.black);
+      };
+      addTearDown(resetLiveVideoTrackRendererForTest);
+
+      await tester.pumpWidget(
+        _host(
+          searchController: searchController,
+          live: _liveState([
+            _participant(
+              id: 'live_self',
+              user: _currentUser.toSummary(),
+              cameraOn: true,
+              cameraMirrored: true,
+            ),
+            _participant(
+              id: 'live_phabe',
+              user: _user('phabe', 'Phabe', roomRole: 'member'),
+              cameraOn: true,
+            ),
+          ]),
+          videoTracks: [
+            _liveVideoTrack(
+              identity: 'current_user',
+              isScreenShare: false,
+              isLocal: true,
+            ),
+            _liveVideoTrack(
+              identity: 'phabe',
+              isScreenShare: false,
+              isLocal: false,
+            ),
+          ],
+        ),
+      );
+      await tester.pump();
+
+      expect(mirrorByIdentity['current_user'], isTrue);
+      expect(mirrorByIdentity['phabe'], isFalse);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'Android local camera texture opens the same stage preview as Windows',
+    (tester) async {
+      final searchController = TextEditingController();
+      addTearDown(searchController.dispose);
+      liveVideoTrackRendererForTest = (track, fit, shouldMirror) {
+        return const ColoredBox(color: Colors.black);
+      };
+      addTearDown(resetLiveVideoTrackRendererForTest);
+      final selections = <LiveStageSelection?>[];
+
+      await tester.pumpWidget(
+        _host(
+          searchController: searchController,
+          platform: TargetPlatform.android,
+          live: _liveState([
+            _participant(
+              id: 'live_self',
+              user: _currentUser.toSummary(),
+              cameraOn: true,
+            ),
+          ]),
+          videoTracks: [
+            _liveVideoTrack(
+              identity: 'current_user',
+              isScreenShare: false,
+              isLocal: true,
+            ),
+          ],
+          onStageSelectionChanged: selections.add,
+        ),
+      );
+      await tester.pump();
+
+      final androidTapTarget = find.byKey(
+        const ValueKey<String>('live-member:android-local-camera-tap'),
+      );
+      expect(androidTapTarget, findsOneWidget);
+      await tester.tap(androidTapTarget);
+
+      expect(selections, hasLength(1));
+      expect(selections.single?.identity, 'current_user');
+      expect(selections.single?.isScreenShare, isFalse);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('local camera stage exposes flip and shared mirror controls', (
+    tester,
+  ) async {
+    final searchController = TextEditingController();
+    addTearDown(searchController.dispose);
+    final renderedMirrors = <bool>[];
+    liveVideoTrackRendererForTest = (track, fit, shouldMirror) {
+      if (track.identity == 'current_user') {
+        renderedMirrors.add(shouldMirror);
+      }
+      return const ColoredBox(color: Colors.black);
+    };
+    addTearDown(resetLiveVideoTrackRendererForTest);
+    var flipCalls = 0;
+    final sharedMirrorChanges = <bool>[];
+
+    await tester.pumpWidget(
+      _host(
+        searchController: searchController,
+        platform: TargetPlatform.android,
+        live: _liveState([
+          _participant(
+            id: 'live_self',
+            user: _currentUser.toSummary(),
+            cameraOn: true,
+          ),
+        ]),
+        videoTracks: [
+          _liveVideoTrack(
+            identity: 'current_user',
+            isScreenShare: false,
+            isLocal: true,
+          ),
+        ],
+        stageSelection: const LiveStageSelection.track(
+          identity: 'current_user',
+          isScreenShare: false,
+        ),
+        onFlipCamera: () async {
+          flipCalls += 1;
+          return true;
+        },
+        onSetLocalCameraMirrored: (mirrored) async {
+          sharedMirrorChanges.add(mirrored);
+          return true;
+        },
+      ),
+    );
+    await tester.pump();
+
+    final flip = find.byKey(const ValueKey<String>('live-stage:flip-camera'));
+    final mirror = find.byKey(
+      const ValueKey<String>('live-stage:mirror-camera'),
+    );
+    expect(flip, findsOneWidget);
+    expect(mirror, findsOneWidget);
+    expect(renderedMirrors.last, isFalse);
+
+    await tester.tap(flip);
+    await tester.pump();
+    expect(flipCalls, 1);
+
+    await tester.tap(mirror);
+    await tester.pump();
+    expect(sharedMirrorChanges, [true]);
+    expect(renderedMirrors.last, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('local camera stage hides flip without camera capability', (
+    tester,
+  ) async {
+    final searchController = TextEditingController();
+    addTearDown(searchController.dispose);
+    liveVideoTrackRendererForTest = (track, fit, shouldMirror) {
+      return const ColoredBox(color: Colors.black);
+    };
+    addTearDown(resetLiveVideoTrackRendererForTest);
+
+    await tester.pumpWidget(
+      _host(
+        searchController: searchController,
+        platform: TargetPlatform.android,
+        live: _liveState([
+          _participant(
+            id: 'live_self',
+            user: _currentUser.toSummary(),
+            cameraOn: true,
+          ),
+        ]),
+        videoTracks: [
+          _liveVideoTrack(
+            identity: 'current_user',
+            isScreenShare: false,
+            isLocal: true,
+          ),
+        ],
+        stageSelection: const LiveStageSelection.track(
+          identity: 'current_user',
+          isScreenShare: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey<String>('live-stage:flip-camera')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('live-stage:mirror-camera')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'remote camera stage hides flip and mirrors only the local viewer',
+    (tester) async {
+      final searchController = TextEditingController();
+      addTearDown(searchController.dispose);
+      final renderedMirrors = <bool>[];
+      liveVideoTrackRendererForTest = (track, fit, shouldMirror) {
+        renderedMirrors.add(shouldMirror);
+        return const ColoredBox(color: Colors.black);
+      };
+      addTearDown(resetLiveVideoTrackRendererForTest);
+      final sharedMirrorChanges = <bool>[];
+
+      await tester.pumpWidget(
+        _host(
+          searchController: searchController,
+          platform: TargetPlatform.android,
+          live: _liveState([
+            _participant(
+              id: 'live_phabe',
+              user: _user('phabe', 'Phabe', roomRole: 'member'),
+              cameraOn: true,
+            ),
+          ]),
+          videoTracks: [
+            _liveVideoTrack(
+              identity: 'phabe',
+              isScreenShare: false,
+              isLocal: false,
+            ),
+          ],
+          stageSelection: const LiveStageSelection.track(
+            identity: 'phabe',
+            isScreenShare: false,
+          ),
+          onFlipCamera: () async => true,
+          onSetLocalCameraMirrored: (mirrored) async {
+            sharedMirrorChanges.add(mirrored);
+            return true;
+          },
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        find.byKey(const ValueKey<String>('live-stage:flip-camera')),
+        findsNothing,
+      );
+      final mirror = find.byKey(
+        const ValueKey<String>('live-stage:mirror-camera'),
+      );
+      expect(mirror, findsOneWidget);
+      expect(renderedMirrors.last, isFalse);
+
+      await tester.tap(mirror);
+      await tester.pump();
+      expect(renderedMirrors.last, isTrue);
+      expect(sharedMirrorChanges, isEmpty);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('screen-share stage has no camera transform controls', (
+    tester,
+  ) async {
+    final searchController = TextEditingController();
+    addTearDown(searchController.dispose);
+    liveVideoTrackRendererForTest = (track, fit, shouldMirror) {
+      return const ColoredBox(color: Colors.black);
+    };
+    addTearDown(resetLiveVideoTrackRendererForTest);
+
+    await tester.pumpWidget(
+      _host(
+        searchController: searchController,
+        live: _liveState([
+          _participant(
+            id: 'live_phabe',
+            user: _user('phabe', 'Phabe', roomRole: 'member'),
+            screenSharing: true,
+          ),
+        ]),
+        videoTracks: [
+          _liveVideoTrack(
+            identity: 'phabe',
+            isScreenShare: true,
+            isLocal: false,
+          ),
+        ],
+        stageSelection: const LiveStageSelection.track(
+          identity: 'phabe',
+          isScreenShare: true,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey<String>('live-stage:flip-camera')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('live-stage:mirror-camera')),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('remote media thumbnail joins live room and selects stage', (
     tester,
@@ -1513,6 +1836,84 @@ void main() {
 
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'music box panel stays above the inline player at every layout width',
+    (tester) async {
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final searchController = TextEditingController();
+      addTearDown(searchController.dispose);
+
+      final cases =
+          <
+            ({
+              String label,
+              TargetPlatform platform,
+              bool compact,
+              double width,
+            })
+          >[
+            (
+              label: 'Android compact',
+              platform: TargetPlatform.android,
+              compact: true,
+              width: 360,
+            ),
+            (
+              label: 'Windows compact',
+              platform: TargetPlatform.windows,
+              compact: true,
+              width: 360,
+            ),
+            (
+              label: 'Windows wide',
+              platform: TargetPlatform.windows,
+              compact: false,
+              width: 960,
+            ),
+            (
+              label: 'macOS wide',
+              platform: TargetPlatform.macOS,
+              compact: false,
+              width: 960,
+            ),
+          ];
+
+      for (final testCase in cases) {
+        await tester.binding.setSurfaceSize(Size(testCase.width, 740));
+        await tester.pumpWidget(
+          HomeAdaptiveLayout(
+            compact: testCase.compact,
+            child: _host(
+              searchController: searchController,
+              live: _liveState(const []),
+              width: testCase.width,
+              height: 740,
+              platform: testCase.platform,
+              musicBox: _emptyMusicBoxState,
+              musicBoxOpen: true,
+            ),
+          ),
+        );
+        await tester.pump();
+
+        final panel = find.byKey(
+          const ValueKey<String>('live-music-box-panel'),
+        );
+        final inlinePlayer = find.byKey(
+          const ValueKey<String>('live-control:music-inline'),
+        );
+        expect(panel, findsOneWidget);
+        expect(inlinePlayer, findsOneWidget);
+        expect(
+          tester.getRect(panel).bottom,
+          lessThanOrEqualTo(tester.getRect(inlinePlayer).top),
+          reason: '${testCase.label} music box must not overlap its player',
+        );
+        expect(tester.takeException(), isNull);
+      }
+    },
+  );
 }
 
 void _expectBelowTooltip(WidgetTester tester, String message) {
@@ -1559,12 +1960,16 @@ Widget _host({
   VoidCallback? onToggleMic,
   VoidCallback? onToggleHeadphones,
   VoidCallback? onToggleCamera,
+  Future<bool> Function()? onFlipCamera,
+  Future<bool> Function(bool mirrored)? onSetLocalCameraMirrored,
   VoidCallback? onToggleShare,
   bool screenShareSupported = true,
   ValueChanged<LiveStageSelection?>? onStageSelectionChanged,
   LiveStageSelection? stageSelection,
   List<LiveVideoTrack> videoTracks = const [],
   bool suspendStageVideo = false,
+  MusicBoxState? musicBox,
+  bool musicBoxOpen = false,
   double screenShareVolume = 1,
   ValueChanged<double>? onScreenShareVolumeChanged,
   VoidCallback? onScreenShareMuteToggled,
@@ -1617,9 +2022,12 @@ Widget _host({
             onToggleMic: onToggleMic ?? () {},
             onToggleHeadphones: onToggleHeadphones ?? () {},
             onToggleCamera: onToggleCamera ?? () {},
+            onFlipCamera: onFlipCamera,
+            onSetLocalCameraMirrored:
+                onSetLocalCameraMirrored ?? (_) async => true,
             onToggleShare: screenShareSupported ? onToggleShare ?? () {} : null,
-            musicBox: null,
-            musicBoxOpen: false,
+            musicBox: musicBox,
+            musicBoxOpen: musicBoxOpen,
             musicBoxSearchController: searchController,
             musicBoxSearchResults: const [],
             musicBoxSearching: false,
@@ -1659,6 +2067,19 @@ Widget _host({
     ),
   );
 }
+
+const _emptyMusicBoxState = MusicBoxState(
+  enabled: true,
+  playback: MusicBoxPlayback(
+    state: MusicBoxPlaybackState.stopped,
+    currentItemId: '',
+    positionMs: 0,
+    volume: 100,
+    updatedAt: null,
+  ),
+  queue: <MusicBoxQueueItem>[],
+  usage: MusicBoxUsage(usedBytes: 0, limitBytes: 200 * 1024 * 1024),
+);
 
 void _expectMediaMemberCard(
   WidgetTester tester, {
@@ -1770,6 +2191,7 @@ LiveParticipant _participant({
   bool headphonesBlocked = false,
   bool voiceBlocked = false,
   bool cameraOn = false,
+  bool cameraMirrored = false,
   bool screenSharing = false,
   List<UserSummary> screenViewers = const <UserSummary>[],
   String connectionState = 'connected',
@@ -1785,6 +2207,7 @@ LiveParticipant _participant({
     headphonesListening: !headphonesMuted && !headphonesBlocked,
     voiceBlocked: voiceBlocked,
     cameraOn: cameraOn,
+    cameraMirrored: cameraMirrored,
     screenSharing: screenSharing,
     screenViewers: screenViewers,
     connectionState: connectionState,

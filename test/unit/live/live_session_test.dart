@@ -9,6 +9,12 @@ import 'package:client/src/live/audio_output_rebinder.dart';
 import 'package:client/src/live/live_session.dart';
 
 void main() {
+  test('camera flip capability distinguishes unknown and single-camera', () {
+    expect(cameraFlipAvailabilityFromVideoInputCount(0), isNull);
+    expect(cameraFlipAvailabilityFromVideoInputCount(1), isFalse);
+    expect(cameraFlipAvailabilityFromVideoInputCount(2), isTrue);
+  });
+
   test('participant removal maps to the kicked announcement kind', () {
     expect(
       liveParticipantDepartureKind(lk.DisconnectReason.participantRemoved),
