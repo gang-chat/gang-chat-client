@@ -115,6 +115,56 @@ void main() {
   );
 
   test(
+    'preferredStoredAudioDeviceFrom restores unique label after group id churn',
+    () {
+      const devices = [
+        _Device('speaker_new', 'USB Headset', 'audiooutput', 'group_new'),
+        _Device('speaker_2', 'Desk Speaker', 'audiooutput', 'group_desk'),
+      ];
+
+      expect(
+        preferredStoredAudioDeviceFrom(
+          devices,
+          kind: 'audiooutput',
+          storedDeviceId: 'speaker_old',
+          storedDeviceLabel: 'USB Headset',
+          storedDeviceGroupId: 'group_old',
+          systemDefaultDeviceId: 'speaker_2',
+          kindOf: _kindOf,
+          deviceIdOf: _deviceIdOf,
+          labelOf: _labelOf,
+          groupIdOf: _groupIdOf,
+        ),
+        devices[0],
+      );
+    },
+  );
+
+  test('group id churn does not restore an ambiguous device label', () {
+    const devices = [
+      _Device('speaker_a', 'USB Headset', 'audiooutput', 'group_a'),
+      _Device('speaker_b', 'USB Headset', 'audiooutput', 'group_b'),
+      _Device('speaker_default', 'Desk Speaker', 'audiooutput', 'group_desk'),
+    ];
+
+    expect(
+      preferredStoredAudioDeviceFrom(
+        devices,
+        kind: 'audiooutput',
+        storedDeviceId: 'speaker_old',
+        storedDeviceLabel: 'USB Headset',
+        storedDeviceGroupId: 'group_old',
+        systemDefaultDeviceId: 'speaker_default',
+        kindOf: _kindOf,
+        deviceIdOf: _deviceIdOf,
+        labelOf: _labelOf,
+        groupIdOf: _groupIdOf,
+      ),
+      devices[2],
+    );
+  });
+
+  test(
     'preferredStoredAudioDeviceFrom prefers stored, then system default, then '
     'synthetic default',
     () {

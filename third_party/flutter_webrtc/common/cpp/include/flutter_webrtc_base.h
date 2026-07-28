@@ -143,6 +143,10 @@ class FlutterWebRTCBase {
       const std::string& keyProviderId);
 
  private:
+  void PreserveRuntimeForAbandonedNativeWork() {
+    preserve_runtime_for_abandoned_native_work_ = true;
+  }
+
   void ParseConstraints(const EncodableMap& src,
                         scoped_refptr<RTCMediaConstraints> mediaConstraints,
                         ParseConstraintType type = kMandatory);
@@ -180,6 +184,7 @@ class FlutterWebRTCBase {
   std::map<std::string, std::shared_ptr<FlutterPeerConnectionObserver>>
       peerconnection_observers_;
   mutable std::mutex mutex_;
+  bool preserve_runtime_for_abandoned_native_work_ = false;
 
   void lock() { mutex_.lock(); }
   void unlock() { mutex_.unlock(); }

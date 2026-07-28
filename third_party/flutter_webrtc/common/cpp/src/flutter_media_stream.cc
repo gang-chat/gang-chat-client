@@ -1,6 +1,13 @@
 #include "flutter_media_stream.h"
+#include "task_runner.h"
+#include "timed_serial_worker.h"
 
+#include <cstdint>
+#include <map>
+#include <mutex>
 #include <set>
+#include <stdexcept>
+#include <vector>
 
 #if defined(_WIN32)
 #ifndef NOMINMAX
@@ -31,7 +38,8 @@ void AppendAudioDevice(EncodableList& sources,
                        std::set<std::string>& seen,
                        const std::string& kind,
                        const std::string& label,
-                       const std::string& device_id) {
+                       const std::string& device_id,
+                       const std::string& group_id = {}) {
   if (device_id.empty()) {
     return;
   }
@@ -42,7 +50,8 @@ void AppendAudioDevice(EncodableList& sources,
   EncodableMap audio;
   audio[EncodableValue("label")] = EncodableValue(label);
   audio[EncodableValue("deviceId")] = EncodableValue(device_id);
-  audio[EncodableValue("groupId")] = EncodableValue(device_id);
+  audio[EncodableValue("groupId")] =
+      EncodableValue(group_id.empty() ? device_id : group_id);
   audio[EncodableValue("facing")] = "";
   audio[EncodableValue("kind")] = kind;
   sources.push_back(EncodableValue(audio));
@@ -126,14 +135,38 @@ std::string AudioEndpointFriendlyName(IMMDevice* device,
   return label.empty() ? fallback : label;
 }
 
-void AppendWindowsAudioEndpoints(EncodableList& sources,
+std::string AudioEndpointGroupId(IMMDevice* device) {
+  if (!device) {
+    return {};
+  }
+  IPropertyStore* properties = nullptr;
+  PROPVARIANT container_id;
+  PropVariantInit(&container_id);
+  std::string group_id;
+  if (SUCCEEDED(device->OpenPropertyStore(STGM_READ, &properties)) &&
+      SUCCEEDED(
+          properties->GetValue(PKEY_Device_ContainerId, &container_id)) &&
+      container_id.vt == VT_CLSID && container_id.puuid) {
+    wchar_t value[64] = {};
+    if (StringFromGUID2(*container_id.puuid, value,
+                        static_cast<int>(sizeof(value) / sizeof(value[0]))) >
+        0) {
+      group_id = WideToUtf8(value);
+    }
+  }
+  PropVariantClear(&container_id);
+  SafeRelease(properties);
+  return group_id;
+}
+
+bool AppendWindowsAudioEndpoints(EncodableList& sources,
                                  std::set<std::string>& seen,
                                  EDataFlow flow,
                                  const std::string& kind,
                                  const std::string& fallback) {
   ScopedComInitialization com;
   if (!com.ok()) {
-    return;
+    return false;
   }
 
   IMMDeviceEnumerator* enumerator = nullptr;
@@ -144,27 +177,31 @@ void AppendWindowsAudioEndpoints(EncodableList& sources,
                                             &collection))) {
     SafeRelease(collection);
     SafeRelease(enumerator);
-    return;
+    return false;
   }
 
   UINT count = 0;
-  if (SUCCEEDED(collection->GetCount(&count))) {
-    for (UINT i = 0; i < count; ++i) {
-      IMMDevice* device = nullptr;
-      if (FAILED(collection->Item(i, &device))) {
-        continue;
-      }
-      const std::string device_id = AudioEndpointId(device);
-      AppendAudioDevice(
-          sources, seen, kind,
-          AudioEndpointFriendlyName(device, fallback + " " + device_id),
-          device_id);
-      SafeRelease(device);
+  if (FAILED(collection->GetCount(&count))) {
+    SafeRelease(collection);
+    SafeRelease(enumerator);
+    return false;
+  }
+  for (UINT i = 0; i < count; ++i) {
+    IMMDevice* device = nullptr;
+    if (FAILED(collection->Item(i, &device))) {
+      continue;
     }
+    const std::string device_id = AudioEndpointId(device);
+    AppendAudioDevice(
+        sources, seen, kind,
+        AudioEndpointFriendlyName(device, fallback + " " + device_id),
+        device_id, AudioEndpointGroupId(device));
+    SafeRelease(device);
   }
 
   SafeRelease(collection);
   SafeRelease(enumerator);
+  return true;
 }
 #endif
 
@@ -172,13 +209,177 @@ void AppendWindowsAudioEndpoints(EncodableList& sources,
 
 namespace flutter_webrtc_plugin {
 
+struct FlutterMediaStream::DeviceChangeState {
+  explicit DeviceChangeState(EventChannelProxy* channel)
+      : event_channel(channel) {}
+
+  std::mutex mutex;
+  EventChannelProxy* event_channel;
+  bool active = true;
+};
+
+#if defined(_WIN32)
+struct FlutterMediaStream::SourceEnumerationState {
+  explicit SourceEnumerationState(TaskRunner* runner) : task_runner(runner) {}
+
+  struct CachedVideoDevice {
+    std::string name;
+    std::string id;
+    int index = 0;
+  };
+
+  std::mutex mutex;
+  TaskRunner* task_runner;
+  bool active = true;
+  bool enumerating = false;
+  uint64_t next_operation_id = 1;
+  std::vector<std::shared_ptr<MethodResultProxy>> pending_results;
+  std::map<uint64_t, std::shared_ptr<MethodResultProxy>> operation_results;
+  std::vector<CachedVideoDevice> video_devices;
+};
+
+namespace {
+
+const char* WorkerFailureCode(TimedSerialWorker::FailureReason reason) {
+  switch (reason) {
+    case TimedSerialWorker::FailureReason::kTimedOut:
+      return "NativeDeviceOperationTimeout";
+    case TimedSerialWorker::FailureReason::kStopped:
+      return "NativeDeviceOperationStopped";
+    case TimedSerialWorker::FailureReason::kUnavailable:
+      return "NativeDeviceOperationUnavailable";
+    case TimedSerialWorker::FailureReason::kFailed:
+      return "NativeDeviceOperationFailed";
+  }
+  return "NativeDeviceOperationFailed";
+}
+
+const char* WorkerFailureMessage(TimedSerialWorker::FailureReason reason) {
+  switch (reason) {
+    case TimedSerialWorker::FailureReason::kTimedOut:
+      return "The native media-device operation timed out.";
+    case TimedSerialWorker::FailureReason::kStopped:
+      return "The native media-device operation was stopped.";
+    case TimedSerialWorker::FailureReason::kUnavailable:
+      return "The native media-device worker is unavailable.";
+    case TimedSerialWorker::FailureReason::kFailed:
+      return "The native media-device operation failed.";
+  }
+  return "The native media-device operation failed.";
+}
+
+template <typename State>
+void PostWindowsPlatformTask(
+    const std::shared_ptr<State>& state,
+    std::function<void()> task) {
+  TaskRunner* runner = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(state->mutex);
+    if (!state->active || !state->task_runner) {
+      return;
+    }
+    runner = state->task_runner;
+    runner->EnqueueTask([state, task = std::move(task)]() mutable {
+      {
+        std::lock_guard<std::mutex> state_lock(state->mutex);
+        if (!state->active) {
+          return;
+        }
+      }
+      task();
+    });
+  }
+}
+
+bool TrySelectAudioDevice(const scoped_refptr<RTCAudioDevice>& audio_device,
+                          const std::string& device_id,
+                          bool input) {
+  if (!audio_device || device_id.empty()) {
+    return false;
+  }
+  char device_name[RTCAudioDevice::kAdmMaxDeviceNameSize + 1] = {0};
+  char device_guid[RTCAudioDevice::kAdmMaxGuidSize + 1] = {0};
+  const int device_count =
+      input ? audio_device->RecordingDevices()
+            : audio_device->PlayoutDevices();
+  for (int i = 0; i < device_count; ++i) {
+    const int result =
+        input ? audio_device->RecordingDeviceName(
+                    static_cast<uint16_t>(i), device_name, device_guid)
+              : audio_device->PlayoutDeviceName(
+                    static_cast<uint16_t>(i), device_name, device_guid);
+    if (result != 0) {
+      continue;
+    }
+    if (device_id != AudioDeviceIdFromNameAndGuid(device_name, device_guid)) {
+      continue;
+    }
+    return (input ? audio_device->SetRecordingDevice(
+                        static_cast<uint16_t>(i))
+                  : audio_device->SetPlayoutDevice(
+                        static_cast<uint16_t>(i))) == 0;
+  }
+  return false;
+}
+
+}  // namespace
+#endif
+
 FlutterMediaStream::FlutterMediaStream(FlutterWebRTCBase* base) : base_(base) {
-  base_->audio_device_->OnDeviceChange([&] {
+  device_change_state_ =
+      std::make_shared<DeviceChangeState>(base->event_channel());
+#if defined(_WIN32)
+  source_enumeration_state_ =
+      std::make_shared<SourceEnumerationState>(base->task_runner_);
+  windows_device_worker_ = std::make_unique<TimedSerialWorker>();
+  const auto change_state = device_change_state_;
+  base_->audio_device_->OnDeviceChange([change_state] {
+    std::lock_guard<std::mutex> lock(change_state->mutex);
+    if (!change_state->active || !change_state->event_channel) {
+      return;
+    }
+    EncodableMap info;
+    info[EncodableValue("event")] = "onDeviceChange";
+    change_state->event_channel->Success(EncodableValue(info), false);
+  });
+#else
+  const auto change_state = device_change_state_;
+  base_->audio_device_->OnDeviceChange([this, change_state] {
+    std::lock_guard<std::mutex> lock(change_state->mutex);
+    if (!change_state->active || !change_state->event_channel) {
+      return;
+    }
     ApplyDesiredAudioDevices();
     EncodableMap info;
     info[EncodableValue("event")] = "onDeviceChange";
-    base_->event_channel()->Success(EncodableValue(info), false);
+    change_state->event_channel->Success(EncodableValue(info), false);
   });
+#endif
+}
+
+FlutterMediaStream::~FlutterMediaStream() {
+  base_->audio_device_->OnDeviceChange([] {});
+  const auto change_state = device_change_state_;
+  if (change_state) {
+    std::lock_guard<std::mutex> lock(change_state->mutex);
+    change_state->active = false;
+    change_state->event_channel = nullptr;
+  }
+#if defined(_WIN32)
+  const auto state = source_enumeration_state_;
+  if (state) {
+    std::lock_guard<std::mutex> lock(state->mutex);
+    state->active = false;
+    state->task_runner = nullptr;
+    state->pending_results.clear();
+    state->operation_results.clear();
+    state->video_devices.clear();
+  }
+  if (windows_device_worker_ && !windows_device_worker_->Stop()) {
+    base_->PreserveRuntimeForAbandonedNativeWork();
+  }
+  windows_device_worker_.reset();
+#endif
 }
 
 void FlutterMediaStream::GetUserMedia(
@@ -291,6 +492,14 @@ void FlutterMediaStream::GetUserAudio(const EncodableMap& constraints,
   // deviceId
 
   if (enable_audio) {
+#if defined(_WIN32)
+    // MediaDeviceNative performs the requested Windows input selection through
+    // the timed serial worker before invoking getUserMedia. Do not enumerate
+    // ADM devices again on Flutter's platform thread here.
+    if (sourceId.empty() && !desired_audio_input_device_id_.empty()) {
+      sourceId = desired_audio_input_device_id_;
+    }
+#else
     char strRecordingName[256];
     char strRecordingGuid[256];
     int playout_devices = base_->audio_device_->PlayoutDevices();
@@ -330,6 +539,7 @@ void FlutterMediaStream::GetUserAudio(const EncodableMap& constraints,
         base_->audio_device_->SetPlayoutDevice(i);
       }
     }
+#endif
 
     scoped_refptr<RTCAudioSource> source =
         base_->factory_->CreateAudioSource("audio_input");
@@ -439,14 +649,32 @@ void FlutterMediaStream::GetUserVideo(const EncodableMap& constraints,
     fpsValue = findEncodableValue(video_mandatory, "frameRate");
 
   scoped_refptr<RTCVideoCapturer> video_capturer;
+#if defined(_WIN32)
+  std::vector<SourceEnumerationState::CachedVideoDevice> cached_devices;
+  {
+    std::lock_guard<std::mutex> lock(source_enumeration_state_->mutex);
+    cached_devices = source_enumeration_state_->video_devices;
+  }
+  const int nb_video_devices = static_cast<int>(cached_devices.size());
+#else
   char strNameUTF8[256];
   char strGuidUTF8[256];
   int nb_video_devices = base_->video_device_->NumberOfDevices();
+#endif
 
   int32_t width = toInt(widthValue, DEFAULT_WIDTH);
   int32_t height = toInt(heightValue, DEFAULT_HEIGHT);
   int32_t fps = toInt(fpsValue, DEFAULT_FPS);
 
+#if defined(_WIN32)
+  for (const auto& device : cached_devices) {
+    if (!sourceId.empty() && sourceId == device.id) {
+      video_capturer = base_->video_device_->Create(
+          device.name.c_str(), device.index, width, height, fps);
+      break;
+    }
+  }
+#else
   for (int i = 0; i < nb_video_devices; i++) {
     base_->video_device_->GetDeviceName(i, strNameUTF8, 256, strGuidUTF8, 256);
     if (sourceId != "" && sourceId == strGuidUTF8) {
@@ -455,15 +683,23 @@ void FlutterMediaStream::GetUserVideo(const EncodableMap& constraints,
       break;
     }
   }
+#endif
 
   if (nb_video_devices == 0)
     return;
 
   if (!video_capturer.get()) {
+#if defined(_WIN32)
+    const auto& device = cached_devices.front();
+    sourceId = device.id;
+    video_capturer = base_->video_device_->Create(
+        device.name.c_str(), device.index, width, height, fps);
+#else
     base_->video_device_->GetDeviceName(0, strNameUTF8, 128, strGuidUTF8, 128);
     sourceId = strGuidUTF8;
     video_capturer =
         base_->video_device_->Create(strNameUTF8, 0, width, height, fps);
+#endif
   }
 
   if (!video_capturer.get())
@@ -505,6 +741,110 @@ void FlutterMediaStream::GetUserVideo(const EncodableMap& constraints,
 }
 
 void FlutterMediaStream::GetSources(std::unique_ptr<MethodResultProxy> result) {
+#if defined(_WIN32)
+  const auto state = source_enumeration_state_;
+  const auto video_device = base_->video_device_;
+  const auto shared_result =
+      std::shared_ptr<MethodResultProxy>(std::move(result));
+  bool reject_request = false;
+  {
+    std::lock_guard<std::mutex> lock(state->mutex);
+    if (!state->active) {
+      return;
+    }
+    if (state->pending_results.size() >= 32) {
+      reject_request = true;
+    } else {
+      state->pending_results.push_back(shared_result);
+      if (state->enumerating) {
+        return;
+      }
+      state->enumerating = true;
+    }
+  }
+  if (reject_request) {
+    shared_result->Error(
+        "NativeDeviceOperationUnavailable",
+        "Too many media-device enumeration requests are pending.");
+    return;
+  }
+
+  windows_device_worker_->Submit(
+      [state, video_device]() -> TimedSerialWorker::Completion {
+        EncodableList sources;
+        std::set<std::string> seen_audio_devices;
+        if (!AppendWindowsAudioEndpoints(sources, seen_audio_devices, eCapture,
+                                         "audioinput", "Microphone") ||
+            !AppendWindowsAudioEndpoints(sources, seen_audio_devices, eRender,
+                                         "audiooutput", "Speaker")) {
+          throw std::runtime_error(
+              "Windows audio endpoint enumeration failed.");
+        }
+
+        std::vector<SourceEnumerationState::CachedVideoDevice> video_cache;
+        char name[RTCAudioDevice::kAdmMaxDeviceNameSize + 1] = {0};
+        char guid[RTCAudioDevice::kAdmMaxGuidSize + 1] = {0};
+        const int video_devices = video_device->NumberOfDevices();
+        for (int i = 0; i < video_devices; i++) {
+          if (video_device->GetDeviceName(i, name, 128, guid, 128) != 0) {
+            continue;
+          }
+          SourceEnumerationState::CachedVideoDevice cached;
+          cached.name = name;
+          cached.id = guid;
+          cached.index = i;
+          video_cache.push_back(cached);
+
+          EncodableMap video;
+          video[EncodableValue("label")] =
+              EncodableValue(std::string(name));
+          video[EncodableValue("deviceId")] =
+              EncodableValue(std::string(guid));
+          video[EncodableValue("facing")] = i == 1 ? "front" : "back";
+          video[EncodableValue("kind")] = "videoinput";
+          sources.push_back(EncodableValue(video));
+        }
+
+        EncodableMap params;
+        params[EncodableValue("sources")] = EncodableValue(sources);
+        const EncodableValue response(params);
+        return [state, response, video_cache = std::move(video_cache)]() {
+          PostWindowsPlatformTask(
+              state, [state, response, video_cache]() {
+                std::vector<std::shared_ptr<MethodResultProxy>> results;
+                {
+                  std::lock_guard<std::mutex> result_lock(state->mutex);
+                  if (!state->active) {
+                    state->pending_results.clear();
+                    state->enumerating = false;
+                    return;
+                  }
+                  state->video_devices = video_cache;
+                  state->enumerating = false;
+                  results.swap(state->pending_results);
+                }
+                for (const auto& pending : results) {
+                  pending->Success(response);
+                }
+              });
+        };
+      },
+      [state](TimedSerialWorker::FailureReason reason) {
+        PostWindowsPlatformTask(state, [state, reason]() {
+          std::vector<std::shared_ptr<MethodResultProxy>> results;
+          {
+            std::lock_guard<std::mutex> result_lock(state->mutex);
+            state->enumerating = false;
+            results.swap(state->pending_results);
+          }
+          for (const auto& pending : results) {
+            pending->Error(WorkerFailureCode(reason),
+                           WorkerFailureMessage(reason));
+          }
+        });
+      });
+  return;
+#else
   EncodableList sources;
   std::set<std::string> seen_audio_devices;
 
@@ -527,16 +867,6 @@ void FlutterMediaStream::GetSources(std::unique_ptr<MethodResultProxy> result) {
         AudioDeviceIdFromNameAndGuid(strNameUTF8, strGuidUTF8));
   }
 
-#if defined(_WIN32)
-  // On Windows the ADM can return zero devices until recording/playout is
-  // initialized by a real room. Enumerate IMMDevice directly so Settings can
-  // show and remember input/output choices before joining.
-  AppendWindowsAudioEndpoints(sources, seen_audio_devices, eCapture,
-                              "audioinput", "Microphone");
-  AppendWindowsAudioEndpoints(sources, seen_audio_devices, eRender,
-                              "audiooutput", "Speaker");
-#endif
-
   int nb_video_devices = base_->video_device_->NumberOfDevices();
   for (int i = 0; i < nb_video_devices; i++) {
     base_->video_device_->GetDeviceName(i, strNameUTF8, 128, strGuidUTF8, 128);
@@ -551,10 +881,15 @@ void FlutterMediaStream::GetSources(std::unique_ptr<MethodResultProxy> result) {
   EncodableMap params;
   params[EncodableValue("sources")] = EncodableValue(sources);
   result->Success(EncodableValue(params));
+#endif
 }
 
 bool FlutterMediaStream::TrySelectAudioOutputDevice(
     const std::string& device_id) {
+#if defined(_WIN32)
+  // Windows selection is always dispatched through windows_device_worker_.
+  return false;
+#else
   if (device_id.empty()) {
     return false;
   }
@@ -571,31 +906,102 @@ bool FlutterMediaStream::TrySelectAudioOutputDevice(
     }
   }
   return false;
+#endif
 }
 
 void FlutterMediaStream::SelectAudioOutput(
     const std::string& device_id,
     std::unique_ptr<MethodResultProxy> result) {
   desired_audio_output_device_id_ = device_id;
+#if defined(_WIN32)
+  const auto state = source_enumeration_state_;
+  const auto audio_device = base_->audio_device_;
+  const auto shared_result =
+      std::shared_ptr<MethodResultProxy>(std::move(result));
+  uint64_t operation_id = 0;
+  bool reject_request = false;
+  {
+    std::lock_guard<std::mutex> lock(state->mutex);
+    if (!state->active || state->operation_results.size() >= 32) {
+      reject_request = true;
+    } else {
+      operation_id = state->next_operation_id++;
+      state->operation_results[operation_id] = shared_result;
+    }
+  }
+  if (reject_request) {
+    shared_result->Error(
+        "NativeDeviceOperationUnavailable",
+        "The native media-device worker is unavailable.");
+    return;
+  }
+  windows_device_worker_->Submit(
+      [state, audio_device, device_id,
+       operation_id]() -> TimedSerialWorker::Completion {
+        const bool selected =
+            TrySelectAudioDevice(audio_device, device_id, false);
+        return [state, operation_id, selected, device_id]() {
+          PostWindowsPlatformTask(
+              state, [state, operation_id, selected, device_id]() {
+                std::shared_ptr<MethodResultProxy> operation_result;
+                {
+                  std::lock_guard<std::mutex> lock(state->mutex);
+                  const auto found =
+                      state->operation_results.find(operation_id);
+                  if (found == state->operation_results.end()) {
+                    return;
+                  }
+                  operation_result = std::move(found->second);
+                  state->operation_results.erase(found);
+                }
+                if (selected) {
+                  operation_result->Success();
+                } else if (!device_id.empty()) {
+                  operation_result->Success(EncodableValue(EncodableMap{
+                      {EncodableValue("deferred"), EncodableValue(true)}}));
+                } else {
+                  operation_result->Error(
+                      "Bad Arguments",
+                      "Not found device id: " + device_id);
+                }
+              });
+        };
+      },
+      [state, operation_id](TimedSerialWorker::FailureReason reason) {
+        PostWindowsPlatformTask(state, [state, operation_id, reason]() {
+          std::shared_ptr<MethodResultProxy> operation_result;
+          {
+            std::lock_guard<std::mutex> lock(state->mutex);
+            const auto found = state->operation_results.find(operation_id);
+            if (found == state->operation_results.end()) {
+              return;
+            }
+            operation_result = std::move(found->second);
+            state->operation_results.erase(found);
+          }
+          operation_result->Error(WorkerFailureCode(reason),
+                                  WorkerFailureMessage(reason));
+        });
+      });
+  return;
+#else
   if (TrySelectAudioOutputDevice(device_id)) {
     result->Success();
     return;
   }
-#if defined(_WIN32)
-  if (!device_id.empty()) {
-    result->Success(EncodableValue(EncodableMap{
-        {EncodableValue("deferred"), EncodableValue(true)}}));
-    return;
-  }
-#endif
   {
     result->Error("Bad Arguments", "Not found device id: " + device_id);
     return;
   }
+#endif
 }
 
 bool FlutterMediaStream::TrySelectAudioInputDevice(
     const std::string& device_id) {
+#if defined(_WIN32)
+  // Windows selection is always dispatched through windows_device_worker_.
+  return false;
+#else
   if (device_id.empty()) {
     return false;
   }
@@ -612,27 +1018,94 @@ bool FlutterMediaStream::TrySelectAudioInputDevice(
     }
   }
   return false;
+#endif
 }
 
 void FlutterMediaStream::SelectAudioInput(
     const std::string& device_id,
     std::unique_ptr<MethodResultProxy> result) {
   desired_audio_input_device_id_ = device_id;
+#if defined(_WIN32)
+  const auto state = source_enumeration_state_;
+  const auto audio_device = base_->audio_device_;
+  const auto shared_result =
+      std::shared_ptr<MethodResultProxy>(std::move(result));
+  uint64_t operation_id = 0;
+  bool reject_request = false;
+  {
+    std::lock_guard<std::mutex> lock(state->mutex);
+    if (!state->active || state->operation_results.size() >= 32) {
+      reject_request = true;
+    } else {
+      operation_id = state->next_operation_id++;
+      state->operation_results[operation_id] = shared_result;
+    }
+  }
+  if (reject_request) {
+    shared_result->Error(
+        "NativeDeviceOperationUnavailable",
+        "The native media-device worker is unavailable.");
+    return;
+  }
+  windows_device_worker_->Submit(
+      [state, audio_device, device_id,
+       operation_id]() -> TimedSerialWorker::Completion {
+        const bool selected =
+            TrySelectAudioDevice(audio_device, device_id, true);
+        return [state, operation_id, selected, device_id]() {
+          PostWindowsPlatformTask(
+              state, [state, operation_id, selected, device_id]() {
+                std::shared_ptr<MethodResultProxy> operation_result;
+                {
+                  std::lock_guard<std::mutex> lock(state->mutex);
+                  const auto found =
+                      state->operation_results.find(operation_id);
+                  if (found == state->operation_results.end()) {
+                    return;
+                  }
+                  operation_result = std::move(found->second);
+                  state->operation_results.erase(found);
+                }
+                if (selected) {
+                  operation_result->Success();
+                } else if (!device_id.empty()) {
+                  operation_result->Success(EncodableValue(EncodableMap{
+                      {EncodableValue("deferred"), EncodableValue(true)}}));
+                } else {
+                  operation_result->Error(
+                      "Bad Arguments",
+                      "Not found device id: " + device_id);
+                }
+              });
+        };
+      },
+      [state, operation_id](TimedSerialWorker::FailureReason reason) {
+        PostWindowsPlatformTask(state, [state, operation_id, reason]() {
+          std::shared_ptr<MethodResultProxy> operation_result;
+          {
+            std::lock_guard<std::mutex> lock(state->mutex);
+            const auto found = state->operation_results.find(operation_id);
+            if (found == state->operation_results.end()) {
+              return;
+            }
+            operation_result = std::move(found->second);
+            state->operation_results.erase(found);
+          }
+          operation_result->Error(WorkerFailureCode(reason),
+                                  WorkerFailureMessage(reason));
+        });
+      });
+  return;
+#else
   if (TrySelectAudioInputDevice(device_id)) {
     result->Success();
     return;
   }
-#if defined(_WIN32)
-  if (!device_id.empty()) {
-    result->Success(EncodableValue(EncodableMap{
-        {EncodableValue("deferred"), EncodableValue(true)}}));
-    return;
-  }
-#endif
   {
     result->Error("Bad Arguments", "Not found device id: " + device_id);
     return;
   }
+#endif
 }
 
 void FlutterMediaStream::ApplyDesiredAudioDevices() {

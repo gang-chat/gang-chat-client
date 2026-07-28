@@ -4,8 +4,10 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
 
+import 'package:client/src/live/audio_device_rebinder.dart';
 import 'package:client/src/live/audio_input_rebinder.dart';
 import 'package:client/src/live/audio_output_rebinder.dart';
+import 'package:client/src/live/camera_device_reconciler.dart';
 import 'package:client/src/live/live_session.dart';
 
 void main() {
@@ -316,6 +318,63 @@ void main() {
       expect(cachedScreenSourceThumbnailForTest('screen:0'), same(thumbnail));
     },
   );
+
+  test('session starts and stops the combined audio-device rebinder', () async {
+    final changes = StreamController<void>.broadcast();
+    addTearDown(changes.close);
+    var resolutions = 0;
+
+    final session = LiveSession(
+      audioDeviceRebinderFactory: (_) => AudioDeviceRebinder(
+        deviceChanges: changes.stream,
+        resolvePreferredDevices: () async {
+          resolutions += 1;
+          return const PreferredLiveAudioDevices();
+        },
+        rebindInput: (_) async {},
+        selectOutput: (_) async {},
+        onOutputRebound: () async {},
+        debounce: const Duration(milliseconds: 10),
+      ),
+    );
+    addTearDown(session.dispose);
+
+    session.debugStartAudioDeviceRebinder();
+    changes.add(null);
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(resolutions, 1);
+
+    session.debugStopAudioDeviceRebinder();
+    changes.add(null);
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(resolutions, 1);
+  });
+
+  test('session starts and stops the Windows camera reconciler', () async {
+    final changes = StreamController<void>.broadcast();
+    addTearDown(changes.close);
+    var refreshes = 0;
+
+    final session = LiveSession(
+      audioDeviceRebinderFactory: (_) => null,
+      cameraDeviceReconcilerFactory: () => CameraDeviceReconciler(
+        deviceChanges: changes.stream,
+        refreshDevices: () async => refreshes += 1,
+        debounce: const Duration(milliseconds: 10),
+      ),
+    );
+    addTearDown(session.dispose);
+
+    session.debugStartAudioDeviceRebinder();
+    changes.add(null);
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(refreshes, 1);
+
+    session.debugStopAudioDeviceRebinder();
+    changes.add(null);
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(refreshes, 1);
+  });
 
   test('session starts the output rebinder while connected', () async {
     final changes = StreamController<void>.broadcast();

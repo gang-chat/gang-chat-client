@@ -8,6 +8,28 @@ import 'event_channel.dart';
 import 'media_stream_impl.dart';
 import 'utils.dart';
 
+String? _constraintDeviceId(dynamic constraints) {
+  if (constraints is! Map) return null;
+  for (final key in const ['sourceId', 'deviceId']) {
+    final value = constraints[key];
+    if (value is String && value.isNotEmpty) return value;
+    if (value is Map) {
+      for (final nestedKey in const ['exact', 'ideal']) {
+        final nested = value[nestedKey];
+        if (nested is String && nested.isNotEmpty) return nested;
+      }
+    }
+  }
+  final optional = constraints['optional'];
+  if (optional is Iterable) {
+    for (final entry in optional) {
+      final id = _constraintDeviceId(entry);
+      if (id != null) return id;
+    }
+  }
+  return null;
+}
+
 class MediaDeviceNative extends MediaDevices {
   MediaDeviceNative._internal() {
     FlutterWebRTCEventChannel.instance.handleEvents.stream.listen((data) {
@@ -31,6 +53,21 @@ class MediaDeviceNative extends MediaDevices {
   Future<MediaStream> getUserMedia(
       Map<String, dynamic> mediaConstraints) async {
     try {
+      if (WebRTC.platformIsWindows) {
+        final preparations = <Future<void>>[];
+        final audioDeviceId = _constraintDeviceId(mediaConstraints['audio']);
+        if (audioDeviceId != null) {
+          preparations.add(_prepareWindowsAudioInput(audioDeviceId));
+        }
+        final video = mediaConstraints['video'];
+        if (video == true || video is Map) {
+          // Windows GetUserVideo consumes the camera snapshot built by the
+          // timed native worker, so no camera enumeration runs on the Flutter
+          // platform thread.
+          preparations.add(getSources().then<void>((_) {}));
+        }
+        await Future.wait(preparations).timeout(const Duration(seconds: 6));
+      }
       final response = await WebRTC.invokeMethod(
         'getUserMedia',
         <String, dynamic>{'constraints': mediaConstraints},
@@ -46,6 +83,20 @@ class MediaDeviceNative extends MediaDevices {
       return stream;
     } on PlatformException catch (e) {
       throw 'Unable to getUserMedia: ${e.message}';
+    }
+  }
+
+  Future<void> _prepareWindowsAudioInput(String deviceId) async {
+    for (var attempt = 0; attempt < 3; attempt += 1) {
+      final response =
+          await WebRTC.invokeMethod<Map<dynamic, dynamic>, dynamic>(
+        'selectAudioInput',
+        <String, dynamic>{'deviceId': deviceId},
+      );
+      if (response?['deferred'] != true) return;
+      if (attempt < 2) {
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      }
     }
   }
 

@@ -7,12 +7,18 @@
 #include <flutter/method_channel.h>
 #include <shellapi.h>
 
+#include <functional>
 #include <memory>
 
 #include "win32_window.h"
 
 struct IMMDeviceEnumerator;
 struct IMMNotificationClient;
+struct AudioEndpointQueryState;
+
+namespace flutter_webrtc_plugin {
+class TimedSerialWorker;
+}
 
 // A window that does nothing but host a Flutter view.
 class FlutterWindow : public Win32Window {
@@ -63,11 +69,18 @@ class FlutterWindow : public Win32Window {
   IMMDeviceEnumerator* audio_device_enumerator_ = nullptr;
   IMMNotificationClient* audio_device_notification_client_ = nullptr;
   bool audio_com_initialized_here_ = false;
+  std::shared_ptr<AudioEndpointQueryState> audio_endpoint_query_state_;
+  std::unique_ptr<flutter_webrtc_plugin::TimedSerialWorker>
+      audio_endpoint_worker_;
 
   HWND file_drop_child_window_ = nullptr;
   WNDPROC original_child_proc_ = nullptr;
 
   void RegisterAudioDevicesChannel();
+  void SubmitAudioEndpointQuery(
+      std::function<flutter::EncodableValue()> query,
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  void StopAudioEndpointQueries();
   void RegisterTrayChannel();
   bool ShowTrayIcon();
   void RemoveTrayIcon();

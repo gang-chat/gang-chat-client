@@ -52,11 +52,12 @@ class MediaDevice {
 class Hardware {
   Hardware._internal() {
     rtc.navigator.mediaDevices.ondevicechange = _onDeviceChange;
-    unawaited(enumerateDevices().then((devices) {
-      selectedAudioInput ??= devices.firstWhereOrNull((element) => element.kind == 'audioinput');
-      selectedAudioOutput ??= devices.firstWhereOrNull((element) => element.kind == 'audiooutput');
-      selectedVideoInput ??= devices.firstWhereOrNull((element) => element.kind == 'videoinput');
-    }));
+    unawaited(
+      _refreshSelectedDevices().catchError((Object error, StackTrace stack) {
+        logger.warning('Initial media-device enumeration failed: $error');
+        return <MediaDevice>[];
+      }),
+    );
   }
 
   static final Hardware instance = Hardware._internal();
@@ -198,11 +199,58 @@ class Hardware {
     });
   }
 
-  dynamic _onDeviceChange(dynamic _) async {
+  MediaDevice? _reconciledSelection(
+    MediaDevice? selected,
+    List<MediaDevice> devices,
+    String kind,
+  ) {
+    final matching = devices.where((device) => device.kind == kind).toList();
+    if (selected != null) {
+      final refreshed = matching.firstWhereOrNull(
+        (device) => device.deviceId == selected.deviceId,
+      );
+      if (refreshed != null) return refreshed;
+    }
+    return matching.firstOrNull;
+  }
+
+  Future<List<MediaDevice>> _refreshSelectedDevices() async {
     final devices = await enumerateDevices();
-    selectedAudioInput ??= devices.firstWhereOrNull((element) => element.kind == 'audioinput');
-    selectedAudioOutput ??= devices.firstWhereOrNull((element) => element.kind == 'audiooutput');
-    selectedVideoInput ??= devices.firstWhereOrNull((element) => element.kind == 'videoinput');
+    selectedAudioInput = _reconciledSelection(
+      selectedAudioInput,
+      devices,
+      'audioinput',
+    );
+    selectedAudioOutput = _reconciledSelection(
+      selectedAudioOutput,
+      devices,
+      'audiooutput',
+    );
+    selectedVideoInput = _reconciledSelection(
+      selectedVideoInput,
+      devices,
+      'videoinput',
+    );
+    return devices;
+  }
+
+  /// Re-enumerates device topology and emits the reconciled selections.
+  ///
+  /// The Windows runner calls this indirectly for camera-only device-tree
+  /// changes, which libwebrtc's audio-only desktop callback cannot observe.
+  Future<List<MediaDevice>> refreshDevices() async {
+    final devices = await _refreshSelectedDevices();
     onDeviceChange.add(devices);
+    return devices;
+  }
+
+  dynamic _onDeviceChange(dynamic _) async {
+    try {
+      await refreshDevices();
+    } catch (error) {
+      logger.warning('Media-device refresh failed: $error');
+      // Still emit a topology signal so platform-specific recovery can run.
+      onDeviceChange.add(const []);
+    }
   }
 }

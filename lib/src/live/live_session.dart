@@ -6,13 +6,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart' as rtc;
 import 'package:livekit_client/livekit_client.dart' as lk;
 
-import '../app/audio_device_info.dart';
 import '../app/audio_device_store.dart';
 import '../app/audio_levels.dart';
 import '../protocol/models.dart' show musicBoxBotIdentity;
+import 'audio_device_rebinder.dart';
 import 'audio_device_service.dart';
 import 'audio_input_rebinder.dart';
 import 'audio_output_rebinder.dart';
+import 'camera_device_reconciler.dart';
 import 'screen_share_quality.dart';
 import 'screen_audio_publisher.dart';
 import 'system_audio_devices.dart';
@@ -384,43 +385,54 @@ class LiveVideoTrack {
 /// participant's [lk.Participant.identity] matches `UserSummary.id` from the
 /// protocol layer. The UI uses that as the join key.
 class LiveSession extends ChangeNotifier {
-  /// [inputRebinderFactory] builds the recovery hook that restarts local mic
-  /// capture when the OS removes/recreates audio input endpoints (for example a
-  /// Bluetooth headset dying and reconnecting).
+  /// [audioDeviceRebinderFactory] builds the production recovery hook that
+  /// resolves and rebinds input/output together after a desktop device change.
   ///
-  /// [outputRebinderFactory] builds the recovery hook that re-routes WebRTC
-  /// audio output after the OS rebuilds audio endpoints (for example a headset
-  /// being unplugged/replugged, or a Bluetooth profile flip). It is started
-  /// while connected and stopped on disconnect; null disables the recovery
-  /// (tests, unsupported platforms).
+  /// The separate input/output factories remain injectable for focused legacy
+  /// tests. Supplying either disables the combined production factory so tests
+  /// cannot accidentally start real platform listeners.
   LiveSession({
+    AudioDeviceRebinder? Function(LiveSession session)?
+    audioDeviceRebinderFactory,
     AudioInputRebinder? Function(LiveSession session)? inputRebinderFactory,
     AudioOutputRebinder? Function(LiveSession session)? outputRebinderFactory,
+    CameraDeviceReconciler? Function()? cameraDeviceReconcilerFactory,
     AudioDeviceStore? audioDeviceStore,
     ScreenAudioTokenProvider? screenAudioTokenProvider,
     CameraVideoInputCountProvider? cameraVideoInputCountProvider,
-  }) : _inputRebinderFactory =
-           inputRebinderFactory ??
-           ((session) => _defaultInputRebinderFactory(
-             session,
-             audioDeviceStore: audioDeviceStore,
-           )),
-       _outputRebinderFactory =
-           outputRebinderFactory ??
-           ((session) => _defaultOutputRebinderFactory(
-             session,
-             audioDeviceStore: audioDeviceStore,
-           )),
+  }) : _audioDeviceRebinderFactory =
+           audioDeviceRebinderFactory ??
+           ((inputRebinderFactory == null && outputRebinderFactory == null)
+               ? (session) => _defaultAudioDeviceRebinderFactory(
+                   session,
+                   audioDeviceStore: audioDeviceStore,
+                 )
+               : null),
+       _inputRebinderFactory = inputRebinderFactory,
+       _outputRebinderFactory = outputRebinderFactory,
+       _cameraDeviceReconcilerFactory =
+           cameraDeviceReconcilerFactory ??
+           ((audioDeviceRebinderFactory == null &&
+                   inputRebinderFactory == null &&
+                   outputRebinderFactory == null)
+               ? _defaultCameraDeviceReconcilerFactory
+               : null),
        _screenAudioTokenProvider = screenAudioTokenProvider,
        _cameraVideoInputCountProvider =
            cameraVideoInputCountProvider ??
            _defaultCameraVideoInputCountProvider;
 
-  final AudioInputRebinder? Function(LiveSession session) _inputRebinderFactory;
-  final AudioOutputRebinder? Function(LiveSession session)
+  final AudioDeviceRebinder? Function(LiveSession session)?
+  _audioDeviceRebinderFactory;
+  final AudioInputRebinder? Function(LiveSession session)?
+  _inputRebinderFactory;
+  final AudioOutputRebinder? Function(LiveSession session)?
   _outputRebinderFactory;
+  final CameraDeviceReconciler? Function()? _cameraDeviceReconcilerFactory;
+  AudioDeviceRebinder? _audioDeviceRebinder;
   AudioInputRebinder? _inputRebinder;
   AudioOutputRebinder? _outputRebinder;
+  CameraDeviceReconciler? _cameraDeviceReconciler;
   final ScreenAudioTokenProvider? _screenAudioTokenProvider;
   final CameraVideoInputCountProvider _cameraVideoInputCountProvider;
   ScreenAudioPublisher? _screenAudioPublisher;
@@ -748,13 +760,11 @@ class LiveSession extends ChangeNotifier {
       await _applyCameraSubscriptions();
       await _applyScreenShareVolume();
       _refreshAllMicStates();
-      _startInputRebinder();
-      _startOutputRebinder();
+      _startAudioDeviceRebinder();
     } catch (e) {
       await _cancelEvents?.call();
       _cancelEvents = null;
-      _stopInputRebinder();
-      _stopOutputRebinder();
+      await _stopAudioDeviceRebinderAndWait();
       try {
         await room.dispose();
       } catch (_) {}
@@ -1254,8 +1264,7 @@ class LiveSession extends ChangeNotifier {
     _cancelEvents = null;
     _screenShareSubscriptionReconciler.invalidate();
     _cameraSubscriptionReconciler.invalidate();
-    _stopInputRebinder();
-    _stopOutputRebinder();
+    await _stopAudioDeviceRebinderAndWait();
     _room = null;
     _roomName = null;
     _resolvedLiveKitUrl = null;
@@ -1301,8 +1310,7 @@ class LiveSession extends ChangeNotifier {
     _cancelEvents = null;
     _screenShareSubscriptionReconciler.invalidate();
     _cameraSubscriptionReconciler.invalidate();
-    _stopInputRebinder();
-    _stopOutputRebinder();
+    _stopAudioDeviceRebinder();
     _room = null;
     _roomName = null;
     _screenSharing = false;
@@ -1811,9 +1819,48 @@ class LiveSession extends ChangeNotifier {
     await _applyScreenShareVolume();
   }
 
+  void _startAudioDeviceRebinder() {
+    _stopAudioDeviceRebinder();
+    final cameraReconciler = _cameraDeviceReconcilerFactory?.call();
+    _cameraDeviceReconciler = cameraReconciler;
+    cameraReconciler?.start();
+    final combinedFactory = _audioDeviceRebinderFactory;
+    if (combinedFactory != null) {
+      final rebinder = combinedFactory(this);
+      _audioDeviceRebinder = rebinder;
+      rebinder?.start();
+      return;
+    }
+    // Compatibility path for focused tests that inject the former split
+    // coordinators. Production always uses the combined coordinator.
+    _startInputRebinder();
+    _startOutputRebinder();
+  }
+
+  void _stopAudioDeviceRebinder() {
+    unawaited(_stopAudioDeviceRebinderAndWait());
+  }
+
+  Future<void> _stopAudioDeviceRebinderAndWait() async {
+    final rebinder = _audioDeviceRebinder;
+    _audioDeviceRebinder = null;
+    final inputRebinder = _inputRebinder;
+    _inputRebinder = null;
+    final outputRebinder = _outputRebinder;
+    _outputRebinder = null;
+    final cameraReconciler = _cameraDeviceReconciler;
+    _cameraDeviceReconciler = null;
+    await Future.wait<void>([
+      if (rebinder != null) rebinder.stop(),
+      if (inputRebinder != null) inputRebinder.stop(),
+      if (outputRebinder != null) outputRebinder.stop(),
+      if (cameraReconciler != null) cameraReconciler.stop(),
+    ]);
+  }
+
   void _startInputRebinder() {
     _stopInputRebinder();
-    final rebinder = _inputRebinderFactory(this);
+    final rebinder = _inputRebinderFactory?.call(this);
     _inputRebinder = rebinder;
     rebinder?.start();
   }
@@ -1826,7 +1873,7 @@ class LiveSession extends ChangeNotifier {
 
   void _startOutputRebinder() {
     _stopOutputRebinder();
-    final rebinder = _outputRebinderFactory(this);
+    final rebinder = _outputRebinderFactory?.call(this);
     _outputRebinder = rebinder;
     rebinder?.start();
   }
@@ -1852,84 +1899,55 @@ class LiveSession extends ChangeNotifier {
   @visibleForTesting
   void debugStopOutputRebinder() => _stopOutputRebinder();
 
+  @visibleForTesting
+  void debugStartAudioDeviceRebinder() => _startAudioDeviceRebinder();
+
+  @visibleForTesting
+  void debugStopAudioDeviceRebinder() => _stopAudioDeviceRebinder();
+
   /// Exercises reconnect/event cache reconciliation without a real LiveKit
   /// transport. Production events reach the same handler through [connect].
   @visibleForTesting
   void debugHandleRoomEvent(lk.RoomEvent event) => _onEvent(event);
 }
 
-// Default desktop recovery for input hotplug/profile flips: resolve the
-// preferred mic against the current device list, then restart the local
-// microphone capture inside the existing room instead of reconnecting.
-AudioInputRebinder? _defaultInputRebinderFactory(
+// Default desktop recovery for endpoint hotplug/profile flips. One LiveKit
+// change signal resolves one input/output snapshot and applies both directions
+// serially. On Windows LiveAudioDeviceService uses SystemAudioDevices only, so
+// this path never calls WebRTC getSources while an endpoint is being rebuilt.
+AudioDeviceRebinder? _defaultAudioDeviceRebinderFactory(
   LiveSession session, {
   required AudioDeviceStore? audioDeviceStore,
 }) {
   if (kIsWeb || !(Platform.isMacOS || Platform.isWindows)) return null;
   final systemAudio = SystemAudioDevices();
   const audioDevices = LiveAudioDeviceService();
-  return AudioInputRebinder(
-    deviceChanges: lk.Hardware.instance.onDeviceChange.stream.map((_) {}),
-    currentInputDeviceId: () => preferredLiveInputDeviceId(
+  return AudioDeviceRebinder(
+    deviceChanges: Platform.isWindows
+        ? systemAudio.changes.map((_) {})
+        : lk.Hardware.instance.onDeviceChange.stream.map((_) {}),
+    resolvePreferredDevices: () => preferredLiveAudioDevices(
       audioDeviceStore: audioDeviceStore,
       audioDevices: audioDevices,
       systemAudio: systemAudio,
     ),
     rebindInput: session._rebindInputDeviceId,
-  );
-}
-
-// Default desktop recovery for output hotplug/profile flips: re-select the
-// user's stored output when it is available again; otherwise temporarily follow
-// the OS default. The re-select forces WebRTC's ADM to rebuild playout routing,
-// then volumes are re-applied.
-AudioOutputRebinder? _defaultOutputRebinderFactory(
-  LiveSession session, {
-  required AudioDeviceStore? audioDeviceStore,
-}) {
-  if (kIsWeb || !(Platform.isMacOS || Platform.isWindows)) return null;
-  final systemAudio = SystemAudioDevices();
-  const audioDevices = LiveAudioDeviceService();
-  return AudioOutputRebinder(
-    deviceChanges: lk.Hardware.instance.onDeviceChange.stream.map((_) {}),
-    currentOutputDeviceId: () => _preferredOutputDeviceId(
-      audioDeviceStore: audioDeviceStore,
-      audioDevices: audioDevices,
-      systemAudio: systemAudio,
-    ),
     selectOutput: (deviceId) async {
       await rtc.Helper.selectAudioOutput(deviceId);
     },
-    onRebound: session._reapplyAudioRouting,
+    onOutputRebound: session._reapplyAudioRouting,
   );
 }
 
-Future<String?> _preferredOutputDeviceId({
-  required AudioDeviceStore? audioDeviceStore,
-  required LiveAudioDeviceService audioDevices,
-  required SystemAudioDevices systemAudio,
-}) async {
-  final systemDefaultOutputId = await systemAudio.currentOutputDeviceId();
-  if (audioDeviceStore == null) return systemDefaultOutputId;
-  try {
-    final stored = await audioDeviceStore.read();
-    final devices = await audioDevices.enumerateDevices();
-    final storedOutput = preferredStoredAudioDeviceFrom<AudioDeviceInfo>(
-      devices,
-      kind: 'audiooutput',
-      storedDeviceId: stored.outputDeviceId,
-      storedDeviceLabel: stored.outputDeviceLabel,
-      storedDeviceGroupId: stored.outputDeviceGroupId,
-      kindOf: audioDeviceInfoKind,
-      deviceIdOf: audioDeviceInfoId,
-      labelOf: audioDeviceInfoLabel,
-      groupIdOf: audioDeviceInfoGroupId,
-      systemDefaultDeviceId: systemDefaultOutputId,
-    );
-    return storedOutput?.deviceId ?? systemDefaultOutputId;
-  } catch (_) {
-    return systemDefaultOutputId;
-  }
+CameraDeviceReconciler? _defaultCameraDeviceReconcilerFactory() {
+  if (kIsWeb || !Platform.isWindows) return null;
+  final systemAudio = SystemAudioDevices();
+  return CameraDeviceReconciler(
+    deviceChanges: systemAudio.videoChanges,
+    refreshDevices: () async {
+      await lk.Hardware.instance.refreshDevices();
+    },
+  );
 }
 
 class LiveSessionConnectException implements Exception {

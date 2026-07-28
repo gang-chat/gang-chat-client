@@ -1,5 +1,7 @@
 #include "flutter_window.h"
+#include "../../third_party/flutter_webrtc/common/cpp/include/timed_serial_worker.h"
 
+#include <dbt.h>
 #include <propkeydef.h>
 #include <functiondiscoverykeys_devpkey.h>
 #include <flutter/standard_method_codec.h>
@@ -14,8 +16,11 @@
 #include <cwchar>
 #include <cstring>
 #include <functional>
+#include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <variant>
@@ -23,6 +28,17 @@
 
 #include "flutter/generated_plugin_registrant.h"
 #include "resource.h"
+
+struct AudioEndpointQueryState {
+  std::mutex mutex;
+  HWND window = nullptr;
+  bool active = true;
+  uint64_t next_request_id = 1;
+  std::map<
+      uint64_t,
+      std::shared_ptr<flutter::MethodResult<flutter::EncodableValue>>>
+      pending_results;
+};
 
 namespace {
 
@@ -43,6 +59,8 @@ constexpr char kStartListeningMethod[] = "startListening";
 constexpr char kDefaultInputDeviceChangedMethod[] = "defaultInputDeviceChanged";
 constexpr char kDefaultOutputDeviceChangedMethod[] =
     "defaultOutputDeviceChanged";
+constexpr char kAudioDevicesChangedMethod[] = "audioDevicesChanged";
+constexpr char kVideoDevicesChangedMethod[] = "videoDevicesChanged";
 constexpr char kTrayInitializeMethod[] = "initialize";
 constexpr char kTrayDisposeMethod[] = "dispose";
 constexpr char kTrayRequestAttentionMethod[] = "requestAttention";
@@ -57,6 +75,7 @@ constexpr UINT kAudioDefaultDeviceChangedMessage = WM_APP + 0x4A2;
 constexpr UINT kTrayCallbackMessage = WM_APP + 0x4A3;
 constexpr UINT kTrayMenuCommandMessage = WM_APP + 0x4A4;
 constexpr UINT kStopMessageAttentionMessage = WM_APP + 0x4A5;
+constexpr UINT kAudioEndpointQueryCompletedMessage = WM_APP + 0x4A6;
 constexpr UINT kTrayIconId = 1;
 constexpr UINT kTrayOpenCommand = 0x4A30;
 constexpr UINT kTrayExitCommand = 0x4A31;
@@ -471,6 +490,46 @@ struct AudioDeviceChange {
   std::string device_id;
 };
 
+struct AudioEndpointQueryCompletion {
+  uint64_t request_id = 0;
+  std::optional<flutter::EncodableValue> value;
+  std::string error_code;
+  std::string error_message;
+};
+
+void PostAudioEndpointQueryCompletion(
+    const std::shared_ptr<AudioEndpointQueryState>& state,
+    std::unique_ptr<AudioEndpointQueryCompletion> completion) {
+  HWND window = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(state->mutex);
+    if (!state->active || !state->window) {
+      return;
+    }
+    window = state->window;
+  }
+  auto* raw = completion.release();
+  if (!PostMessage(window, kAudioEndpointQueryCompletedMessage, 0,
+                   reinterpret_cast<LPARAM>(raw))) {
+    delete raw;
+  }
+}
+
+const char* AudioEndpointWorkerErrorCode(
+    flutter_webrtc_plugin::TimedSerialWorker::FailureReason reason) {
+  switch (reason) {
+    case flutter_webrtc_plugin::TimedSerialWorker::FailureReason::kTimedOut:
+      return "AudioEndpointQueryTimeout";
+    case flutter_webrtc_plugin::TimedSerialWorker::FailureReason::kStopped:
+      return "AudioEndpointQueryStopped";
+    case flutter_webrtc_plugin::TimedSerialWorker::FailureReason::kUnavailable:
+      return "AudioEndpointQueryUnavailable";
+    case flutter_webrtc_plugin::TimedSerialWorker::FailureReason::kFailed:
+      return "AudioEndpointQueryFailed";
+  }
+  return "AudioEndpointQueryFailed";
+}
+
 class AudioDeviceNotificationClient final : public IMMNotificationClient {
  public:
   explicit AudioDeviceNotificationClient(
@@ -514,15 +573,18 @@ class AudioDeviceNotificationClient final : public IMMNotificationClient {
   }
 
   HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR device_id) override {
+    on_default_changed_(eAll, WideToUtf8(device_id));
     return S_OK;
   }
 
   HRESULT STDMETHODCALLTYPE OnDeviceRemoved(LPCWSTR device_id) override {
+    on_default_changed_(eAll, WideToUtf8(device_id));
     return S_OK;
   }
 
   HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR device_id,
                                                  DWORD new_state) override {
+    on_default_changed_(eAll, WideToUtf8(device_id));
     return S_OK;
   }
 
@@ -574,6 +636,30 @@ std::string AudioEndpointFriendlyName(IMMDevice* device,
   return label.empty() ? fallback : label;
 }
 
+std::string AudioEndpointGroupId(IMMDevice* device) {
+  if (!device) {
+    return {};
+  }
+  IPropertyStore* properties = nullptr;
+  PROPVARIANT container_id;
+  PropVariantInit(&container_id);
+  std::string group_id;
+  if (SUCCEEDED(device->OpenPropertyStore(STGM_READ, &properties)) &&
+      SUCCEEDED(
+          properties->GetValue(PKEY_Device_ContainerId, &container_id)) &&
+      container_id.vt == VT_CLSID && container_id.puuid) {
+    wchar_t value[64] = {};
+    if (StringFromGUID2(*container_id.puuid, value,
+                        static_cast<int>(sizeof(value) / sizeof(value[0]))) >
+        0) {
+      group_id = WideToUtf8(value);
+    }
+  }
+  PropVariantClear(&container_id);
+  SafeRelease(properties);
+  return group_id;
+}
+
 std::optional<std::string> DefaultAudioEndpointIdFromEnumerator(
     IMMDeviceEnumerator* enumerator,
     EDataFlow flow) {
@@ -617,7 +703,7 @@ flutter::EncodableList EnumerateAudioEndpoints(EDataFlow flow,
   flutter::EncodableList devices;
   ScopedComInitialization com;
   if (!com.ok()) {
-    return devices;
+    throw std::runtime_error("Unable to initialize COM for audio endpoints.");
   }
 
   IMMDeviceEnumerator* enumerator = nullptr;
@@ -628,30 +714,35 @@ flutter::EncodableList EnumerateAudioEndpoints(EDataFlow flow,
                                             &collection))) {
     SafeRelease(collection);
     SafeRelease(enumerator);
-    return devices;
+    throw std::runtime_error("Unable to enumerate Windows audio endpoints.");
   }
 
   const auto default_id = DefaultAudioEndpointIdFromEnumerator(enumerator, flow);
   UINT count = 0;
-  if (SUCCEEDED(collection->GetCount(&count))) {
-    for (UINT i = 0; i < count; ++i) {
-      IMMDevice* device = nullptr;
-      if (FAILED(collection->Item(i, &device))) {
-        continue;
-      }
-      const auto device_id = AudioEndpointId(device);
-      if (device_id) {
-        flutter::EncodableMap entry;
-        entry[flutter::EncodableValue("deviceId")] =
-            flutter::EncodableValue(*device_id);
-        entry[flutter::EncodableValue("label")] = flutter::EncodableValue(
-            AudioEndpointFriendlyName(device, fallback + " " + *device_id));
-        entry[flutter::EncodableValue("isDefault")] =
-            flutter::EncodableValue(default_id && *default_id == *device_id);
-        devices.emplace_back(entry);
-      }
-      SafeRelease(device);
+  if (FAILED(collection->GetCount(&count))) {
+    SafeRelease(collection);
+    SafeRelease(enumerator);
+    throw std::runtime_error("Unable to read Windows audio endpoint count.");
+  }
+  for (UINT i = 0; i < count; ++i) {
+    IMMDevice* device = nullptr;
+    if (FAILED(collection->Item(i, &device))) {
+      continue;
     }
+    const auto device_id = AudioEndpointId(device);
+    if (device_id) {
+      flutter::EncodableMap entry;
+      entry[flutter::EncodableValue("deviceId")] =
+          flutter::EncodableValue(*device_id);
+      entry[flutter::EncodableValue("label")] = flutter::EncodableValue(
+          AudioEndpointFriendlyName(device, fallback + " " + *device_id));
+      entry[flutter::EncodableValue("groupId")] =
+          flutter::EncodableValue(AudioEndpointGroupId(device));
+      entry[flutter::EncodableValue("isDefault")] =
+          flutter::EncodableValue(default_id && *default_id == *device_id);
+      devices.emplace_back(entry);
+    }
+    SafeRelease(device);
   }
 
   SafeRelease(collection);
@@ -1131,7 +1222,81 @@ FlutterWindow::FlutterWindow(const flutter::DartProject& project)
 
 FlutterWindow::~FlutterWindow() {}
 
+void FlutterWindow::SubmitAudioEndpointQuery(
+    std::function<flutter::EncodableValue()> query,
+    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  if (!audio_endpoint_worker_ || !audio_endpoint_query_state_) {
+    result->Error("AudioEndpointQueryUnavailable",
+                  "The Windows audio endpoint worker is unavailable.");
+    return;
+  }
+  const auto state = audio_endpoint_query_state_;
+  const auto shared_result =
+      std::shared_ptr<flutter::MethodResult<flutter::EncodableValue>>(
+          std::move(result));
+  uint64_t request_id = 0;
+  bool reject_request = false;
+  {
+    std::lock_guard<std::mutex> lock(state->mutex);
+    if (!state->active || state->pending_results.size() >= 32) {
+      reject_request = true;
+    } else {
+      request_id = state->next_request_id++;
+      state->pending_results[request_id] = shared_result;
+    }
+  }
+  if (reject_request) {
+    shared_result->Error(
+        "AudioEndpointQueryUnavailable",
+        "Too many Windows audio endpoint queries are pending.");
+    return;
+  }
+  audio_endpoint_worker_->Submit(
+      [state, query = std::move(query),
+       request_id]() -> flutter_webrtc_plugin::TimedSerialWorker::Completion {
+        auto value = query();
+        return [state, request_id, value = std::move(value)]() mutable {
+          auto completion = std::make_unique<AudioEndpointQueryCompletion>();
+          completion->request_id = request_id;
+          completion->value = std::move(value);
+          PostAudioEndpointQueryCompletion(state, std::move(completion));
+        };
+      },
+      [state, request_id](
+          flutter_webrtc_plugin::TimedSerialWorker::FailureReason reason) {
+        auto completion = std::make_unique<AudioEndpointQueryCompletion>();
+        completion->request_id = request_id;
+        completion->error_code = AudioEndpointWorkerErrorCode(reason);
+        completion->error_message =
+            "The Windows audio endpoint query did not complete safely.";
+        PostAudioEndpointQueryCompletion(state, std::move(completion));
+      });
+}
+
+void FlutterWindow::StopAudioEndpointQueries() {
+  const auto state = audio_endpoint_query_state_;
+  if (state) {
+    std::lock_guard<std::mutex> lock(state->mutex);
+    state->active = false;
+    state->window = nullptr;
+    state->pending_results.clear();
+  }
+  audio_endpoint_worker_.reset();
+
+  MSG message;
+  while (PeekMessage(&message, GetHandle(),
+                     kAudioEndpointQueryCompletedMessage,
+                     kAudioEndpointQueryCompletedMessage, PM_REMOVE)) {
+    delete reinterpret_cast<AudioEndpointQueryCompletion*>(message.lParam);
+  }
+  audio_endpoint_query_state_.reset();
+}
+
 void FlutterWindow::RegisterAudioDevicesChannel() {
+  audio_endpoint_query_state_ = std::make_shared<AudioEndpointQueryState>();
+  audio_endpoint_query_state_->window = GetHandle();
+  audio_endpoint_worker_ =
+      std::make_unique<flutter_webrtc_plugin::TimedSerialWorker>();
   audio_devices_channel_ =
       std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
           flutter_controller_->engine()->messenger(), kAudioDevicesChannelName,
@@ -1142,24 +1307,49 @@ void FlutterWindow::RegisterAudioDevicesChannel() {
           std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
               result) {
         if (call.method_name() == kEnumerateInputsMethod) {
-          result->Success(EnumerateAudioEndpoints(eCapture, "Microphone"));
+          SubmitAudioEndpointQuery(
+              []() {
+                return flutter::EncodableValue(
+                    EnumerateAudioEndpoints(eCapture, "Microphone"));
+              },
+              std::move(result));
           return;
         }
         if (call.method_name() == kEnumerateOutputsMethod) {
-          result->Success(EnumerateAudioEndpoints(eRender, "Speaker"));
+          SubmitAudioEndpointQuery(
+              []() {
+                return flutter::EncodableValue(
+                    EnumerateAudioEndpoints(eRender, "Speaker"));
+              },
+              std::move(result));
           return;
         }
         if (call.method_name() == kDefaultInputDeviceIdMethod) {
-          result->Success(NullableStringValue(DefaultAudioEndpointId(eCapture)));
+          SubmitAudioEndpointQuery(
+              []() {
+                return NullableStringValue(
+                    DefaultAudioEndpointId(eCapture));
+              },
+              std::move(result));
           return;
         }
         if (call.method_name() == kDefaultOutputDeviceIdMethod) {
-          result->Success(NullableStringValue(DefaultAudioEndpointId(eRender)));
+          SubmitAudioEndpointQuery(
+              []() {
+                return NullableStringValue(
+                    DefaultAudioEndpointId(eRender));
+              },
+              std::move(result));
           return;
         }
         if (call.method_name() == kStartListeningMethod) {
-          EnsureAudioDeviceNotifications();
-          result->Success(flutter::EncodableValue());
+          if (EnsureAudioDeviceNotifications()) {
+            result->Success(flutter::EncodableValue());
+          } else {
+            result->Error(
+                "AudioDeviceNotificationsUnavailable",
+                "Unable to register the Windows audio-device listener.");
+          }
           return;
         }
         result->NotImplemented();
@@ -1441,11 +1631,19 @@ bool FlutterWindow::EnsureAudioDeviceNotifications() {
   }
 
   if (!audio_device_notification_client_) {
+    const auto state = audio_endpoint_query_state_;
     auto* client = new AudioDeviceNotificationClient(
-        [this](EDataFlow flow, std::string device_id) {
-          auto* change =
-              new AudioDeviceChange(flow, std::move(device_id));
-          if (!PostMessage(GetHandle(), kAudioDefaultDeviceChangedMessage, 0,
+        [state](EDataFlow flow, std::string device_id) {
+          HWND window = nullptr;
+          {
+            std::lock_guard<std::mutex> lock(state->mutex);
+            if (!state->active || !state->window) {
+              return;
+            }
+            window = state->window;
+          }
+          auto* change = new AudioDeviceChange(flow, std::move(device_id));
+          if (!PostMessage(window, kAudioDefaultDeviceChangedMessage, 0,
                            reinterpret_cast<LPARAM>(change))) {
             delete change;
           }
@@ -1652,6 +1850,7 @@ void FlutterWindow::OnDestroy() {
   if (flutter_controller_) {
     RemoveTrayIcon();
     DetachAudioDeviceNotifications();
+    StopAudioEndpointQueries();
     DetachFileDropTarget();
     file_drop_channel_ = nullptr;
     audio_devices_channel_ = nullptr;
@@ -1683,14 +1882,53 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     std::unique_ptr<AudioDeviceChange> change(
         reinterpret_cast<AudioDeviceChange*>(lparam));
     if (change && audio_devices_channel_) {
-      const char* method = change->flow == eCapture
-                               ? kDefaultInputDeviceChangedMethod
-                               : kDefaultOutputDeviceChangedMethod;
+      const char* method =
+          change->flow == eCapture
+              ? kDefaultInputDeviceChangedMethod
+              : (change->flow == eRender ? kDefaultOutputDeviceChangedMethod
+                                         : kAudioDevicesChangedMethod);
       auto argument = change->device_id.empty()
                           ? std::make_unique<flutter::EncodableValue>()
                           : std::make_unique<flutter::EncodableValue>(
                                 change->device_id);
       audio_devices_channel_->InvokeMethod(method, std::move(argument));
+    }
+    return 0;
+  }
+
+  if (message == WM_DEVICECHANGE &&
+      (wparam == DBT_DEVNODES_CHANGED || wparam == DBT_DEVICEARRIVAL ||
+       wparam == DBT_DEVICEREMOVECOMPLETE)) {
+    if (audio_devices_channel_) {
+      audio_devices_channel_->InvokeMethod(
+          kVideoDevicesChangedMethod,
+          std::make_unique<flutter::EncodableValue>());
+    }
+    return 0;
+  }
+
+  if (message == kAudioEndpointQueryCompletedMessage) {
+    std::unique_ptr<AudioEndpointQueryCompletion> completion(
+        reinterpret_cast<AudioEndpointQueryCompletion*>(lparam));
+    std::shared_ptr<flutter::MethodResult<flutter::EncodableValue>>
+        query_result;
+    const auto state = audio_endpoint_query_state_;
+    if (completion && state) {
+      std::lock_guard<std::mutex> lock(state->mutex);
+      const auto found =
+          state->pending_results.find(completion->request_id);
+      if (found != state->pending_results.end()) {
+        query_result = std::move(found->second);
+        state->pending_results.erase(found);
+      }
+    }
+    if (completion && query_result) {
+      if (completion->value.has_value()) {
+        query_result->Success(std::move(*completion->value));
+      } else {
+        query_result->Error(completion->error_code,
+                            completion->error_message);
+      }
     }
     return 0;
   }

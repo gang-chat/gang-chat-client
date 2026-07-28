@@ -92,7 +92,14 @@ FlutterWebRTCBase::~FlutterWebRTCBase() {
   StopScreenAudioCapture();
   screen_audio_factory_ = nullptr;
 #endif
-  LibWebRTC::Terminate();
+  // An uninterruptible Windows device API can outlive the plugin shutdown
+  // grace period. In that exceptional case FlutterMediaStream deliberately
+  // preserves the process-wide runtime; terminating libwebrtc underneath the
+  // still-running native call is a use-after-free risk. The OS reclaims this
+  // bounded leak at process exit.
+  if (!preserve_runtime_for_abandoned_native_work_) {
+    LibWebRTC::Terminate();
+  }
 }
 
 void FlutterWebRTCBase::SetLocalAudioInputVolume(double volume) {

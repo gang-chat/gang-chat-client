@@ -1,17 +1,39 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:livekit_client/livekit_client.dart' as lk;
 
 import '../app/audio_device_info.dart';
 import 'system_audio_devices.dart';
 
 class LiveAudioDeviceService {
-  const LiveAudioDeviceService();
+  const LiveAudioDeviceService({bool? systemAudioOnly})
+    : _systemAudioOnlyOverride = systemAudioOnly;
 
-  // Desktop native audio access. macOS needs native enumeration before a room is
-  // joined; Windows uses the same channel for OS default endpoint ids and can
-  // also contribute native devices if WebRTC omits any.
+  final bool? _systemAudioOnlyOverride;
+
+  // Desktop native audio access. macOS merges native devices into WebRTC's
+  // list; Windows treats the native list as authoritative and never asks the
+  // WebRTC ADM to enumerate audio endpoints.
   static final SystemAudioDevices _systemAudio = SystemAudioDevices();
 
+  bool get _systemAudioOnly {
+    return _systemAudioOnlyOverride ??
+        systemAudioOnlyForPlatform(
+          isWeb: kIsWeb,
+          isWindows: !kIsWeb && Platform.isWindows,
+        );
+  }
+
   Stream<List<AudioDeviceInfo>> get devicesChanged {
+    if (_systemAudioOnly) {
+      // Windows listens to the OS endpoint channel directly. LiveKit's generic
+      // hardware callback historically called WebRTC getSources before
+      // emitting, which is exactly the blocking path this service avoids.
+      return _systemAudio.changes.asyncMap(
+        (_) => _systemAudio.enumerateDevices(),
+      );
+    }
     // Re-merge native devices on every hardware change so a hotplug doesn't wipe
     // the CoreAudio-sourced devices that WebRTC can't see outside a room.
     return lk.Hardware.instance.onDeviceChange.stream.asyncMap((devices) async {
@@ -20,6 +42,9 @@ class LiveAudioDeviceService {
   }
 
   Future<List<AudioDeviceInfo>> enumerateDevices() async {
+    if (_systemAudioOnly) {
+      return _systemAudio.enumerateDevicesOrThrow();
+    }
     final webrtc = _audioDeviceInfos(
       await lk.Hardware.instance.enumerateDevices(),
     );
@@ -61,6 +86,14 @@ class LiveAudioDeviceService {
   Future<void> selectAudioOutput(AudioDeviceInfo device) {
     return lk.Hardware.instance.selectAudioOutput(_mediaDevice(device));
   }
+}
+
+@visibleForTesting
+bool systemAudioOnlyForPlatform({
+  required bool isWeb,
+  required bool isWindows,
+}) {
+  return !isWeb && isWindows;
 }
 
 List<AudioDeviceInfo> _audioDeviceInfos(List<lk.MediaDevice> devices) {

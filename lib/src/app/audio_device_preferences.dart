@@ -174,6 +174,7 @@ T? storedAudioDeviceBySignatureFrom<T>(
   if (storedGroupId != null && groupIdOf == null) return null;
 
   final matches = <T>[];
+  final uniqueLabelFallbacks = <T>[];
   for (final device in devices) {
     if (kindOf(device) != kind) continue;
     final deviceLabel = labelOf == null
@@ -186,6 +187,9 @@ T? storedAudioDeviceBySignatureFrom<T>(
     final groupMatches =
         storedGroupId != null && deviceGroupId == storedGroupId;
 
+    if (labelMatches) {
+      uniqueLabelFallbacks.add(device);
+    }
     if (storedGroupId != null) {
       if (groupMatches && (storedLabel == null || labelMatches)) {
         matches.add(device);
@@ -194,7 +198,16 @@ T? storedAudioDeviceBySignatureFrom<T>(
       matches.add(device);
     }
   }
-  return matches.length == 1 ? matches.single : null;
+  if (matches.length == 1) return matches.single;
+  // Some platforms change endpoint ids/group ids across Bluetooth profile
+  // transitions or driver reinstalls. A unique label is safe to restore; an
+  // ambiguous label still falls back to the system default.
+  if (matches.isEmpty &&
+      storedGroupId != null &&
+      uniqueLabelFallbacks.length == 1) {
+    return uniqueLabelFallbacks.single;
+  }
+  return null;
 }
 
 Future<T?> selectStoredAudioDeviceIfChanged<T>({
