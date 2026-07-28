@@ -25,10 +25,16 @@ const _liveRoomPadding = 18.0;
 // Width of the right-docked music box panel (search + queue) when expanded.
 const _musicBoxPanelWidth = 270.0;
 const _memberCardWidth = 154.0;
-const _memberCardHeight = _memberCardWidth;
+const _memberCardMinTwoColumnWidth = 135.0;
+const _memberCardSpacing = 12.0;
 const _controlButtonSize = 44.0;
 const _controlHoverInfoBelowReserve = 4.0;
 const _controlHoverInfoVerticalOffset = 24.0;
+const _liveStageControlGap = 16.0;
+// The open music box always has its 44px inline player above one 44px
+// transport row in the standard layout. Narrow layouts may add more rows, but
+// those rows must move the docked panel upward instead of shortening it.
+const _musicBoxStandardControlHeight = _controlButtonSize * 2 + 10.0;
 const _liveRoomBackground = UiColors.surfaceLow;
 const _liveRoomBorder = UiColors.border;
 const _memberSpeakingBackground = Color(0xFF252A34);
@@ -298,185 +304,315 @@ class _LiveChannelPaneState extends State<LiveChannelPane> {
                 _LiveRoomHeader(title: widget.title),
                 const SizedBox(height: 16),
                 Expanded(
-                  child: LayoutBuilder(
-                    builder: (context, stageConstraints) {
-                      final musicBoxPanelHeight =
-                          stageConstraints.maxHeight <
-                              _musicBoxMinComfortableHeight
-                          ? _musicBoxMinComfortableHeight
-                          : stageConstraints.maxHeight;
-                      return Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          Positioned.fill(
-                            child: Column(
-                              children: [
-                                if (stageTrack != null) ...[
-                                  Expanded(
-                                    flex: 3,
-                                    child: _LiveMediaStage(
-                                      track: stageTrack,
-                                      renderVideo: !widget.suspendStageVideo,
-                                      label: liveStageTrackLabel(
+                  child: _LiveChannelBodyLayout(
+                    stage: Column(
+                      children: [
+                        if (stageTrack != null) ...[
+                          Expanded(
+                            flex: 3,
+                            child: _LiveMediaStage(
+                              track: stageTrack,
+                              renderVideo: !widget.suspendStageVideo,
+                              label: liveStageTrackLabel(
+                                widget.live,
+                                stageTrack,
+                              ),
+                              screenShareViewers: stageTrack.isScreenShare
+                                  ? live_display.liveScreenShareViewers(
+                                      widget.live,
+                                      stageTrack.identity,
+                                    )
+                                  : const <UserSummary>[],
+                              screenShareVolume: widget.screenShareVolume,
+                              cameraMirrored:
+                                  live_display
+                                      .liveParticipantByUserId(
                                         widget.live,
-                                        stageTrack,
-                                      ),
-                                      screenShareViewers:
-                                          stageTrack.isScreenShare
-                                          ? live_display.liveScreenShareViewers(
-                                              widget.live,
-                                              stageTrack.identity,
-                                            )
-                                          : const <UserSummary>[],
-                                      screenShareVolume:
-                                          widget.screenShareVolume,
-                                      cameraMirrored:
-                                          live_display
-                                              .liveParticipantByUserId(
-                                                widget.live,
-                                                stageTrack.identity,
-                                              )
-                                              ?.cameraMirrored ??
-                                          false,
-                                      onFlipCamera: stageTrack.isLocal
-                                          ? widget.onFlipCamera
-                                          : null,
-                                      onSetLocalCameraMirrored:
-                                          widget.onSetLocalCameraMirrored,
-                                      onExit: _exitStage,
-                                      onFullScreen: () =>
-                                          widget.onEnterFullScreen(stageTrack),
-                                      onScreenShareVolumeChanged:
-                                          widget.onScreenShareVolumeChanged,
-                                      onScreenShareMuteToggled:
-                                          widget.onScreenShareMuteToggled,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 14),
-                                ],
-                                Expanded(
-                                  flex: stageTrack == null ? 1 : 2,
-                                  child: _LiveMemberStage(
-                                    participants: participants,
-                                    currentUser: widget.currentUser,
-                                    localMicMuted: widget.micMuted,
-                                    localHeadphonesMuted:
-                                        widget.headphonesMuted,
-                                    speakingUserIds: widget.speakingUserIds,
-                                    liveKitMicMutedByParticipantId:
-                                        widget.liveKitMicMutedByParticipantId,
-                                    videoTracks: widget.videoTracks,
-                                    stageTrack: stageTrack,
-                                    onSelectStage: _selectStage,
-                                    onSelectScreenShareStage:
-                                        _selectScreenShareStage,
-                                    onSelectCameraStage: _selectCameraStage,
-                                    onToggleMic: widget.onToggleMic,
-                                    onToggleHeadphones:
-                                        widget.onToggleHeadphones,
-                                    participantVoiceVolume:
-                                        widget.participantVoiceVolume,
-                                    onParticipantVoiceVolumeChanged:
-                                        widget.onParticipantVoiceVolumeChanged,
-                                    onParticipantVoiceMuteToggled:
-                                        widget.onParticipantVoiceMuteToggled,
-                                    canModerateParticipant:
-                                        widget.canModerateParticipant,
-                                    onToggleParticipantMicModeration:
-                                        widget.onToggleParticipantMicModeration,
-                                    onToggleParticipantHeadphonesModeration: widget
-                                        .onToggleParticipantHeadphonesModeration,
-                                    canRemoveParticipant:
-                                        widget.canRemoveParticipant,
-                                    onRemoveParticipant:
-                                        widget.onRemoveParticipant,
-                                    onResolveParticipantProfile:
-                                        widget.onResolveParticipantProfile,
-                                    onResolveParticipantRoomProfile:
-                                        widget.onResolveParticipantRoomProfile,
-                                    onEnterParticipantProfileRoom:
-                                        widget.onEnterParticipantProfileRoom,
-                                    participantProfileActionBuilder:
-                                        widget.participantProfileActionBuilder,
-                                  ),
-                                ),
-                              ],
+                                        stageTrack.identity,
+                                      )
+                                      ?.cameraMirrored ??
+                                  false,
+                              onFlipCamera: stageTrack.isLocal
+                                  ? widget.onFlipCamera
+                                  : null,
+                              onSetLocalCameraMirrored:
+                                  widget.onSetLocalCameraMirrored,
+                              onExit: _exitStage,
+                              onFullScreen: () =>
+                                  widget.onEnterFullScreen(stageTrack),
+                              onScreenShareVolumeChanged:
+                                  widget.onScreenShareVolumeChanged,
+                              onScreenShareMuteToggled:
+                                  widget.onScreenShareMuteToggled,
                             ),
                           ),
-                          // The search + queue panel slides out as a narrow
-                          // right-docked surface over the stage when expanded. The
-                          // compact now-playing strip itself lives inline in the
-                          // control bar below (see _LiveControlBar).
-                          if (musicBoxOpen && musicBox != null)
-                            Positioned(
-                              right: 0,
-                              bottom: 0,
-                              height: musicBoxPanelHeight,
-                              child: SizedBox(
-                                width: _musicBoxPanelWidth,
-                                child: LiveMusicBoxPanel(
-                                  key: const ValueKey<String>(
-                                    'live-music-box-panel',
-                                  ),
-                                  state: musicBox,
-                                  searchController:
-                                      widget.musicBoxSearchController,
-                                  searchResults: widget.musicBoxSearchResults,
-                                  searching: widget.musicBoxSearching,
-                                  searchError: widget.musicBoxSearchError,
-                                  source: widget.musicBoxSource,
-                                  onTogglePlayback:
-                                      widget.onMusicBoxTogglePlayback,
-                                  onSkip: widget.onMusicBoxSkip,
-                                  onQueueResult: widget.onMusicBoxQueueResult,
-                                  onRemoveItem: widget.onMusicBoxRemoveItem,
-                                  onSourceChanged:
-                                      widget.onMusicBoxSourceChanged,
-                                  onClose: widget.onToggleMusicBox,
-                                  volume: widget.musicBoxVolume,
-                                  onVolumeChanged:
-                                      widget.onMusicBoxVolumeChanged,
-                                ),
-                              ),
-                            ),
+                          const SizedBox(height: 14),
                         ],
-                      );
-                    },
+                        Expanded(
+                          flex: stageTrack == null ? 1 : 2,
+                          child: _LiveMemberStage(
+                            participants: participants,
+                            currentUser: widget.currentUser,
+                            localMicMuted: widget.micMuted,
+                            localHeadphonesMuted: widget.headphonesMuted,
+                            speakingUserIds: widget.speakingUserIds,
+                            liveKitMicMutedByParticipantId:
+                                widget.liveKitMicMutedByParticipantId,
+                            videoTracks: widget.videoTracks,
+                            stageTrack: stageTrack,
+                            onSelectStage: _selectStage,
+                            onSelectScreenShareStage: _selectScreenShareStage,
+                            onSelectCameraStage: _selectCameraStage,
+                            onToggleMic: widget.onToggleMic,
+                            onToggleHeadphones: widget.onToggleHeadphones,
+                            participantVoiceVolume:
+                                widget.participantVoiceVolume,
+                            onParticipantVoiceVolumeChanged:
+                                widget.onParticipantVoiceVolumeChanged,
+                            onParticipantVoiceMuteToggled:
+                                widget.onParticipantVoiceMuteToggled,
+                            canModerateParticipant:
+                                widget.canModerateParticipant,
+                            onToggleParticipantMicModeration:
+                                widget.onToggleParticipantMicModeration,
+                            onToggleParticipantHeadphonesModeration:
+                                widget.onToggleParticipantHeadphonesModeration,
+                            canRemoveParticipant: widget.canRemoveParticipant,
+                            onRemoveParticipant: widget.onRemoveParticipant,
+                            onResolveParticipantProfile:
+                                widget.onResolveParticipantProfile,
+                            onResolveParticipantRoomProfile:
+                                widget.onResolveParticipantRoomProfile,
+                            onEnterParticipantProfileRoom:
+                                widget.onEnterParticipantProfileRoom,
+                            participantProfileActionBuilder:
+                                widget.participantProfileActionBuilder,
+                          ),
+                        ),
+                      ],
+                    ),
+                    controls: _LiveControlBar(
+                      joined: widget.joined,
+                      joining: widget.joining || widget.loading,
+                      micMuted: widget.micMuted,
+                      headphonesMuted: widget.headphonesMuted,
+                      voiceBlocked: widget.voiceBlocked,
+                      cameraOn: widget.cameraOn,
+                      screenSharing: widget.screenSharing,
+                      inputVolume: widget.inputVolume,
+                      outputVolume: widget.outputVolume,
+                      musicBox: musicBox,
+                      musicBoxEnabled: musicBoxEnabled,
+                      musicBoxOpen: musicBoxOpen,
+                      onJoin: widget.onJoin,
+                      onLeave: widget.onLeave,
+                      onToggleMic: widget.onToggleMic,
+                      onToggleHeadphones: widget.onToggleHeadphones,
+                      onToggleCamera: widget.onToggleCamera,
+                      onToggleShare: widget.onToggleShare,
+                      onInputVolumeChanged: widget.onInputVolumeChanged,
+                      onOutputVolumeChanged: widget.onOutputVolumeChanged,
+                      onToggleMusicBox: widget.onToggleMusicBox,
+                      onMusicBoxTogglePlayback: widget.onMusicBoxTogglePlayback,
+                      onMusicBoxSkip: widget.onMusicBoxSkip,
+                      onCollapse: widget.onBackToChat,
+                    ),
+                    musicBox: musicBoxOpen && musicBox != null
+                        ? LiveMusicBoxPanel(
+                            key: const ValueKey<String>('live-music-box-panel'),
+                            state: musicBox,
+                            searchController: widget.musicBoxSearchController,
+                            searchResults: widget.musicBoxSearchResults,
+                            searching: widget.musicBoxSearching,
+                            searchError: widget.musicBoxSearchError,
+                            source: widget.musicBoxSource,
+                            onTogglePlayback: widget.onMusicBoxTogglePlayback,
+                            onSkip: widget.onMusicBoxSkip,
+                            onQueueResult: widget.onMusicBoxQueueResult,
+                            onRemoveItem: widget.onMusicBoxRemoveItem,
+                            onSourceChanged: widget.onMusicBoxSourceChanged,
+                            onClose: widget.onToggleMusicBox,
+                            volume: widget.musicBoxVolume,
+                            onVolumeChanged: widget.onMusicBoxVolumeChanged,
+                          )
+                        : null,
                   ),
                 ),
-                const SizedBox(height: 16),
-                _LiveControlBar(
-                  joined: widget.joined,
-                  joining: widget.joining || widget.loading,
-                  micMuted: widget.micMuted,
-                  headphonesMuted: widget.headphonesMuted,
-                  voiceBlocked: widget.voiceBlocked,
-                  cameraOn: widget.cameraOn,
-                  screenSharing: widget.screenSharing,
-                  inputVolume: widget.inputVolume,
-                  outputVolume: widget.outputVolume,
-                  musicBox: musicBox,
-                  musicBoxEnabled: musicBoxEnabled,
-                  musicBoxOpen: musicBoxOpen,
-                  onJoin: widget.onJoin,
-                  onLeave: widget.onLeave,
-                  onToggleMic: widget.onToggleMic,
-                  onToggleHeadphones: widget.onToggleHeadphones,
-                  onToggleCamera: widget.onToggleCamera,
-                  onToggleShare: widget.onToggleShare,
-                  onInputVolumeChanged: widget.onInputVolumeChanged,
-                  onOutputVolumeChanged: widget.onOutputVolumeChanged,
-                  onToggleMusicBox: widget.onToggleMusicBox,
-                  onMusicBoxTogglePlayback: widget.onMusicBoxTogglePlayback,
-                  onMusicBoxSkip: widget.onMusicBoxSkip,
-                  onCollapse: widget.onBackToChat,
-                ),
-                const SizedBox(height: _controlHoverInfoBelowReserve),
               ],
             ),
           ),
         ),
       ),
     );
+  }
+}
+
+enum _LiveChannelBodySlot { stage, controls, musicBoxAnchor }
+
+/// Lays out the live stage and its controls in one pass so the docked music box
+/// can keep a stable height. Extra compact control rows reduce the stage and
+/// move the panel upward; they never compress the panel itself.
+class _LiveChannelBodyLayout extends StatefulWidget {
+  const _LiveChannelBodyLayout({
+    required this.stage,
+    required this.controls,
+    required this.musicBox,
+  });
+
+  final Widget stage;
+  final Widget controls;
+  final Widget? musicBox;
+
+  @override
+  State<_LiveChannelBodyLayout> createState() => _LiveChannelBodyLayoutState();
+}
+
+class _LiveChannelBodyLayoutState extends State<_LiveChannelBodyLayout> {
+  final GlobalKey _bodyKey = GlobalKey();
+  final GlobalKey _musicBoxAnchorKey = GlobalKey();
+  final OverlayPortalController _musicBoxPortal = OverlayPortalController();
+
+  @override
+  void didUpdateWidget(_LiveChannelBodyLayout oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _schedulePortalSync();
+  }
+
+  @override
+  void dispose() {
+    if (_musicBoxPortal.isShowing) _musicBoxPortal.hide();
+    super.dispose();
+  }
+
+  void _schedulePortalSync() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (widget.musicBox != null) {
+        if (!_musicBoxPortal.isShowing) _musicBoxPortal.show();
+      } else if (_musicBoxPortal.isShowing) {
+        _musicBoxPortal.hide();
+      }
+    });
+  }
+
+  Rect? _rectInOverlay(GlobalKey key) {
+    final overlay = Overlay.maybeOf(context);
+    final anchorBox = key.currentContext?.findRenderObject();
+    final overlayBox = overlay?.context.findRenderObject();
+    if (anchorBox is! RenderBox ||
+        overlayBox is! RenderBox ||
+        !anchorBox.hasSize ||
+        !overlayBox.hasSize) {
+      return null;
+    }
+    return anchorBox.localToGlobal(Offset.zero, ancestor: overlayBox) &
+        anchorBox.size;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _schedulePortalSync();
+    return OverlayPortal(
+      controller: _musicBoxPortal,
+      overlayChildBuilder: (context) {
+        return Positioned.fill(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final bodyRect = _rectInOverlay(_bodyKey);
+              final anchorRect = _rectInOverlay(_musicBoxAnchorKey);
+              if (bodyRect == null ||
+                  anchorRect == null ||
+                  widget.musicBox == null) {
+                return const SizedBox.shrink();
+              }
+              final standardPanelHeight =
+                  bodyRect.height -
+                  _musicBoxStandardControlHeight -
+                  _liveStageControlGap -
+                  _controlHoverInfoBelowReserve;
+              final desiredPanelHeight =
+                  standardPanelHeight < _musicBoxMinComfortableHeight
+                  ? _musicBoxMinComfortableHeight
+                  : standardPanelHeight;
+              final panelHeight = desiredPanelHeight > anchorRect.top
+                  ? anchorRect.top
+                  : desiredPanelHeight;
+              final panelWidth = bodyRect.width < _musicBoxPanelWidth
+                  ? bodyRect.width
+                  : _musicBoxPanelWidth;
+              if (panelHeight <= 0 || panelWidth <= 0) {
+                return const SizedBox.shrink();
+              }
+              return Stack(
+                children: [
+                  Positioned(
+                    left: anchorRect.right - panelWidth,
+                    top: anchorRect.top - panelHeight,
+                    width: panelWidth,
+                    height: panelHeight,
+                    child: widget.musicBox!,
+                  ),
+                ],
+              );
+            },
+          ),
+        );
+      },
+      child: KeyedSubtree(
+        key: _bodyKey,
+        child: CustomMultiChildLayout(
+          delegate: _LiveChannelBodyLayoutDelegate(),
+          children: [
+            LayoutId(id: _LiveChannelBodySlot.stage, child: widget.stage),
+            LayoutId(id: _LiveChannelBodySlot.controls, child: widget.controls),
+            LayoutId(
+              id: _LiveChannelBodySlot.musicBoxAnchor,
+              child: SizedBox(key: _musicBoxAnchorKey),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LiveChannelBodyLayoutDelegate extends MultiChildLayoutDelegate {
+  _LiveChannelBodyLayoutDelegate();
+
+  @override
+  void performLayout(Size size) {
+    final controlSize = layoutChild(
+      _LiveChannelBodySlot.controls,
+      BoxConstraints(minWidth: size.width, maxWidth: size.width),
+    );
+    final stageHeight =
+        (size.height -
+                controlSize.height -
+                _liveStageControlGap -
+                _controlHoverInfoBelowReserve)
+            .clamp(0.0, size.height)
+            .toDouble();
+    layoutChild(
+      _LiveChannelBodySlot.stage,
+      BoxConstraints.tightFor(width: size.width, height: stageHeight),
+    );
+    positionChild(_LiveChannelBodySlot.stage, Offset.zero);
+    positionChild(
+      _LiveChannelBodySlot.controls,
+      Offset(0, stageHeight + _liveStageControlGap),
+    );
+    layoutChild(
+      _LiveChannelBodySlot.musicBoxAnchor,
+      BoxConstraints.tight(Size.zero),
+    );
+    positionChild(
+      _LiveChannelBodySlot.musicBoxAnchor,
+      Offset(size.width, stageHeight),
+    );
+  }
+
+  @override
+  bool shouldRelayout(_LiveChannelBodyLayoutDelegate oldDelegate) {
+    return false;
   }
 }

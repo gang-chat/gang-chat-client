@@ -412,7 +412,7 @@ extension _HomeShellLiveActions on _HomeShellState {
       if (muted) {
         _rememberInputVolume(_liveSessionController.inputVolume);
       }
-      unawaited(_liveSessionController.setTransientInputVolume(volume));
+      unawaited(_liveSessionController.setInputVolume(volume, persist: false));
     }
     unawaited(_liveSessionController.setMicMuted(muted));
     if (_micMuted != muted) {
@@ -490,7 +490,7 @@ extension _HomeShellLiveActions on _HomeShellState {
 
     if (muteMic) {
       _rememberInputVolume(_liveSessionController.inputVolume);
-      unawaited(_liveSessionController.setTransientInputVolume(0));
+      unawaited(_liveSessionController.setInputVolume(0, persist: false));
       unawaited(_liveSessionController.setMicMuted(true));
     }
     if (headphonesChanged && syncVolume) {
@@ -498,7 +498,7 @@ extension _HomeShellLiveActions on _HomeShellState {
       if (muted) {
         _rememberOutputVolume(_liveSessionController.outputVolume);
       }
-      unawaited(_liveSessionController.setTransientOutputVolume(volume));
+      unawaited(_liveSessionController.setOutputVolume(volume, persist: false));
     }
     if (headphonesChanged) {
       unawaited(_liveSessionController.setOutputMuted(muted));
@@ -878,6 +878,7 @@ extension _HomeShellLiveActions on _HomeShellState {
         await _liveSessionController.connectWithRetry(
           displayResult,
           isCancelled: () => !mounted,
+          initialMicMuted: _voiceBlocked ? true : desiredMicMuted,
         );
       } catch (error) {
         if (mounted) {
@@ -988,6 +989,7 @@ extension _HomeShellLiveActions on _HomeShellState {
         await _liveSessionController.connectWithRetry(
           result,
           isCancelled: () => !mounted || _joinedLiveRoomId != roomId,
+          initialMicMuted: joinPatch.voiceBlocked ? true : previousMicMuted,
         );
       } catch (error) {
         if (mounted) {

@@ -718,6 +718,54 @@ void registerShellHomeWidgetTests() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('exiting the program resets persistent live audio choices', (
+    WidgetTester tester,
+  ) async {
+    var exitSessionCount = 0;
+    final windowEvents = <String>[];
+    final windowController = _RecordingWindowController(windowEvents);
+    final liveSession = _FakeLiveSession();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ui.uiTheme().copyWith(platform: TargetPlatform.windows),
+        home: HomePage(
+          app: _homeTestAppContext(
+            onExitSessionForAppExit: () async => exitSessionCount++,
+          ),
+          audioDeviceStore: const _FakeAudioDeviceStore(),
+          liveSessionController: _FakeLiveSessionController(
+            session: liveSession,
+          ),
+          realtime: _NoopRealtimeService(),
+          closeBehaviorStore: const _FixedCloseBehaviorStore(
+            CloseBehavior.exitProgram,
+          ),
+          windowController: windowController,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('home-title-live-room:headphones')),
+    );
+    await tester.pumpAndSettle();
+    expect(liveSession.micMutes.last, isTrue);
+    expect(liveSession.outputMutes.last, isTrue);
+
+    final closeFuture = windowController.closeRequestHandler!();
+    await tester.pumpAndSettle();
+    expect(await closeFuture, isTrue);
+
+    expect(exitSessionCount, 1);
+    expect(liveSession.micMutes.last, isFalse);
+    expect(liveSession.outputMutes.last, isFalse);
+    expect(liveSession.inputVolumes.last, greaterThan(0));
+    expect(liveSession.outputVolumes.last, greaterThan(0));
+    expect(windowEvents, containsAllInOrder(['hide', 'terminate']));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('title live room leaves paint safety for a long room name', (
     WidgetTester tester,
   ) async {

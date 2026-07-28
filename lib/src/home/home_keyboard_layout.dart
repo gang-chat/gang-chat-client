@@ -40,6 +40,12 @@ class _HomeKeyboardOverlayViewportState
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.enabled) {
+      _stableSize = null;
+      _stablePadding = null;
+      _stableViewPadding = null;
+      return widget.child;
+    }
     final mediaQuery = MediaQuery.of(context);
     final keyboardVisible = mediaQuery.viewInsets.bottom > 0;
     return LayoutBuilder(
@@ -52,24 +58,24 @@ class _HomeKeyboardOverlayViewportState
         }
 
         final stableSize = _stableSize;
-        if (!widget.enabled || !keyboardVisible || stableSize == null) {
-          return widget.child;
-        }
-
-        final stableMediaQuery = mediaQuery.copyWith(
-          size: stableSize,
-          padding: _stablePadding,
-          viewPadding: _stableViewPadding,
-        );
+        final preserveStableViewport = keyboardVisible && stableSize != null;
+        final viewportSize = preserveStableViewport ? stableSize : currentSize;
+        final viewportMediaQuery = preserveStableViewport
+            ? mediaQuery.copyWith(
+                size: viewportSize,
+                padding: _stablePadding,
+                viewPadding: _stableViewPadding,
+              )
+            : mediaQuery;
         return OverflowBox(
           alignment: Alignment.topLeft,
-          minWidth: stableSize.width,
-          maxWidth: stableSize.width,
-          minHeight: stableSize.height,
-          maxHeight: stableSize.height,
+          minWidth: viewportSize.width,
+          maxWidth: viewportSize.width,
+          minHeight: viewportSize.height,
+          maxHeight: viewportSize.height,
           child: SizedBox.fromSize(
-            size: stableSize,
-            child: MediaQuery(data: stableMediaQuery, child: widget.child),
+            size: viewportSize,
+            child: MediaQuery(data: viewportMediaQuery, child: widget.child),
           ),
         );
       },

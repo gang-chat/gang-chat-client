@@ -661,6 +661,7 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
         ],
         const SizedBox(height: 12),
         Expanded(
+          key: const ValueKey<String>('music-box-results-viewport'),
           child: _showQueue
               ? _MusicBoxQueueList(
                   state: widget.state,
@@ -966,21 +967,24 @@ class _MusicBoxEmpty extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 30, color: UiColors.textMuted),
-          const SizedBox(height: 10),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: UiColors.textMuted,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 30, color: UiColors.textMuted),
+            const SizedBox(height: 10),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: UiColors.textMuted,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

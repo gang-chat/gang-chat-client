@@ -159,29 +159,26 @@ void main() {
     },
   );
 
-  test(
-    'session mute gain does not replace stored volume preferences',
-    () async {
-      final session = _FakeLiveSession();
-      final store = _RecordingAudioDeviceStore();
-      final controller = LiveSessionController(
-        apiBaseUrl: 'https://api.example.test/api/v1',
-        session: session,
-        audioDeviceStore: store,
-        audioDeviceRestorer: (_) async => null,
-      );
+  test('transient mute gains do not overwrite stored volumes', () async {
+    final session = _FakeLiveSession();
+    final store = _RecordingAudioDeviceStore();
+    final controller = LiveSessionController(
+      apiBaseUrl: 'https://api.example.test/api/v1',
+      session: session,
+      audioDeviceStore: store,
+      audioDeviceRestorer: (_) async => null,
+    );
 
-      await controller.setTransientInputVolume(0);
-      await controller.setTransientOutputVolume(0);
+    await controller.setInputVolume(0, persist: false);
+    await controller.setOutputVolume(0, persist: false);
 
-      expect(session.inputVolumes, [0]);
-      expect(session.outputVolumes, [0]);
-      expect(store.inputVolumeWrites, isEmpty);
-      expect(store.outputVolumeWrites, isEmpty);
-    },
-  );
+    expect(session.inputVolumes, [0]);
+    expect(session.outputVolumes, [0]);
+    expect(store.inputVolumeWrites, isEmpty);
+    expect(store.outputVolumeWrites, isEmpty);
+  });
 
-  test('fresh open session repairs legacy persisted mute gain', () async {
+  test('stored legacy mute gains are healed before joining', () async {
     final session = _FakeLiveSession();
     final store = _RecordingAudioDeviceStore(
       storedInputVolume: 0,
@@ -202,28 +199,49 @@ void main() {
     expect(store.outputVolumeWrites, [defaultAudioVolume]);
   });
 
-  test('explicitly muted join keeps an intentional zero gain', () async {
+  test(
+    'legacy gain migration failure does not stop remaining restore',
+    () async {
+      final session = _FakeLiveSession();
+      final store = _RecordingAudioDeviceStore(
+        storedInputVolume: 0,
+        storedOutputVolume: 0,
+        storedScreenShareMaxHeight: 480,
+        failVolumeWrites: true,
+      );
+      var restoredDevices = 0;
+      final controller = LiveSessionController(
+        apiBaseUrl: 'https://api.example.test/api/v1',
+        session: session,
+        audioDeviceStore: store,
+        audioDeviceRestorer: (_) async {
+          restoredDevices += 1;
+          return null;
+        },
+      );
+
+      await controller.restoreStoredAudioSettings();
+
+      expect(session.inputVolumes, [defaultAudioVolume]);
+      expect(session.outputVolumes, [defaultAudioVolume]);
+      expect(session.screenShareMaxHeights, [480]);
+      expect(restoredDevices, 1);
+    },
+  );
+
+  test('current join mic choice overrides a stale muted snapshot', () async {
     final session = _FakeLiveSession();
-    final store = _RecordingAudioDeviceStore(
-      storedInputVolume: 0,
-      storedOutputVolume: 0,
-    );
     final controller = LiveSessionController(
       apiBaseUrl: 'https://api.example.test/api/v1',
       session: session,
-      audioDeviceStore: store,
+      audioDeviceStore: const _FakeAudioDeviceStore(),
       audioDeviceRestorer: (_) async => null,
     );
 
-    await controller.restoreStoredAudioSettings(
-      micMuted: true,
-      headphonesMuted: true,
-    );
+    await controller.connectWithRetry(_liveJoinResult, initialMicMuted: false);
 
-    expect(session.inputVolumes, [0]);
-    expect(session.outputVolumes, [0]);
-    expect(store.inputVolumeWrites, isEmpty);
-    expect(store.outputVolumeWrites, isEmpty);
+    expect(_liveJoinResult.participant.micMuted, isTrue);
+    expect(session.connectedMicMuted, isFalse);
   });
 
   test('participant voice volume restores and toggles local mute', () async {
@@ -428,6 +446,7 @@ class _RecordingAudioDeviceStore extends AudioDeviceStore {
     this.storedScreenShareMaxHeight = 1080,
     this.storedInputVolume = 0.35,
     this.storedOutputVolume = 0.75,
+    this.failVolumeWrites = false,
     Map<String, double> storedParticipantVoiceVolumes = const {},
   }) : _storedParticipantVoiceVolumes = Map<String, double>.from(
          storedParticipantVoiceVolumes,
@@ -436,6 +455,7 @@ class _RecordingAudioDeviceStore extends AudioDeviceStore {
   final int storedScreenShareMaxHeight;
   final double storedInputVolume;
   final double storedOutputVolume;
+  final bool failVolumeWrites;
   final Map<String, double> _storedParticipantVoiceVolumes;
   final inputVolumeWrites = <double>[];
   final outputVolumeWrites = <double>[];
@@ -455,11 +475,13 @@ class _RecordingAudioDeviceStore extends AudioDeviceStore {
 
   @override
   Future<void> writeInputVolume(double volume) async {
+    if (failVolumeWrites) throw StateError('input volume write failed');
     inputVolumeWrites.add(volume);
   }
 
   @override
   Future<void> writeOutputVolume(double volume) async {
+    if (failVolumeWrites) throw StateError('output volume write failed');
     outputVolumeWrites.add(volume);
   }
 

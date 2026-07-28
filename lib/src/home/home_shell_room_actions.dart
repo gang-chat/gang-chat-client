@@ -286,11 +286,11 @@ extension _HomeShellRoomActions on _HomeShellState {
     await _leaveLiveForSessionEnd(
       disconnectTimeout: const Duration(seconds: 1),
     );
-    await _resetLiveAudioPreferencesForSessionEnd();
+    await _resetLiveAudioStateAfterSessionEnd();
     await widget.app.logout();
   }
 
-  Future<void> _resetLiveAudioPreferencesForSessionEnd() async {
+  Future<void> _resetLiveAudioStateAfterSessionEnd() async {
     if (mounted) {
       _setHomeState(() {
         _micMuted = false;
@@ -341,7 +341,7 @@ extension _HomeShellRoomActions on _HomeShellState {
       await _leaveLiveForSessionEnd(
         disconnectTimeout: const Duration(milliseconds: 700),
       );
-      await _resetLiveAudioPreferencesForSessionEnd();
+      await _resetLiveAudioStateAfterSessionEnd();
       await _stopRealtimeForExit();
       await widget.app.exitSessionForAppExit();
     } catch (_) {
@@ -598,7 +598,7 @@ extension _HomeShellRoomActions on _HomeShellState {
       await _leaveLiveForSessionEnd(
         disconnectTimeout: const Duration(seconds: 1),
       );
-      await _resetLiveAudioPreferencesForSessionEnd();
+      await _resetLiveAudioStateAfterSessionEnd();
       await _stopRealtimeForExit();
       await widget.app.exitSessionForAppExit();
     } finally {

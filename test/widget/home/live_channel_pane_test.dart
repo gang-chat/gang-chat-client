@@ -2,6 +2,7 @@ import 'dart:ui' show PointerDeviceKind;
 
 import 'package:client/src/config/app_config.dart';
 import 'package:client/src/home/adaptive_layout.dart';
+import 'package:client/src/home/home_keyboard_layout.dart';
 import 'package:client/src/home/live_channel_pane.dart';
 import 'package:client/src/live/live_session.dart';
 import 'package:client/src/live/live_video_track_view.dart';
@@ -307,6 +308,54 @@ void main() {
       );
     },
   );
+
+  testWidgets('narrow live member stage fits two square cards in one row', (
+    tester,
+  ) async {
+    final searchController = TextEditingController();
+    addTearDown(searchController.dispose);
+    final currentUser = _currentUser.toSummary().copyWith(
+      roomDisplayName: 'Room Me',
+      roomRole: 'member',
+    );
+    final remoteUser = _user(
+      'phabe',
+      'Phabe',
+      roomRole: 'member',
+    ).copyWith(roomDisplayName: 'Room Phabe');
+
+    await tester.pumpWidget(
+      _host(
+        searchController: searchController,
+        live: _liveState([
+          _participant(id: 'live_self', user: currentUser),
+          _participant(id: 'live_phabe', user: remoteUser),
+        ]),
+        width: 347,
+        height: 720,
+      ),
+    );
+
+    final currentCard = find.ancestor(
+      of: find.text('Room Me'),
+      matching: find.byType(ui.PressableSurface),
+    );
+    final remoteCard = find.ancestor(
+      of: find.text('Room Phabe'),
+      matching: find.byType(ui.PressableSurface),
+    );
+    final currentRect = tester.getRect(currentCard);
+    final remoteRect = tester.getRect(remoteCard);
+    final currentSurface = tester.widget<ui.PressableSurface>(currentCard);
+    final remoteSurface = tester.widget<ui.PressableSurface>(remoteCard);
+
+    expect(currentRect.top, closeTo(remoteRect.top, 0.01));
+    expect(currentRect.width, closeTo(currentSurface.height, 0.01));
+    expect(remoteRect.width, closeTo(remoteSurface.height, 0.01));
+    expect(remoteRect.left - currentRect.right, closeTo(12, 0.01));
+    expect(currentRect.width, lessThan(154));
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'current user member card uses local audio mute state before snapshot',
@@ -2006,89 +2055,192 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-    'music box panel stays above the inline player at every layout width',
-    (tester) async {
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-      final searchController = TextEditingController();
-      addTearDown(searchController.dispose);
+  testWidgets('music box keeps one height and rises above wrapped live controls', (
+    tester,
+  ) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final searchController = TextEditingController();
+    addTearDown(searchController.dispose);
 
-      final cases =
-          <
-            ({
-              String label,
-              TargetPlatform platform,
-              bool compact,
-              double width,
-            })
-          >[
-            (
-              label: 'Android compact',
-              platform: TargetPlatform.android,
-              compact: true,
-              width: 360,
-            ),
-            (
-              label: 'Windows compact',
-              platform: TargetPlatform.windows,
-              compact: true,
-              width: 360,
-            ),
-            (
-              label: 'Windows wide',
-              platform: TargetPlatform.windows,
-              compact: false,
-              width: 960,
-            ),
-            (
-              label: 'macOS wide',
-              platform: TargetPlatform.macOS,
-              compact: false,
-              width: 960,
-            ),
-          ];
-
-      for (final testCase in cases) {
-        await tester.binding.setSurfaceSize(Size(testCase.width, 740));
-        await tester.pumpWidget(
-          HomeAdaptiveLayout(
-            compact: testCase.compact,
-            child: _host(
-              searchController: searchController,
-              live: _liveState(const []),
-              width: testCase.width,
-              height: 740,
-              platform: testCase.platform,
-              musicBox: _emptyMusicBoxState,
-              musicBoxOpen: true,
-            ),
+    final cases =
+        <({String label, TargetPlatform platform, bool compact, double width})>[
+          (
+            label: 'Android compact',
+            platform: TargetPlatform.android,
+            compact: true,
+            width: 360,
           ),
+          (
+            label: 'Windows compact',
+            platform: TargetPlatform.windows,
+            compact: true,
+            width: 360,
+          ),
+          (
+            label: 'Windows wide',
+            platform: TargetPlatform.windows,
+            compact: false,
+            width: 960,
+          ),
+          (
+            label: 'macOS wide',
+            platform: TargetPlatform.macOS,
+            compact: false,
+            width: 960,
+          ),
+        ];
+
+    double? stablePanelHeight;
+    Rect? androidCompactPanel;
+    Rect? windowsWidePanel;
+    var closeTaps = 0;
+    for (final testCase in cases) {
+      await tester.binding.setSurfaceSize(Size(testCase.width, 740));
+      await tester.pumpWidget(
+        HomeAdaptiveLayout(
+          compact: testCase.compact,
+          child: _host(
+            searchController: searchController,
+            live: _liveState(const []),
+            width: testCase.width,
+            height: 740,
+            platform: testCase.platform,
+            musicBox: _emptyMusicBoxState,
+            musicBoxOpen: true,
+            onToggleMusicBox: () => closeTaps += 1,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final panel = find.byKey(const ValueKey<String>('live-music-box-panel'));
+      final inlinePlayer = find.byKey(
+        const ValueKey<String>('live-control:music-inline'),
+      );
+      expect(panel, findsOneWidget);
+      expect(inlinePlayer, findsOneWidget);
+      final panelRect = tester.getRect(panel);
+      stablePanelHeight ??= panelRect.height;
+      expect(
+        panelRect.height,
+        closeTo(stablePanelHeight, 0.01),
+        reason: '${testCase.label} must keep the standard music box height',
+      );
+      expect(
+        panelRect.height,
+        greaterThanOrEqualTo(400),
+        reason:
+            '${testCase.label} music box should extend upward instead of scrolling',
+      );
+      expect(
+        panelRect.top,
+        greaterThanOrEqualTo(0),
+        reason: '${testCase.label} must keep the raised panel interactive',
+      );
+      expect(
+        panelRect.bottom,
+        lessThanOrEqualTo(tester.getRect(inlinePlayer).top),
+        reason: '${testCase.label} music box must not overlap its player',
+      );
+      if (testCase.label == 'Android compact') {
+        androidCompactPanel = panelRect;
+        await tester.tap(
+          find.descendant(of: panel, matching: find.byIcon(Icons.close)),
         );
         await tester.pump();
-
-        final panel = find.byKey(
-          const ValueKey<String>('live-music-box-panel'),
-        );
-        final inlinePlayer = find.byKey(
-          const ValueKey<String>('live-control:music-inline'),
-        );
-        expect(panel, findsOneWidget);
-        expect(inlinePlayer, findsOneWidget);
-        expect(
-          tester.getRect(panel).height,
-          greaterThanOrEqualTo(400),
-          reason:
-              '${testCase.label} music box should extend upward instead of scrolling',
-        );
-        expect(
-          tester.getRect(panel).bottom,
-          lessThanOrEqualTo(tester.getRect(inlinePlayer).top),
-          reason: '${testCase.label} music box must not overlap its player',
-        );
-        expect(tester.takeException(), isNull);
+        expect(closeTaps, 1);
+      } else if (testCase.label == 'Windows wide') {
+        windowsWidePanel = panelRect;
       }
-    },
-  );
+      expect(tester.takeException(), isNull);
+    }
+    expect(androidCompactPanel, isNotNull);
+    expect(windowsWidePanel, isNotNull);
+    expect(
+      androidCompactPanel!.top,
+      lessThan(windowsWidePanel!.top),
+      reason:
+          'wrapped compact controls should move the fixed-height panel upward',
+    );
+
+    await tester.binding.setSurfaceSize(const Size(320, 740));
+    await tester.pumpWidget(
+      HomeAdaptiveLayout(
+        compact: true,
+        child: _host(
+          searchController: searchController,
+          live: _liveState(const []),
+          width: 320,
+          height: 740,
+          platform: TargetPlatform.android,
+          musicBox: _emptyMusicBoxState,
+          musicBoxOpen: true,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final limitedPanel = tester.getRect(
+      find.byKey(const ValueKey<String>('live-music-box-panel')),
+    );
+    expect(limitedPanel.top, closeTo(0, 0.01));
+    expect(
+      limitedPanel.height,
+      lessThan(stablePanelHeight!),
+      reason: 'the panel should shrink only after it reaches the screen top',
+    );
+    expect(
+      limitedPanel.bottom,
+      lessThanOrEqualTo(
+        tester
+            .getRect(
+              find.byKey(const ValueKey<String>('live-control:music-inline')),
+            )
+            .top,
+      ),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Android docked music box search keeps focus when IME opens', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(360, 740);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetViewInsets);
+    final searchController = TextEditingController();
+    addTearDown(searchController.dispose);
+
+    await tester.pumpWidget(
+      _host(
+        searchController: searchController,
+        live: _liveState(const []),
+        width: 360,
+        height: 740,
+        platform: TargetPlatform.android,
+        musicBox: _emptyMusicBoxState,
+        musicBoxOpen: true,
+        resizeToAvoidBottomInset: false,
+        preserveKeyboardViewport: true,
+      ),
+    );
+    await tester.pump();
+
+    final search = find.byType(TextField);
+    expect(search, findsOneWidget);
+    await tester.tap(search);
+    await tester.pump();
+    expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
+
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    await tester.pump();
+
+    expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isTrue);
+    expect(tester.takeException(), isNull);
+  });
 }
 
 void _expectBelowTooltip(WidgetTester tester, String message) {
@@ -2145,6 +2297,9 @@ Widget _host({
   bool suspendStageVideo = false,
   MusicBoxState? musicBox,
   bool musicBoxOpen = false,
+  VoidCallback? onToggleMusicBox,
+  bool resizeToAvoidBottomInset = true,
+  bool preserveKeyboardViewport = false,
   double screenShareVolume = 1,
   ValueChanged<double>? onScreenShareVolumeChanged,
   VoidCallback? onScreenShareMuteToggled,
@@ -2167,75 +2322,81 @@ Widget _host({
         releaseBucketUrl: 'https://releases.test/gang-chat',
       ),
       child: Scaffold(
-        body: SizedBox(
-          width: width,
-          height: height,
-          child: LiveChannelPane(
-            title: 'Test room',
-            avatarUrl: null,
-            live: live,
-            currentUser: _currentUser,
-            loading: false,
-            joined: joined,
-            joining: joining,
-            micMuted: micMuted,
-            headphonesMuted: headphonesMuted,
-            voiceBlocked: false,
-            cameraOn: false,
-            screenSharing: false,
-            speakingUserIds: speakingUserIds,
-            connectedParticipantIds: connectedParticipantIds,
-            liveKitMicMutedByParticipantId: liveKitMicMutedByParticipantId,
-            videoTracks: videoTracks,
-            stageSelection: stageSelection ?? const LiveStageSelection.none(),
-            suspendStageVideo: suspendStageVideo,
-            onStageSelectionChanged: onStageSelectionChanged ?? (_) {},
-            onEnterFullScreen: (_) {},
-            onBackToChat: () {},
-            onJoin: onJoin ?? () {},
-            onLeave: () {},
-            onToggleMic: onToggleMic ?? () {},
-            onToggleHeadphones: onToggleHeadphones ?? () {},
-            onToggleCamera: onToggleCamera ?? () {},
-            onFlipCamera: onFlipCamera,
-            onSetLocalCameraMirrored:
-                onSetLocalCameraMirrored ?? (_) async => true,
-            onToggleShare: screenShareSupported ? onToggleShare ?? () {} : null,
-            musicBox: musicBox,
-            musicBoxOpen: musicBoxOpen,
-            musicBoxSearchController: searchController,
-            musicBoxSearchResults: const [],
-            musicBoxSearching: false,
-            musicBoxSearchError: null,
-            musicBoxSource: 'netease',
-            onToggleMusicBox: () {},
-            onMusicBoxTogglePlayback: () {},
-            onMusicBoxSkip: () {},
-            onMusicBoxQueueResult: (_) {},
-            onMusicBoxRemoveItem: (_) {},
-            onMusicBoxSourceChanged: (_) {},
-            inputVolume: 1,
-            outputVolume: 1,
-            musicBoxVolume: 1,
-            screenShareVolume: screenShareVolume,
-            onInputVolumeChanged: (_) {},
-            onOutputVolumeChanged: (_) {},
-            onMusicBoxVolumeChanged: (_) {},
-            onScreenShareVolumeChanged: onScreenShareVolumeChanged ?? (_) {},
-            onScreenShareMuteToggled: onScreenShareMuteToggled ?? () {},
-            participantVoiceVolume: participantVoiceVolume ?? ((_) => 1),
-            onParticipantVoiceVolumeChanged:
-                onParticipantVoiceVolumeChanged ?? ((_, _) {}),
-            onParticipantVoiceMuteToggled:
-                onParticipantVoiceMuteToggled ?? (_) {},
-            canModerateParticipant: canModerateParticipant ?? ((_) => false),
-            onToggleParticipantMicModeration:
-                onToggleParticipantMicModeration ?? (_) {},
-            onToggleParticipantHeadphonesModeration:
-                onToggleParticipantHeadphonesModeration ?? (_) {},
-            canRemoveParticipant: canRemoveParticipant ?? ((_) => false),
-            onRemoveParticipant: onRemoveParticipant ?? ((_) {}),
-            onResolveParticipantProfile: onResolveParticipantProfile,
+        resizeToAvoidBottomInset: resizeToAvoidBottomInset,
+        body: HomeKeyboardOverlayViewport(
+          enabled: preserveKeyboardViewport,
+          child: SizedBox(
+            width: width,
+            height: height,
+            child: LiveChannelPane(
+              title: 'Test room',
+              avatarUrl: null,
+              live: live,
+              currentUser: _currentUser,
+              loading: false,
+              joined: joined,
+              joining: joining,
+              micMuted: micMuted,
+              headphonesMuted: headphonesMuted,
+              voiceBlocked: false,
+              cameraOn: false,
+              screenSharing: false,
+              speakingUserIds: speakingUserIds,
+              connectedParticipantIds: connectedParticipantIds,
+              liveKitMicMutedByParticipantId: liveKitMicMutedByParticipantId,
+              videoTracks: videoTracks,
+              stageSelection: stageSelection ?? const LiveStageSelection.none(),
+              suspendStageVideo: suspendStageVideo,
+              onStageSelectionChanged: onStageSelectionChanged ?? (_) {},
+              onEnterFullScreen: (_) {},
+              onBackToChat: () {},
+              onJoin: onJoin ?? () {},
+              onLeave: () {},
+              onToggleMic: onToggleMic ?? () {},
+              onToggleHeadphones: onToggleHeadphones ?? () {},
+              onToggleCamera: onToggleCamera ?? () {},
+              onFlipCamera: onFlipCamera,
+              onSetLocalCameraMirrored:
+                  onSetLocalCameraMirrored ?? (_) async => true,
+              onToggleShare: screenShareSupported
+                  ? onToggleShare ?? () {}
+                  : null,
+              musicBox: musicBox,
+              musicBoxOpen: musicBoxOpen,
+              musicBoxSearchController: searchController,
+              musicBoxSearchResults: const [],
+              musicBoxSearching: false,
+              musicBoxSearchError: null,
+              musicBoxSource: 'netease',
+              onToggleMusicBox: onToggleMusicBox ?? () {},
+              onMusicBoxTogglePlayback: () {},
+              onMusicBoxSkip: () {},
+              onMusicBoxQueueResult: (_) {},
+              onMusicBoxRemoveItem: (_) {},
+              onMusicBoxSourceChanged: (_) {},
+              inputVolume: 1,
+              outputVolume: 1,
+              musicBoxVolume: 1,
+              screenShareVolume: screenShareVolume,
+              onInputVolumeChanged: (_) {},
+              onOutputVolumeChanged: (_) {},
+              onMusicBoxVolumeChanged: (_) {},
+              onScreenShareVolumeChanged: onScreenShareVolumeChanged ?? (_) {},
+              onScreenShareMuteToggled: onScreenShareMuteToggled ?? () {},
+              participantVoiceVolume: participantVoiceVolume ?? ((_) => 1),
+              onParticipantVoiceVolumeChanged:
+                  onParticipantVoiceVolumeChanged ?? ((_, _) {}),
+              onParticipantVoiceMuteToggled:
+                  onParticipantVoiceMuteToggled ?? (_) {},
+              canModerateParticipant: canModerateParticipant ?? ((_) => false),
+              onToggleParticipantMicModeration:
+                  onToggleParticipantMicModeration ?? (_) {},
+              onToggleParticipantHeadphonesModeration:
+                  onToggleParticipantHeadphonesModeration ?? (_) {},
+              canRemoveParticipant: canRemoveParticipant ?? ((_) => false),
+              onRemoveParticipant: onRemoveParticipant ?? ((_) {}),
+              onResolveParticipantProfile: onResolveParticipantProfile,
+            ),
           ),
         ),
       ),

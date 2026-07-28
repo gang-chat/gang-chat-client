@@ -78,6 +78,39 @@ MusicBoxState _state({
 }
 
 void main() {
+  testWidgets('height pressure shrinks only the search results viewport', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    final state = _state(
+      playbackState: MusicBoxPlaybackState.stopped,
+      positionMs: 0,
+    );
+
+    await tester.pumpWidget(_host(state, controller, height: 400));
+    final searchField = find.byType(Input);
+    final sourcePicker = find.byType(SegmentedControl<String>);
+    final resultsViewport = find.byKey(
+      const ValueKey<String>('music-box-results-viewport'),
+    );
+    final comfortableSearchSize = tester.getSize(searchField);
+    final comfortableSourceSize = tester.getSize(sourcePicker);
+    final comfortableResultsHeight = tester.getSize(resultsViewport).height;
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(_host(state, controller, height: 370));
+
+    expect(tester.getSize(searchField), comfortableSearchSize);
+    expect(tester.getSize(sourcePicker), comfortableSourceSize);
+    expect(
+      tester.getSize(resultsViewport).height,
+      lessThan(comfortableResultsHeight),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('empty music box keeps the whole panel static', (tester) async {
     final controller = TextEditingController();
     addTearDown(controller.dispose);

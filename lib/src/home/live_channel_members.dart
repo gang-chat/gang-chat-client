@@ -93,17 +93,27 @@ class _LiveMemberStage extends StatelessWidget {
           );
         }
 
+        final twoColumnCardWidth =
+            (constraints.maxWidth - _memberCardSpacing) / 2;
+        final cardDimension = twoColumnCardWidth >= _memberCardMinTwoColumnWidth
+            ? twoColumnCardWidth.clamp(
+                _memberCardMinTwoColumnWidth,
+                _memberCardWidth,
+              )
+            : constraints.maxWidth.clamp(0.0, _memberCardWidth);
+
         return SingleChildScrollView(
           child: ConstrainedBox(
             constraints: BoxConstraints(minHeight: constraints.maxHeight),
             child: Align(
               alignment: Alignment.topLeft,
               child: Wrap(
-                spacing: 12,
-                runSpacing: 12,
+                spacing: _memberCardSpacing,
+                runSpacing: _memberCardSpacing,
                 children: [
                   for (final participant in participants)
                     _LiveMemberCard(
+                      dimension: cardDimension,
                       participant: participant.user.id == currentUser.id
                           ? participant.copyWith(
                               micMuted: localMicMuted,
@@ -172,6 +182,7 @@ class _LiveMemberStage extends StatelessWidget {
 
 class _LiveMemberCard extends StatelessWidget {
   const _LiveMemberCard({
+    required this.dimension,
     required this.participant,
     required this.currentUser,
     required this.local,
@@ -200,6 +211,7 @@ class _LiveMemberCard extends StatelessWidget {
     this.previewTrack,
   });
 
+  final double dimension;
   final LiveParticipant participant;
   final CurrentUser currentUser;
   final bool local;
@@ -321,9 +333,9 @@ class _LiveMemberCard extends StatelessWidget {
               mirrored: participant.cameraMirrored,
             );
       return SizedBox(
-        width: _memberCardWidth,
+        width: dimension,
         child: PressableSurface(
-          height: _memberCardHeight,
+          height: dimension,
           hoverLift: 3,
           baseDepth: 5,
           borderRadius: UiRadii.lg,
@@ -421,9 +433,9 @@ class _LiveMemberCard extends StatelessWidget {
       );
     }
     return SizedBox(
-      width: _memberCardWidth,
+      width: dimension,
       child: PressableSurface(
-        height: _memberCardHeight,
+        height: dimension,
         hoverLift: 3,
         baseDepth: 5,
         borderRadius: UiRadii.lg,
