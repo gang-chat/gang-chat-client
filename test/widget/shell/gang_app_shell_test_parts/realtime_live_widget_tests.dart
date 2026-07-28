@@ -820,15 +820,49 @@ void registerShellRealtimeLiveWidgetTests() {
 
       await tester.tap(_liveControl('mic'));
       await tester.pumpAndSettle();
+      await tester.tap(_liveControl('camera'));
+      await tester.pumpAndSettle();
+
+      realtime.add(
+        RealtimeEvent(
+          type: 'live_participant_updated',
+          data: {
+            'room_id': 'server-alpha',
+            'participant_count': 2,
+            'preview': <Object?>[],
+            'live': {
+              ..._liveStateJson(
+                roomId: 'server-alpha',
+                participantCount: 2,
+                participants: [
+                  _liveParticipantJson(
+                    user: _currentUserJson,
+                    liveSessionId: 'live-session-joined',
+                    micMuted: true,
+                    cameraOn: true,
+                    cameraMirrored: true,
+                  ),
+                  _liveParticipantJson(
+                    user: _userJson(
+                      id: 'user-2',
+                      username: 'morgan',
+                      displayName: 'Morgan',
+                    ),
+                    liveSessionId: 'live-session-morgan',
+                    micMuted: true,
+                  ),
+                ],
+              ),
+              'updated_at': '2099-06-05T08:00:00Z',
+            },
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
       liveJoinRequests.clear();
       liveStateUpdates.clear();
 
-      await liveSession.disconnect();
-
-      realtime.setStatus(RealtimeConnectionStatus.reconnecting);
-      await tester.pumpAndSettle();
-      realtime.setStatus(RealtimeConnectionStatus.connected);
-      realtime.emitReconnect();
+      liveSession.emitUnexpectedDisconnect();
       await tester.pumpAndSettle();
 
       expect(
@@ -838,8 +872,10 @@ void registerShellRealtimeLiveWidgetTests() {
       expect(liveSession.connectAttempts, 2);
       expect(liveStateUpdates.last['mic_muted'], true);
       expect(liveStateUpdates.last['headphones_muted'], false);
-      expect(liveStateUpdates.last['camera_on'], false);
+      expect(liveStateUpdates.last['camera_on'], true);
+      expect(liveStateUpdates.last['camera_mirrored'], true);
       expect(liveStateUpdates.last['screen_sharing'], false);
+      expect(liveSession.cameraEnables, contains(true));
     },
   );
 

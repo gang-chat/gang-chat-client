@@ -491,7 +491,12 @@ class LiveController {
       participants: replaced
           ? participants
           : [...participants, liveParticipantWithExclusiveMedia(participant)],
-      updatedAt: DateTime.now().toUtc(),
+      // A participant PATCH response does not carry a room-snapshot revision.
+      // Keep the last server revision until the authoritative realtime/refresh
+      // snapshot arrives. Stamping this with the client clock can make every
+      // later server snapshot look stale after reconnect (especially with
+      // clock skew), leaving remote mic/headphones state frozen.
+      updatedAt: live.updatedAt,
     );
   }
 

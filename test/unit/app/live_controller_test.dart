@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 import 'package:client/src/app/live_controller.dart';
+import 'package:client/src/app/rooms_controller.dart';
 import 'package:client/src/protocol/api_client.dart';
 import 'package:client/src/protocol/models.dart';
 
@@ -766,12 +767,74 @@ void main() {
     expect(replaced.participantCount, 1);
     expect(replaced.participants.single.user.id, 'alice');
     expect(replaced.participants.single.micMuted, isTrue);
+    expect(replaced.updatedAt, live.updatedAt);
 
     final appended = controller.mergeParticipant(live, bob)!;
     expect(appended.participantCount, 2);
     expect(appended.participants.map((item) => item.user.id), ['alice', 'bob']);
+    expect(appended.updatedAt, live.updatedAt);
 
     expect(controller.mergeParticipant(null, bob), isNull);
+  });
+
+  test('local participant patch does not reject newer reconnect snapshot', () {
+    final api = GangApiClient(
+      baseUrl: 'http://example.test/api/v1',
+      accessTokenProvider: ({bool forceRefresh = false}) async => 'token',
+      httpClient: MockClient((request) async {
+        fail('Reducer test should not call the API: ${request.url}');
+      }),
+    );
+    addTearDown(api.close);
+    final liveController = LiveController(api: api);
+    final roomsController = RoomsController(api: api);
+    final initial = _live('room_1', [
+      _participant(_user('me')),
+      _participant(_user('other'), micMuted: true, headphonesMuted: false),
+    ]);
+
+    final locallyPatched = liveController.mergeParticipant(
+      initial,
+      _participant(_user('me'), micMuted: true),
+    )!;
+    final reconnectSnapshot = LiveState(
+      roomId: initial.roomId,
+      participantCount: initial.participantCount,
+      participants: [
+        _participant(_user('me'), micMuted: true),
+        _participant(
+          _user('other'),
+          micMuted: false,
+          headphonesMuted: true,
+          headphonesListening: false,
+          cameraOn: true,
+        ).copyWith(
+          cameraMirrored: true,
+          connectionState: 'online',
+          screenViewers: [_user('viewer')],
+        ),
+      ],
+      updatedAt: initial.updatedAt.add(const Duration(milliseconds: 1)),
+    );
+
+    final patch = roomsController.patchSelectedLiveRefreshed(
+      live: reconnectSnapshot,
+      selectedRoomId: 'room_1',
+      currentLive: locallyPatched,
+    );
+
+    expect(patch, isNotNull);
+    final other = patch!.live.participants.singleWhere(
+      (participant) => participant.user.id == 'other',
+    );
+    expect(other.micMuted, isFalse);
+    expect(other.headphonesMuted, isTrue);
+    expect(other.headphonesListening, isFalse);
+    expect(other.cameraOn, isTrue);
+    expect(other.cameraMirrored, isTrue);
+    expect(other.screenSharing, isFalse);
+    expect(other.connectionState, 'online');
+    expect(other.screenViewers.map((viewer) => viewer.id), ['viewer']);
   });
 }
 

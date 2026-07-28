@@ -61,6 +61,7 @@ void main() {
     );
     var changes = 0;
     var removals = 0;
+    var unexpectedDisconnects = 0;
     final joins = <String>[];
     final leaves = <String>[];
     final publishPermissions = <bool>[];
@@ -69,6 +70,7 @@ void main() {
     controller.attachSessionCallbacks(
       onChanged: onChanged,
       onForciblyRemoved: () => removals += 1,
+      onUnexpectedlyDisconnected: () => unexpectedDisconnects += 1,
       onPublishPermissionChanged: publishPermissions.add,
       onParticipantJoined: joins.add,
       onParticipantLeft: (identity, kind) =>
@@ -76,6 +78,7 @@ void main() {
     );
     session.emitChange();
     session.onForciblyRemoved?.call();
+    session.onUnexpectedlyDisconnected?.call();
     session.onPublishPermissionChanged?.call(false);
     session.onParticipantJoined?.call('user-2');
     session.onParticipantLeft?.call(
@@ -85,6 +88,7 @@ void main() {
 
     expect(changes, 1);
     expect(removals, 1);
+    expect(unexpectedDisconnects, 1);
     expect(publishPermissions, [false]);
     expect(joins, ['user-2']);
     expect(leaves, ['user-3:removed']);
@@ -93,6 +97,7 @@ void main() {
     session.emitChange();
     expect(changes, 1);
     expect(session.onForciblyRemoved, isNull);
+    expect(session.onUnexpectedlyDisconnected, isNull);
     expect(session.onPublishPermissionChanged, isNull);
     expect(session.onParticipantJoined, isNull);
     expect(session.onParticipantLeft, isNull);

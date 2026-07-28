@@ -269,6 +269,13 @@ extension _HomeShellLiveActions on _HomeShellState {
     unawaited(_liveSessionController.disconnect());
   }
 
+  void _onUnexpectedlyDisconnectedFromLive() {
+    if (!mounted) return;
+    final roomId = _joinedLiveRoomId;
+    if (roomId == null) return;
+    unawaited(_restoreLiveAfterRealtimeReconnect(roomId));
+  }
+
   void _onPublishPermissionChanged(bool canPublish) {
     if (!mounted) return;
     final patch = _liveController.patchPublishPermission(
@@ -898,6 +905,7 @@ extension _HomeShellLiveActions on _HomeShellState {
         micMuted: _voiceBlocked ? true : desiredMicMuted,
         headphonesMuted: desiredHeadphonesMuted,
         cameraOn: false,
+        cameraMirrored: false,
         screenSharing: false,
       );
       // Only publish the viewer relation after this participant is online.
@@ -933,6 +941,14 @@ extension _HomeShellLiveActions on _HomeShellState {
     final previousMicMuted = _micMuted;
     final previousHeadphonesMuted = _headphonesMuted;
     final previousCameraOn = _cameraOn;
+    final previousCameraMirrored =
+        live_display
+            .liveParticipantByUserId(
+              _live ?? _selectedRoom?.live,
+              _currentUser.id,
+            )
+            ?.cameraMirrored ??
+        false;
     final previousScreenSharing = _screenSharing;
     _setHomeState(() {
       _joiningLive = true;
@@ -987,6 +1003,7 @@ extension _HomeShellLiveActions on _HomeShellState {
         micMuted: canPublish ? previousMicMuted : true,
         headphonesMuted: previousHeadphonesMuted,
         cameraOn: canPublish && previousCameraOn,
+        cameraMirrored: previousCameraMirrored,
         screenSharing:
             canPublish &&
             previousScreenSharing &&
@@ -1007,6 +1024,7 @@ extension _HomeShellLiveActions on _HomeShellState {
     required bool micMuted,
     required bool headphonesMuted,
     required bool cameraOn,
+    required bool cameraMirrored,
     required bool screenSharing,
   }) async {
     var restoredCameraOn = cameraOn;
@@ -1044,6 +1062,7 @@ extension _HomeShellLiveActions on _HomeShellState {
           micMuted: effectiveMicMuted,
           headphonesMuted: headphonesMuted,
           cameraOn: restoredCameraOn,
+          cameraMirrored: cameraMirrored,
           screenSharing: screenSharing,
           connectionState: 'online',
         ),

@@ -690,6 +690,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     _liveSessionController.attachSessionCallbacks(
       onChanged: _onLiveSessionChanged,
       onForciblyRemoved: _onForciblyRemovedFromLive,
+      onUnexpectedlyDisconnected: _onUnexpectedlyDisconnectedFromLive,
       onPublishPermissionChanged: _onPublishPermissionChanged,
       onParticipantJoined: _onLiveParticipantJoined,
       onParticipantLeft: _onLiveParticipantLeft,

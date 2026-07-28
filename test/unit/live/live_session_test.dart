@@ -30,6 +30,83 @@ void main() {
     );
   });
 
+  test(
+    'missing microphone publication is unknown during participant reconnect',
+    () {
+      expect(
+        liveParticipantMicPublicationMuted(
+          _FakeLiveParticipant(microphonePublication: null),
+        ),
+        isNull,
+      );
+      expect(
+        liveParticipantMicPublicationMuted(
+          _FakeLiveParticipant(
+            microphonePublication: _FakeTrackPublication(muted: true),
+          ),
+        ),
+        isTrue,
+      );
+      expect(
+        liveParticipantMicPublicationMuted(
+          _FakeLiveParticipant(
+            microphonePublication: _FakeTrackPublication(muted: false),
+          ),
+        ),
+        isFalse,
+      );
+    },
+  );
+
+  test('media reconnect clears stale speaking highlights immediately', () {
+    final session = LiveSession(
+      inputRebinderFactory: (_) => null,
+      outputRebinderFactory: (_) => null,
+    );
+    addTearDown(session.dispose);
+    final participant = _FakeLiveParticipant(
+      identity: 'speaker',
+      microphonePublication: null,
+    );
+
+    session.debugHandleRoomEvent(
+      lk.ActiveSpeakersChangedEvent(speakers: [participant]),
+    );
+    expect(session.speakingIdentities, {'speaker'});
+
+    session.debugHandleRoomEvent(const lk.RoomReconnectingEvent());
+
+    expect(session.speakingIdentities, isEmpty);
+    expect(session.micMutedByIdentity, isEmpty);
+  });
+
+  test('only recoverable room disconnects request an app-level reconnect', () {
+    final session = LiveSession(
+      inputRebinderFactory: (_) => null,
+      outputRebinderFactory: (_) => null,
+    );
+    addTearDown(session.dispose);
+    var reconnects = 0;
+    var removals = 0;
+    session.onUnexpectedlyDisconnected = () => reconnects += 1;
+    session.onForciblyRemoved = () => removals += 1;
+
+    session.debugHandleRoomEvent(
+      lk.RoomDisconnectedEvent(
+        reason: lk.DisconnectReason.reconnectAttemptsExceeded,
+      ),
+    );
+    session.debugHandleRoomEvent(
+      lk.RoomDisconnectedEvent(reason: lk.DisconnectReason.duplicateIdentity),
+    );
+    session.debugHandleRoomEvent(
+      lk.RoomDisconnectedEvent(reason: lk.DisconnectReason.participantRemoved),
+    );
+
+    expect(reconnects, 1);
+    expect(removals, 1);
+  });
+
   test('presence cues ignore hidden audio participants', () {
     expect(isLivePresenceSoundParticipantIdentity('user-2'), isTrue);
     expect(
@@ -402,4 +479,33 @@ void main() {
       );
     },
   );
+}
+
+class _FakeLiveParticipant implements lk.Participant<lk.TrackPublication> {
+  _FakeLiveParticipant({
+    this.identity = 'participant',
+    required this.microphonePublication,
+  });
+
+  @override
+  final String identity;
+  final lk.TrackPublication? microphonePublication;
+
+  @override
+  lk.TrackPublication? getTrackPublicationBySource(lk.TrackSource source) {
+    return source == lk.TrackSource.microphone ? microphonePublication : null;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _FakeTrackPublication implements lk.TrackPublication<lk.Track> {
+  _FakeTrackPublication({required this.muted});
+
+  @override
+  final bool muted;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

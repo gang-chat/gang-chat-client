@@ -316,6 +316,7 @@ GangApi _roomsApi({
   var liveMicMuted = false;
   var liveHeadphonesMuted = false;
   var liveCameraOn = false;
+  var liveCameraMirrored = false;
   var liveScreenSharing = false;
   return GangApiClient(
     baseUrl: 'http://example.test/api/v1',
@@ -1127,6 +1128,7 @@ GangApi _roomsApi({
           micMuted: liveMicMuted,
           headphonesMuted: liveHeadphonesMuted,
           cameraOn: liveCameraOn,
+          cameraMirrored: liveCameraMirrored,
           screenSharing: liveScreenSharing,
         );
         return _jsonResponse({
@@ -1171,6 +1173,9 @@ GangApi _roomsApi({
         if (body['camera_on'] case final bool value) {
           liveCameraOn = value;
         }
+        if (body['camera_mirrored'] case final bool value) {
+          liveCameraMirrored = value;
+        }
         if (body['screen_sharing'] case final bool value) {
           liveScreenSharing = value;
         }
@@ -1181,6 +1186,7 @@ GangApi _roomsApi({
             micMuted: liveMicMuted,
             headphonesMuted: liveHeadphonesMuted,
             cameraOn: liveCameraOn,
+            cameraMirrored: liveCameraMirrored,
             screenSharing: liveScreenSharing,
           ),
         });
@@ -1342,6 +1348,7 @@ Map<String, Object?> _liveParticipantJson({
   bool headphonesBlocked = false,
   bool voiceBlocked = false,
   bool cameraOn = false,
+  bool cameraMirrored = false,
   bool screenSharing = false,
 }) {
   return {
@@ -1355,6 +1362,7 @@ Map<String, Object?> _liveParticipantJson({
     'headphones_listening': !headphonesMuted && !headphonesBlocked,
     'voice_blocked': voiceBlocked,
     'camera_on': cameraOn,
+    'camera_mirrored': cameraMirrored,
     'screen_sharing': screenSharing,
     'connection_state': 'connected',
   };
@@ -1908,6 +1916,11 @@ class _FakeLiveSession extends LiveSession {
         ? LiveParticipantDepartureKind.removed
         : LiveParticipantDepartureKind.left,
   );
+
+  void emitUnexpectedDisconnect() {
+    _connected = false;
+    onUnexpectedlyDisconnected?.call();
+  }
 
   @override
   Future<void> connect({

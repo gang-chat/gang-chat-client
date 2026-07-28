@@ -74,6 +74,18 @@ LiveParticipantDepartureKind liveParticipantDepartureKind(
       : LiveParticipantDepartureKind.left;
 }
 
+/// Returns LiveKit's microphone mute state only after a publication exists.
+///
+/// During reconnect LiveKit can restore the participant before restoring its
+/// microphone publication. Treating a missing publication as muted would
+/// temporarily override the app server's authoritative logical mute state.
+@visibleForTesting
+bool? liveParticipantMicPublicationMuted(lk.Participant participant) {
+  return participant
+      .getTrackPublicationBySource(lk.TrackSource.microphone)
+      ?.muted;
+}
+
 /// Serializes remote-video subscription reconciliation and makes newer
 /// selections supersede work that has not started yet.
 ///
@@ -461,6 +473,11 @@ class LiveSession extends ChangeNotifier {
   /// its joined state and exit the voice panel without auto-reconnecting. Only
   /// raised for involuntary removals, not for our own [disconnect].
   void Function()? onForciblyRemoved;
+
+  /// Fired after LiveKit exhausts its own reconnect path for a recoverable
+  /// media/signalling failure. The app can request a fresh token and rebuild
+  /// the session even when its ordinary realtime/SSE connection stayed online.
+  void Function()? onUnexpectedlyDisconnected;
 
   /// Fired when LiveKit reports the local participant's publish permission
   /// changed (an admin `mute_mic` -> canPublish=false, or `restore_voice` ->
@@ -1328,11 +1345,29 @@ class LiveSession extends ChangeNotifier {
   void _onEvent(lk.RoomEvent event) {
     if (event is lk.ReconnectingEvent) {
       _presenceCallbacksEnabled = false;
+      // Speaking and per-publication mute state are media-connection facts,
+      // not durable room state. A reconnect can replace every publication
+      // without emitting a matching "stopped speaking" event, so drop the
+      // remote cache immediately and let the server snapshot remain the
+      // authoritative fallback until LiveKit has restored its publications.
+      _speakingIdentities.clear();
+      _micMutedByIdentity.clear();
+      final local = _room?.localParticipant;
+      if (local != null) {
+        _micMutedByIdentity[local.identity] = localMicMuted;
+      }
+      notifyListeners();
       return;
     }
     if (event is lk.RoomReconnectedEvent) {
       _presenceCallbacksEnabled = true;
       _refreshAllMicStates();
+      // A full reconnect may restore already-published tracks without
+      // replaying every participant/track event that normally applies these
+      // local preferences. Reconcile them serially so native WebRTC operations
+      // cannot overlap one another or continue into a newer room connection.
+      final room = _room;
+      if (room != null) unawaited(_reconcileMediaAfterReconnect(room));
       notifyListeners();
       return;
     }
@@ -1354,9 +1389,12 @@ class LiveSession extends ChangeNotifier {
         unawaited(_applyScreenShareVolume());
         return;
       }
-      _micMutedByIdentity[event.participant.identity] = _isMicMuted(
-        event.participant,
-      );
+      final micMuted = liveParticipantMicPublicationMuted(event.participant);
+      if (micMuted == null) {
+        _micMutedByIdentity.remove(event.participant.identity);
+      } else {
+        _micMutedByIdentity[event.participant.identity] = micMuted;
+      }
       unawaited(_applyOutputVolume());
       unawaited(_applyMusicBoxVolume());
       unawaited(_applyScreenShareSubscriptions());
@@ -1460,6 +1498,12 @@ class LiveSession extends ChangeNotifier {
       if (event.reason == lk.DisconnectReason.participantRemoved ||
           event.reason == lk.DisconnectReason.roomDeleted) {
         onForciblyRemoved?.call();
+      } else if (event.reason != lk.DisconnectReason.clientInitiated &&
+          event.reason != lk.DisconnectReason.duplicateIdentity) {
+        // Do not fight another device that intentionally replaced this
+        // account's LiveKit identity. Ordinary network/server failures are
+        // recoverable with a fresh app-level join.
+        onUnexpectedlyDisconnected?.call();
       }
       return;
     }
@@ -1474,24 +1518,37 @@ class LiveSession extends ChangeNotifier {
     );
   }
 
+  Future<void> _reconcileMediaAfterReconnect(lk.Room reconnectedRoom) async {
+    if (_room != reconnectedRoom) return;
+    await _applyLocalMicrophoneState();
+    if (_room != reconnectedRoom) return;
+    await _applyOutputVolume();
+    if (_room != reconnectedRoom) return;
+    await _applyMusicBoxVolume();
+    if (_room != reconnectedRoom) return;
+    await _applyScreenShareSubscriptions();
+    if (_room != reconnectedRoom) return;
+    await _applyCameraSubscriptions();
+    if (_room != reconnectedRoom) return;
+    await _applyScreenShareVolume();
+  }
+
   void _refreshAllMicStates() {
     final room = _room;
     if (room == null) return;
+    final refreshed = <String, bool>{};
     final local = room.localParticipant;
     if (local != null) {
-      _micMutedByIdentity[local.identity] = localMicMuted;
+      refreshed[local.identity] = localMicMuted;
     }
     for (final p in room.remoteParticipants.values) {
       if (_isScreenAudioAux(p.identity)) continue;
-      _micMutedByIdentity[p.identity] = _isMicMuted(p);
+      final micMuted = liveParticipantMicPublicationMuted(p);
+      if (micMuted != null) refreshed[p.identity] = micMuted;
     }
-  }
-
-  static bool _isMicMuted(lk.Participant participant) {
-    final pub = participant.getTrackPublicationBySource(
-      lk.TrackSource.microphone,
-    );
-    return pub?.muted ?? true;
+    _micMutedByIdentity
+      ..clear()
+      ..addAll(refreshed);
   }
 
   bool get _shouldMuteLocalMicrophone => _micMuted || _inputVolume <= 0;
@@ -1794,6 +1851,11 @@ class LiveSession extends ChangeNotifier {
 
   @visibleForTesting
   void debugStopOutputRebinder() => _stopOutputRebinder();
+
+  /// Exercises reconnect/event cache reconciliation without a real LiveKit
+  /// transport. Production events reach the same handler through [connect].
+  @visibleForTesting
+  void debugHandleRoomEvent(lk.RoomEvent event) => _onEvent(event);
 }
 
 // Default desktop recovery for input hotplug/profile flips: resolve the

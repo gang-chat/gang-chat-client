@@ -88,6 +88,7 @@ class LiveSessionController {
   void attachSessionCallbacks({
     required void Function() onChanged,
     required void Function() onForciblyRemoved,
+    required void Function() onUnexpectedlyDisconnected,
     required void Function(bool canPublish) onPublishPermissionChanged,
     required void Function(String participantIdentity) onParticipantJoined,
     required void Function(
@@ -98,6 +99,7 @@ class LiveSessionController {
   }) {
     session.addListener(onChanged);
     session.onForciblyRemoved = onForciblyRemoved;
+    session.onUnexpectedlyDisconnected = onUnexpectedlyDisconnected;
     session.onPublishPermissionChanged = onPublishPermissionChanged;
     session.onParticipantJoined = onParticipantJoined;
     session.onParticipantLeft = onParticipantLeft;
@@ -106,6 +108,7 @@ class LiveSessionController {
   void detachSessionCallbacks({required void Function() onChanged}) {
     session.removeListener(onChanged);
     session.onForciblyRemoved = null;
+    session.onUnexpectedlyDisconnected = null;
     session.onPublishPermissionChanged = null;
     session.onParticipantJoined = null;
     session.onParticipantLeft = null;
