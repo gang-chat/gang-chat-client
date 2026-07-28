@@ -286,11 +286,11 @@ extension _HomeShellRoomActions on _HomeShellState {
     await _leaveLiveForSessionEnd(
       disconnectTimeout: const Duration(seconds: 1),
     );
-    await _resetLiveAudioPreferencesAfterLogout();
+    await _resetLiveAudioPreferencesForSessionEnd();
     await widget.app.logout();
   }
 
-  Future<void> _resetLiveAudioPreferencesAfterLogout() async {
+  Future<void> _resetLiveAudioPreferencesForSessionEnd() async {
     if (mounted) {
       _setHomeState(() {
         _micMuted = false;
@@ -325,6 +325,31 @@ extension _HomeShellRoomActions on _HomeShellState {
     try {
       await _services.realtime.stop();
     } catch (_) {}
+  }
+
+  Future<void> _handleAndroidTaskRemoved(
+    AndroidTaskRemovalRequest request,
+  ) async {
+    if (_exitingApplication) {
+      // Another explicit-exit path is already sending the same cleanup. Do not
+      // acknowledge early and let native Android cut that request short; the
+      // native grace timeout will still guarantee that the process terminates.
+      return;
+    }
+    _exitingApplication = true;
+    try {
+      await _leaveLiveForSessionEnd(
+        disconnectTimeout: const Duration(milliseconds: 700),
+      );
+      await _resetLiveAudioPreferencesForSessionEnd();
+      await _stopRealtimeForExit();
+      await widget.app.exitSessionForAppExit();
+    } catch (_) {
+      // Native Android enforces a short process-exit timeout and LiveKit's
+      // participant_left webhook is the final cleanup path.
+    } finally {
+      request.complete();
+    }
   }
 
   void _handleAppUpdateDownloadCancellationChanged(
@@ -573,6 +598,7 @@ extension _HomeShellRoomActions on _HomeShellState {
       await _leaveLiveForSessionEnd(
         disconnectTimeout: const Duration(seconds: 1),
       );
+      await _resetLiveAudioPreferencesForSessionEnd();
       await _stopRealtimeForExit();
       await widget.app.exitSessionForAppExit();
     } finally {

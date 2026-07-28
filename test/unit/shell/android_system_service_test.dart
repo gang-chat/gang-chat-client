@@ -137,4 +137,30 @@ void main() {
     expect(registration?.enabled, isTrue);
     expect(calls.single.method, 'getPushRegistration');
   });
+
+  test('task removal callback waits for graceful cleanup completion', () async {
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    final requests = <AndroidTaskRemovalRequest>[];
+    final subscription = android.taskRemovalRequests.listen(requests.add);
+    addTearDown(subscription.cancel);
+    var nativeReplyReceived = false;
+
+    final delivery = messenger.handlePlatformMessage(
+      'gang_chat/android_system',
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('taskRemoved'),
+      ),
+      (_) => nativeReplyReceived = true,
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(requests, hasLength(1));
+    expect(nativeReplyReceived, isFalse);
+
+    requests.single.complete();
+    await delivery;
+    await Future<void>.delayed(Duration.zero);
+    expect(nativeReplyReceived, isTrue);
+  });
 }

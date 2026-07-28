@@ -137,6 +137,14 @@ class LiveSessionController {
     }
   }
 
+  /// Applies a session-only input level without replacing the user's stored
+  /// volume preference. Mute buttons use this path because mute state ends at
+  /// logout/app exit, including Android process termination where no Dart
+  /// cleanup callback is guaranteed to run.
+  Future<void> setTransientInputVolume(double volume) {
+    return session.setInputVolume(volume);
+  }
+
   /// Pin the microphone capture device. Keeps [LiveSession]'s tracked input id
   /// in sync so a later mute/unmute republish stays on the chosen device. The
   /// native ADM is routed separately by the Settings picker's selectAudioInput;
@@ -190,6 +198,13 @@ class LiveSessionController {
     } catch (_) {
       // A failed persist shouldn't undo the live change.
     }
+  }
+
+  /// Applies a session-only output level without replacing the user's stored
+  /// volume preference. Explicit slider changes still use [setOutputVolume]
+  /// and remain persistent.
+  Future<void> setTransientOutputVolume(double volume) {
+    return session.setOutputVolume(volume);
   }
 
   Future<void> setParticipantVoiceVolume(String userId, double volume) async {
@@ -287,7 +302,10 @@ class LiveSessionController {
           serverUrl: result.liveKit.serverUrl,
           apiBaseUrl: apiBaseUrl,
         );
-        await restoreStoredAudioSettings();
+        await restoreStoredAudioSettings(
+          micMuted: result.participant.micMuted,
+          headphonesMuted: result.participant.headphonesMuted,
+        );
         await session.connect(
           url: liveKitUrl,
           token: result.liveKit.token,
@@ -303,11 +321,35 @@ class LiveSessionController {
     throw lastError ?? 'LiveKit 连接失败';
   }
 
-  Future<void> restoreStoredAudioSettings() async {
+  Future<void> restoreStoredAudioSettings({
+    bool micMuted = false,
+    bool headphonesMuted = false,
+  }) async {
     try {
       final stored = await audioDeviceStore.read();
-      await session.setInputVolume(stored.inputVolume);
-      await session.setOutputVolume(stored.outputVolume);
+      // Older clients persisted the temporary gain=0 used by the mute buttons.
+      // If the new logical session is open, repair that legacy value instead
+      // of silently re-muting the microphone/headphones after joining.
+      final repairInputVolume = !micMuted && stored.inputVolume <= 0;
+      final repairOutputVolume = !headphonesMuted && stored.outputVolume <= 0;
+      final inputVolume = repairInputVolume
+          ? defaultAudioVolume
+          : stored.inputVolume;
+      final outputVolume = repairOutputVolume
+          ? defaultAudioVolume
+          : stored.outputVolume;
+      await session.setInputVolume(inputVolume);
+      await session.setOutputVolume(outputVolume);
+      if (repairInputVolume) {
+        try {
+          await audioDeviceStore.writeInputVolume(inputVolume);
+        } catch (_) {}
+      }
+      if (repairOutputVolume) {
+        try {
+          await audioDeviceStore.writeOutputVolume(outputVolume);
+        } catch (_) {}
+      }
       await session.setMusicBoxVolume(stored.musicBoxVolume);
       await session.setScreenShareVolume(stored.screenShareVolume);
       await session.setScreenShareMaxHeight(stored.screenShareMaxHeight);

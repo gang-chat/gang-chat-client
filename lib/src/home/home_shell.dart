@@ -189,6 +189,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   StreamSubscription<RealtimeConnectionStatus>? _realtimeStatusEvents;
   StreamSubscription<FileDropEvent>? _fileDropEvents;
   StreamSubscription<String>? _androidNotificationSelections;
+  StreamSubscription<AndroidTaskRemovalRequest>? _androidTaskRemovals;
   AndroidPushRegistrationController? _androidPushRegistration;
   bool _isAppForeground = true;
   String? _pendingNotificationRoomId;
@@ -357,6 +358,8 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           .androidSystemService
           .selectedNotificationRoomIds
           .listen(_handleAndroidNotificationRoomSelected);
+      _androidTaskRemovals = widget.androidSystemService.taskRemovalRequests
+          .listen(_handleAndroidTaskRemoved);
       unawaited(_takeInitialAndroidNotification());
       unawaited(_ensureAndroidNotificationPermission());
     }
@@ -520,6 +523,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     final androidNotificationSelections = _androidNotificationSelections;
     if (androidNotificationSelections != null) {
       unawaited(androidNotificationSelections.cancel());
+    }
+    final androidTaskRemovals = _androidTaskRemovals;
+    if (androidTaskRemovals != null) {
+      unawaited(androidTaskRemovals.cancel());
     }
     unawaited(_androidPushRegistration?.dispose());
     final realtimeEvents = _realtimeEvents;

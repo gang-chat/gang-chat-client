@@ -42,6 +42,7 @@ import 'package:client/src/protocol/models.dart';
 import 'package:client/src/protocol/sticker_pack_store.dart';
 import 'package:client/src/settings/settings_page.dart';
 import 'package:client/src/shell/desktop_window_controller.dart';
+import 'package:client/src/shell/android_system_service.dart';
 import 'package:client/src/shell/feedback_mail_service.dart';
 import 'package:client/src/shell/install_info_service.dart';
 import 'package:client/src/shell/login_page.dart';

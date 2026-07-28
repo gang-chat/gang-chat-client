@@ -724,6 +724,28 @@ class AndroidSystemBridge(private val activity: Activity) {
             }
         }
 
+        fun notifyTaskRemoved(onFinished: () -> Unit): Boolean {
+            val currentChannel = activeChannel ?: return false
+            Handler(Looper.getMainLooper()).post {
+                currentChannel.invokeMethod(
+                    "taskRemoved",
+                    null,
+                    object : MethodChannel.Result {
+                        override fun success(result: Any?) = onFinished()
+
+                        override fun error(
+                            errorCode: String,
+                            errorMessage: String?,
+                            errorDetails: Any?,
+                        ) = onFinished()
+
+                        override fun notImplemented() = onFinished()
+                    },
+                )
+            }
+            return true
+        }
+
         private const val createDocumentRequestCode = 4201
         private const val notificationPermissionRequestCode = 4202
         private const val bluetoothPermissionRequestCode = 4203

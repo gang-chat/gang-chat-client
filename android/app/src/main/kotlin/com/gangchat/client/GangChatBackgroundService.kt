@@ -6,8 +6,11 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.Process
+import java.util.concurrent.atomic.AtomicBoolean
 import androidx.core.content.ContextCompat
 
 class GangChatBackgroundService : Service() {
@@ -46,8 +49,26 @@ class GangChatBackgroundService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         stopSelf()
-        // Removing the task is an explicit exit: closing the process also
-        // closes SSE immediately, so the server no longer reports us online.
-        Process.killProcess(Process.myPid())
+        val processStopped = AtomicBoolean(false)
+        val stopProcess = Runnable {
+            if (processStopped.compareAndSet(false, true)) {
+                Process.killProcess(Process.myPid())
+            }
+        }
+
+        // Removing the task is an explicit exit, unlike merely putting the app
+        // in the background. Let Flutter send its authenticated live-leave and
+        // offline requests first so other clients update immediately. If the
+        // engine is unavailable or blocked, the timeout still closes the
+        // process and LiveKit's participant_left webhook remains the fallback.
+        val handler = Handler(Looper.getMainLooper())
+        handler.postDelayed(stopProcess, taskRemovalGraceMillis)
+        if (!AndroidSystemBridge.notifyTaskRemoved { stopProcess.run() }) {
+            stopProcess.run()
+        }
+    }
+
+    companion object {
+        private const val taskRemovalGraceMillis = 1750L
     }
 }

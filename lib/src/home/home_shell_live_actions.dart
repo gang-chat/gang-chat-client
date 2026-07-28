@@ -412,7 +412,7 @@ extension _HomeShellLiveActions on _HomeShellState {
       if (muted) {
         _rememberInputVolume(_liveSessionController.inputVolume);
       }
-      unawaited(_liveSessionController.setInputVolume(volume));
+      unawaited(_liveSessionController.setTransientInputVolume(volume));
     }
     unawaited(_liveSessionController.setMicMuted(muted));
     if (_micMuted != muted) {
@@ -490,7 +490,7 @@ extension _HomeShellLiveActions on _HomeShellState {
 
     if (muteMic) {
       _rememberInputVolume(_liveSessionController.inputVolume);
-      unawaited(_liveSessionController.setInputVolume(0));
+      unawaited(_liveSessionController.setTransientInputVolume(0));
       unawaited(_liveSessionController.setMicMuted(true));
     }
     if (headphonesChanged && syncVolume) {
@@ -498,7 +498,7 @@ extension _HomeShellLiveActions on _HomeShellState {
       if (muted) {
         _rememberOutputVolume(_liveSessionController.outputVolume);
       }
-      unawaited(_liveSessionController.setOutputVolume(volume));
+      unawaited(_liveSessionController.setTransientOutputVolume(volume));
     }
     if (headphonesChanged) {
       unawaited(_liveSessionController.setOutputMuted(muted));

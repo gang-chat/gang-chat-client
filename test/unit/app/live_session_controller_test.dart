@@ -159,6 +159,73 @@ void main() {
     },
   );
 
+  test(
+    'session mute gain does not replace stored volume preferences',
+    () async {
+      final session = _FakeLiveSession();
+      final store = _RecordingAudioDeviceStore();
+      final controller = LiveSessionController(
+        apiBaseUrl: 'https://api.example.test/api/v1',
+        session: session,
+        audioDeviceStore: store,
+        audioDeviceRestorer: (_) async => null,
+      );
+
+      await controller.setTransientInputVolume(0);
+      await controller.setTransientOutputVolume(0);
+
+      expect(session.inputVolumes, [0]);
+      expect(session.outputVolumes, [0]);
+      expect(store.inputVolumeWrites, isEmpty);
+      expect(store.outputVolumeWrites, isEmpty);
+    },
+  );
+
+  test('fresh open session repairs legacy persisted mute gain', () async {
+    final session = _FakeLiveSession();
+    final store = _RecordingAudioDeviceStore(
+      storedInputVolume: 0,
+      storedOutputVolume: 0,
+    );
+    final controller = LiveSessionController(
+      apiBaseUrl: 'https://api.example.test/api/v1',
+      session: session,
+      audioDeviceStore: store,
+      audioDeviceRestorer: (_) async => null,
+    );
+
+    await controller.restoreStoredAudioSettings();
+
+    expect(session.inputVolumes, [defaultAudioVolume]);
+    expect(session.outputVolumes, [defaultAudioVolume]);
+    expect(store.inputVolumeWrites, [defaultAudioVolume]);
+    expect(store.outputVolumeWrites, [defaultAudioVolume]);
+  });
+
+  test('explicitly muted join keeps an intentional zero gain', () async {
+    final session = _FakeLiveSession();
+    final store = _RecordingAudioDeviceStore(
+      storedInputVolume: 0,
+      storedOutputVolume: 0,
+    );
+    final controller = LiveSessionController(
+      apiBaseUrl: 'https://api.example.test/api/v1',
+      session: session,
+      audioDeviceStore: store,
+      audioDeviceRestorer: (_) async => null,
+    );
+
+    await controller.restoreStoredAudioSettings(
+      micMuted: true,
+      headphonesMuted: true,
+    );
+
+    expect(session.inputVolumes, [0]);
+    expect(session.outputVolumes, [0]);
+    expect(store.inputVolumeWrites, isEmpty);
+    expect(store.outputVolumeWrites, isEmpty);
+  });
+
   test('participant voice volume restores and toggles local mute', () async {
     final session = _FakeLiveSession();
     final store = _RecordingAudioDeviceStore(
@@ -359,12 +426,16 @@ class _FakeLiveSession extends LiveSession {
 class _RecordingAudioDeviceStore extends AudioDeviceStore {
   _RecordingAudioDeviceStore({
     this.storedScreenShareMaxHeight = 1080,
+    this.storedInputVolume = 0.35,
+    this.storedOutputVolume = 0.75,
     Map<String, double> storedParticipantVoiceVolumes = const {},
   }) : _storedParticipantVoiceVolumes = Map<String, double>.from(
          storedParticipantVoiceVolumes,
        );
 
   final int storedScreenShareMaxHeight;
+  final double storedInputVolume;
+  final double storedOutputVolume;
   final Map<String, double> _storedParticipantVoiceVolumes;
   final inputVolumeWrites = <double>[];
   final outputVolumeWrites = <double>[];
@@ -375,8 +446,8 @@ class _RecordingAudioDeviceStore extends AudioDeviceStore {
   @override
   Future<StoredAudioDevices> read() async {
     return StoredAudioDevices(
-      inputVolume: 0.35,
-      outputVolume: 0.75,
+      inputVolume: storedInputVolume,
+      outputVolume: storedOutputVolume,
       screenShareVolume: 1.0,
       screenShareMaxHeight: storedScreenShareMaxHeight,
     );

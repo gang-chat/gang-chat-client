@@ -240,6 +240,15 @@ void registerShellSettingsWidgetTests() {
       await tester.pumpAndSettle();
 
       await tester.tap(
+        find.byKey(const ValueKey<String>('home-title-live-room:headphones')),
+      );
+      await tester.pumpAndSettle();
+      expect(liveSession.micMutes.last, isTrue);
+      expect(liveSession.outputMutes.last, isTrue);
+      expect(liveSession.inputVolumes.last, 0);
+      expect(liveSession.outputVolumes.last, 0);
+
+      await tester.tap(
         find
             .ancestor(
               of: find.text('Alpha Room'),
@@ -263,8 +272,58 @@ void registerShellSettingsWidgetTests() {
 
       expect(requestedPaths, contains('/api/v1/rooms/server-alpha/live/me'));
       expect(liveSession.disconnects, 1);
+      expect(liveSession.micMutes.last, isFalse);
+      expect(liveSession.outputMutes.last, isFalse);
+      expect(liveSession.inputVolumes.last, greaterThan(0));
+      expect(liveSession.outputVolumes.last, greaterThan(0));
       expect(events, ['hide', 'realtime-stop', 'exit-session', 'terminate']);
       expect(events, isNot(contains('logout')));
+    },
+  );
+
+  testWidgets(
+    'Android task removal leaves live before native process termination',
+    (WidgetTester tester) async {
+      final events = <String>[];
+      final requestedPaths = <String>[];
+      final liveSession = _FakeLiveSession();
+      final liveSessionController = _FakeLiveSessionController(
+        session: liveSession,
+      );
+      final androidSystemService = _TaskRemovalAndroidSystemService();
+      addTearDown(androidSystemService.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ui.uiTheme(),
+          home: HomePage(
+            app: _homeTestAppContext(
+              onExitSessionForAppExit: () async => events.add('exit-session'),
+              requestedPaths: requestedPaths,
+            ),
+            audioDeviceStore: const _FakeAudioDeviceStore(),
+            liveSessionController: liveSessionController,
+            realtime: _RecordingRealtimeService(events),
+            androidSystemService: androidSystemService,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Alpha Room'));
+      await tester.pumpAndSettle();
+      await _openLiveChannelFromHeader(tester);
+      await tester.tap(find.widgetWithText(ui.Button, '加入'));
+      await tester.pumpAndSettle();
+
+      final removal = androidSystemService.removeTask();
+      await removal.completed;
+      await tester.pumpAndSettle();
+
+      expect(requestedPaths, contains('/api/v1/rooms/server-alpha/live/me'));
+      expect(liveSession.disconnects, 1);
+      expect(events, ['realtime-stop', 'exit-session']);
+      expect(tester.takeException(), isNull);
     },
   );
 
@@ -1081,4 +1140,49 @@ class _MemoryStickerPackStore extends StickerPackStore {
     lastWrittenUserId = userId;
     this.packs = packs;
   }
+}
+
+class _TaskRemovalAndroidSystemService extends AndroidSystemService {
+  final StreamController<AndroidTaskRemovalRequest> _taskRemovals =
+      StreamController<AndroidTaskRemovalRequest>.broadcast(sync: true);
+
+  @override
+  bool get isSupported => true;
+
+  @override
+  Stream<String> get selectedNotificationRoomIds => const Stream.empty();
+
+  @override
+  Stream<AndroidTaskRemovalRequest> get taskRemovalRequests =>
+      _taskRemovals.stream;
+
+  @override
+  Stream<AndroidPushRegistration> get pushRegistrationChanges =>
+      const Stream.empty();
+
+  @override
+  Future<AndroidPushRegistration?> pushRegistration() async => null;
+
+  @override
+  Future<String?> takeInitialNotificationRoomId() async => null;
+
+  @override
+  Future<bool> notificationPreferenceEnabled() async => false;
+
+  @override
+  Future<bool> requestBluetoothConnectPermission() async => true;
+
+  @override
+  Future<void> enterBackground() async {}
+
+  @override
+  Future<void> enterForeground() async {}
+
+  AndroidTaskRemovalRequest removeTask() {
+    final request = AndroidTaskRemovalRequest();
+    _taskRemovals.add(request);
+    return request;
+  }
+
+  Future<void> dispose() => _taskRemovals.close();
 }

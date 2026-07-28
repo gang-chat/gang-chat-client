@@ -19,6 +19,10 @@ class AndroidSystemService {
   static final StreamController<AndroidPushRegistration>
   _pushRegistrationChanges =
       StreamController<AndroidPushRegistration>.broadcast();
+  static final StreamController<AndroidTaskRemovalRequest>
+  _taskRemovalRequests = StreamController<AndroidTaskRemovalRequest>.broadcast(
+    sync: true,
+  );
   static bool _methodHandlerInstalled = false;
 
   bool get isSupported => !kIsWeb && Platform.isAndroid;
@@ -31,6 +35,18 @@ class AndroidSystemService {
   Stream<AndroidPushRegistration> get pushRegistrationChanges {
     _ensureMethodHandler();
     return _pushRegistrationChanges.stream;
+  }
+
+  /// Emitted when Android removes the app from its recent-task list.
+  ///
+  /// The native foreground service waits briefly for [complete] before it
+  /// terminates the process. That gives the authenticated shell a chance to
+  /// leave voice and close its realtime session without changing ordinary
+  /// background behaviour. Native code still enforces a timeout, so a wedged
+  /// Flutter isolate cannot keep the removed task alive.
+  Stream<AndroidTaskRemovalRequest> get taskRemovalRequests {
+    _ensureMethodHandler();
+    return _taskRemovalRequests.stream;
   }
 
   Future<void> openUri(Uri uri) {
@@ -241,6 +257,13 @@ class AndroidSystemService {
     if (_methodHandlerInstalled) return;
     _methodHandlerInstalled = true;
     _channel.setMethodCallHandler((call) async {
+      if (call.method == 'taskRemoved') {
+        if (!_taskRemovalRequests.hasListener) return;
+        final request = AndroidTaskRemovalRequest();
+        _taskRemovalRequests.add(request);
+        await request.completed;
+        return;
+      }
       final arguments = call.arguments;
       if (arguments is! Map) return;
       if (call.method == 'notificationSelected') {
@@ -251,8 +274,21 @@ class AndroidSystemService {
       if (call.method == 'pushTokenChanged') {
         final registration = AndroidPushRegistration.tryFromMap(arguments);
         if (registration != null) _pushRegistrationChanges.add(registration);
+        return;
       }
     });
+  }
+}
+
+class AndroidTaskRemovalRequest {
+  AndroidTaskRemovalRequest();
+
+  final Completer<void> _completion = Completer<void>();
+
+  Future<void> get completed => _completion.future;
+
+  void complete() {
+    if (!_completion.isCompleted) _completion.complete();
   }
 }
 
@@ -279,8 +315,7 @@ class AndroidPushRegistration {
 
   static AndroidPushRegistration? tryFromMap(Map<Object?, Object?> value) {
     final provider = value['provider']?.toString().trim() ?? '';
-    final installationId =
-        value['installationId']?.toString().trim() ?? '';
+    final installationId = value['installationId']?.toString().trim() ?? '';
     final token = value['token']?.toString().trim() ?? '';
     if (provider.isEmpty || installationId.isEmpty || token.isEmpty) {
       return null;
