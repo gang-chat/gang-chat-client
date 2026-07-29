@@ -40,7 +40,7 @@ class _LiveControlBar extends StatelessWidget {
   final MusicBoxState? musicBox;
   final bool musicBoxEnabled;
   final bool musicBoxOpen;
-  final VoidCallback onJoin;
+  final VoidCallback? onJoin;
   final VoidCallback onLeave;
   final VoidCallback? onToggleMic;
   final VoidCallback onToggleHeadphones;
@@ -411,9 +411,20 @@ class _HoverVolumeButtonState extends State<_HoverVolumeButton> {
       ancestor: overlayBox,
     );
     final targetSize = targetBox.size;
+    final targetBottomRight = targetBox.localToGlobal(
+      targetSize.bottomRight(Offset.zero),
+      ancestor: overlayBox,
+    );
+    final targetRect = Rect.fromPoints(targetOffset, targetBottomRight);
     final overlaySize = overlayBox.size;
-    final panelWidth = _panelWidth;
-    final panelHeight = _panelHeight;
+    final horizontalScale = targetSize.width <= 0
+        ? 1.0
+        : targetRect.width / targetSize.width;
+    final verticalScale = targetSize.height <= 0
+        ? 1.0
+        : targetRect.height / targetSize.height;
+    final panelWidth = _panelWidth * horizontalScale;
+    final panelHeight = _panelHeight * verticalScale;
     final maxPanelLeft = (overlaySize.width - panelWidth).clamp(
       0.0,
       double.infinity,
@@ -422,15 +433,20 @@ class _HoverVolumeButtonState extends State<_HoverVolumeButton> {
       0.0,
       double.infinity,
     );
-    final panelLeft = (targetOffset.dx + (targetSize.width - panelWidth) / 2)
+    final panelLeft = (targetRect.left + (targetRect.width - panelWidth) / 2)
         .clamp(0.0, maxPanelLeft)
         .toDouble();
-    final panelTop = (targetOffset.dy - panelHeight - 8)
+    final panelTop = (targetRect.top - panelHeight - 8 * verticalScale)
         .clamp(0.0, maxPanelTop)
         .toDouble();
     _overlayEntry = OverlayEntry(
-      builder: (context) =>
-          _buildOverlay(context, left: panelLeft, top: panelTop),
+      builder: (context) => _buildOverlay(
+        context,
+        left: panelLeft,
+        top: panelTop,
+        width: panelWidth,
+        height: panelHeight,
+      ),
     );
     overlay.insert(_overlayEntry!);
   }
@@ -475,12 +491,14 @@ class _HoverVolumeButtonState extends State<_HoverVolumeButton> {
     BuildContext context, {
     required double left,
     required double top,
+    required double width,
+    required double height,
   }) {
     return Positioned(
       left: left,
       top: top,
-      width: _panelWidth,
-      height: _panelHeight,
+      width: width,
+      height: height,
       child: MouseRegion(
         onEnter: (_) {
           _overlayHovered = true;
@@ -494,8 +512,8 @@ class _HoverVolumeButtonState extends State<_HoverVolumeButton> {
           value: _value,
           maxValue: _maxValue,
           valueFormatter: widget.valueFormatter,
-          width: _panelWidth,
-          height: _panelHeight,
+          width: width,
+          height: height,
           semanticLabel: widget.semanticLabel,
           onChanged: _setValue,
           onChangeStart: (_) {

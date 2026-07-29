@@ -90,6 +90,118 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('joining voice replaces the call icon with a spinner', (
+    tester,
+  ) async {
+    final searchController = TextEditingController();
+    addTearDown(searchController.dispose);
+
+    await tester.pumpWidget(
+      _host(
+        searchController: searchController,
+        live: _liveState(const []),
+        width: 360,
+        joined: false,
+        joining: true,
+        platform: TargetPlatform.android,
+      ),
+    );
+
+    final join = find.byKey(const ValueKey<String>('live-control:join'));
+    expect(
+      find.descendant(of: join, matching: find.byIcon(Icons.call)),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: join,
+        matching: find.byType(CircularProgressIndicator),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: join, matching: find.byType(Text)),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('room loading disables join without showing joining state', (
+    tester,
+  ) async {
+    final searchController = TextEditingController();
+    addTearDown(searchController.dispose);
+
+    await tester.pumpWidget(
+      _host(
+        searchController: searchController,
+        live: _liveState(const []),
+        width: 360,
+        loading: true,
+        joined: false,
+        joining: false,
+        platform: TargetPlatform.android,
+      ),
+    );
+
+    final join = find.byKey(const ValueKey<String>('live-control:join'));
+    final button = tester.widget<ui.Button>(join);
+    expect(button.loading, isFalse);
+    expect(button.onPressed, isNull);
+    expect(
+      find.descendant(of: join, matching: find.byIcon(Icons.call)),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: join,
+        matching: find.byType(CircularProgressIndicator),
+      ),
+      findsNothing,
+    );
+    expect(find.text('语音频道里还没有人'), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('leaving voice disables join without showing joining state', (
+    tester,
+  ) async {
+    final searchController = TextEditingController();
+    addTearDown(searchController.dispose);
+
+    await tester.pumpWidget(
+      _host(
+        searchController: searchController,
+        live: _liveState(const []),
+        width: 360,
+        joined: false,
+        joining: false,
+        leaving: true,
+        platform: TargetPlatform.android,
+      ),
+    );
+
+    final join = find.byKey(const ValueKey<String>('live-control:join'));
+    final button = tester.widget<ui.Button>(join);
+    expect(button.loading, isFalse);
+    expect(button.onPressed, isNull);
+    expect(
+      find.descendant(of: join, matching: find.byIcon(Icons.call)),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: join,
+        matching: find.byType(CircularProgressIndicator),
+      ),
+      findsNothing,
+    );
+    expect(find.text('语音频道里还没有人'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('wide join and collapse actions are matching labeled buttons', (
     tester,
   ) async {
@@ -331,6 +443,7 @@ void main() {
           _participant(id: 'live_self', user: currentUser),
           _participant(id: 'live_phabe', user: remoteUser),
         ]),
+        speakingUserIds: const {'current_user'},
         width: 347,
         height: 720,
       ),
@@ -346,14 +459,55 @@ void main() {
     );
     final currentRect = tester.getRect(currentCard);
     final remoteRect = tester.getRect(remoteCard);
-    final currentSurface = tester.widget<ui.PressableSurface>(currentCard);
-    final remoteSurface = tester.widget<ui.PressableSurface>(remoteCard);
+    final scale = currentRect.width / 154;
+    final avatar = find.descendant(
+      of: currentCard,
+      matching: find.byWidgetPredicate(
+        (widget) => widget is ui.Avatar && widget.label == 'Me',
+      ),
+    );
+    final activityTag = find.descendant(
+      of: currentCard,
+      matching: find.byKey(
+        const ValueKey<String>('live-member-activity:current_user'),
+      ),
+    );
+    final micButton = find.descendant(
+      of: currentCard,
+      matching: find.byKey(
+        const ValueKey<String>('live-member-status:mic:current_user'),
+      ),
+    );
 
     expect(currentRect.top, closeTo(remoteRect.top, 0.01));
-    expect(currentRect.width, closeTo(currentSurface.height, 0.01));
-    expect(remoteRect.width, closeTo(remoteSurface.height, 0.01));
+    expect(currentRect.height, closeTo(162 * scale, 0.01));
+    expect(remoteRect.height, closeTo(162 * scale, 0.01));
     expect(remoteRect.left - currentRect.right, closeTo(12, 0.01));
     expect(currentRect.width, lessThan(154));
+    expect(tester.getRect(avatar).width, closeTo(42 * scale, 0.01));
+    expect(tester.getRect(activityTag).width, closeTo(24 * scale, 0.01));
+    expect(tester.getRect(micButton).width, closeTo(32.5 * scale, 0.01));
+    expect(
+      find.ancestor(of: currentCard, matching: find.byType(FittedBox)),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(
+      _host(
+        searchController: searchController,
+        live: _liveState([
+          _participant(id: 'live_self', user: currentUser),
+          _participant(id: 'live_phabe', user: remoteUser),
+        ]),
+        speakingUserIds: const {'current_user'},
+        width: 365,
+        height: 720,
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 10));
+    expect(tester.takeException(), isNull);
+    await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
 
@@ -596,6 +750,8 @@ void main() {
       _host(
         searchController: searchController,
         live: live,
+        width: 347,
+        height: 720,
         onResolveParticipantProfile: resolveProfile,
       ),
     );
@@ -730,15 +886,19 @@ void main() {
         _participant(id: 'live_phabe', user: remoteUser),
       ]);
       final volumeToggles = <String>[];
+      final volumeChanges = <double>[];
 
       await tester.pumpWidget(
         _host(
           searchController: searchController,
           live: live,
-          height: 600,
+          width: 347,
+          height: 720,
           platform: TargetPlatform.android,
           participantVoiceVolume: (_) => 0.4,
-          onParticipantVoiceVolumeChanged: (_, _) {},
+          onParticipantVoiceVolumeChanged: (_, volume) {
+            volumeChanges.add(volume);
+          },
           onParticipantVoiceMuteToggled: volumeToggles.add,
         ),
       );
@@ -751,12 +911,30 @@ void main() {
       );
       expect(volumeSlider, findsNothing);
 
+      await tester.tap(volumeButton);
+      await tester.pump();
+      expect(volumeToggles, ['phabe']);
+      volumeToggles.clear();
+
       await tester.longPress(volumeButton);
       await tester.pump();
 
       expect(volumeSlider, findsOneWidget);
       expect(volumeToggles, isEmpty);
       expect(find.byTooltip('静音Phabe音量'), findsNothing);
+      final volumePanel = find.byKey(
+        const ValueKey<String>('live-volume-panel:Phabe语音音量'),
+      );
+      final buttonRect = tester.getRect(volumeButton);
+      final panelRect = tester.getRect(volumePanel);
+      expect(panelRect.width, closeTo(buttonRect.width, 0.01));
+      expect(panelRect.center.dx, closeTo(buttonRect.center.dx, 0.01));
+
+      await tester.tapAt(
+        tester.getRect(volumeSlider).bottomCenter - const Offset(0, 1),
+      );
+      await tester.pump();
+      expect(volumeChanges.last, closeTo(0, 0.02));
 
       await tester.pump(const Duration(seconds: 3));
       await tester.pump(const Duration(milliseconds: 100));
@@ -871,6 +1049,8 @@ void main() {
             searchController: searchController,
             platform: TargetPlatform.windows,
             live: live,
+            width: 347,
+            height: 720,
             videoTracks: [
               _liveVideoTrack(
                 identity: 'current_user',
@@ -1613,6 +1793,112 @@ void main() {
   });
 
   testWidgets(
+    'Android screen share volume toggles and reflects a zero slider value',
+    (tester) async {
+      final searchController = TextEditingController();
+      addTearDown(searchController.dispose);
+      liveVideoTrackRendererForTest = (track, fit, mirrorLocal) {
+        return const ColoredBox(color: Colors.black);
+      };
+      addTearDown(resetLiveVideoTrackRendererForTest);
+      final live = _liveState([
+        _participant(
+          id: 'live_phabe',
+          user: _user('phabe', 'Phabe', roomRole: 'member'),
+          screenSharing: true,
+        ),
+      ]);
+      var screenShareVolume = 0.75;
+      var rememberedVolume = screenShareVolume;
+
+      await tester.pumpWidget(
+        StatefulBuilder(
+          builder: (context, setState) => _host(
+            searchController: searchController,
+            live: live,
+            height: 620,
+            platform: TargetPlatform.android,
+            videoTracks: [
+              _liveVideoTrack(
+                identity: 'phabe',
+                isScreenShare: true,
+                isLocal: false,
+              ),
+            ],
+            stageSelection: const LiveStageSelection.track(
+              identity: 'phabe',
+              isScreenShare: true,
+            ),
+            screenShareVolume: screenShareVolume,
+            onScreenShareVolumeChanged: (volume) {
+              setState(() {
+                screenShareVolume = volume;
+                if (volume > 0) rememberedVolume = volume;
+              });
+            },
+            onScreenShareMuteToggled: () {
+              setState(() {
+                if (screenShareVolume <= 0) {
+                  screenShareVolume = rememberedVolume;
+                } else {
+                  rememberedVolume = screenShareVolume;
+                  screenShareVolume = 0;
+                }
+              });
+            },
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final volumeButton = find.byKey(
+        const ValueKey<String>('live-stage:screen-share-volume'),
+      );
+      expect(
+        find.descendant(
+          of: volumeButton,
+          matching: find.byIcon(Icons.volume_up),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(volumeButton);
+      await tester.pump();
+      expect(screenShareVolume, 0);
+      expect(
+        find.descendant(
+          of: volumeButton,
+          matching: find.byIcon(Icons.volume_off),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(volumeButton);
+      await tester.pump();
+      expect(screenShareVolume, 0.75);
+
+      await tester.longPress(volumeButton);
+      await tester.pump();
+      final volumeSlider = find.byKey(
+        const ValueKey<String>('live-volume-slider:共享屏幕输出音量'),
+      );
+      expect(volumeSlider, findsOneWidget);
+      await tester.tapAt(
+        tester.getRect(volumeSlider).bottomCenter - const Offset(0, 1),
+      );
+      await tester.pump();
+      expect(screenShareVolume, closeTo(0, 0.02));
+      expect(
+        find.descendant(
+          of: volumeButton,
+          matching: find.byIcon(Icons.volume_off),
+        ),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
     'suspended stage releases its renderer while preserving the stage surface',
     (tester) async {
       final searchController = TextEditingController();
@@ -2278,8 +2564,10 @@ Widget _host({
   Map<String, bool> liveKitMicMutedByParticipantId = const {},
   double width = 720,
   double height = 520,
+  bool loading = false,
   bool joined = true,
   bool joining = false,
+  bool leaving = false,
   bool micMuted = false,
   bool headphonesMuted = false,
   TargetPlatform? platform,
@@ -2333,9 +2621,10 @@ Widget _host({
               avatarUrl: null,
               live: live,
               currentUser: _currentUser,
-              loading: false,
+              loading: loading,
               joined: joined,
               joining: joining,
+              leaving: leaving,
               micMuted: micMuted,
               headphonesMuted: headphonesMuted,
               voiceBlocked: false,
@@ -2474,7 +2763,8 @@ void _expectMediaMemberCard(
       ? tester.getRect(liveVideoFinder)
       : tester.getRect(stoppedThumbnailFinder!);
 
-  expect(card.height, closeTo(cardRect.width, 0.01));
+  final scale = cardRect.width / card.height;
+  expect(cardRect.height, closeTo(162 * scale, 0.01));
   expect(
     liveVideoFinder,
     stoppedThumbnailKey == null ? findsOneWidget : findsNothing,

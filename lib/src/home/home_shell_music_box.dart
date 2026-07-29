@@ -42,8 +42,9 @@ extension _HomeShellMusicBox on _HomeShellState {
 
   /// Switches the search source and re-runs the current query against it.
   void _changeMusicBoxSource(String source) {
-    if (source == _musicBoxSource) return;
-    _setHomeState(() => _musicBoxSource = source);
+    final normalizedSource = music_box_display.normalizedMusicBoxSource(source);
+    if (normalizedSource == _musicBoxSource) return;
+    _setHomeState(() => _musicBoxSource = normalizedSource);
     final keyword = _musicBoxSearchController.text.trim();
     if (keyword.isEmpty) return;
     _musicBoxSearchDebounce?.cancel();
@@ -96,7 +97,7 @@ extension _HomeShellMusicBox on _HomeShellState {
       final results = await _musicBoxController.search(
         roomId: roomId,
         keyword: trimmed,
-        source: _musicBoxSource,
+        source: music_box_display.normalizedMusicBoxSource(_musicBoxSource),
       );
       if (!mounted || serial != _musicBoxSearchSerial) return;
       _setHomeState(() {

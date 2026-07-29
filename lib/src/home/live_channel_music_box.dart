@@ -651,7 +651,7 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
           SegmentedControl<String>(
             expanded: true,
             height: _musicBoxSearchFieldHeight,
-            value: widget.source,
+            value: music_box_display.normalizedMusicBoxSource(widget.source),
             segments: [
               for (final source in music_box_display.musicBoxSources)
                 Segment(value: source.id, label: source.label),

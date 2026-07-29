@@ -306,6 +306,13 @@ void registerShellRealtimeLiveWidgetTests() {
     final liveScreenViewUpdates = <String?>[];
     final liveOperationLog = <String>[];
     final liveSession = _FakeLiveSession();
+    liveSession.testVideoTracks = [
+      _liveVideoTrack(identity: 'user-2', isScreenShare: true, isLocal: false),
+    ];
+    liveVideoTrackRendererForTest = (track, fit, mirrored) {
+      return const ColoredBox(color: Colors.black);
+    };
+    addTearDown(resetLiveVideoTrackRendererForTest);
     final liveSessionController = _FakeLiveSessionController(
       session: liveSession,
     );
@@ -371,6 +378,175 @@ void registerShellRealtimeLiveWidgetTests() {
     expect(liveSession.watchedScreenShareIdentity, 'user-2');
     expect(liveScreenViewUpdates, ['user-2']);
     expect(liveOperationLog, ['join', 'state:online', 'screen-view:user-2']);
+
+    final volumeButton = find.byKey(
+      const ValueKey<String>('live-stage:screen-share-volume'),
+    );
+    expect(volumeButton, findsOneWidget);
+    final initialScreenShareVolume = liveSession.screenShareVolume;
+    expect(initialScreenShareVolume, greaterThan(0));
+    await tester.tap(volumeButton);
+    await tester.pump();
+    expect(liveSession.screenShareVolumes.last, 0);
+    expect(
+      find.descendant(
+        of: volumeButton,
+        matching: find.byIcon(Icons.volume_off),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(volumeButton);
+    await tester.pump();
+    expect(liveSession.screenShareVolumes.last, initialScreenShareVolume);
+    expect(
+      find.descendant(
+        of: volumeButton,
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is Icon &&
+              (widget.icon == Icons.volume_down ||
+                  widget.icon == Icons.volume_up),
+        ),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.longPress(volumeButton);
+    await tester.pump();
+    final volumeSlider = find.byKey(
+      const ValueKey<String>('live-volume-slider:共享屏幕输出音量'),
+    );
+    expect(volumeSlider, findsOneWidget);
+    await tester.tapAt(
+      tester.getRect(volumeSlider).bottomCenter - const Offset(0, 1),
+    );
+    await tester.pump();
+    expect(liveSession.screenShareVolumes.last, closeTo(0, 0.02));
+    expect(
+      find.descendant(
+        of: volumeButton,
+        matching: find.byIcon(Icons.volume_off),
+      ),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('leaving voice forgets the watched screen share before rejoin', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(420, 740);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final realtime = _FakeRealtimeService();
+    final liveScreenViewUpdates = <String?>[];
+    final leaveStarted = Completer<void>();
+    final releaseLeave = Completer<void>();
+    final liveSession = _FakeLiveSession();
+    liveSession.testVideoTracks = [
+      _liveVideoTrack(identity: 'user-2', isScreenShare: true, isLocal: false),
+    ];
+    liveVideoTrackRendererForTest = (track, fit, mirrored) {
+      return const ColoredBox(color: Colors.black);
+    };
+    addTearDown(resetLiveVideoTrackRendererForTest);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ui.uiTheme().copyWith(platform: TargetPlatform.android),
+        home: HomePage(
+          app: _homeTestAppContext(
+            liveScreenViewUpdates: liveScreenViewUpdates,
+            beforeLiveStateResponse: (update) async {
+              if (update['connection_state'] != 'left') return;
+              if (!leaveStarted.isCompleted) leaveStarted.complete();
+              await releaseLeave.future;
+            },
+          ),
+          liveSessionController: _FakeLiveSessionController(
+            session: liveSession,
+          ),
+          realtime: realtime,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Alpha Room'));
+    await tester.pumpAndSettle();
+    await _openLiveChannelFromHeader(tester);
+    realtime.add(
+      RealtimeEvent(
+        type: 'live_participant_updated',
+        data: {
+          'room_id': 'server-alpha',
+          'participant_count': 1,
+          'preview': <Object?>[],
+          'live': _liveStateJson(
+            roomId: 'server-alpha',
+            participantCount: 1,
+            participants: [
+              _liveParticipantJson(
+                user: _userJson(
+                  id: 'user-2',
+                  username: 'morgan',
+                  displayName: 'Morgan',
+                ),
+                liveSessionId: 'live-session-morgan',
+                micMuted: true,
+                screenSharing: true,
+              ),
+            ],
+          ),
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('live-member:screen-share-thumbnail')),
+    );
+    await tester.pumpAndSettle();
+    expect(liveSession.watchedScreenShareIdentity, 'user-2');
+    expect(liveScreenViewUpdates, ['user-2']);
+
+    await tester.tap(find.byKey(const ValueKey<String>('live-control:leave')));
+    await tester.pump();
+    await leaveStarted.future;
+
+    final join = find.byKey(const ValueKey<String>('live-control:join'));
+    final joinButton = tester.widget<ui.Button>(join);
+    expect(joinButton.loading, isFalse);
+    expect(joinButton.onPressed, isNull);
+    expect(
+      find.descendant(of: join, matching: find.byIcon(Icons.call)),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: join,
+        matching: find.byType(CircularProgressIndicator),
+      ),
+      findsNothing,
+    );
+
+    releaseLeave.complete();
+    await tester.pumpAndSettle();
+    expect(liveSession.watchedScreenShareIdentity, isNull);
+    expect(tester.widget<ui.Button>(join).onPressed, isNotNull);
+
+    await tester.tap(join);
+    await tester.pumpAndSettle();
+
+    expect(liveSession.connectAttempts, 2);
+    expect(liveSession.watchedScreenShareIdentity, isNull);
+    expect(liveScreenViewUpdates, ['user-2', null]);
+    expect(
+      find.byKey(const ValueKey<String>('live-stage:screen-share-volume')),
+      findsNothing,
+    );
     expect(tester.takeException(), isNull);
   });
 

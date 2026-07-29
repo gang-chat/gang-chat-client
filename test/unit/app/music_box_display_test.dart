@@ -4,6 +4,22 @@ import 'package:client/src/app/music_box_display.dart';
 import 'package:client/src/protocol/models.dart';
 
 void main() {
+  group('music box sources', () {
+    test('temporarily excludes QQ Music from selectable sources', () {
+      expect(
+        musicBoxSources.map((source) => source.id),
+        orderedEquals(const ['netease', 'bilibili']),
+      );
+      expect(musicBoxSourceEnabled('tencent'), isFalse);
+    });
+
+    test('normalizes a disabled or unknown source to the default', () {
+      expect(normalizedMusicBoxSource('tencent'), musicBoxDefaultSource);
+      expect(normalizedMusicBoxSource('unknown'), musicBoxDefaultSource);
+      expect(normalizedMusicBoxSource('bilibili'), 'bilibili');
+    });
+  });
+
   group('musicBoxProgress', () {
     test('renders the server-reported position as-is', () {
       final state = _state(
@@ -98,7 +114,10 @@ void main() {
 
     test('maps transport action to the API verb', () {
       expect(musicBoxTransportApiAction(MusicBoxTransportAction.play), 'play');
-      expect(musicBoxTransportApiAction(MusicBoxTransportAction.pause), 'pause');
+      expect(
+        musicBoxTransportApiAction(MusicBoxTransportAction.pause),
+        'pause',
+      );
       expect(
         musicBoxTransportApiAction(MusicBoxTransportAction.resume),
         'resume',
@@ -151,9 +170,7 @@ void main() {
         '版权限制',
       );
       expect(
-        musicBoxQueueStatusLabel(
-          _item(status: MusicBoxQueueItemStatus.failed),
-        ),
+        musicBoxQueueStatusLabel(_item(status: MusicBoxQueueItemStatus.failed)),
         '处理失败',
       );
     });
@@ -162,21 +179,15 @@ void main() {
   group('musicBoxUsageHint', () {
     test('warns near and at the limit', () {
       expect(
-        musicBoxUsageHint(
-          const MusicBoxUsage(usedBytes: 50, limitBytes: 100),
-        ),
+        musicBoxUsageHint(const MusicBoxUsage(usedBytes: 50, limitBytes: 100)),
         isNull,
       );
       expect(
-        musicBoxUsageHint(
-          const MusicBoxUsage(usedBytes: 92, limitBytes: 100),
-        ),
+        musicBoxUsageHint(const MusicBoxUsage(usedBytes: 92, limitBytes: 100)),
         '空间已接近上限',
       );
       expect(
-        musicBoxUsageHint(
-          const MusicBoxUsage(usedBytes: 100, limitBytes: 100),
-        ),
+        musicBoxUsageHint(const MusicBoxUsage(usedBytes: 100, limitBytes: 100)),
         '空间已满，新歌将排队等待下载',
       );
       expect(
@@ -199,9 +210,7 @@ void main() {
         1.0,
       );
       expect(
-        musicBoxUsageFraction(
-          const MusicBoxUsage(usedBytes: 5, limitBytes: 0),
-        ),
+        musicBoxUsageFraction(const MusicBoxUsage(usedBytes: 5, limitBytes: 0)),
         0,
       );
     });

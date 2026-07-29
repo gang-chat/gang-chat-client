@@ -347,6 +347,7 @@ extension _HomeShellLayout on _HomeShellState {
         loading: _loadingRoom,
         joined: _joinedLiveRoomId == _selectedServerId,
         joining: _joiningLive,
+        leaving: _leavingLive,
         micMuted: _micMuted,
         headphonesMuted: _headphonesMuted,
         voiceBlocked: _voiceBlocked,

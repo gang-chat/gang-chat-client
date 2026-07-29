@@ -287,6 +287,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   bool _joinedLivePersonalAiVoiceAnnouncementsEnabled = false;
   final Map<String, UserSummary> _joinedLiveParticipantUsers = {};
   bool _joiningLive = false;
+  bool _leavingLive = false;
   bool _syncingLiveConnectedParticipants = false;
   bool _micMuted = false;
   bool _headphonesMuted = false;
@@ -491,6 +492,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       _joinedLivePersonalAiVoiceAnnouncementsEnabled = false;
       _joinedLiveParticipantUsers.clear();
       _joiningLive = false;
+      _leavingLive = false;
       _micMuted = false;
       _headphonesMuted = false;
       _cameraOn = false;

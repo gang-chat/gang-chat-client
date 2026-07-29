@@ -592,7 +592,10 @@ void registerShellAuthWidgetTests() {
       expect(find.text('当前密码'), findsOneWidget);
       await tester.ensureVisible(find.widgetWithText(ui.Button, '忘记密码'));
       await tester.tap(find.widgetWithText(ui.Button, '忘记密码'));
-      await tester.pumpAndSettle();
+      await _pumpUntilFound(
+        tester,
+        find.byKey(const ValueKey('password-reset-code-input')),
+      );
       await tester.enterText(
         find.byKey(const ValueKey('password-reset-code-input')),
         '123456',

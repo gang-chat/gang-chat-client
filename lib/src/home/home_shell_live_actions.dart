@@ -265,7 +265,11 @@ extension _HomeShellLiveActions on _HomeShellState {
       userId: _currentUser.id,
       joiningLive: false,
     );
-    _setHomeState(() => _applyLiveLocalDeparturePatch(patch));
+    _setHomeState(() {
+      _leavingLive = false;
+      _applyLiveLocalDeparturePatch(patch);
+    });
+    _syncWatchedLiveStageSelection(null);
     unawaited(_liveSessionController.disconnect());
   }
 
@@ -299,6 +303,7 @@ extension _HomeShellLiveActions on _HomeShellState {
   void _applyLiveJoinPreviousRoomDisconnectedPatch(
     LiveJoinPreviousRoomDisconnectedPatch patch,
   ) {
+    final departedRoomId = _joinedLiveRoomId;
     _live = patch.live;
     _servers = _roomsController
         .patchRoomCardsRefreshed(rooms: patch.rooms)
@@ -307,9 +312,13 @@ extension _HomeShellLiveActions on _HomeShellState {
     _joiningLive = patch.joiningLive;
     _contentMode = patch.livePanelOpen ? _ContentMode.live : _contentMode;
     _roomError = patch.error;
+    if (departedRoomId != null && departedRoomId != patch.joinedLiveRoomId) {
+      _liveStageSelections.remove(departedRoomId);
+    }
   }
 
   void _applyLiveLocalDeparturePatch(LiveLocalDeparturePatch patch) {
+    final departedRoomId = _joinedLiveRoomId;
     _live = patch.live;
     _servers = _roomsController
         .patchRoomCardsRefreshed(rooms: patch.rooms)
@@ -320,6 +329,13 @@ extension _HomeShellLiveActions on _HomeShellState {
     _screenSharing = patch.screenSharing;
     _voiceBlocked = patch.voiceBlocked;
     if (patch.joinedLiveRoomId == null) {
+      // A selected remote camera/share belongs to this voice participation,
+      // not to the room UI. Forget it when that participation ends so a later
+      // manual join never resumes watching stale media. Realtime reconnects do
+      // not pass through this departure patch and therefore keep watching.
+      if (departedRoomId != null) {
+        _liveStageSelections.remove(departedRoomId);
+      }
       _joinedLivePersonalAiVoiceAnnouncementsEnabled = false;
       _joinedLiveParticipantUsers.clear();
     }
@@ -562,7 +578,9 @@ extension _HomeShellLiveActions on _HomeShellState {
     if (normalized > 0) {
       _lastScreenShareVolumeBeforeMute = rememberedAudioVolume(normalized);
     }
-    unawaited(_liveSessionController.setScreenShareVolume(normalized));
+    _runLiveAudioStateChange(
+      _liveSessionController.setScreenShareVolume(normalized),
+    );
   }
 
   void _toggleScreenShareAudioMute() {
@@ -585,11 +603,15 @@ extension _HomeShellLiveActions on _HomeShellState {
   }
 
   void _changeParticipantVoiceVolume(String userId, double volume) {
-    unawaited(_setParticipantVoiceVolume(userId, volume));
+    _runLiveAudioStateChange(
+      _liveSessionController.setParticipantVoiceVolume(userId, volume),
+    );
   }
 
   void _toggleParticipantVoiceMute(String userId) {
-    unawaited(_toggleParticipantVoiceMuted(userId));
+    _runLiveAudioStateChange(
+      _liveSessionController.toggleParticipantVoiceMuted(userId),
+    );
   }
 
   Future<void> _restoreParticipantVoiceVolume(String userId) async {
@@ -600,14 +622,16 @@ extension _HomeShellLiveActions on _HomeShellState {
     _setHomeState(() {});
   }
 
-  Future<void> _setParticipantVoiceVolume(String userId, double volume) async {
-    await _liveSessionController.setParticipantVoiceVolume(userId, volume);
-    if (!mounted) return;
-    _setHomeState(() {});
+  void _runLiveAudioStateChange(Future<void> change) {
+    // LiveSession updates its normalized volume before applying it to tracks.
+    // Rebuild now so taps and slider changes are reflected immediately, then
+    // rebuild once more after the asynchronous device/persistence work ends.
+    if (mounted) _setHomeState(() {});
+    unawaited(_finishLiveAudioStateChange(change));
   }
 
-  Future<void> _toggleParticipantVoiceMuted(String userId) async {
-    await _liveSessionController.toggleParticipantVoiceMuted(userId);
+  Future<void> _finishLiveAudioStateChange(Future<void> change) async {
+    await change;
     if (!mounted) return;
     _setHomeState(() {});
   }
@@ -800,7 +824,7 @@ extension _HomeShellLiveActions on _HomeShellState {
 
   Future<void> _joinLive(String source) async {
     final room = _selectedRoom;
-    if (room == null || _joiningLive) return;
+    if (room == null || _joiningLive || _leavingLive) return;
     final desiredMicMuted = _micMuted;
     final desiredHeadphonesMuted = _headphonesMuted;
 
@@ -844,6 +868,7 @@ extension _HomeShellLiveActions on _HomeShellState {
             ),
           );
         });
+        _syncWatchedLiveStageSelection(null);
       }
     }
 
@@ -1108,7 +1133,7 @@ extension _HomeShellLiveActions on _HomeShellState {
 
   Future<void> _leaveLive() async {
     final roomId = _joinedLiveRoomId;
-    if (roomId == null) return;
+    if (roomId == null || _leavingLive) return;
     _playLivePresenceSound(LivePresenceSound.left, continueAfterRoomExit: true);
     final shouldKeepLivePanelOpen = _contentMode == _ContentMode.live;
     final patch = _liveController.patchLocalDeparture(
@@ -1116,9 +1141,13 @@ extension _HomeShellLiveActions on _HomeShellState {
       rooms: _servers,
       joinedLiveRoomId: roomId,
       userId: _currentUser.id,
-      joiningLive: true,
+      joiningLive: false,
     );
-    _setHomeState(() => _applyLiveLocalDeparturePatch(patch));
+    _setHomeState(() {
+      _leavingLive = true;
+      _applyLiveLocalDeparturePatch(patch);
+    });
+    _syncWatchedLiveStageSelection(null);
     try {
       await _notifyLiveLeft(roomId);
       await _liveSessionController.disconnect();
@@ -1128,15 +1157,16 @@ extension _HomeShellLiveActions on _HomeShellState {
       }
     } finally {
       if (mounted) {
-        _setHomeState(
-          () => _applyLiveJoinStatePatch(
+        _setHomeState(() {
+          _leavingLive = false;
+          _applyLiveJoinStatePatch(
             _liveController.patchJoinFinished(
               joinedLiveRoomId: _joinedLiveRoomId,
               livePanelOpen: shouldKeepLivePanelOpen,
               error: _roomError,
             ),
-          ),
-        );
+          );
+        });
       }
     }
   }

@@ -740,7 +740,7 @@ void registerShellRoomManagementWidgetTests() {
 
       final saveButton = find.widgetWithText(ui.Button, '保存房间设置');
       tester.widget<ui.Button>(saveButton).onPressed?.call();
-      await tester.pumpAndSettle();
+      await _pumpUntilFound(tester, find.byType(ui.DialogFrame));
 
       expect(
         requestedPaths,

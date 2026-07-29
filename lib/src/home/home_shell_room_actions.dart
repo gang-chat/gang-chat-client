@@ -338,11 +338,10 @@ extension _HomeShellRoomActions on _HomeShellState {
     }
     _exitingApplication = true;
     try {
-      await _leaveLiveForSessionEnd(
-        disconnectTimeout: const Duration(milliseconds: 700),
-      );
-      await _resetLiveAudioStateAfterSessionEnd();
-      await _stopRealtimeForExit();
+      await Future.wait<void>([
+        _leaveLiveForAndroidTaskRemoval(),
+        _stopRealtimeForExit(),
+      ]);
       await widget.app.exitSessionForAppExit();
     } catch (_) {
       // Native Android enforces a short process-exit timeout and LiveKit's
@@ -350,6 +349,31 @@ extension _HomeShellRoomActions on _HomeShellState {
     } finally {
       request.complete();
     }
+  }
+
+  Future<void> _leaveLiveForAndroidTaskRemoval() async {
+    final joinedLiveRoomId = _joinedLiveRoomId;
+    _joinedLiveRoomId = null;
+
+    // Task removal is terminal and has a strict native deadline. Do not put
+    // this leave behind an in-flight mic/camera/screen-share PATCH. Start the
+    // authenticated server leave and LiveKit disconnect together so either
+    // path can remove the remote track and participant immediately.
+    final cleanup = <Future<void>>[
+      _liveSessionController.disconnect(
+        timeout: const Duration(milliseconds: 900),
+      ),
+    ];
+    if (joinedLiveRoomId != null) {
+      cleanup.add(() async {
+        try {
+          await _liveController.leaveLive(roomId: joinedLiveRoomId);
+        } catch (_) {
+          // LiveKit's participant_left webhook remains the fallback.
+        }
+      }());
+    }
+    await Future.wait<void>(cleanup);
   }
 
   void _handleAppUpdateDownloadCancellationChanged(
@@ -845,6 +869,7 @@ extension _HomeShellRoomActions on _HomeShellState {
       if (_joinedLiveRoomId == roomId) {
         _joinedLiveRoomId = null;
         _joiningLive = false;
+        _leavingLive = false;
       }
     });
   }

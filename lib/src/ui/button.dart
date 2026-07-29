@@ -84,7 +84,9 @@ class Button extends StatelessWidget {
     final colors = _colorsFor(tone, visuallyEnabled, active: active);
     final content = _ButtonContent(
       colors: colors,
-      icon: icon,
+      icon: loading && icon != null
+          ? const _ButtonLoadingIndicator(size: _iconSize)
+          : icon,
       mainAxisSize: mainAxisSize,
       child: child,
     );
@@ -184,7 +186,26 @@ class ButtonIcon extends StatelessWidget {
       baseBorderColor: baseBorderColor,
       child: IconTheme.merge(
         data: IconThemeData(color: colors.foreground, size: size * 0.46),
-        child: Center(child: icon),
+        child: Center(
+          child: loading ? _ButtonLoadingIndicator(size: size * 0.46) : icon,
+        ),
+      ),
+    );
+  }
+}
+
+class _ButtonLoadingIndicator extends StatelessWidget {
+  const _ButtonLoadingIndicator({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox.square(
+      dimension: size,
+      child: CircularProgressIndicator(
+        strokeWidth: 2,
+        color: IconTheme.of(context).color,
       ),
     );
   }

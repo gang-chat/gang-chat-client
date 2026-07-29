@@ -36,6 +36,7 @@ import 'package:client/src/auth/token_store.dart';
 import 'package:client/src/live/audio_device_service.dart';
 import 'package:client/src/live/live_session.dart';
 import 'package:client/src/live/live_presence_sound_service.dart';
+import 'package:client/src/live/live_video_track_view.dart';
 import 'package:client/src/live/system_audio_devices.dart';
 import 'package:client/src/protocol/api_client.dart';
 import 'package:client/src/protocol/models.dart';
@@ -133,6 +134,18 @@ Finder _liveControl(String id) {
   return find.byKey(ValueKey<String>('live-control:$id'));
 }
 
+Future<void> _pumpUntilFound(
+  WidgetTester tester,
+  Finder finder, {
+  int maxPumps = 40,
+}) async {
+  for (var attempt = 0; attempt < maxPumps; attempt += 1) {
+    await tester.pump(const Duration(milliseconds: 25));
+    if (finder.evaluate().isNotEmpty) return;
+  }
+  throw TestFailure('Timed out waiting for the target widget.');
+}
+
 Future<void> _openLiveChannelFromHeader(WidgetTester tester) async {
   final header = find.byKey(const ValueKey('chat-header-live-button'));
   expect(header, findsOneWidget);
@@ -220,6 +233,7 @@ AuthenticatedAppContext _homeTestAppContext({
   bool alphaRoomHasPendingJoinRequests = false,
   bool alphaRoomAiVoiceAnnouncementsEnabled = false,
   Future<void> Function(String roomId)? beforeRoomDetailResponse,
+  Future<void> Function(Map<String, Object?> update)? beforeLiveStateResponse,
 }) {
   final user = CurrentUser(
     id: 'user-1',
@@ -276,6 +290,7 @@ AuthenticatedAppContext _homeTestAppContext({
       initialAlphaRoomAiVoiceAnnouncementsEnabled:
           alphaRoomAiVoiceAnnouncementsEnabled,
       beforeRoomDetailResponse: beforeRoomDetailResponse,
+      beforeLiveStateResponse: beforeLiveStateResponse,
     ),
   );
 }
@@ -304,6 +319,7 @@ GangApi _roomsApi({
   bool alphaRoomHasPendingJoinRequests = false,
   bool initialAlphaRoomAiVoiceAnnouncementsEnabled = false,
   Future<void> Function(String roomId)? beforeRoomDetailResponse,
+  Future<void> Function(Map<String, Object?> update)? beforeLiveStateResponse,
 }) {
   var roomNotificationsMarkedRead = false;
   var actionComparisonMemberRole = 'member';
@@ -1165,6 +1181,7 @@ GangApi _roomsApi({
           'state:${body['connection_state'] ?? 'unchanged'}',
         );
         liveStateUpdates?.add(body);
+        await beforeLiveStateResponse?.call(body);
         if (body['mic_muted'] case final bool value) {
           liveMicMuted = value;
         }
@@ -1908,6 +1925,10 @@ class _FakeLiveSession extends LiveSession {
   final cameraEnables = <bool>[];
   final screenShareEnables = <bool>[];
   final screenShareSourceIds = <String?>[];
+  List<LiveVideoTrack> testVideoTracks = const <LiveVideoTrack>[];
+
+  @override
+  List<LiveVideoTrack> get videoTracks => testVideoTracks;
 
   void emitParticipantJoined() => onParticipantJoined?.call('user-2');
 

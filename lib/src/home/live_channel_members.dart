@@ -26,6 +26,7 @@ class _LiveRoomHeader extends StatelessWidget {
 
 class _LiveMemberStage extends StatelessWidget {
   const _LiveMemberStage({
+    required this.loading,
     required this.participants,
     required this.currentUser,
     required this.localMicMuted,
@@ -53,6 +54,7 @@ class _LiveMemberStage extends StatelessWidget {
     this.participantProfileActionBuilder,
   });
 
+  final bool loading;
   final List<LiveParticipant> participants;
   final CurrentUser currentUser;
   final bool localMicMuted;
@@ -84,6 +86,11 @@ class _LiveMemberStage extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        if (loading) {
+          return const Center(
+            child: CircularProgressIndicator(color: UiColors.accent),
+          );
+        }
         if (participants.isEmpty) {
           return Center(
             child: Text(
@@ -332,12 +339,11 @@ class _LiveMemberCard extends StatelessWidget {
               track: previewTrack!,
               mirrored: participant.cameraMirrored,
             );
-      return SizedBox(
-        width: dimension,
+      return _scaledSurface(
         child: PressableSurface(
-          height: dimension,
-          hoverLift: 3,
-          baseDepth: 5,
+          height: _memberCardWidth,
+          hoverLift: _memberCardHoverLift,
+          baseDepth: _memberCardBaseDepth,
           borderRadius: UiRadii.lg,
           backgroundColor: state.highlighted
               ? _memberSpeakingBackground
@@ -432,12 +438,11 @@ class _LiveMemberCard extends StatelessWidget {
         ),
       );
     }
-    return SizedBox(
-      width: dimension,
+    return _scaledSurface(
       child: PressableSurface(
-        height: dimension,
-        hoverLift: 3,
-        baseDepth: 5,
+        height: _memberCardWidth,
+        hoverLift: _memberCardHoverLift,
+        baseDepth: _memberCardBaseDepth,
         borderRadius: UiRadii.lg,
         backgroundColor: state.highlighted
             ? _memberSpeakingBackground
@@ -498,6 +503,23 @@ class _LiveMemberCard extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _scaledSurface({required Widget child}) {
+    final scale = dimension / _memberCardWidth;
+    return SizedBox(
+      width: dimension,
+      height: _memberCardSurfaceHeight * scale,
+      child: FittedBox(
+        alignment: Alignment.topLeft,
+        fit: BoxFit.fill,
+        child: SizedBox(
+          width: _memberCardWidth,
+          height: _memberCardSurfaceHeight,
+          child: child,
         ),
       ),
     );

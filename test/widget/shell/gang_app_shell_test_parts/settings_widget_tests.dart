@@ -286,6 +286,15 @@ void registerShellSettingsWidgetTests() {
     (WidgetTester tester) async {
       final events = <String>[];
       final requestedPaths = <String>[];
+      final liveStateUpdates = <Map<String, Object?>>[];
+      final blockedStateRequestStarted = Completer<void>();
+      final releaseBlockedStateRequest = Completer<void>();
+      var blockNextMicStateRequest = false;
+      addTearDown(() {
+        if (!releaseBlockedStateRequest.isCompleted) {
+          releaseBlockedStateRequest.complete();
+        }
+      });
       final liveSession = _FakeLiveSession();
       final liveSessionController = _FakeLiveSessionController(
         session: liveSession,
@@ -300,6 +309,19 @@ void registerShellSettingsWidgetTests() {
             app: _homeTestAppContext(
               onExitSessionForAppExit: () async => events.add('exit-session'),
               requestedPaths: requestedPaths,
+              liveStateUpdates: liveStateUpdates,
+              beforeLiveStateResponse: (update) async {
+                if (!blockNextMicStateRequest ||
+                    update['connection_state'] != null ||
+                    update['mic_muted'] is! bool) {
+                  return;
+                }
+                blockNextMicStateRequest = false;
+                if (!blockedStateRequestStarted.isCompleted) {
+                  blockedStateRequestStarted.complete();
+                }
+                await releaseBlockedStateRequest.future;
+              },
             ),
             audioDeviceStore: const _FakeAudioDeviceStore(),
             liveSessionController: liveSessionController,
@@ -316,11 +338,23 @@ void registerShellSettingsWidgetTests() {
       await tester.tap(find.widgetWithText(ui.Button, '加入'));
       await tester.pumpAndSettle();
 
+      blockNextMicStateRequest = true;
+      await tester.tap(_liveControl('mic'));
+      await tester.pump();
+      await blockedStateRequestStarted.future.timeout(
+        const Duration(seconds: 2),
+      );
+
       final removal = androidSystemService.removeTask();
-      await removal.completed;
+      await removal.completed.timeout(const Duration(seconds: 2));
+      releaseBlockedStateRequest.complete();
       await tester.pumpAndSettle();
 
       expect(requestedPaths, contains('/api/v1/rooms/server-alpha/live/me'));
+      expect(
+        liveStateUpdates.any((update) => update['connection_state'] == 'left'),
+        isTrue,
+      );
       expect(liveSession.disconnects, 1);
       expect(events, ['realtime-stop', 'exit-session']);
       expect(tester.takeException(), isNull);

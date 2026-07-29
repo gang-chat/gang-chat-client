@@ -150,8 +150,7 @@ String musicBoxUsageLabel(MusicBoxUsage usage) {
 }
 
 /// A selectable music search source. netease and bilibili go through the GD
-/// music API; tencent (QQ音乐) routes to the self-hosted QQ音乐 service on the
-/// server. netease is the default. Verified end-to-end (search + playable url).
+/// music API; tencent routes to the self-hosted QQ Music service on the server.
 class MusicBoxSource {
   const MusicBoxSource({required this.id, required this.label});
 
@@ -162,13 +161,25 @@ class MusicBoxSource {
   final String label;
 }
 
-/// The sources offered in the search picker, in display order. netease is first
-/// and is treated as the default selection.
-const List<MusicBoxSource> musicBoxSources = [
-  MusicBoxSource(id: 'netease', label: '网易云'),
-  MusicBoxSource(id: 'bilibili', label: '哔哩哔哩'),
-  MusicBoxSource(id: 'tencent', label: 'QQ音乐'),
-];
+/// Temporarily keeps QQ Music out of the client without removing its routing
+/// implementation. Re-enable it here once the source is ready for users again.
+const bool musicBoxTencentSourceEnabled = false;
 
 /// The default source id (netease).
 const String musicBoxDefaultSource = 'netease';
+
+/// The sources offered in the search picker, in display order.
+const List<MusicBoxSource> musicBoxSources = [
+  MusicBoxSource(id: 'netease', label: '网易云'),
+  MusicBoxSource(id: 'bilibili', label: '哔哩哔哩'),
+  if (musicBoxTencentSourceEnabled)
+    MusicBoxSource(id: 'tencent', label: 'QQ音乐'),
+];
+
+bool musicBoxSourceEnabled(String source) {
+  return musicBoxSources.any((candidate) => candidate.id == source);
+}
+
+String normalizedMusicBoxSource(String source) {
+  return musicBoxSourceEnabled(source) ? source : musicBoxDefaultSource;
+}

@@ -27,6 +27,10 @@ const _musicBoxPanelWidth = 270.0;
 const _memberCardWidth = 154.0;
 const _memberCardMinTwoColumnWidth = 135.0;
 const _memberCardSpacing = 12.0;
+const _memberCardHoverLift = 3.0;
+const _memberCardBaseDepth = 5.0;
+const _memberCardSurfaceHeight =
+    _memberCardWidth + _memberCardHoverLift + _memberCardBaseDepth;
 const _controlButtonSize = 44.0;
 const _controlHoverInfoBelowReserve = 4.0;
 const _controlHoverInfoVerticalOffset = 24.0;
@@ -75,6 +79,7 @@ class LiveChannelPane extends StatefulWidget {
     required this.loading,
     required this.joined,
     required this.joining,
+    required this.leaving,
     required this.micMuted,
     required this.headphonesMuted,
     required this.voiceBlocked,
@@ -140,6 +145,7 @@ class LiveChannelPane extends StatefulWidget {
   final bool loading;
   final bool joined;
   final bool joining;
+  final bool leaving;
   final bool micMuted;
   final bool headphonesMuted;
   final bool voiceBlocked;
@@ -249,7 +255,10 @@ class _LiveChannelPaneState extends State<LiveChannelPane> {
 
   void _selectStageAndJoinIfNeeded(LiveStageSelection selection) {
     widget.onStageSelectionChanged(selection);
-    if (!widget.joined && !widget.joining && !widget.loading) {
+    if (!widget.joined &&
+        !widget.joining &&
+        !widget.leaving &&
+        !widget.loading) {
       widget.onJoin();
     }
   }
@@ -351,6 +360,7 @@ class _LiveChannelPaneState extends State<LiveChannelPane> {
                         Expanded(
                           flex: stageTrack == null ? 1 : 2,
                           child: _LiveMemberStage(
+                            loading: widget.loading,
                             participants: participants,
                             currentUser: widget.currentUser,
                             localMicMuted: widget.micMuted,
@@ -393,7 +403,7 @@ class _LiveChannelPaneState extends State<LiveChannelPane> {
                     ),
                     controls: _LiveControlBar(
                       joined: widget.joined,
-                      joining: widget.joining || widget.loading,
+                      joining: widget.joining,
                       micMuted: widget.micMuted,
                       headphonesMuted: widget.headphonesMuted,
                       voiceBlocked: widget.voiceBlocked,
@@ -404,7 +414,9 @@ class _LiveChannelPaneState extends State<LiveChannelPane> {
                       musicBox: musicBox,
                       musicBoxEnabled: musicBoxEnabled,
                       musicBoxOpen: musicBoxOpen,
-                      onJoin: widget.onJoin,
+                      onJoin: widget.loading || widget.leaving
+                          ? null
+                          : widget.onJoin,
                       onLeave: widget.onLeave,
                       onToggleMic: widget.onToggleMic,
                       onToggleHeadphones: widget.onToggleHeadphones,

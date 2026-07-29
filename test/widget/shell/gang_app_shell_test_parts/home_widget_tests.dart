@@ -1937,7 +1937,7 @@ void registerShellHomeWidgetTests() {
 
       await tester.tap(find.byTooltip('接受邀请'));
       await tester.tap(find.byTooltip('接受邀请'), warnIfMissed: false);
-      await tester.pumpAndSettle();
+      await _pumpUntilFound(tester, find.byType(Dialog));
 
       expect(find.text('申请加入'), findsOneWidget);
       expect(find.text('您需要等待'), findsOneWidget);
@@ -1947,7 +1947,7 @@ void registerShellHomeWidgetTests() {
       expect(find.text('申请加入'), findsNothing);
 
       await tester.tap(find.byTooltip('接受邀请'));
-      await tester.pumpAndSettle();
+      await _pumpUntilFound(tester, find.byType(Dialog));
 
       expect(find.text('申请加入'), findsOneWidget);
       await tester.tap(find.widgetWithText(ui.Button, '取消'));
@@ -1956,7 +1956,7 @@ void registerShellHomeWidgetTests() {
       expect(find.text('申请加入'), findsNothing);
 
       await tester.tap(find.byTooltip('接受邀请'));
-      await tester.pumpAndSettle();
+      await _pumpUntilFound(tester, find.byType(Dialog));
 
       expect(find.text('申请加入'), findsOneWidget);
       await tester.enterText(_textFieldWithHint('申请说明'), 'I was invited');

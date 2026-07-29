@@ -1302,11 +1302,61 @@ void registerShellUiShowcaseWidgetTests() {
     );
     expect(surfaces.map((surface) => surface.enabled), everyElement(isTrue));
     expect(surfaces.map((surface) => surface.onPressed), everyElement(isNull));
+    expect(find.byIcon(Icons.call), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
     await tester.tap(find.text('Loading'));
-    await tester.tap(find.byIcon(Icons.call));
+    await tester.tap(find.byTooltip('Call'));
 
     expect(taps, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('loading button replaces only an existing leading icon', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              ui.Button(
+                loading: true,
+                icon: const Icon(Icons.call),
+                onPressed: () {},
+                child: const Text('Join'),
+              ),
+              ui.Button(
+                loading: true,
+                onPressed: () {},
+                child: const Text('Wait'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final join = find.widgetWithText(ui.Button, 'Join');
+    final wait = find.widgetWithText(ui.Button, 'Wait');
+    expect(
+      find.descendant(of: join, matching: find.byIcon(Icons.call)),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: join,
+        matching: find.byType(CircularProgressIndicator),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: wait,
+        matching: find.byType(CircularProgressIndicator),
+      ),
+      findsNothing,
+    );
     expect(tester.takeException(), isNull);
   });
 

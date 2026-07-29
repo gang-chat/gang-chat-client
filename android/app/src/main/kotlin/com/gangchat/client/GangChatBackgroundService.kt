@@ -48,10 +48,15 @@ class GangChatBackgroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        stopSelf()
         val processStopped = AtomicBoolean(false)
         val stopProcess = Runnable {
             if (processStopped.compareAndSet(false, true)) {
+                // Keep this foreground service alive while Flutter sends the
+                // terminal live-leave request. Calling stopSelf() before the
+                // method-channel round trip makes the process immediately
+                // reclaimable on aggressive Android builds (notably OPPO),
+                // leaving the remote participant and screen share stale.
+                stopSelf()
                 Process.killProcess(Process.myPid())
             }
         }
@@ -69,6 +74,6 @@ class GangChatBackgroundService : Service() {
     }
 
     companion object {
-        private const val taskRemovalGraceMillis = 1750L
+        private const val taskRemovalGraceMillis = 3000L
     }
 }

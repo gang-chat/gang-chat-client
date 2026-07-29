@@ -15,6 +15,7 @@ Widget _host(
   double? height,
   bool resizeToAvoidBottomInset = true,
   List<MusicBoxSearchResult> searchResults = const [],
+  String source = 'netease',
 }) {
   return MaterialApp(
     theme: uiTheme().copyWith(platform: platform),
@@ -29,7 +30,7 @@ Widget _host(
           searchResults: searchResults,
           searching: false,
           searchError: null,
-          source: 'netease',
+          source: source,
           onTogglePlayback: () {},
           onSkip: () {},
           onQueueResult: (_) {},
@@ -78,6 +79,35 @@ MusicBoxState _state({
 }
 
 void main() {
+  testWidgets(
+    'source picker hides QQ Music and normalizes a legacy selection',
+    (tester) async {
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(
+        _host(
+          _state(playbackState: MusicBoxPlaybackState.stopped, positionMs: 0),
+          controller,
+          source: 'tencent',
+        ),
+      );
+
+      expect(find.text('QQ音乐'), findsNothing);
+      expect(find.text('网易云'), findsOneWidget);
+      expect(find.text('哔哩哔哩'), findsOneWidget);
+      expect(
+        tester
+            .widget<SegmentedControl<String>>(
+              find.byType(SegmentedControl<String>),
+            )
+            .value,
+        'netease',
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('height pressure shrinks only the search results viewport', (
     tester,
   ) async {
