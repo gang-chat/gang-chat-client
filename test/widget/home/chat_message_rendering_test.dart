@@ -1242,6 +1242,7 @@ void main() {
             canRecall: (_) => false,
           ),
         ),
+        platform: TargetPlatform.windows,
       ),
     );
 
@@ -1289,9 +1290,58 @@ void main() {
     await tester.longPress(find.byType(TextField));
     await tester.pumpAndSettle();
 
+    final editableTextState = tester.state<EditableTextState>(
+      find.byType(EditableText),
+    );
     expect(find.text('复制'), findsOneWidget);
     expect(find.text('删除'), findsOneWidget);
     expect(find.text('全选'), findsNothing);
+    expect(editableTextState.textEditingValue.selection.isCollapsed, isTrue);
+    expect(_selectionHandleFades(), findsNothing);
+  });
+
+  testWidgets('Android message double tap keeps its text selection', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(
+        MessageBubbleForTest(
+          message: _message(type: 'text', body: 'select this message'),
+          downloadActions: _downloadActions(),
+        ),
+        platform: TargetPlatform.android,
+      ),
+    );
+
+    final field = find.byType(TextField);
+    final rect = tester.getRect(field);
+    final wordPosition = Offset(rect.left + 24, rect.center.dy);
+    await tester.tapAt(wordPosition);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tapAt(wordPosition);
+    await tester.pump();
+
+    final editableTextState = tester.state<EditableTextState>(
+      find.byType(EditableText),
+    );
+    expect(editableTextState.textEditingValue.selection.isCollapsed, isFalse);
+
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(editableTextState.textEditingValue.selection.isCollapsed, isFalse);
+    expect(_selectionHandleFades(), findsNWidgets(2));
+    expect(find.text('删除'), findsNothing);
+
+    editableTextState.hideToolbar(false);
+    await tester.pump();
+    expect(editableTextState.textEditingValue.selection.isCollapsed, isFalse);
+    expect(_selectionHandleFades(), findsNWidgets(2));
+
+    expect(editableTextState.showToolbar(), isTrue);
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('text-context-menu-panel')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('message quote shows room name and time and opens source', (
@@ -1538,6 +1588,7 @@ void main() {
             canRecall: (_) => false,
           ),
         ),
+        platform: TargetPlatform.windows,
       ),
     );
 
@@ -2658,6 +2709,15 @@ void main() {
       );
     }
   });
+}
+
+Finder _selectionHandleFades() {
+  return find.descendant(
+    of: find.byWidgetPredicate(
+      (widget) => '${widget.runtimeType}' == '_SelectionHandleOverlay',
+    ),
+    matching: find.byType(FadeTransition),
+  );
 }
 
 Widget _host(Widget child, {double? height, TargetPlatform? platform}) {

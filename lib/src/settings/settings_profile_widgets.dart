@@ -13,6 +13,8 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
   final _undoController = UndoHistoryController();
+  late final EditableTextContextMenuBuilder _contextMenuBuilder =
+      _buildContextMenu;
 
   @override
   void dispose() {
@@ -72,12 +74,7 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
                   onChanged: (_) => setState(() {}),
                   cursorColor: _textSecondary,
                   undoController: _undoController,
-                  contextMenuBuilder: (context, editableTextState) =>
-                      buildTextFieldContextMenu(
-                        context,
-                        editableTextState,
-                        undoController: _undoController,
-                      ),
+                  contextMenuBuilder: _contextMenuBuilder,
                   style: const TextStyle(
                     color: _textPrimary,
                     fontWeight: FontWeight.w500,
@@ -109,6 +106,17 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildContextMenu(
+    BuildContext context,
+    EditableTextState editableTextState,
+  ) {
+    return buildTextFieldContextMenu(
+      context,
+      editableTextState,
+      undoController: _undoController,
     );
   }
 }

@@ -771,6 +771,8 @@ class _TitleSearchField extends StatefulWidget {
 class _TitleSearchFieldState extends State<_TitleSearchField> {
   final FocusNode _focusNode = FocusNode();
   final UndoHistoryController _undoController = UndoHistoryController();
+  late final EditableTextContextMenuBuilder _contextMenuBuilder =
+      _buildContextMenu;
   bool _focused = false;
   bool _hasText = false;
 
@@ -852,14 +854,7 @@ class _TitleSearchFieldState extends State<_TitleSearchField> {
                 cursorColor: UiColors.accent,
                 cursorWidth: 1.5,
                 style: UiTypography.body.copyWith(fontSize: 13, height: 1.2),
-                contextMenuBuilder: (context, editableTextState) =>
-                    buildTextFieldContextMenu(
-                      context,
-                      editableTextState,
-                      undoController: _undoController,
-                      tapRegionGroupId: widget.tapRegionGroup,
-                      onOpenChanged: widget.onContextMenuOpenChanged,
-                    ),
+                contextMenuBuilder: _contextMenuBuilder,
                 decoration: InputDecoration(
                   isCollapsed: true,
                   border: InputBorder.none,
@@ -886,6 +881,19 @@ class _TitleSearchFieldState extends State<_TitleSearchField> {
           ],
         ],
       ),
+    );
+  }
+
+  Widget _buildContextMenu(
+    BuildContext context,
+    EditableTextState editableTextState,
+  ) {
+    return buildTextFieldContextMenu(
+      context,
+      editableTextState,
+      undoController: _undoController,
+      tapRegionGroupId: widget.tapRegionGroup,
+      onOpenChanged: widget.onContextMenuOpenChanged,
     );
   }
 }

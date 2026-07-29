@@ -260,6 +260,35 @@ void main() {
     expect(find.text('复制'), findsNothing);
   });
 
+  testWidgets('Android select all keeps the menu and both handles visible', (
+    tester,
+  ) async {
+    _mockClipboardText(null);
+    final controller = TextEditingController(text: 'hello world');
+    addTearDown(controller.dispose);
+
+    await _pumpInput(tester, controller, platform: TargetPlatform.android);
+    await _showInputContextMenu(
+      tester,
+      selection: const TextSelection(baseOffset: 0, extentOffset: 5),
+    );
+
+    await tester.tap(find.text('全选'));
+    await tester.pump();
+
+    expect(
+      controller.selection,
+      const TextSelection(baseOffset: 0, extentOffset: 11),
+    );
+    expect(_selectionHandleFades(), findsNWidgets(2));
+    expect(
+      find.byKey(const ValueKey('text-context-menu-panel')),
+      findsOneWidget,
+    );
+    expect(find.text('复制'), findsOneWidget);
+    expect(find.text('全选'), findsNothing);
+  });
+
   testWidgets('input context menu hides select all when text is empty', (
     tester,
   ) async {
@@ -805,6 +834,83 @@ void main() {
 
     expect(redoCount, 1);
   });
+
+  testWidgets('Android input hold keeps focus and opens the text menu', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: 'hello world');
+    final focusNode = FocusNode();
+    final focusEvents = <bool>[];
+    focusNode.addListener(() => focusEvents.add(focusNode.hasFocus));
+    addTearDown(controller.dispose);
+    addTearDown(focusNode.dispose);
+
+    await _pumpInput(
+      tester,
+      controller,
+      focusNode: focusNode,
+      platform: TargetPlatform.android,
+    );
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
+    focusEvents.clear();
+
+    final field = find.byType(TextField);
+    final rect = tester.getRect(field);
+    final gesture = await tester.startGesture(
+      Offset(rect.left + 30, rect.center.dy),
+    );
+    await tester.pump(kLongPressTimeout + const Duration(milliseconds: 100));
+
+    expect(focusNode.hasFocus, isTrue);
+    expect(focusEvents, isNot(contains(false)));
+
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(focusNode.hasFocus, isTrue);
+    expect(focusEvents, isNot(contains(false)));
+    expect(controller.selection.isCollapsed, isFalse);
+    expect(_selectionHandleFades(), findsNWidgets(2));
+    expect(
+      find.byKey(const ValueKey('text-context-menu-panel')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('Android input keeps its selection overlay across rebuilds', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: 'hello world');
+    addTearDown(controller.dispose);
+
+    await _pumpInput(tester, controller, platform: TargetPlatform.android);
+    final field = find.byType(TextField);
+    final builderBefore = tester.widget<TextField>(field).contextMenuBuilder;
+    final rect = tester.getRect(field);
+    final wordPosition = Offset(rect.left + 30, rect.center.dy);
+
+    await tester.tapAt(wordPosition);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tapAt(wordPosition);
+    await tester.pumpAndSettle();
+
+    expect(controller.selection.isCollapsed, isFalse);
+    expect(_selectionHandleFades(), findsNWidgets(2));
+    expect(
+      tester.widget<TextField>(field).contextMenuBuilder,
+      same(builderBefore),
+    );
+  });
+}
+
+Finder _selectionHandleFades() {
+  return find.descendant(
+    of: find.byWidgetPredicate(
+      (widget) => '${widget.runtimeType}' == '_SelectionHandleOverlay',
+    ),
+    matching: find.byType(FadeTransition),
+  );
 }
 
 Future<void> _pumpInput(
@@ -813,9 +919,11 @@ Future<void> _pumpInput(
   FocusNode? focusNode,
   UndoHistoryController? undoController,
   bool obscureText = false,
+  TargetPlatform? platform,
 }) {
   return tester.pumpWidget(
     MaterialApp(
+      theme: ThemeData(platform: platform),
       home: Scaffold(
         body: Center(
           child: SizedBox(

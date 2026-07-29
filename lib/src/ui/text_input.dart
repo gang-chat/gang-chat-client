@@ -37,6 +37,8 @@ class _TextInputState extends State<TextInput> {
   TextEditingController? _localController;
   final FocusNode _focusNode = FocusNode();
   UndoHistoryController? _localUndoController;
+  late final EditableTextContextMenuBuilder _contextMenuBuilder =
+      _buildContextMenu;
 
   TextEditingController get _effectiveController =>
       widget.controller ?? _localController!;
@@ -122,14 +124,7 @@ class _TextInputState extends State<TextInput> {
                 onSubmitted: widget.onSubmitted,
                 cursorColor: UiColors.accent,
                 style: UiTypography.body,
-                contextMenuBuilder: (context, editableTextState) =>
-                    buildTextFieldContextMenu(
-                      context,
-                      editableTextState,
-                      undoController: _effectiveUndoController,
-                      allowCut: !widget.obscureText,
-                      allowCopy: !widget.obscureText,
-                    ),
+                contextMenuBuilder: _contextMenuBuilder,
                 decoration: InputDecoration(
                   isDense: true,
                   hintText: widget.hint,
@@ -162,6 +157,19 @@ class _TextInputState extends State<TextInput> {
         const SizedBox(height: 7),
         field,
       ],
+    );
+  }
+
+  Widget _buildContextMenu(
+    BuildContext context,
+    EditableTextState editableTextState,
+  ) {
+    return buildTextFieldContextMenu(
+      context,
+      editableTextState,
+      undoController: _effectiveUndoController,
+      allowCut: !widget.obscureText,
+      allowCopy: !widget.obscureText,
     );
   }
 }

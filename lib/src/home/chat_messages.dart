@@ -2345,6 +2345,7 @@ class ChatMessageContent extends StatelessWidget {
     this.profileActionBuilder,
     this.isUserInLive,
     this.onSelectionActiveChanged,
+    this.textSelectionResetListenable,
     this.onOpenQuote,
     this.timestampNow,
     this.showDetailedTimestamps = false,
@@ -2369,6 +2370,7 @@ class ChatMessageContent extends StatelessWidget {
   final UserProfileActionBuilder? profileActionBuilder;
   final bool Function(String userId)? isUserInLive;
   final ValueChanged<bool>? onSelectionActiveChanged;
+  final Listenable? textSelectionResetListenable;
   final Future<void> Function(BuildContext context, MessageQuote quote)?
   onOpenQuote;
   final DateTime? timestampNow;
@@ -2428,6 +2430,7 @@ class ChatMessageContent extends StatelessWidget {
             isUserInLive: isUserInLive,
             onSelectionActiveChanged:
                 onSelectionActiveChanged ?? _ignoreMessageSelectionChange,
+            selectionResetListenable: textSelectionResetListenable,
           ),
         },
         if (status != null) ...[
@@ -2516,6 +2519,7 @@ class _MessageBubble extends StatefulWidget {
 class _MessageBubbleState extends State<_MessageBubble> {
   late final UiAndroidLongPressTracker _androidLongPressTracker =
       UiAndroidLongPressTracker(onLongPress: _handleAndroidBubbleLongPress);
+  final ValueNotifier<int> _textSelectionReset = ValueNotifier<int>(0);
   bool _textSelectionActive = false;
   bool _contextMenuActive = false;
   bool _androidLongPressEnabled = false;
@@ -2525,6 +2529,7 @@ class _MessageBubbleState extends State<_MessageBubble> {
   @override
   void dispose() {
     _androidLongPressTracker.cancel();
+    _textSelectionReset.dispose();
     super.dispose();
   }
 
@@ -2640,6 +2645,7 @@ class _MessageBubbleState extends State<_MessageBubble> {
                 profileActionBuilder: widget.profileActionBuilder,
                 isUserInLive: widget.isUserInLive,
                 onSelectionActiveChanged: _handleTextSelectionActiveChanged,
+                textSelectionResetListenable: _textSelectionReset,
                 onOpenQuote: widget.messageActions.onOpenQuote,
               ),
             ),
@@ -2656,6 +2662,9 @@ class _MessageBubbleState extends State<_MessageBubble> {
     if (contentKind == message_display.MessageContentKind.text &&
         _textSelectionActiveAtPointerDown) {
       return;
+    }
+    if (contentKind == message_display.MessageContentKind.text) {
+      _textSelectionReset.value++;
     }
     ContextMenuController.removeAny();
     _showBubbleContextMenuAt(
@@ -2957,6 +2966,7 @@ class _TextBody extends StatefulWidget {
     required this.mentionMembers,
     required this.mentionHighlighted,
     required this.onSelectionActiveChanged,
+    this.selectionResetListenable,
     this.onResolveSenderProfile,
     this.onResolveRoomProfile,
     this.onEnterProfileRoom,
@@ -2971,6 +2981,7 @@ class _TextBody extends StatefulWidget {
   final List<RoomMember> mentionMembers;
   final bool mentionHighlighted;
   final ValueChanged<bool> onSelectionActiveChanged;
+  final Listenable? selectionResetListenable;
   final Future<UserSummary> Function(UserSummary sender)?
   onResolveSenderProfile;
   final RoomProfileResolver? onResolveRoomProfile;
@@ -2987,10 +2998,17 @@ class _TextBodyState extends State<_TextBody> {
   final FocusNode _focusNode = FocusNode();
   final UndoHistoryController _undoController = UndoHistoryController();
   final Object _tapRegionGroup = Object();
+  late final EditableTextContextMenuBuilder _contextMenuBuilder =
+      _buildContextMenu;
   EditableTextState? _activeTextContextMenuState;
   Offset? _lastPointerDownPosition;
   bool _textContextMenuOpen = false;
   bool _textContextMenuActionPressed = false;
+  int? _androidOutsidePointer;
+  Offset? _androidOutsidePointerOrigin;
+  TextSelection? _androidOutsideInitialSelection;
+  bool _androidOutsidePointerMoved = false;
+  bool _androidOutsideSelectionChanged = false;
 
   @override
   void initState() {
@@ -3006,11 +3024,16 @@ class _TextBodyState extends State<_TextBody> {
       onOpenLink: _handleOpenLink,
     );
     _controller.addListener(_handleControllerChanged);
+    widget.selectionResetListenable?.addListener(_handleSelectionReset);
   }
 
   @override
   void didUpdateWidget(_TextBody oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectionResetListenable != widget.selectionResetListenable) {
+      oldWidget.selectionResetListenable?.removeListener(_handleSelectionReset);
+      widget.selectionResetListenable?.addListener(_handleSelectionReset);
+    }
     _controller.updateMentionContext(
       currentUser: widget.currentUser,
       ownerUserId: widget.ownerUserId,
@@ -3033,6 +3056,8 @@ class _TextBodyState extends State<_TextBody> {
 
   @override
   void dispose() {
+    _stopAndroidOutsidePointerTracking();
+    widget.selectionResetListenable?.removeListener(_handleSelectionReset);
     _controller.removeListener(_handleControllerChanged);
     widget.onSelectionActiveChanged(false);
     _controller.dispose();
@@ -3067,18 +3092,7 @@ class _TextBodyState extends State<_TextBody> {
               style: UiTypography.body,
               cursorColor: UiColors.accent,
               undoController: _undoController,
-              contextMenuBuilder: (context, editableTextState) {
-                _activeTextContextMenuState = editableTextState;
-                return buildTextFieldContextMenu(
-                  context,
-                  editableTextState,
-                  readOnly: true,
-                  showReadOnlySelectAll: false,
-                  tapRegionGroupId: _tapRegionGroup,
-                  onOpenChanged: _handleTextContextMenuOpenChanged,
-                  onActionPressed: _handleTextContextMenuActionPressed,
-                );
-              },
+              contextMenuBuilder: _contextMenuBuilder,
               decoration: const InputDecoration(
                 isCollapsed: true,
                 border: InputBorder.none,
@@ -3095,7 +3109,38 @@ class _TextBodyState extends State<_TextBody> {
   }
 
   void _handleControllerChanged() {
+    final initialSelection = _androidOutsideInitialSelection;
+    if (initialSelection != null && _controller.selection != initialSelection) {
+      _androidOutsideSelectionChanged = true;
+    }
     widget.onSelectionActiveChanged(_hasSelection);
+  }
+
+  void _handleSelectionReset() {
+    _collapseSelection(hideToolbar: true);
+    // The bubble context menu and EditableText both resolve the same Android
+    // long press. EditableText can publish its selection later in this frame,
+    // so reconcile once more after both recognizers have completed.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _collapseSelection(hideToolbar: true);
+    });
+  }
+
+  Widget _buildContextMenu(
+    BuildContext context,
+    EditableTextState editableTextState,
+  ) {
+    _activeTextContextMenuState = editableTextState;
+    return buildTextFieldContextMenu(
+      context,
+      editableTextState,
+      readOnly: true,
+      showReadOnlySelectAll: false,
+      tapRegionGroupId: _tapRegionGroup,
+      onOpenChanged: _handleTextContextMenuOpenChanged,
+      onActionPressed: _handleTextContextMenuActionPressed,
+    );
   }
 
   void _handlePointerDown(PointerDownEvent event) {
@@ -3121,7 +3166,10 @@ class _TextBodyState extends State<_TextBody> {
     _textContextMenuOpen = false;
     _textContextMenuActionPressed = false;
     _activeTextContextMenuState = null;
-    if (closedByOutsideClick) _collapseSelection();
+    if (closedByOutsideClick &&
+        Theme.of(context).platform != TargetPlatform.android) {
+      _collapseSelection();
+    }
   }
 
   bool get _hasSelection {
@@ -3131,7 +3179,64 @@ class _TextBodyState extends State<_TextBody> {
 
   void _handleTapOutside(PointerDownEvent event) {
     if ((event.buttons & kPrimaryMouseButton) == 0) return;
+    if (Theme.of(context).platform == TargetPlatform.android) {
+      _startAndroidOutsidePointerTracking(event);
+      return;
+    }
     _collapseSelection(hideToolbar: true);
+  }
+
+  void _startAndroidOutsidePointerTracking(PointerDownEvent event) {
+    if (!_hasSelection) return;
+    _stopAndroidOutsidePointerTracking();
+    _androidOutsidePointer = event.pointer;
+    _androidOutsidePointerOrigin = event.position;
+    _androidOutsideInitialSelection = _controller.selection;
+    _androidOutsidePointerMoved = false;
+    _androidOutsideSelectionChanged = false;
+    GestureBinding.instance.pointerRouter.addGlobalRoute(
+      _handleAndroidOutsidePointerEvent,
+    );
+  }
+
+  void _handleAndroidOutsidePointerEvent(PointerEvent event) {
+    if (event.pointer != _androidOutsidePointer) return;
+    final origin = _androidOutsidePointerOrigin;
+    if (origin != null && event.position != origin) {
+      _androidOutsidePointerMoved =
+          _androidOutsidePointerMoved ||
+          (event.position - origin).distance > kTouchSlop;
+    }
+    final initialSelection = _androidOutsideInitialSelection;
+    if (initialSelection != null && _controller.selection != initialSelection) {
+      _androidOutsideSelectionChanged = true;
+    }
+    if (event is! PointerUpEvent && event is! PointerCancelEvent) return;
+
+    final shouldCollapse =
+        event is PointerUpEvent &&
+        !_androidOutsidePointerMoved &&
+        !_androidOutsideSelectionChanged;
+    final selectionToCollapse = _androidOutsideInitialSelection;
+    _stopAndroidOutsidePointerTracking();
+    if (!shouldCollapse || selectionToCollapse == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _controller.selection != selectionToCollapse) return;
+      _collapseSelection(hideToolbar: true);
+    });
+  }
+
+  void _stopAndroidOutsidePointerTracking() {
+    if (_androidOutsidePointer != null) {
+      GestureBinding.instance.pointerRouter.removeGlobalRoute(
+        _handleAndroidOutsidePointerEvent,
+      );
+    }
+    _androidOutsidePointer = null;
+    _androidOutsidePointerOrigin = null;
+    _androidOutsideInitialSelection = null;
+    _androidOutsidePointerMoved = false;
+    _androidOutsideSelectionChanged = false;
   }
 
   void _handleGlobalPrimaryPointerDownDuringTextSelectionProtection(

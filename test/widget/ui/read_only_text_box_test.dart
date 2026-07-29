@@ -90,7 +90,7 @@ void main() {
     expect(selection.isCollapsed, isFalse);
   });
 
-  testWidgets('Android hold preserves selection like a desktop right click', (
+  testWidgets('Android hold uses native text selection and context menu', (
     tester,
   ) async {
     await _pumpReadOnlyTextBox(
@@ -115,9 +115,11 @@ void main() {
     await tester.longPressAt(Offset(rect.right - 8, rect.center.dy));
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(editableTextState.textEditingValue.selection, selectedText);
-    expect(find.text('复制'), findsOneWidget);
-    expect(find.text('Ctrl+C'), findsOneWidget);
+    expect(editableTextState.textEditingValue.selection.isValid, isTrue);
+    expect(
+      find.byKey(const ValueKey('text-context-menu-panel')),
+      findsOneWidget,
+    );
   });
 }
 

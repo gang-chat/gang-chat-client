@@ -372,28 +372,35 @@ class _AuthGateState extends State<_AuthGate> {
           : null,
     );
 
-    return SelectionArea(
-      child: SelectionContainer.disabled(
-        child: AppUpdateGate(
-          releaseBucketUrl: widget.config.releaseBucketUrl,
+    final home = SelectionContainer.disabled(
+      child: AppUpdateGate(
+        releaseBucketUrl: widget.config.releaseBucketUrl,
+        windowController: widget.windowController,
+        onUpdateAvailable: (update) {
+          if (!mounted) return;
+          setState(() => _detectedAppUpdate = update);
+        },
+        child: HomePage(
+          app: app,
+          languageStore: widget.languageStore,
           windowController: widget.windowController,
-          onUpdateAvailable: (update) {
-            if (!mounted) return;
-            setState(() => _detectedAppUpdate = update);
+          detectedAppUpdate: _detectedAppUpdate,
+          onDetectedAppUpdateShown: () {
+            if (!mounted || _detectedAppUpdate == null) return;
+            setState(() => _detectedAppUpdate = null);
           },
-          child: HomePage(
-            app: app,
-            languageStore: widget.languageStore,
-            windowController: widget.windowController,
-            detectedAppUpdate: _detectedAppUpdate,
-            onDetectedAppUpdateShown: () {
-              if (!mounted || _detectedAppUpdate == null) return;
-              setState(() => _detectedAppUpdate = null);
-            },
-          ),
         ),
       ),
     );
+
+    // On Android the app-wide SelectableRegion competes with EditableText's
+    // native long-press recognizer. It temporarily takes primary focus while
+    // an input is selecting text, which closes and reopens the IME and leaves
+    // the platform selection handles unable to drag. Individual inputs and
+    // message bodies already own their selection, so the global region is only
+    // retained on desktop where cross-widget mouse selection is useful.
+    if (Theme.of(context).platform == TargetPlatform.android) return home;
+    return SelectionArea(child: home);
   }
 }
 

@@ -37,6 +37,8 @@ class _ReadOnlySelectableTextState extends State<ReadOnlySelectableText> {
   late final TextEditingController _controller;
   final FocusNode _focusNode = FocusNode();
   final UndoHistoryController _undoController = UndoHistoryController();
+  late final EditableTextContextMenuBuilder _contextMenuBuilder =
+      _buildContextMenu;
 
   @override
   void initState() {
@@ -89,15 +91,7 @@ class _ReadOnlySelectableTextState extends State<ReadOnlySelectableText> {
         style: widget.style,
         cursorColor: UiColors.accent,
         undoController: _undoController,
-        contextMenuBuilder: (context, editableTextState) =>
-            buildTextFieldContextMenu(
-              context,
-              editableTextState,
-              readOnly: true,
-              showReadOnlySelectAll: widget.showSelectAllInContextMenu,
-              tapRegionGroupId: widget.contextMenuTapRegionGroupId,
-              onOpenChanged: widget.onContextMenuOpenChanged,
-            ),
+        contextMenuBuilder: _contextMenuBuilder,
         decoration: const InputDecoration(
           isCollapsed: true,
           border: InputBorder.none,
@@ -107,6 +101,20 @@ class _ReadOnlySelectableTextState extends State<ReadOnlySelectableText> {
           contentPadding: EdgeInsets.zero,
         ),
       ),
+    );
+  }
+
+  Widget _buildContextMenu(
+    BuildContext context,
+    EditableTextState editableTextState,
+  ) {
+    return buildTextFieldContextMenu(
+      context,
+      editableTextState,
+      readOnly: true,
+      showReadOnlySelectAll: widget.showSelectAllInContextMenu,
+      tapRegionGroupId: widget.contextMenuTapRegionGroupId,
+      onOpenChanged: widget.onContextMenuOpenChanged,
     );
   }
 }
@@ -139,6 +147,8 @@ class _ReadOnlyTextBoxState extends State<ReadOnlyTextBox> {
   late final TextEditingController _controller;
   final FocusNode _focusNode = FocusNode();
   final UndoHistoryController _undoController = UndoHistoryController();
+  late final EditableTextContextMenuBuilder _contextMenuBuilder =
+      _buildContextMenu;
 
   @override
   void initState() {
@@ -196,12 +206,7 @@ class _ReadOnlyTextBoxState extends State<ReadOnlyTextBox> {
           style: style,
           cursorColor: UiColors.accent,
           undoController: _undoController,
-          contextMenuBuilder: (context, editableTextState) =>
-              buildTextFieldContextMenu(
-                context,
-                editableTextState,
-                readOnly: true,
-              ),
+          contextMenuBuilder: _contextMenuBuilder,
           decoration: InputDecoration(
             isDense: true,
             border: InputBorder.none,
@@ -212,6 +217,17 @@ class _ReadOnlyTextBoxState extends State<ReadOnlyTextBox> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildContextMenu(
+    BuildContext context,
+    EditableTextState editableTextState,
+  ) {
+    return buildTextFieldContextMenu(
+      context,
+      editableTextState,
+      readOnly: true,
     );
   }
 }

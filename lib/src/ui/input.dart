@@ -87,6 +87,9 @@ class _InputState extends State<Input> {
   TextEditingController? _localController;
   FocusNode? _localFocusNode;
   UndoHistoryController? _localUndoController;
+  late final EditableTextContextMenuBuilder _contextMenuBuilder =
+      _buildContextMenu;
+  String _lastControllerText = '';
   bool _hovered = false;
 
   TextEditingController get _effectiveController =>
@@ -126,6 +129,7 @@ class _InputState extends State<Input> {
     _localUndoController = widget.undoController == null
         ? UndoHistoryController()
         : null;
+    _lastControllerText = _effectiveController.text;
     _effectiveController.addListener(_handleTextChanged);
     _effectiveFocusNode.addListener(_handleFocusChanged);
   }
@@ -147,6 +151,7 @@ class _InputState extends State<Input> {
         _localController?.dispose();
         _localController = null;
       }
+      _lastControllerText = _effectiveController.text;
       _effectiveController.addListener(_handleTextChanged);
     }
 
@@ -188,9 +193,16 @@ class _InputState extends State<Input> {
     super.dispose();
   }
 
-  void _handleTextChanged() => setState(() {});
+  void _handleTextChanged() {
+    final text = _effectiveController.text;
+    if (_lastControllerText == text) return;
+    _lastControllerText = text;
+    setState(() {});
+  }
 
-  void _handleFocusChanged() => setState(() {});
+  void _handleFocusChanged() {
+    setState(() {});
+  }
 
   void _handleHoverChanged(bool hovered) {
     if (_hovered == hovered) return;
@@ -241,16 +253,8 @@ class _InputState extends State<Input> {
           onTapOutside: widget.onTapOutside,
           groupId: widget.tapRegionGroupId ?? EditableText,
           contextMenuBuilder: widget.enableInteractiveSelection
-              ? (context, editableTextState) => buildTextFieldContextMenu(
-                  context,
-                  editableTextState,
-                  undoController: _effectiveUndoController,
-                  canPasteNonText: widget.canPasteNonText,
-                  tapRegionGroupId: widget.tapRegionGroupId,
-                  allowCut: !widget.obscureText,
-                  allowCopy: !widget.obscureText,
-                )
-              : (_, _) => const SizedBox.shrink(),
+              ? _contextMenuBuilder
+              : null,
           decoration: InputDecoration(
             isDense: true,
             hintText: widget.hintText,
@@ -355,6 +359,21 @@ class _InputState extends State<Input> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildContextMenu(
+    BuildContext context,
+    EditableTextState editableTextState,
+  ) {
+    return buildTextFieldContextMenu(
+      context,
+      editableTextState,
+      undoController: _effectiveUndoController,
+      canPasteNonText: widget.canPasteNonText,
+      tapRegionGroupId: widget.tapRegionGroupId,
+      allowCut: !widget.obscureText,
+      allowCopy: !widget.obscureText,
     );
   }
 

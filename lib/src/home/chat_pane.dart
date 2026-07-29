@@ -3,10 +3,15 @@ import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart'
     show
+        GestureBinding,
+        PointerCancelEvent,
         PointerDownEvent,
+        PointerEvent,
+        PointerUpEvent,
         TapGestureRecognizer,
         kPrimaryMouseButton,
-        kSecondaryMouseButton;
+        kSecondaryMouseButton,
+        kTouchSlop;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart'
     show RenderAbstractViewport, ScrollCacheExtent;
