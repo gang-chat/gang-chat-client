@@ -175,6 +175,7 @@ class AppUpdatePage extends StatelessWidget {
               _VersionLine(
                 label: '发行时间',
                 value: releaseTimeLabel(update.asset.releasedAt),
+                scaleValueToFit: true,
               ),
               _VersionLog(value: releaseNotesLabel(update.releaseNotes)),
               if (downloading) ...[
@@ -229,31 +230,47 @@ class _VersionLine extends StatelessWidget {
     required this.label,
     required this.value,
     this.accent = false,
+    this.scaleValueToFit = false,
   });
 
   final String label;
   final String value;
   final bool accent;
+  final bool scaleValueToFit;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
         SizedBox(width: 86, child: Text(label, style: UiTypography.label)),
-        Expanded(
-          child: Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: accent ? UiColors.accent : UiColors.text,
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0,
-            ),
-          ),
-        ),
+        Expanded(child: scaleValueToFit ? _scaledValue() : _valueText()),
       ],
+    );
+  }
+
+  Widget _scaledValue() {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: _valueText(overflow: TextOverflow.visible),
+      ),
+    );
+  }
+
+  Widget _valueText({TextOverflow overflow = TextOverflow.ellipsis}) {
+    return Text(
+      value,
+      maxLines: 1,
+      softWrap: false,
+      overflow: overflow,
+      style: TextStyle(
+        color: accent ? UiColors.accent : UiColors.text,
+        fontSize: 15,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0,
+      ),
     );
   }
 }

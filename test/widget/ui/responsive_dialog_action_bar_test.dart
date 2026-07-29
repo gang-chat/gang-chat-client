@@ -144,53 +144,70 @@ void main() {
     },
   );
 
-  testWidgets('Windows keeps the existing equal-width fit decision', (
+  testWidgets('Windows keeps complete labels in one row when their sum fits', (
     tester,
   ) async {
     await pumpBar(tester, platform: TargetPlatform.windows, width: 180);
 
     final cancelRect = tester.getRect(find.byKey(cancelKey));
     final downloadRect = tester.getRect(find.byKey(downloadKey));
+    final downloadParagraph = tester.renderObject<RenderParagraph>(
+      find.text('下载新版本'),
+    );
 
-    expect(downloadRect.top, greaterThan(cancelRect.bottom));
+    expect(cancelRect.center.dy, downloadRect.center.dy);
+    expect(find.byIcon(Icons.download_outlined), findsNothing);
+    expect(downloadParagraph.didExceedMaxLines, isFalse);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-    'DialogFrame adapts standard actions and preserves the Windows Wrap row',
-    (tester) async {
-      Future<void> pumpFrame(TargetPlatform platform) async {
-        tester.view.devicePixelRatio = 1;
-        tester.view.physicalSize = const Size(600, 500);
-        await tester.pumpWidget(
-          MaterialApp(
-            theme: ui.uiTheme().copyWith(platform: platform),
-            home: Scaffold(
-              body: ui.DialogFrame(
-                title: '下载新版本',
-                maxWidth: 300,
-                adaptiveActions: actions(),
-                child: const Text('确认下载？'),
-              ),
+  testWidgets('Windows stacks only after complete labels no longer fit', (
+    tester,
+  ) async {
+    await pumpBar(tester, platform: TargetPlatform.windows, width: 140);
+
+    final cancelRect = tester.getRect(find.byKey(cancelKey));
+    final downloadRect = tester.getRect(find.byKey(downloadKey));
+    expect(downloadRect.top, greaterThan(cancelRect.bottom));
+    expect(cancelRect.width, 140);
+    expect(downloadRect.width, 140);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('DialogFrame adapts standard actions on Android and Windows', (
+    tester,
+  ) async {
+    Future<void> pumpFrame(TargetPlatform platform) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(600, 500);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ui.uiTheme().copyWith(platform: platform),
+          home: Scaffold(
+            body: ui.DialogFrame(
+              title: '下载新版本',
+              maxWidth: 300,
+              adaptiveActions: actions(),
+              child: const Text('确认下载？'),
             ),
           ),
-        );
-        await tester.pump();
-      }
+        ),
+      );
+      await tester.pump();
+    }
 
-      addTearDown(tester.view.resetDevicePixelRatio);
-      addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
 
-      await pumpFrame(TargetPlatform.android);
-      var cancelRect = tester.getRect(find.byKey(cancelKey));
-      var downloadRect = tester.getRect(find.byKey(downloadKey));
-      expect(cancelRect.center.dy, downloadRect.center.dy);
+    await pumpFrame(TargetPlatform.android);
+    var cancelRect = tester.getRect(find.byKey(cancelKey));
+    var downloadRect = tester.getRect(find.byKey(downloadKey));
+    expect(cancelRect.center.dy, downloadRect.center.dy);
 
-      await pumpFrame(TargetPlatform.windows);
-      cancelRect = tester.getRect(find.byKey(cancelKey));
-      downloadRect = tester.getRect(find.byKey(downloadKey));
-      expect(cancelRect.center.dy, downloadRect.center.dy);
-      expect(tester.takeException(), isNull);
-    },
-  );
+    await pumpFrame(TargetPlatform.windows);
+    cancelRect = tester.getRect(find.byKey(cancelKey));
+    downloadRect = tester.getRect(find.byKey(downloadKey));
+    expect(cancelRect.center.dy, downloadRect.center.dy);
+    expect(tester.takeException(), isNull);
+  });
 }

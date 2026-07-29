@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:client/src/app/app_update.dart';
@@ -156,6 +157,58 @@ void main() {
     expect(refreshCount, 1);
     expect(ignoreCount, 1);
     expect(downloadCount, 1);
+  });
+
+  testWidgets('narrow update page scales release time without ellipsis', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 800);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final update = AvailableAppUpdate(
+      currentVersion: '1.0.0',
+      latestVersion: '1.0.1',
+      asset: ReleaseAsset(
+        key: 'releases/GangChat_v1.0.1.apk',
+        version: '1.0.1',
+        platform: AppUpdatePlatform.android,
+        releasedAt: DateTime.utc(2026, 7, 29, 9, 49),
+      ),
+      downloadUrl: Uri.parse(
+        'https://os.example.test/gang-chat/releases/GangChat_v1.0.1.apk',
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ui.uiTheme().copyWith(platform: TargetPlatform.android),
+        home: AppUpdatePage(
+          update: update,
+          checking: false,
+          downloading: false,
+          downloadedBytes: 0,
+          wrapInScaffold: true,
+          onBack: () {},
+          onRefresh: () {},
+          onIgnoreVersion: () {},
+          onDownload: () {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final value = find.text('2026/07/29 17:49 UTC+08:00');
+    final fitted = find.ancestor(of: value, matching: find.byType(FittedBox));
+    final paragraph = tester.renderObject<RenderParagraph>(value);
+    expect(value, findsOneWidget);
+    expect(fitted, findsOneWidget);
+    expect(paragraph.didExceedMaxLines, isFalse);
+    expect(
+      tester.getSize(value).width,
+      greaterThan(tester.getSize(fitted).width),
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(

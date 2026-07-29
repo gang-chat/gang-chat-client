@@ -623,7 +623,6 @@ class ResponsiveDialogActionBar extends StatelessWidget {
     if (actions.isEmpty) return const SizedBox.shrink();
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isAndroid = Theme.of(context).platform == TargetPlatform.android;
         final actionWidths = [
           for (final action in actions)
             Button.minimumWidthForLabel(
@@ -633,27 +632,17 @@ class ResponsiveDialogActionBar extends StatelessWidget {
             ),
         ];
         final requiredWithIcons =
-            (expanded && !isAndroid
-                ? actionWidths.reduce(
-                        (left, right) => left > right ? left : right,
-                      ) *
-                      actions.length
-                : actionWidths.fold<double>(0, (sum, width) => sum + width)) +
+            actionWidths.fold<double>(0, (sum, width) => sum + width) +
             (_gap * (actions.length - 1));
         final actionWidthsWithoutIcons = [
           for (final action in actions)
             Button.minimumWidthForLabel(context, label: action.label),
         ];
         final requiredWithoutIcons =
-            (expanded && !isAndroid
-                ? actionWidthsWithoutIcons.reduce(
-                        (left, right) => left > right ? left : right,
-                      ) *
-                      actions.length
-                : actionWidthsWithoutIcons.fold<double>(
-                    0,
-                    (sum, width) => sum + width,
-                  )) +
+            actionWidthsWithoutIcons.fold<double>(
+              0,
+              (sum, width) => sum + width,
+            ) +
             (_gap * (actions.length - 1));
         final showIcons =
             !constraints.maxWidth.isFinite ||
@@ -689,12 +678,11 @@ class ResponsiveDialogActionBar extends StatelessWidget {
         }
 
         if (compact || expanded) {
-          if (isAndroid && constraints.maxWidth.isFinite) {
-            // Android dialog actions use their real content widths when
-            // deciding whether a row fits. Equal-width buttons can truncate a
-            // long label even when the row has enough total space. Give every
-            // action its measured minimum first, then share the spare width so
-            // a fitting row still fills the dialog.
+          if (constraints.maxWidth.isFinite) {
+            // Use each action's real content width on every platform. Equal
+            // widths can truncate a long label even when the row has enough
+            // total space. Give every action its measured minimum first, then
+            // share the spare width so a fitting row still fills the dialog.
             final widths = showIcons ? actionWidths : actionWidthsWithoutIcons;
             final buttonSpace =
                 constraints.maxWidth - (_gap * (actions.length - 1));
@@ -771,21 +759,18 @@ class DialogFrame extends StatelessWidget {
   final Widget child;
   final List<Widget> actions;
 
-  /// Standard dialog actions that adapt on Android without changing desktop.
+  /// Standard dialog actions that adapt to the available width.
   ///
-  /// Android measures each label (including text scaling), removes icons first
-  /// when needed, then stacks only if the complete labels still cannot fit.
-  /// Other platforms keep the legacy [Wrap] layout used by [actions].
+  /// Each label is measured with the active text scale. Icons are removed first
+  /// when needed, then actions stack only if the complete labels still cannot
+  /// fit on one row.
   final List<ResponsiveDialogAction> adaptiveActions;
   final Widget? actionBar;
   final double maxWidth;
 
   @override
   Widget build(BuildContext context) {
-    final useAndroidAdaptiveActions =
-        adaptiveActions.isNotEmpty &&
-        Theme.of(context).platform == TargetPlatform.android;
-    final resolvedActionBar = useAndroidAdaptiveActions
+    final resolvedActionBar = adaptiveActions.isNotEmpty
         ? ResponsiveDialogActionBar(expanded: true, actions: adaptiveActions)
         : actionBar;
     final resolvedActions = adaptiveActions.isNotEmpty
