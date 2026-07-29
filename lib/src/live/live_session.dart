@@ -1591,12 +1591,16 @@ class LiveSession extends ChangeNotifier {
       'provider=${provider != null} url=$url roomName=$name',
     );
     if (provider == null || url == null || name == null) return;
-    _screenAudioPublisher = ScreenAudioPublisher(tokenProvider: provider);
+    final publisher = ScreenAudioPublisher(tokenProvider: provider);
+    _screenAudioPublisher = publisher;
     try {
-      await _screenAudioPublisher!.start(liveKitUrl: url, roomName: name);
+      await publisher.start(liveKitUrl: url, roomName: name);
     } catch (e, st) {
       debugPrint('screen-audio: publisher start failed: $e\n$st');
-      _screenAudioPublisher = null;
+      if (identical(_screenAudioPublisher, publisher)) {
+        _screenAudioPublisher = null;
+      }
+      await publisher.stop();
       rethrow;
     }
   }
