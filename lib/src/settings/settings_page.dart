@@ -1285,10 +1285,16 @@ class _SettingsPageState extends State<SettingsPage>
     final confirmed = await _confirmAppUpdateAction(
       title: '下载新版本',
       icon: Icons.download_for_offline_outlined,
-      body: '将下载新版安装包。下载完成后，Gang Chat 会退出当前程序并启动安装程序。',
+      body: updateDownloadConfirmationBody(update.asset.platform),
       confirmLabel: '下载新版本',
     );
     if (!confirmed || !mounted) return;
+    if (update.asset.platform == AppUpdatePlatform.android) {
+      try {
+        await widget.androidSystemService.requestUpdateNotificationPermission();
+        if (!mounted) return;
+      } catch (_) {}
+    }
     await _downloadAndInstallAvailableUpdate();
   }
 
@@ -1331,6 +1337,7 @@ class _SettingsPageState extends State<SettingsPage>
     if (update == null || _downloadingAppUpdate) return;
     final cancellationToken = ReleaseDownloadCancellationToken();
     widget.onAppUpdateDownloadCancellationChanged?.call(cancellationToken);
+    var androidDownloadStatusSet = false;
     setState(() {
       _downloadingAppUpdate = true;
       _updateDownloadError = null;
@@ -1338,6 +1345,10 @@ class _SettingsPageState extends State<SettingsPage>
       _updateDownloadTotalBytes = null;
     });
     try {
+      if (update.asset.platform == AppUpdatePlatform.android) {
+        await widget.androidSystemService.setUpdateDownloadActive(true);
+        androidDownloadStatusSet = true;
+      }
       final file = await widget.releaseUpdateService.downloadUpdate(
         update,
         cancellationToken: cancellationToken,
@@ -1354,8 +1365,17 @@ class _SettingsPageState extends State<SettingsPage>
         file,
         platform: update.asset.platform,
       );
-      await Future<void>.delayed(const Duration(milliseconds: 280));
-      await _windowController.terminateApplication();
+      if (shouldTerminateApplicationAfterInstallerLaunch(
+        update.asset.platform,
+      )) {
+        await Future<void>.delayed(const Duration(milliseconds: 280));
+        await _windowController.terminateApplication();
+      } else if (mounted) {
+        // Android's package installer reads the APK from this process through
+        // FileProvider. Keep the process alive until the OS has finished its
+        // prepare/verify phase; the OS will replace it when installation wins.
+        setState(() => _downloadingAppUpdate = false);
+      }
     } on ReleaseDownloadCancelledException {
       if (!mounted) return;
       setState(() {
@@ -1376,6 +1396,13 @@ class _SettingsPageState extends State<SettingsPage>
         _markFloatingNoticeEvent('updateDownloadError', _updateDownloadError);
       });
     } finally {
+      if (androidDownloadStatusSet) {
+        try {
+          await widget.androidSystemService.setUpdateDownloadActive(false);
+        } catch (_) {
+          // Notification decoration must not mask the actual update result.
+        }
+      }
       widget.onAppUpdateDownloadCancellationChanged?.call(null);
     }
   }

@@ -420,6 +420,7 @@ String _androidInstallerErrorMessage(PlatformException error) {
     'signature_mismatch' => '安装包签名与当前应用不一致，无法直接更新',
     'installer_unavailable' => '系统中没有可用的 Android 安装器',
     'install_in_progress' => '已有更新安装流程正在进行',
+    'notification_permission_required' => '请开启通知权限，以便后台下载完成后提示安装',
     _ => '无法启动 Android 系统安装器',
   };
 }

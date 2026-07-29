@@ -200,6 +200,18 @@ class AndroidSystemService {
         false;
   }
 
+  Future<bool> requestUpdateNotificationPermission() async {
+    if (!isSupported) return false;
+    return await _channel.invokeMethod<bool>(
+          'requestUpdateNotificationPermission',
+        ) ??
+        false;
+  }
+
+  Future<void> setUpdateDownloadActive(bool active) {
+    return _invokeVoid('setUpdateDownloadActive', {'active': active});
+  }
+
   Future<AndroidPushRegistration?> pushRegistration() async {
     if (!isSupported) return null;
     _ensureMethodHandler();

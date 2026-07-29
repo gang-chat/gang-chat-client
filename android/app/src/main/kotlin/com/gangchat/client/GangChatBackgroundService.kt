@@ -16,9 +16,18 @@ import androidx.core.content.ContextCompat
 class GangChatBackgroundService : Service() {
     override fun onCreate() {
         super.onCreate()
+        isRunning = true
+        activeInstance = this
+        promoteToForeground()
+    }
+
+    private fun promoteToForeground() {
         val notification = GangChatNotifications.backgroundNotification(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             var serviceTypes = 0
+            if (GangChatNotifications.isUpdateDownloadActive()) {
+                serviceTypes = serviceTypes or ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            }
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
                 PackageManager.PERMISSION_GRANTED
             ) {
@@ -46,6 +55,12 @@ class GangChatBackgroundService : Service() {
         START_NOT_STICKY
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onDestroy() {
+        if (activeInstance === this) activeInstance = null
+        isRunning = false
+        super.onDestroy()
+    }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         val processStopped = AtomicBoolean(false)
@@ -75,5 +90,16 @@ class GangChatBackgroundService : Service() {
 
     companion object {
         private const val taskRemovalGraceMillis = 3000L
+
+        @Volatile
+        var isRunning: Boolean = false
+            private set
+
+        @Volatile
+        private var activeInstance: GangChatBackgroundService? = null
+
+        fun refreshForegroundState() {
+            activeInstance?.promoteToForeground()
+        }
     }
 }

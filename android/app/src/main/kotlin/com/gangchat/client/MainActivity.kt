@@ -86,5 +86,6 @@ class MainActivity : FlutterActivity() {
 
     companion object {
         const val notificationRoomIdExtra = "gang_chat_notification_room_id"
+        const val pendingUpdateInstallExtra = "gang_chat_pending_update_install"
     }
 }

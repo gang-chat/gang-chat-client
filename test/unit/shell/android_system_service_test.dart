@@ -34,6 +34,7 @@ void main() {
             'notificationsEnabled' => true,
             'notificationPreferenceEnabled' => true,
             'requestNotificationPermission' => true,
+            'requestUpdateNotificationPermission' => true,
             'requestBluetoothConnectPermission' => true,
             'getPushRegistration' => <String, Object?>{
               'provider': 'fcm',
@@ -125,6 +126,23 @@ void main() {
     () async {
       expect(await android.requestBluetoothConnectPermission(), isTrue);
       expect(calls.single.method, 'requestBluetoothConnectPermission');
+    },
+  );
+
+  test(
+    'Android update notifications and background state use native bridge',
+    () async {
+      expect(await android.requestUpdateNotificationPermission(), isTrue);
+      await android.setUpdateDownloadActive(true);
+      await android.setUpdateDownloadActive(false);
+
+      expect(calls.map((call) => call.method), [
+        'requestUpdateNotificationPermission',
+        'setUpdateDownloadActive',
+        'setUpdateDownloadActive',
+      ]);
+      expect(calls[1].arguments, {'active': true});
+      expect(calls[2].arguments, {'active': false});
     },
   );
 

@@ -16,8 +16,10 @@ import androidx.core.content.ContextCompat
 object GangChatNotifications {
     const val backgroundChannelId = "gang_chat_background"
     const val messageChannelId = "gang_chat_messages"
+    const val updateChannelId = "gang_chat_updates"
     const val backgroundNotificationId = 1001
     private const val summaryNotificationId = 1002
+    private const val updateReadyNotificationId = 1003
     private const val messageNotificationIdBase = 20_000
     private const val messageGroup = "gang_chat_room_messages"
     private const val lastMessageIdPrefix = "last_notified_message_id:"
@@ -44,6 +46,15 @@ object GangChatNotifications {
                     enableVibration(true)
                     setShowBadge(true)
                 },
+                NotificationChannel(
+                    updateChannelId,
+                    "版本更新",
+                    NotificationManager.IMPORTANCE_HIGH,
+                ).apply {
+                    description = "显示后台下载状态并在下载完成后提示安装"
+                    enableVibration(true)
+                    setShowBadge(false)
+                },
             ),
         )
     }
@@ -58,7 +69,9 @@ object GangChatNotifications {
         return NotificationCompat.Builder(context, backgroundChannelId)
             .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setContentTitle("Gang Chat")
-            .setContentText("正在后台保持在线")
+            .setContentText(
+                if (updateDownloadActive) "正在后台下载新版本" else "正在后台保持在线",
+            )
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setSilent(true)
@@ -66,6 +79,60 @@ object GangChatNotifications {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .build()
+    }
+
+    fun setUpdateDownloadActive(active: Boolean) {
+        updateDownloadActive = active
+        if (!GangChatBackgroundService.isRunning) return
+        GangChatBackgroundService.refreshForegroundState()
+    }
+
+    fun isUpdateDownloadActive(): Boolean = updateDownloadActive
+
+    fun showUpdateReady(
+        context: Context,
+        version: String,
+    ): Boolean {
+        if (!updateNotificationsAllowed(context)) return false
+        ensureChannels(context)
+        val launchIntent =
+            (context.packageManager.getLaunchIntentForPackage(context.packageName)
+                ?: Intent(context, MainActivity::class.java)).apply {
+                putExtra(MainActivity.pendingUpdateInstallExtra, true)
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
+        val pendingIntent =
+            PendingIntent.getActivity(
+                context,
+                updateReadyNotificationId,
+                launchIntent,
+                pendingIntentFlags(),
+            )
+        val cleanVersion = version.trim().ifEmpty { "新版本" }
+        val notification =
+            NotificationCompat.Builder(context, updateChannelId)
+                .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                .setContentTitle("Gang Chat $cleanVersion 已下载")
+                .setContentText("点击打开系统安装界面")
+                .setStyle(
+                    NotificationCompat.BigTextStyle()
+                        .bigText("Gang Chat $cleanVersion 已下载完成，点击安装。"),
+                )
+                .setContentIntent(pendingIntent)
+                .setAutoCancel(true)
+                .setCategory(NotificationCompat.CATEGORY_STATUS)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+                .build()
+        NotificationManagerCompat.from(context).notify(
+            updateReadyNotificationId,
+            notification,
+        )
+        return true
+    }
+
+    fun cancelUpdateReady(context: Context) {
+        NotificationManagerCompat.from(context).cancel(updateReadyNotificationId)
     }
 
     fun showRoomMessage(
@@ -177,6 +244,26 @@ object GangChatNotifications {
         return NotificationManagerCompat.from(context).areNotificationsEnabled()
     }
 
+    fun updateNotificationsAllowed(context: Context): Boolean {
+        ensureChannels(context)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED
+        ) {
+            return false
+        }
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val manager = context.getSystemService(NotificationManager::class.java)
+            if (manager.getNotificationChannel(updateChannelId)?.importance ==
+                NotificationManager.IMPORTANCE_NONE
+            ) {
+                return false
+            }
+        }
+        return true
+    }
+
     private fun roomNotificationId(roomId: String): Int =
         messageNotificationIdBase + ((roomId.hashCode() and Int.MAX_VALUE) % 100_000)
 
@@ -201,4 +288,7 @@ object GangChatNotifications {
 
     private fun pendingIntentFlags(): Int =
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+
+    @Volatile
+    private var updateDownloadActive = false
 }

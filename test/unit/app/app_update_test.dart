@@ -3,6 +3,39 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:client/src/app/app_update.dart';
 
 void main() {
+  test('only desktop update launches terminate the current application', () {
+    expect(
+      shouldTerminateApplicationAfterInstallerLaunch(AppUpdatePlatform.windows),
+      isTrue,
+    );
+    expect(
+      shouldTerminateApplicationAfterInstallerLaunch(AppUpdatePlatform.macos),
+      isTrue,
+    );
+    expect(
+      shouldTerminateApplicationAfterInstallerLaunch(AppUpdatePlatform.android),
+      isFalse,
+    );
+  });
+
+  test('Android update copy allows backgrounding but warns against exit', () {
+    final androidBody = updateDownloadConfirmationBody(
+      AppUpdatePlatform.android,
+    );
+    expect(androidBody, contains('在后台'));
+    expect(androidBody, contains('点击安装'));
+    expect(androidBody, contains('未开启通知权限'));
+    expect(androidBody, contains('重新打开 Gang Chat'));
+    expect(androidBody, contains('请勿退出 Gang Chat'));
+    expect(androidBody, isNot(contains('请勿关闭 Gang Chat')));
+
+    final windowsBody = updateDownloadConfirmationBody(
+      AppUpdatePlatform.windows,
+    );
+    expect(windowsBody, contains('退出当前程序并启动安装程序'));
+    expect(windowsBody, isNot(contains('在后台')));
+  });
+
   test('parseReleaseAssetsFromS3List accepts GangChat release names only', () {
     final assets = parseReleaseAssetsFromS3List('''
       <ListBucketResult>

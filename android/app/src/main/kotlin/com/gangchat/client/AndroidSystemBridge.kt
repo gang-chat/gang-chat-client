@@ -37,6 +37,7 @@ class AndroidSystemBridge(private val activity: Activity) {
 
     private var pendingDocument: PendingDocument? = null
     private var pendingNotificationPermission: MethodChannel.Result? = null
+    private var pendingUpdateNotificationPermission = false
     private var pendingBluetoothPermission: MethodChannel.Result? = null
     private var channel: MethodChannel? = null
     private var pendingNotificationRoomId: String? = null
@@ -141,6 +142,14 @@ class AndroidSystemBridge(private val activity: Activity) {
                     }
                 }
             "requestNotificationPermission" -> requestNotificationPermission(result)
+            "requestUpdateNotificationPermission" ->
+                requestNotificationPermission(result, forUpdate = true)
+            "setUpdateDownloadActive" -> {
+                GangChatNotifications.setUpdateDownloadActive(
+                    call.argument<Boolean>("active") == true,
+                )
+                result.success(null)
+            }
             "requestBluetoothConnectPermission" -> requestBluetoothConnectPermission(result)
             "openNotificationSettings" -> openNotificationSettings(result)
             "getInitialNotificationRoomId" -> {
@@ -210,7 +219,15 @@ class AndroidSystemBridge(private val activity: Activity) {
             notificationPermissionRequestCode -> {
                 val pending = pendingNotificationPermission ?: return true
                 pendingNotificationPermission = null
-                pending.success(GangChatNotifications.notificationsAllowed(activity))
+                val forUpdate = pendingUpdateNotificationPermission
+                pendingUpdateNotificationPermission = false
+                pending.success(
+                    if (forUpdate) {
+                        GangChatNotifications.updateNotificationsAllowed(activity)
+                    } else {
+                        GangChatNotifications.notificationsAllowed(activity)
+                    },
+                )
                 return true
             }
             bluetoothPermissionRequestCode -> {
@@ -547,15 +564,31 @@ class AndroidSystemBridge(private val activity: Activity) {
         result.success(null)
     }
 
-    private fun requestNotificationPermission(result: MethodChannel.Result) {
+    private fun requestNotificationPermission(
+        result: MethodChannel.Result,
+        forUpdate: Boolean = false,
+    ) {
+        GangChatNotifications.ensureChannels(activity)
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-            result.success(GangChatNotifications.notificationsAllowed(activity))
+            result.success(
+                if (forUpdate) {
+                    GangChatNotifications.updateNotificationsAllowed(activity)
+                } else {
+                    GangChatNotifications.notificationsAllowed(activity)
+                },
+            )
             return
         }
         if (ContextCompat.checkSelfPermission(activity, Manifest.permission.POST_NOTIFICATIONS) ==
             PackageManager.PERMISSION_GRANTED
         ) {
-            result.success(GangChatNotifications.notificationsAllowed(activity))
+            result.success(
+                if (forUpdate) {
+                    GangChatNotifications.updateNotificationsAllowed(activity)
+                } else {
+                    GangChatNotifications.notificationsAllowed(activity)
+                },
+            )
             return
         }
         if (pendingNotificationPermission != null) {
@@ -563,6 +596,7 @@ class AndroidSystemBridge(private val activity: Activity) {
             return
         }
         pendingNotificationPermission = result
+        pendingUpdateNotificationPermission = forUpdate
         ActivityCompat.requestPermissions(
             activity,
             arrayOf(Manifest.permission.POST_NOTIFICATIONS),

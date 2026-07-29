@@ -2,6 +2,19 @@ import 'settings_about.dart';
 
 enum AppUpdatePlatform { windows, macos, android }
 
+bool shouldTerminateApplicationAfterInstallerLaunch(
+  AppUpdatePlatform platform,
+) => platform != AppUpdatePlatform.android;
+
+String updateDownloadConfirmationBody(AppUpdatePlatform platform) {
+  if (platform == AppUpdatePlatform.android) {
+    return '将下载新版安装包。下载完成后会打开系统安装界面；如果 Gang Chat 在后台，'
+        '将弹出“点击安装”通知。若未开启通知权限，重新打开 Gang Chat 时也会弹出安装界面。'
+        '安装完成前请勿退出 Gang Chat。';
+  }
+  return '将下载新版安装包。下载完成后，Gang Chat 会退出当前程序并启动安装程序。';
+}
+
 class ReleaseAsset {
   const ReleaseAsset({
     required this.key,

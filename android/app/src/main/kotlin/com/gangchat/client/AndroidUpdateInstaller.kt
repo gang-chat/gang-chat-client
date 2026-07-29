@@ -16,6 +16,11 @@ import java.io.File
 import java.security.MessageDigest
 
 class AndroidUpdateInstaller(private val activity: Activity) {
+    private data class ApkError(
+        val code: String,
+        val message: String,
+    )
+
     private data class PendingInstall(
         val apk: File,
         val result: MethodChannel.Result,
@@ -23,6 +28,12 @@ class AndroidUpdateInstaller(private val activity: Activity) {
 
     private var pendingInstall: PendingInstall? = null
     private var waitingForInstallPermission = false
+    private var waitingForDeferredInstallPermission = false
+    private var skipNextDeferredInstallResume = false
+
+    private val preferences by lazy {
+        activity.getSharedPreferences(updatePreferencesName, Activity.MODE_PRIVATE)
+    }
 
     fun handleMethodCall(call: MethodCall, result: MethodChannel.Result) {
         if (call.method != "installApk") {
@@ -44,6 +55,11 @@ class AndroidUpdateInstaller(private val activity: Activity) {
             return
         }
         val apk = validateApk(path, result) ?: return
+
+        if (!GangChatAppVisibility.isForeground) {
+            deferInstaller(apk, result)
+            return
+        }
 
         if (needsInstallPermission()) {
             pendingInstall = PendingInstall(apk, result)
@@ -77,13 +93,31 @@ class AndroidUpdateInstaller(private val activity: Activity) {
 
     fun onActivityResult(requestCode: Int): Boolean {
         if (requestCode != installPermissionRequestCode) return false
-        finishInstallPermissionRequest()
+        if (pendingInstall != null) {
+            finishInstallPermissionRequest()
+        } else if (waitingForDeferredInstallPermission) {
+            waitingForDeferredInstallPermission = false
+            skipNextDeferredInstallResume = true
+            if (!needsInstallPermission()) resumeDeferredInstall()
+        }
         return true
     }
 
     fun onResume() {
-        if (!waitingForInstallPermission || pendingInstall == null) return
-        finishInstallPermissionRequest()
+        if (waitingForInstallPermission && pendingInstall != null) {
+            finishInstallPermissionRequest()
+            return
+        }
+        if (waitingForDeferredInstallPermission) {
+            waitingForDeferredInstallPermission = false
+            if (!needsInstallPermission()) resumeDeferredInstall()
+            return
+        }
+        if (skipNextDeferredInstallResume) {
+            skipNextDeferredInstallResume = false
+            return
+        }
+        resumeDeferredInstall()
     }
 
     private fun finishInstallPermissionRequest() {
@@ -115,20 +149,8 @@ class AndroidUpdateInstaller(private val activity: Activity) {
         path: String,
         result: MethodChannel.Result,
     ): File? {
-        val apk = try {
-            File(path).canonicalFile
-        } catch (error: Exception) {
-            result.error("invalid_apk", error.message, null)
-            return null
-        }
-        val updateRoot = File(activity.cacheDir, updateDirectoryName).canonicalFile
-        val allowedPrefix = updateRoot.path + File.separator
-        if (!apk.path.startsWith(allowedPrefix) ||
-            !apk.name.matches(apkFilenamePattern) ||
-            !apk.isFile ||
-            !apk.canRead() ||
-            apk.length() <= 0
-        ) {
+        val apk = canonicalUpdateApk(path)
+        if (apk == null) {
             result.error(
                 "invalid_apk",
                 "The APK is outside the private update directory or unreadable.",
@@ -137,18 +159,47 @@ class AndroidUpdateInstaller(private val activity: Activity) {
             return null
         }
 
-        val archiveInfo = packageArchiveInfo(apk)
-        if (archiveInfo == null) {
-            result.error("invalid_apk", "Android could not parse the APK.", null)
+        val error = apkTrustError(apk)
+        if (error != null) {
+            result.error(error.code, error.message, null)
             return null
         }
+        return apk
+    }
+
+    private fun canonicalUpdateApk(path: String): File? {
+        val apk = try {
+            File(path).canonicalFile
+        } catch (_: Exception) {
+            return null
+        }
+        val updateRoot = try {
+            File(activity.cacheDir, updateDirectoryName).canonicalFile
+        } catch (_: Exception) {
+            return null
+        }
+        val allowedPrefix = updateRoot.path + File.separator
+        if (!apk.path.startsWith(allowedPrefix) ||
+            !apk.name.matches(apkFilenamePattern) ||
+            !apk.isFile ||
+            !apk.canRead() ||
+            apk.length() <= 0
+        ) {
+            return null
+        }
+        return apk
+    }
+
+    private fun apkTrustError(apk: File): ApkError? {
+        val archiveInfo = packageArchiveInfo(apk)
+        if (archiveInfo == null) {
+            return ApkError("invalid_apk", "Android could not parse the APK.")
+        }
         if (archiveInfo.packageName != activity.packageName) {
-            result.error(
+            return ApkError(
                 "invalid_package",
                 "The APK belongs to a different application.",
-                null,
             )
-            return null
         }
 
         val installedInfo = installedPackageInfo()
@@ -158,29 +209,24 @@ class AndroidUpdateInstaller(private val activity: Activity) {
             archiveSigners.isEmpty() ||
             installedSigners.intersect(archiveSigners).isEmpty()
         ) {
-            result.error(
+            return ApkError(
                 "signature_mismatch",
                 "The APK signing certificate does not match this installation.",
-                null,
             )
-            return null
         }
-        return apk
+        return null
     }
 
     private fun launchInstaller(apk: File, result: MethodChannel.Result) {
+        if (!GangChatAppVisibility.isForeground) {
+            deferInstaller(apk, result)
+            return
+        }
         try {
-            val uri = FileProvider.getUriForFile(
-                activity,
-                "${activity.packageName}.fileprovider",
-                apk,
-            )
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, apkMimeType)
-                clipData = ClipData.newRawUri("", uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
+            val intent = installerIntent(apk)
+            GangChatNotifications.cancelUpdateReady(activity)
             activity.startActivity(intent)
+            clearDeferredInstall()
             result.success(null)
         } catch (_: ActivityNotFoundException) {
             result.error(
@@ -192,6 +238,106 @@ class AndroidUpdateInstaller(private val activity: Activity) {
             result.error("invalid_apk", error.message, null)
         }
     }
+
+    private fun deferInstaller(apk: File, result: MethodChannel.Result) {
+        rememberDeferredInstall(apk)
+        GangChatNotifications.showUpdateReady(
+            activity,
+            versionFromFilename(apk.name),
+        )
+        result.success(null)
+    }
+
+    private fun resumeDeferredInstall() {
+        if (!GangChatAppVisibility.isForeground || pendingInstall != null) return
+        val apk = deferredInstallApk() ?: return
+        if (needsInstallPermission()) {
+            waitingForDeferredInstallPermission = true
+            try {
+                activity.startActivityForResult(
+                    Intent(
+                        Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                        Uri.parse("package:${activity.packageName}"),
+                    ),
+                    installPermissionRequestCode,
+                )
+            } catch (_: Exception) {
+                waitingForDeferredInstallPermission = false
+            }
+            return
+        }
+
+        try {
+            val intent = installerIntent(apk)
+            GangChatNotifications.cancelUpdateReady(activity)
+            activity.startActivity(intent)
+            clearDeferredInstall()
+        } catch (_: Exception) {
+            // Keep the validated APK pending so a later foreground resume can retry.
+        }
+    }
+
+    private fun rememberDeferredInstall(apk: File) {
+        preferences.edit().putString(pendingApkPathKey, apk.path).apply()
+    }
+
+    private fun deferredInstallApk(): File? {
+        val path = preferences.getString(pendingApkPathKey, null)?.trim().orEmpty()
+        if (path.isEmpty()) return null
+        val apk = canonicalUpdateApk(path)
+        if (apk == null || apkTrustError(apk) != null) {
+            clearDeferredInstall()
+            return null
+        }
+        return apk
+    }
+
+    private fun clearDeferredInstall() {
+        preferences.edit().remove(pendingApkPathKey).apply()
+    }
+
+    private fun installerIntent(apk: File): Intent {
+        val uri = FileProvider.getUriForFile(
+            activity,
+            "${activity.packageName}.fileprovider",
+            apk,
+        )
+        val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
+            setDataAndType(uri, apkMimeType)
+            clipData = ClipData.newRawUri("Gang Chat update", uri)
+            addCategory(Intent.CATEGORY_DEFAULT)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        // ColorOS and some other OEM installers hand the request from a
+        // visible proxy activity to another component in the installer
+        // package. Granting that package explicitly keeps the private APK
+        // readable throughout its asynchronous prepare/verify phase.
+        val installer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            activity.packageManager.resolveActivity(
+                intent,
+                PackageManager.ResolveInfoFlags.of(
+                    PackageManager.MATCH_DEFAULT_ONLY.toLong(),
+                ),
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            activity.packageManager.resolveActivity(
+                intent,
+                PackageManager.MATCH_DEFAULT_ONLY,
+            )
+        } ?: throw ActivityNotFoundException()
+        val installerPackage = installer.activityInfo.packageName
+        activity.grantUriPermission(
+            installerPackage,
+            uri,
+            Intent.FLAG_GRANT_READ_URI_PERMISSION,
+        )
+        return intent.setPackage(installerPackage)
+    }
+
+    private fun versionFromFilename(filename: String): String =
+        apkFilenamePattern.matchEntire(filename)?.groupValues?.getOrNull(1).orEmpty()
 
     @Suppress("DEPRECATION")
     private fun packageArchiveInfo(apk: File): PackageInfo? {
@@ -244,8 +390,13 @@ class AndroidUpdateInstaller(private val activity: Activity) {
         const val channelName = "gang_chat/app_update"
         private const val installPermissionRequestCode = 4107
         private const val updateDirectoryName = "release-updates"
+        private const val updatePreferencesName = "gang_chat_updates"
+        private const val pendingApkPathKey = "pending_apk_path"
         private const val apkMimeType = "application/vnd.android.package-archive"
         private val apkFilenamePattern =
-            Regex("^GangChat_v\\d+\\.\\d+\\.\\d+\\.apk$", RegexOption.IGNORE_CASE)
+            Regex(
+                "^GangChat_v(\\d+\\.\\d+\\.\\d+)\\.apk$",
+                RegexOption.IGNORE_CASE,
+            )
     }
 }
