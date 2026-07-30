@@ -327,7 +327,7 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
 
     audioDeviceModule = audioDeviceModuleBuilder.createAudioDeviceModule();
 
-    if(!bypassVoiceProcessing) {
+    if(!bypassVoiceProcessing && androidUseHardwareAudioProcessing) {
        if(JavaAudioDeviceModule.isBuiltInNoiseSuppressorSupported()) {
          audioDeviceModule.setNoiseSuppressorEnabled(true);
        }

@@ -3,6 +3,7 @@ package com.cloudwebrtc.webrtc.audio;
 import org.webrtc.ExternalAudioProcessingFactory;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -60,17 +61,28 @@ public class AudioProcessingAdapter implements ExternalAudioProcessingFactory.Au
     public void process(int numBands, int numFrames, ByteBuffer buffer) {
         double volume = processingVolume;
         if (volume < 0.999999) {
-            ByteBuffer duplicate = buffer.duplicate();
-            duplicate.order(buffer.order());
-            int sampleCount = duplicate.limit() / 4;
-            for (int index = 0; index < sampleCount; index++) {
-                int offset = index * 4;
-                duplicate.putFloat(offset, (float) (duplicate.getFloat(offset) * volume));
-            }
+            scaleFloatSamples(buffer, volume);
         }
         synchronized (audioProcessors) {
             for (ExternalAudioFrameProcessing audioProcessor : audioProcessors) {
                 audioProcessor.process(numBands, numFrames, buffer);
+            }
+        }
+    }
+
+    static void scaleFloatSamples(ByteBuffer buffer, double volume) {
+        // WebRTC exposes native float samples through a direct ByteBuffer. The
+        // Java buffer's byte-order metadata is not guaranteed to match the
+        // native sample layout, so always decode and encode using native order.
+        ByteBuffer duplicate = buffer.duplicate().order(ByteOrder.nativeOrder());
+        int start = duplicate.position();
+        int end = duplicate.limit() - ((duplicate.limit() - start) % Float.BYTES);
+        for (int offset = start; offset < end; offset += Float.BYTES) {
+            float sample = duplicate.getFloat(offset);
+            if (!Float.isNaN(sample) && !Float.isInfinite(sample)) {
+                duplicate.putFloat(offset, (float) (sample * volume));
+            } else {
+                duplicate.putFloat(offset, 0.0f);
             }
         }
     }
