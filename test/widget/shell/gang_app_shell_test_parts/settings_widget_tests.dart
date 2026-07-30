@@ -967,6 +967,51 @@ void registerShellSettingsWidgetTests() {
     expect(volumeChanges, contains('audiooutput:0.00'));
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'screen share resolution and frame rate use independent options',
+    (WidgetTester tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(900, 1400);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      final heights = <int>[];
+      final frameRates = <int>[];
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ui.uiTheme(),
+          home: SettingsPage(
+            isSubWindow: true,
+            initialSection: SettingsSection.voice,
+            audioDeviceStore: const _FakeAudioDeviceStore(),
+            audioDeviceService: const _FakeSettingsAudioDeviceService(),
+            systemAudioDevices: SystemAudioDevices(supported: false),
+            onScreenShareMaxHeightChanged: heights.add,
+            onScreenShareFrameRateChanged: frameRates.add,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('屏幕共享画质'), findsOneWidget);
+      expect(find.text('480p'), findsOneWidget);
+      expect(find.text('720p'), findsOneWidget);
+      expect(find.text('1080p'), findsOneWidget);
+      expect(find.text('15 FPS'), findsOneWidget);
+      expect(find.text('30 FPS'), findsOneWidget);
+      expect(find.text('60 FPS'), findsOneWidget);
+
+      await tester.tap(find.text('720p'));
+      await tester.pump();
+      await tester.tap(find.text('30 FPS'));
+      await tester.pump();
+
+      expect(heights, [720]);
+      expect(frameRates, [30]);
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets('settings nonzero audio volumes clear live mute states', (
     WidgetTester tester,
   ) async {

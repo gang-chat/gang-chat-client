@@ -766,10 +766,14 @@ class LocalParticipant extends Participant<LocalTrackPublication> {
 
   /// Shortcut for publishing a [TrackSource.screenShareVideo]
   Future<LocalTrackPublication?> setScreenShareEnabled(bool enabled,
-      {bool? captureScreenAudio, ScreenShareCaptureOptions? screenShareCaptureOptions}) async {
+      {bool? captureScreenAudio,
+      ScreenShareCaptureOptions? screenShareCaptureOptions,
+      VideoPublishOptions? screenSharePublishOptions}) async {
     screenShareCaptureOptions ??= room.roomOptions.defaultScreenShareCaptureOptions;
     return setSourceEnabled(TrackSource.screenShareVideo, enabled,
-        captureScreenAudio: captureScreenAudio, screenShareCaptureOptions: screenShareCaptureOptions);
+        captureScreenAudio: captureScreenAudio,
+        screenShareCaptureOptions: screenShareCaptureOptions,
+        videoPublishOptions: screenSharePublishOptions);
   }
 
   /// A convenience method to publish a track for a specific [TrackSource].
@@ -778,7 +782,8 @@ class LocalParticipant extends Participant<LocalTrackPublication> {
       {bool? captureScreenAudio,
       AudioCaptureOptions? audioCaptureOptions,
       CameraCaptureOptions? cameraCaptureOptions,
-      ScreenShareCaptureOptions? screenShareCaptureOptions}) {
+      ScreenShareCaptureOptions? screenShareCaptureOptions,
+      VideoPublishOptions? videoPublishOptions}) {
     return _publishRunner.run(() async {
       if (TrackSource.screenShareVideo == source && lkPlatformIsWebMobile()) {
         throw TrackCreateException('Screen sharing is not supported on mobile devices');
@@ -836,7 +841,10 @@ class LocalParticipant extends Participant<LocalTrackPublication> {
             LocalTrackPublication<LocalVideoTrack>? publication;
             for (final track in tracks) {
               if (track is LocalVideoTrack) {
-                publication = await _publishVideoTrack(track);
+                publication = await _publishVideoTrack(
+                  track,
+                  publishOptions: videoPublishOptions,
+                );
               } else if (track is LocalAudioTrack) {
                 await _publishAudioTrack(track);
               }
@@ -846,7 +854,10 @@ class LocalParticipant extends Participant<LocalTrackPublication> {
             return publication;
           }
           final track = await LocalVideoTrack.createScreenShareTrack(captureOptions);
-          return await _publishVideoTrack(track);
+          return await _publishVideoTrack(
+            track,
+            publishOptions: videoPublishOptions,
+          );
         }
       }
       return null;

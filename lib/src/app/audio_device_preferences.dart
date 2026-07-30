@@ -17,6 +17,7 @@ class StoredAudioDevices {
     this.musicBoxVolume = defaultAudioVolume,
     this.screenShareVolume = defaultAudioVolume,
     this.screenShareMaxHeight = defaultScreenShareMaxHeight,
+    this.screenShareFrameRate = defaultScreenShareFrameRate,
   });
 
   final String? inputDeviceId;
@@ -41,6 +42,10 @@ class StoredAudioDevices {
   /// resolution; lower values cap what we publish to save bandwidth.
   final int screenShareMaxHeight;
 
+  /// Selected publisher frame-rate cap. Platforms may clamp this to their
+  /// capture ceiling (Android currently caps it at 30 FPS).
+  final int screenShareFrameRate;
+
   bool get isEmpty =>
       (inputDeviceId == null || inputDeviceId!.isEmpty) &&
       (inputDeviceLabel == null || inputDeviceLabel!.isEmpty) &&
@@ -52,7 +57,8 @@ class StoredAudioDevices {
       outputVolume == defaultAudioVolume &&
       musicBoxVolume == defaultAudioVolume &&
       screenShareVolume == defaultAudioVolume &&
-      screenShareMaxHeight == defaultScreenShareMaxHeight;
+      screenShareMaxHeight == defaultScreenShareMaxHeight &&
+      screenShareFrameRate == defaultScreenShareFrameRate;
 }
 
 class RestoredAudioDevices<T> {

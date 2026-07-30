@@ -25,6 +25,7 @@ class LocalAudioDeviceStore extends AudioDeviceStore {
   static const _musicBoxVolumeKey = 'gang.musicBoxVolume';
   static const _screenShareVolumeKey = 'gang.screenShareVolume';
   static const _screenShareMaxHeightKey = 'gang.screenShareMaxHeight';
+  static const _screenShareFrameRateKey = 'gang.screenShareFrameRate';
   static const _participantVoiceVolumePrefix = 'gang.participantVoiceVolume.';
 
   @override
@@ -55,6 +56,9 @@ class LocalAudioDeviceStore extends AudioDeviceStore {
       screenShareVolume: _readVolume(prefs, _screenShareVolumeKey),
       screenShareMaxHeight: normalizedScreenShareMaxHeight(
         prefs.getInt(_screenShareMaxHeightKey),
+      ),
+      screenShareFrameRate: normalizedScreenShareFrameRate(
+        prefs.getInt(_screenShareFrameRateKey),
       ),
     );
   }
@@ -137,6 +141,15 @@ class LocalAudioDeviceStore extends AudioDeviceStore {
     await prefs.setInt(
       _screenShareMaxHeightKey,
       normalizedScreenShareMaxHeight(height),
+    );
+  }
+
+  @override
+  Future<void> writeScreenShareFrameRate(int frameRate) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(
+      _screenShareFrameRateKey,
+      normalizedScreenShareFrameRate(frameRate),
     );
   }
 

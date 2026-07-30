@@ -1685,6 +1685,12 @@ class _FakeAudioDeviceStore extends AudioDeviceStore {
 
   @override
   Future<void> writeOutputVolume(double volume) async {}
+
+  @override
+  Future<void> writeScreenShareMaxHeight(int height) async {}
+
+  @override
+  Future<void> writeScreenShareFrameRate(int frameRate) async {}
 }
 
 class _RecordingLivePresenceSoundPlayer implements LivePresenceSoundPlayer {

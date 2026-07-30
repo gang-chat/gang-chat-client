@@ -52,6 +52,103 @@ void main() {
     });
   });
 
+  group('normalizedScreenShareFrameRate', () {
+    test('passes through supported desktop options', () {
+      for (final option in screenShareFrameRateOptions) {
+        expect(normalizedScreenShareFrameRate(option), option);
+      }
+    });
+
+    test('falls back to the platform default and applies its cap', () {
+      expect(normalizedScreenShareFrameRate(null), 60);
+      expect(normalizedScreenShareFrameRate(24), 60);
+      expect(
+        normalizedScreenShareFrameRate(
+          60,
+          maxFrameRate: androidScreenShareFrameRateCap,
+        ),
+        30,
+      );
+      expect(
+        normalizedScreenShareFrameRate(
+          null,
+          maxFrameRate: androidScreenShareFrameRateCap,
+        ),
+        30,
+      );
+    });
+  });
+
+  group('screenShareQualityForHeight', () {
+    test('combines resolution and frame rate into a bitrate profile', () {
+      expect(
+        screenShareQualityForHeight(480, frameRate: 15),
+        const ScreenShareQuality(
+          maxHeight: 480,
+          maxFrameRate: 15,
+          maxBitrate: 1000 * 1000,
+        ),
+      );
+      expect(
+        screenShareQualityForHeight(720, frameRate: 30),
+        const ScreenShareQuality(
+          maxHeight: 720,
+          maxFrameRate: 30,
+          maxBitrate: 3000 * 1000,
+        ),
+      );
+      expect(
+        screenShareQualityForHeight(1080, frameRate: 60),
+        const ScreenShareQuality(
+          maxHeight: 1080,
+          maxFrameRate: 60,
+          maxBitrate: 8000 * 1000,
+        ),
+      );
+    });
+
+    test('caps frame rate and bitrate together for Android', () {
+      expect(
+        screenShareQualityForHeight(
+          1080,
+          frameRate: 60,
+          maxFrameRate: androidScreenShareFrameRateCap,
+        ),
+        const ScreenShareQuality(
+          maxHeight: 1080,
+          maxFrameRate: 30,
+          maxBitrate: 4000 * 1000,
+        ),
+      );
+      expect(
+        screenShareQualityForHeight(
+          720,
+          frameRate: 60,
+          maxFrameRate: androidScreenShareFrameRateCap,
+        ).maxFrameRate,
+        30,
+      );
+    });
+
+    test('coerces unsupported heights to the default profile', () {
+      expect(
+        screenShareQualityForHeight(999, frameRate: 30),
+        screenShareQualityForHeight(defaultScreenShareMaxHeight, frameRate: 30),
+      );
+    });
+
+    test('keeps a stable bits-per-frame budget across FPS options', () {
+      expect(
+        screenShareQualityForHeight(720, frameRate: 15).maxBitrate,
+        1500 * 1000,
+      );
+      expect(
+        screenShareQualityForHeight(720, frameRate: 60).maxBitrate,
+        6000 * 1000,
+      );
+    });
+  });
+
   group('screenShareScaleDownBy', () {
     test('downscales a taller source to the target', () {
       // 4K display capped at 720p.
@@ -91,15 +188,19 @@ void main() {
     });
   });
 
-  group('screenShareHeightLabel', () {
-    test('formats supported heights', () {
-      expect(screenShareHeightLabel(480), '480p');
-      expect(screenShareHeightLabel(720), '720p');
-      expect(screenShareHeightLabel(1080), '1080p');
+  group('screen-share picker labels', () {
+    test('formats supported resolutions and frame rates', () {
+      expect(screenShareResolutionLabel(480), '480p');
+      expect(screenShareResolutionLabel(720), '720p');
+      expect(screenShareResolutionLabel(1080), '1080p');
+      expect(screenShareFrameRateLabel(15), '15 FPS');
+      expect(screenShareFrameRateLabel(30), '30 FPS');
+      expect(screenShareFrameRateLabel(60), '60 FPS');
     });
 
-    test('coerces unsupported heights to the default label', () {
-      expect(screenShareHeightLabel(999), '1080p');
+    test('coerces unsupported values to default labels', () {
+      expect(screenShareResolutionLabel(999), '1080p');
+      expect(screenShareFrameRateLabel(24), '60 FPS');
     });
   });
 }

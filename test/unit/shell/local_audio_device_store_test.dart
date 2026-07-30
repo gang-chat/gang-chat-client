@@ -23,6 +23,7 @@ void main() {
     expect(stored.musicBoxVolume, 0.5);
     expect(stored.screenShareVolume, 0.5);
     expect(stored.screenShareMaxHeight, 1080);
+    expect(stored.screenShareFrameRate, 60);
     expect(await store.readParticipantVoiceVolume('user_2'), 1.0);
   });
 
@@ -44,6 +45,7 @@ void main() {
     await store.writeMusicBoxVolume(0.2);
     await store.writeScreenShareVolume(0.8);
     await store.writeScreenShareMaxHeight(720);
+    await store.writeScreenShareFrameRate(30);
     await store.writeParticipantVoiceVolume('user/2', 1.75);
 
     final stored = await store.read();
@@ -58,6 +60,7 @@ void main() {
     expect(stored.musicBoxVolume, closeTo(0.2, 1e-9));
     expect(stored.screenShareVolume, closeTo(0.8, 1e-9));
     expect(stored.screenShareMaxHeight, 720);
+    expect(stored.screenShareFrameRate, 30);
     expect(
       await store.readParticipantVoiceVolume('user/2'),
       closeTo(1.75, 1e-9),
@@ -75,6 +78,15 @@ void main() {
       expect(stored.screenShareMaxHeight, 1080);
     },
   );
+
+  test('screen share frame rate is coerced to a supported option', () async {
+    final store = const LocalAudioDeviceStore();
+
+    await store.writeScreenShareFrameRate(24);
+    final stored = await store.read();
+
+    expect(stored.screenShareFrameRate, 60);
+  });
 
   test('volumes are clamped to the valid range on write', () async {
     final store = const LocalAudioDeviceStore();

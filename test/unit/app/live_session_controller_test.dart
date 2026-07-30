@@ -225,6 +225,7 @@ void main() {
       expect(session.inputVolumes, [defaultAudioVolume]);
       expect(session.outputVolumes, [defaultAudioVolume]);
       expect(session.screenShareMaxHeights, [480]);
+      expect(session.screenShareFrameRates, [60]);
       expect(restoredDevices, 1);
     },
   );
@@ -288,9 +289,28 @@ void main() {
     expect(store.screenShareWrites, [720]);
   });
 
+  test('setScreenShareFrameRate applies to the session and persists', () async {
+    final session = _FakeLiveSession();
+    final store = _RecordingAudioDeviceStore();
+    final controller = LiveSessionController(
+      apiBaseUrl: 'https://api.example.test/api/v1',
+      session: session,
+      audioDeviceStore: store,
+      audioDeviceRestorer: (_) async => null,
+    );
+
+    await controller.setScreenShareFrameRate(30);
+
+    expect(session.screenShareFrameRates, [30]);
+    expect(store.screenShareFrameRateWrites, [30]);
+  });
+
   test('connectWithRetry restores the stored screen-share height', () async {
     final session = _FakeLiveSession();
-    final store = _RecordingAudioDeviceStore(storedScreenShareMaxHeight: 480);
+    final store = _RecordingAudioDeviceStore(
+      storedScreenShareMaxHeight: 480,
+      storedScreenShareFrameRate: 15,
+    );
     final controller = LiveSessionController(
       apiBaseUrl: 'https://api.example.test/api/v1',
       session: session,
@@ -301,6 +321,7 @@ void main() {
     await controller.connectWithRetry(_liveJoinResult);
 
     expect(session.screenShareMaxHeights, [480]);
+    expect(session.screenShareFrameRates, [15]);
   });
 }
 
@@ -339,6 +360,7 @@ class _FakeLiveSession extends LiveSession {
   double _inputVolume = defaultAudioVolume;
   double _outputVolume = defaultAudioVolume;
   double _screenShareVolume = defaultAudioVolume;
+  int _screenShareFrameRate = 60;
   final _participantVoiceVolumes = <String, double>{};
 
   void emitChange() => notifyListeners();
@@ -356,6 +378,9 @@ class _FakeLiveSession extends LiveSession {
 
   @override
   double get screenShareVolume => _screenShareVolume;
+
+  @override
+  int get screenShareFrameRate => _screenShareFrameRate;
 
   @override
   Future<void> connect({
@@ -434,16 +459,24 @@ class _FakeLiveSession extends LiveSession {
   }
 
   final screenShareMaxHeights = <int>[];
+  final screenShareFrameRates = <int>[];
 
   @override
   Future<void> setScreenShareMaxHeight(int height) async {
     screenShareMaxHeights.add(height);
+  }
+
+  @override
+  Future<void> setScreenShareFrameRate(int frameRate) async {
+    _screenShareFrameRate = frameRate;
+    screenShareFrameRates.add(frameRate);
   }
 }
 
 class _RecordingAudioDeviceStore extends AudioDeviceStore {
   _RecordingAudioDeviceStore({
     this.storedScreenShareMaxHeight = 1080,
+    this.storedScreenShareFrameRate = 60,
     this.storedInputVolume = 0.35,
     this.storedOutputVolume = 0.75,
     this.failVolumeWrites = false,
@@ -453,6 +486,7 @@ class _RecordingAudioDeviceStore extends AudioDeviceStore {
        );
 
   final int storedScreenShareMaxHeight;
+  final int storedScreenShareFrameRate;
   final double storedInputVolume;
   final double storedOutputVolume;
   final bool failVolumeWrites;
@@ -462,6 +496,7 @@ class _RecordingAudioDeviceStore extends AudioDeviceStore {
   final participantVoiceVolumeWrites = <String>[];
   final screenShareVolumeWrites = <double>[];
   final screenShareWrites = <int>[];
+  final screenShareFrameRateWrites = <int>[];
 
   @override
   Future<StoredAudioDevices> read() async {
@@ -470,6 +505,7 @@ class _RecordingAudioDeviceStore extends AudioDeviceStore {
       outputVolume: storedOutputVolume,
       screenShareVolume: 1.0,
       screenShareMaxHeight: storedScreenShareMaxHeight,
+      screenShareFrameRate: storedScreenShareFrameRate,
     );
   }
 
@@ -504,6 +540,11 @@ class _RecordingAudioDeviceStore extends AudioDeviceStore {
   @override
   Future<void> writeScreenShareMaxHeight(int height) async {
     screenShareWrites.add(height);
+  }
+
+  @override
+  Future<void> writeScreenShareFrameRate(int frameRate) async {
+    screenShareFrameRateWrites.add(frameRate);
   }
 }
 

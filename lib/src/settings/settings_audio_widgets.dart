@@ -232,20 +232,31 @@ class _LevelMeter extends StatelessWidget {
   }
 }
 
-class _ScreenShareResolutionSection extends StatelessWidget {
-  const _ScreenShareResolutionSection({
+class _ScreenShareQualitySection extends StatelessWidget {
+  const _ScreenShareQualitySection({
     required this.selectedHeight,
-    required this.onSelect,
+    required this.selectedFrameRate,
+    required this.onHeightSelected,
+    required this.onFrameRateSelected,
     this.remoteUnavailable = false,
   });
 
   final int selectedHeight;
-  final ValueChanged<int> onSelect;
+  final int selectedFrameRate;
+  final ValueChanged<int> onHeightSelected;
+  final ValueChanged<int> onFrameRateSelected;
   final bool remoteUnavailable;
 
   @override
   Widget build(BuildContext context) {
-    final selected = normalizedScreenShareMaxHeight(selectedHeight);
+    final selectedResolution = normalizedScreenShareMaxHeight(selectedHeight);
+    final platformFrameRateCap = !kIsWeb && Platform.isAndroid
+        ? androidScreenShareFrameRateCap
+        : desktopScreenShareFrameRateCap;
+    final selectedFps = normalizedScreenShareFrameRate(
+      selectedFrameRate,
+      maxFrameRate: platformFrameRateCap,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -254,7 +265,7 @@ class _ScreenShareResolutionSection extends StatelessWidget {
             const Icon(Icons.screen_share_outlined, color: _cyan, size: 18),
             const SizedBox(width: 9),
             const Text(
-              '屏幕共享分辨率',
+              '屏幕共享画质',
               style: TextStyle(
                 color: _textPrimary,
                 fontSize: 15,
@@ -265,7 +276,7 @@ class _ScreenShareResolutionSection extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         const Text(
-          '更低的分辨率可以节省上行带宽。1080p 按原始分辨率发送(最高 1080p)。',
+          '分辨率、帧率和码率会一起调整；较低档位可以显著节省上行带宽。',
           style: TextStyle(color: _textSecondary, fontSize: 13, height: 1.4),
         ),
         const SizedBox(height: 12),
@@ -273,13 +284,41 @@ class _ScreenShareResolutionSection extends StatelessWidget {
           const _SettingsEmptyState(text: '该设置仅保存在用户设备，无法远程读取')
         else
           Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const Text(
+                '分辨率',
+                style: TextStyle(
+                  color: _textSecondary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 6),
               for (final height in screenShareHeightOptions)
                 _ScreenShareResolutionRow(
-                  label: screenShareHeightLabel(height),
-                  selected: height == selected,
-                  onTap: () => onSelect(height),
+                  label: screenShareResolutionLabel(height),
+                  selected: height == selectedResolution,
+                  onTap: () => onHeightSelected(height),
                 ),
+              const SizedBox(height: 12),
+              const Text(
+                '帧率',
+                style: TextStyle(
+                  color: _textSecondary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 6),
+              for (final frameRate in screenShareFrameRateOptions)
+                if (frameRate <= platformFrameRateCap)
+                  _ScreenShareResolutionRow(
+                    label: screenShareFrameRateLabel(frameRate),
+                    selected: frameRate == selectedFps,
+                    unselectedIcon: Icons.speed_outlined,
+                    onTap: () => onFrameRateSelected(frameRate),
+                  ),
             ],
           ),
       ],
@@ -292,11 +331,13 @@ class _ScreenShareResolutionRow extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.unselectedIcon = Icons.high_quality_outlined,
   });
 
   final String label;
   final bool selected;
   final VoidCallback onTap;
+  final IconData unselectedIcon;
 
   @override
   Widget build(BuildContext context) {
@@ -331,11 +372,7 @@ class _ScreenShareResolutionRow extends StatelessWidget {
           if (selected)
             const Icon(Icons.check, color: _cyan, size: 18)
           else
-            const Icon(
-              Icons.high_quality_outlined,
-              color: _textMuted,
-              size: 18,
-            ),
+            Icon(unselectedIcon, color: _textMuted, size: 18),
         ],
       ),
     );

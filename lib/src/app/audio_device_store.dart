@@ -70,6 +70,12 @@ class AudioDeviceStore {
     );
   }
 
+  Future<void> writeScreenShareFrameRate(int frameRate) {
+    throw UnimplementedError(
+      'AudioDeviceStore.writeScreenShareFrameRate must be implemented.',
+    );
+  }
+
   Future<double> readParticipantVoiceVolume(String userId) async {
     return defaultParticipantVoiceVolume;
   }

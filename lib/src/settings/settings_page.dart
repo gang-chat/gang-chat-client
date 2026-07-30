@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../app/account_display.dart' as account_display;
@@ -100,6 +101,7 @@ class SettingsPage extends StatefulWidget {
     this.onDeviceSelected,
     this.onVolumeChanged,
     this.onScreenShareMaxHeightChanged,
+    this.onScreenShareFrameRateChanged,
     this.onAccountDeleted,
     this.onClose,
   });
@@ -140,6 +142,7 @@ class SettingsPage extends StatefulWidget {
   /// Fired when the user picks a screen-share resolution, so a live session can
   /// re-scale immediately. The choice is also persisted to [audioDeviceStore].
   final ValueChanged<int>? onScreenShareMaxHeightChanged;
+  final ValueChanged<int>? onScreenShareFrameRateChanged;
   final Future<void> Function()? onAccountDeleted;
   final VoidCallback? onClose;
 
@@ -240,6 +243,7 @@ class _SettingsPageState extends State<SettingsPage>
   bool _testingOutput = false;
   bool _voiceInitialized = false;
   int _screenShareMaxHeight = defaultScreenShareMaxHeight;
+  int _screenShareFrameRate = defaultScreenShareFrameRate;
   String? _error;
   bool _loading = false;
   String _language = 'zh-Hans';
@@ -3117,7 +3121,16 @@ class _SettingsPageState extends State<SettingsPage>
       setState(() => _applyAudioVolumePatch(patch));
       widget.onVolumeChanged?.call('audioinput', patch.inputVolume);
       widget.onVolumeChanged?.call('audiooutput', patch.outputVolume);
-      setState(() => _screenShareMaxHeight = stored.screenShareMaxHeight);
+      final platformFrameRateCap = !kIsWeb && Platform.isAndroid
+          ? androidScreenShareFrameRateCap
+          : desktopScreenShareFrameRateCap;
+      setState(() {
+        _screenShareMaxHeight = stored.screenShareMaxHeight;
+        _screenShareFrameRate = normalizedScreenShareFrameRate(
+          stored.screenShareFrameRate,
+          maxFrameRate: platformFrameRateCap,
+        );
+      });
     } catch (_) {}
   }
 
@@ -3127,6 +3140,20 @@ class _SettingsPageState extends State<SettingsPage>
     setState(() => _screenShareMaxHeight = normalized);
     widget.onScreenShareMaxHeightChanged?.call(normalized);
     unawaited(widget.audioDeviceStore.writeScreenShareMaxHeight(normalized));
+  }
+
+  Future<void> _setScreenShareFrameRate(int frameRate) async {
+    final platformFrameRateCap = !kIsWeb && Platform.isAndroid
+        ? androidScreenShareFrameRateCap
+        : desktopScreenShareFrameRateCap;
+    final normalized = normalizedScreenShareFrameRate(
+      frameRate,
+      maxFrameRate: platformFrameRateCap,
+    );
+    if (_screenShareFrameRate == normalized) return;
+    setState(() => _screenShareFrameRate = normalized);
+    widget.onScreenShareFrameRateChanged?.call(normalized);
+    unawaited(widget.audioDeviceStore.writeScreenShareFrameRate(normalized));
   }
 
   Future<void> _loadDevices() async {
@@ -4453,11 +4480,14 @@ class _SettingsPageState extends State<SettingsPage>
           title: '屏幕共享',
           children: [
             _SettingsSubPanel(
-              child: _ScreenShareResolutionSection(
+              child: _ScreenShareQualitySection(
                 selectedHeight: _screenShareMaxHeight,
+                selectedFrameRate: _screenShareFrameRate,
                 remoteUnavailable: _isManagingUser,
-                onSelect: (height) =>
+                onHeightSelected: (height) =>
                     unawaited(_setScreenShareMaxHeight(height)),
+                onFrameRateSelected: (frameRate) =>
+                    unawaited(_setScreenShareFrameRate(frameRate)),
               ),
             ),
           ],

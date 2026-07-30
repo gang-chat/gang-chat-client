@@ -158,6 +158,9 @@ extension _HomeShellLayout on _HomeShellState {
         onAccountDeleted: _logout,
         onScreenShareMaxHeightChanged: (height) =>
             unawaited(_liveSessionController.setScreenShareMaxHeight(height)),
+        onScreenShareFrameRateChanged: (frameRate) => unawaited(
+          _liveSessionController.setScreenShareFrameRate(frameRate),
+        ),
         onVolumeChanged: _syncSettingsAudioVolumeToLive,
         // The Settings picker already routes the native ADM (selectAudioInput/
         // Output). For inputs, also keep LiveSession's tracked capture device in

@@ -265,6 +265,8 @@ class LiveSessionController {
 
   int get screenShareMaxHeight => session.screenShareMaxHeight;
 
+  int get screenShareFrameRate => session.screenShareFrameRate;
+
   /// Apply and persist the screen-share resolution cap. Takes effect on the
   /// next share, and re-scales the current share live when one is running.
   Future<void> setScreenShareMaxHeight(int height) async {
@@ -274,6 +276,19 @@ class LiveSessionController {
     } catch (_) {
       // A failed persist shouldn't undo the live change; it just won't survive
       // the next launch.
+    }
+  }
+
+  Future<void> setScreenShareFrameRate(int frameRate) async {
+    await session.setScreenShareFrameRate(frameRate);
+    try {
+      // Persist the platform-normalized value (Android currently caps capture
+      // at 30 FPS) rather than an unsupported caller request.
+      await audioDeviceStore.writeScreenShareFrameRate(
+        session.screenShareFrameRate,
+      );
+    } catch (_) {
+      // A failed persist shouldn't undo the live change.
     }
   }
 
@@ -343,6 +358,7 @@ class LiveSessionController {
       await session.setMusicBoxVolume(stored.musicBoxVolume);
       await session.setScreenShareVolume(stored.screenShareVolume);
       await session.setScreenShareMaxHeight(stored.screenShareMaxHeight);
+      await session.setScreenShareFrameRate(stored.screenShareFrameRate);
       // Capture the published mic from the device the restorer resolved (the
       // user's pinned device, or the macOS system default). Null leaves LiveKit
       // on the ADM's current device. Without this the publish path ignores the

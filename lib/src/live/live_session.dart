@@ -521,6 +521,10 @@ class LiveSession extends ChangeNotifier {
   // [screenShareHeightOptions]. Defaults to native (1080 cap). Applied at the
   // next share; a change while sharing re-scales the live publication.
   int _screenShareMaxHeight = defaultScreenShareMaxHeight;
+  int _screenShareFrameRate = defaultScreenShareFrameRate;
+  int? _screenShareSourceHeight;
+  int _screenShareQualityRevision = 0;
+  Future<void> _screenShareQualityParameterTail = Future<void>.value();
 
   final Set<String> _speakingIdentities = <String>{};
   final Map<String, bool> _micMutedByIdentity = <String, bool>{};
@@ -609,6 +613,31 @@ class LiveSession extends ChangeNotifier {
 
   /// Target max height (px) for the local screen share.
   int get screenShareMaxHeight => _screenShareMaxHeight;
+
+  int get screenShareFrameRate => _screenShareFrameRate;
+
+  int get _platformScreenShareFrameRateCap => !kIsWeb && Platform.isAndroid
+      ? androidScreenShareFrameRateCap
+      : desktopScreenShareFrameRateCap;
+
+  ScreenShareQuality get _selectedScreenShareQuality =>
+      screenShareQualityForHeight(
+        _screenShareMaxHeight,
+        frameRate: _screenShareFrameRate,
+        maxFrameRate: _platformScreenShareFrameRateCap,
+      );
+
+  lk.VideoPublishOptions _screenSharePublishOptions(
+    ScreenShareQuality quality,
+  ) {
+    final defaults = _room!.roomOptions.defaultVideoPublishOptions;
+    return defaults.copyWith(
+      screenShareEncoding: lk.VideoEncoding(
+        maxFramerate: quality.maxFrameRate,
+        maxBitrate: quality.maxBitrate,
+      ),
+    );
+  }
 
   /// Whether the local microphone is effectively muted. With Option A muting
   /// keeps a successfully published LiveKit track live and silences outgoing
@@ -727,6 +756,7 @@ class LiveSession extends ChangeNotifier {
     _connecting = true;
     notifyListeners();
 
+    final initialScreenShareQuality = _selectedScreenShareQuality;
     final room = lk.Room(
       roomOptions: lk.RoomOptions(
         // Adaptive stream sizes the subscribed quality to the rendering
@@ -758,11 +788,11 @@ class LiveSession extends ChangeNotifier {
           // null — falls back to LiveKit's screenShareH1080FPS15 preset, hard
           // capped at 15fps. Set it explicitly so the encoder isn't the
           // bottleneck. maxBitrate must scale with the frame rate or the
-          // encoder starves frames to stay under budget. 1080p60 is given a
-          // 16 Mbps ceiling so the encoder isn't bitrate-starved.
+          // encoder starves frames to stay under budget. The selected quality
+          // profile keeps resolution, frame-rate and bitrate in sync.
           screenShareEncoding: lk.VideoEncoding(
-            maxFramerate: 60,
-            maxBitrate: 16000 * 1000,
+            maxFramerate: initialScreenShareQuality.maxFrameRate,
+            maxBitrate: initialScreenShareQuality.maxBitrate,
           ),
         ),
       ),
@@ -770,6 +800,7 @@ class LiveSession extends ChangeNotifier {
     _room = room;
     _roomName = roomName;
     _resolvedLiveKitUrl = url;
+    _invalidateScreenShareQualityApplication(resetSource: true);
     _screenSharing = false;
     _localMicrophonePublishUnavailable = false;
     _canPublish = true;
@@ -821,6 +852,7 @@ class LiveSession extends ChangeNotifier {
       _room = null;
       _roomName = null;
       _connecting = false;
+      _invalidateScreenShareQualityApplication(resetSource: true);
       _screenSharing = false;
       _localMicrophonePublishUnavailable = false;
       _watchedScreenShareIdentity = null;
@@ -1006,6 +1038,7 @@ class LiveSession extends ChangeNotifier {
     final local = _room?.localParticipant;
     if (local == null) return false;
     if (enabled) {
+      _invalidateScreenShareQualityApplication(resetSource: true);
       await local.setCameraEnabled(false);
       // A concrete maxFrameRate is required: livekit's desktop
       // ScreenShareCaptureOptions sends `mandatory: {frameRate: maxFrameRate}`,
@@ -1018,26 +1051,29 @@ class LiveSession extends ChangeNotifier {
       // ScreenCaptureKit, which samples at the display's native resolution and
       // ignores params.dimensions — so dimensions here only bounds non-SCKit
       // platforms. The encoding (and defaultVideoPublishOptions in connect())
-      // still governs what viewers receive. To cap resolution on macOS we scale
-      // the published encoding down after publishing (_applyScreenShareScale).
-      final target = screenShareResolutionForHeight(_screenShareMaxHeight);
+      // still governs what viewers receive. Publisher encoding is therefore
+      // the cross-platform source of truth for output quality.
+      final quality = _selectedScreenShareQuality;
+      final target = quality.resolution;
       final captureScreenAudio = shouldRequestScreenShareAudio(
         sourceId: sourceId,
         isDesktopSourcePickerPlatform: supportsDesktopScreenShare,
         isWindowsDesktop: !kIsWeb && Platform.isWindows,
         isAndroidPlatform: !kIsWeb && Platform.isAndroid,
       );
-      final isAndroid = !kIsWeb && Platform.isAndroid;
-      final maxFrameRate = isAndroid ? 30.0 : 60.0;
+      // Capture at the platform ceiling. The sender applies the selected FPS
+      // cap, which allows a live 15 -> 60 FPS switch without restarting capture
+      // or asking the user to select/authorize the source again.
+      final captureFrameRate = _platformScreenShareFrameRateCap.toDouble();
       final options = lk.ScreenShareCaptureOptions(
         captureScreenAudio: captureScreenAudio,
         sourceId: sourceId,
-        maxFrameRate: maxFrameRate,
+        maxFrameRate: captureFrameRate,
         params: lk.VideoParameters(
           dimensions: lk.VideoDimensions(target.width, target.height),
           encoding: lk.VideoEncoding(
-            maxFramerate: maxFrameRate.toInt(),
-            maxBitrate: 16000 * 1000,
+            maxFramerate: captureFrameRate.toInt(),
+            maxBitrate: quality.maxBitrate,
           ),
         ),
       );
@@ -1053,9 +1089,16 @@ class LiveSession extends ChangeNotifier {
           // returned in the MediaStream.
           captureScreenAudio: false,
           screenShareCaptureOptions: options,
+          // Preserve the room's configured codec/simulcast choices. Only the
+          // screen-share encoding budget belongs to this setting.
+          screenSharePublishOptions: _screenSharePublishOptions(quality),
         );
         _screenSharing = true;
-        await _applyScreenShareScale();
+        // Do not delay the share UI while the first outbound frame becomes
+        // available. The initial publish already has the selected FPS/bitrate;
+        // this bounded background pass discovers native source dimensions,
+        // applies scaling, then verifies the actual outbound resolution.
+        unawaited(_applyScreenShareQualityWithRetries());
       } catch (_) {
         rethrow;
       }
@@ -1072,6 +1115,7 @@ class LiveSession extends ChangeNotifier {
         );
       }
     } else {
+      _invalidateScreenShareQualityApplication(resetSource: true);
       await local.setScreenShareEnabled(false);
       _screenSharing = false;
       await _stopScreenAudioPublisher();
@@ -1093,71 +1137,252 @@ class LiveSession extends ChangeNotifier {
     await Future<void>.delayed(const Duration(milliseconds: 160));
   }
 
-  /// Set the target max height for the local screen share. Persists in-session;
-  /// re-scales the live publication immediately when a share is running.
+  /// Set the target max height for the local screen share. A running share is
+  /// updated through sender parameters without restarting capture.
   Future<void> setScreenShareMaxHeight(int height) async {
     final normalized = normalizedScreenShareMaxHeight(height);
     if (_screenShareMaxHeight == normalized) return;
     _screenShareMaxHeight = normalized;
     if (_screenSharing) {
-      await _applyScreenShareScale();
+      await _applyScreenShareQualityWithRetries();
     }
     notifyListeners();
   }
 
-  /// Scale the published screen-share encoding so it is sent at no more than
-  /// [_screenShareMaxHeight]. macOS captures at the display's native resolution
-  /// (ScreenCaptureKit ignores capture dimensions), so the encoder's
-  /// `scaleResolutionDownBy` is the only lever that actually reduces the pixels
-  /// we send. Best-effort: a missing sender or stats leaves the share unscaled.
-  Future<void> _applyScreenShareScale() async {
+  /// Set the output frame-rate cap independently from resolution.
+  Future<void> setScreenShareFrameRate(int frameRate) async {
+    final normalized = normalizedScreenShareFrameRate(
+      frameRate,
+      maxFrameRate: _platformScreenShareFrameRateCap,
+    );
+    if (_screenShareFrameRate == normalized) return;
+    _screenShareFrameRate = normalized;
+    if (_screenSharing) {
+      await _applyScreenShareQualityWithRetries();
+    }
+    notifyListeners();
+  }
+
+  void _invalidateScreenShareQualityApplication({required bool resetSource}) {
+    _screenShareQualityRevision += 1;
+    if (resetSource) _screenShareSourceHeight = null;
+  }
+
+  /// Applies and verifies the selected quality without interrupting capture.
+  ///
+  /// Native source dimensions and sender stats are not guaranteed to exist on
+  /// the first event-loop turn after publishing. Retry for a bounded period so
+  /// 480p/720p do not silently remain at the display's native resolution.
+  Future<void> _applyScreenShareQualityWithRetries() async {
+    final revision = ++_screenShareQualityRevision;
+    const delays = <Duration>[
+      Duration.zero,
+      Duration(milliseconds: 220),
+      Duration(milliseconds: 450),
+      Duration(milliseconds: 850),
+      Duration(milliseconds: 1400),
+    ];
+    for (final delay in delays) {
+      if (revision != _screenShareQualityRevision || !_screenSharing) return;
+      if (delay != Duration.zero) await Future<void>.delayed(delay);
+      if (revision != _screenShareQualityRevision || !_screenSharing) return;
+      final verified = await _serializeScreenShareQualityAttempt(
+        () => _applyScreenShareQualityAttempt(revision),
+      );
+      if (verified) return;
+    }
+    if (revision == _screenShareQualityRevision && _screenSharing) {
+      final quality = _selectedScreenShareQuality;
+      debugPrint(
+        'screen-share quality could not be verified: '
+        '${quality.maxHeight}p/${quality.maxFrameRate}fps',
+      );
+    }
+  }
+
+  Future<bool> _serializeScreenShareQualityAttempt(
+    Future<bool> Function() operation,
+  ) {
+    final completer = Completer<bool>();
+    final previous = _screenShareQualityParameterTail;
+    _screenShareQualityParameterTail = () async {
+      try {
+        await previous;
+      } catch (_) {}
+      try {
+        completer.complete(await operation());
+      } catch (error, stackTrace) {
+        debugPrint('screen-share quality apply failed: $error\n$stackTrace');
+        completer.complete(false);
+      }
+    }();
+    return completer.future;
+  }
+
+  Future<bool> _applyScreenShareQualityAttempt(int revision) async {
+    if (revision != _screenShareQualityRevision || !_screenSharing) return true;
     final local = _room?.localParticipant;
-    if (local == null) return;
+    if (local == null) return false;
     final pub = local.getTrackPublicationBySource(
       lk.TrackSource.screenShareVideo,
     );
     final track = pub?.track;
-    if (track is! lk.LocalVideoTrack) return;
+    if (track is! lk.LocalVideoTrack) return false;
     final sender = track.sender;
-    if (sender == null) return;
+    if (sender == null) return false;
 
-    // The source height we're capturing. getSenderStats() reports the encoded
-    // frame size once frames flow; until then fall back to the configured
-    // target so we never scale up.
-    var sourceHeight = _screenShareMaxHeight;
+    final params = sender.parameters;
+    final encodings = params.encodings;
+    if (encodings == null || encodings.isEmpty) return false;
+    double encodingScale(rtc.RTCRtpEncoding encoding) {
+      final scale = encoding.scaleResolutionDownBy;
+      return scale == null || scale < 1 ? 1.0 : scale;
+    }
+
+    // Simulcast encodings are ordered low-to-high in LiveKit, but do not rely
+    // on that implementation detail. The smallest scale is the highest layer.
+    final currentHighQualityScale = encodings
+        .map(encodingScale)
+        .reduce((left, right) => left < right ? left : right);
+    final highestCurrentBitrate = encodings
+        .map((encoding) => encoding.maxBitrate ?? 0)
+        .reduce((left, right) => left > right ? left : right);
+
+    // Android exposes the native capture size synchronously. Desktop tracks
+    // generally do not, so outbound stats below remain the portable fallback.
+    if (_screenShareSourceHeight == null) {
+      try {
+        final settings = track.mediaStreamTrack.getSettings();
+        final settingsHeight = _positiveScreenShareDimension(
+          settings['height'],
+        );
+        if (settingsHeight != null) _screenShareSourceHeight = settingsHeight;
+      } catch (_) {}
+    }
+
+    int? encodedHeight;
+    int? observedSourceHeight;
+    num? outboundFrameRate;
     try {
-      final stats = await track.getSenderStats();
+      final stats = await track.getSenderStats().timeout(
+        const Duration(seconds: 1),
+      );
       for (final s in stats) {
         final h = s.frameHeight;
-        if (h != null && h > sourceHeight) sourceHeight = h.toInt();
-      }
-    } catch (_) {
-      // No stats yet; the next call (or capture-side dimensions on
-      // Windows/Linux) handles it.
-    }
-
-    final scale = screenShareScaleDownBy(
-      sourceHeight: sourceHeight,
-      targetHeight: _screenShareMaxHeight,
-    );
-    try {
-      final params = sender.parameters;
-      final encodings = params.encodings;
-      if (encodings == null || encodings.isEmpty) return;
-      var changed = false;
-      for (final encoding in encodings) {
-        if (encoding.scaleResolutionDownBy != scale) {
-          encoding.scaleResolutionDownBy = scale;
-          changed = true;
+        if (h != null && h > 0) {
+          final value = h.round();
+          if (encodedHeight == null || value > encodedHeight) {
+            encodedHeight = value;
+          }
+          rtc.RTCRtpEncoding? matchingEncoding;
+          final rid = s.rid;
+          if (rid != null) {
+            for (final encoding in encodings) {
+              if (encoding.rid == rid) {
+                matchingEncoding = encoding;
+                break;
+              }
+            }
+          } else if (encodings.length == 1) {
+            matchingEncoding = encodings.single;
+          }
+          final sourceCandidate =
+              (value *
+                      (matchingEncoding == null
+                          ? currentHighQualityScale
+                          : encodingScale(matchingEncoding)))
+                  .round();
+          if (observedSourceHeight == null ||
+              sourceCandidate > observedSourceHeight) {
+            observedSourceHeight = sourceCandidate;
+          }
+        }
+        final fps = s.framesPerSecond;
+        if (fps != null &&
+            (outboundFrameRate == null || fps > outboundFrameRate)) {
+          outboundFrameRate = fps;
         }
       }
-      if (changed) {
-        params.encodings = encodings;
-        await sender.setParameters(params);
+    } catch (_) {}
+
+    // Reconstruct native height from the encoded frame and the scale which
+    // produced it. Keep the largest observation so a delayed pre-change frame
+    // cannot make a 4K source look like a 480p source while switching upward.
+    if (observedSourceHeight != null) {
+      final observedSource = observedSourceHeight;
+      if (_screenShareSourceHeight == null ||
+          observedSource > _screenShareSourceHeight!) {
+        _screenShareSourceHeight = observedSource;
       }
-    } catch (_) {
-      // setParameters is best-effort; a failure leaves the prior scale in place.
     }
+
+    if (revision != _screenShareQualityRevision || !_screenSharing) return true;
+    final quality = _selectedScreenShareQuality;
+    final sourceHeight = _screenShareSourceHeight;
+    final desiredHighQualityScale = sourceHeight == null
+        ? currentHighQualityScale
+        : screenShareScaleDownBy(
+            sourceHeight: sourceHeight,
+            targetHeight: quality.maxHeight,
+          );
+
+    var parametersMatch = true;
+    for (final encoding in encodings) {
+      final existingScale = encodingScale(encoding);
+      final relativeScale = existingScale / currentHighQualityScale;
+      final desiredScale = desiredHighQualityScale * relativeScale;
+      final currentBitrate = encoding.maxBitrate ?? highestCurrentBitrate;
+      final bitrateRatio = highestCurrentBitrate <= 0
+          ? 1.0
+          : currentBitrate / highestCurrentBitrate;
+      final desiredBitrate = (quality.maxBitrate * bitrateRatio).round();
+      if ((existingScale - desiredScale).abs() > 0.001 ||
+          encoding.maxFramerate != quality.maxFrameRate ||
+          encoding.maxBitrate != desiredBitrate) {
+        parametersMatch = false;
+      }
+    }
+
+    var resolutionVerified = false;
+    if (sourceHeight != null && encodedHeight != null) {
+      final expectedHeight = sourceHeight < quality.maxHeight
+          ? sourceHeight
+          : quality.maxHeight;
+      final proportionalTolerance = (expectedHeight * 0.05).round();
+      final tolerance = proportionalTolerance > 4 ? proportionalTolerance : 4;
+      resolutionVerified = (encodedHeight - expectedHeight).abs() <= tolerance;
+    }
+    final frameRateVerified =
+        outboundFrameRate == null ||
+        outboundFrameRate <= quality.maxFrameRate + 1;
+    if (parametersMatch && resolutionVerified && frameRateVerified) return true;
+
+    for (final encoding in encodings) {
+      final existingScale = encodingScale(encoding);
+      final relativeScale = existingScale / currentHighQualityScale;
+      final currentBitrate = encoding.maxBitrate ?? highestCurrentBitrate;
+      final bitrateRatio = highestCurrentBitrate <= 0
+          ? 1.0
+          : currentBitrate / highestCurrentBitrate;
+      encoding.scaleResolutionDownBy = desiredHighQualityScale * relativeScale;
+      encoding.maxFramerate = quality.maxFrameRate;
+      encoding.maxBitrate = (quality.maxBitrate * bitrateRatio).round();
+    }
+    params.encodings = encodings;
+    final applied = await sender
+        .setParameters(params)
+        .timeout(const Duration(seconds: 1), onTimeout: () => false);
+    if (!applied) {
+      debugPrint('screen-share sender rejected quality parameters');
+    }
+    // A later attempt verifies frames produced after the encoder reconfigures.
+    return false;
+  }
+
+  int? _positiveScreenShareDimension(Object? value) {
+    if (value is num && value > 0) return value.round();
+    final parsed = int.tryParse(value?.toString() ?? '');
+    return parsed != null && parsed > 0 ? parsed : null;
   }
 
   /// Start or stop the local camera. Returns the resulting state. Throws if
@@ -1325,6 +1550,7 @@ class LiveSession extends ChangeNotifier {
     _roomName = null;
     _resolvedLiveKitUrl = null;
     _connecting = false;
+    _invalidateScreenShareQualityApplication(resetSource: true);
     _screenSharing = false;
     _cameraFlipAvailable = null;
     if (clearWatchedTargets) {
@@ -1374,6 +1600,7 @@ class LiveSession extends ChangeNotifier {
     _stopAudioDeviceRebinder();
     _room = null;
     _roomName = null;
+    _invalidateScreenShareQualityApplication(resetSource: true);
     _screenSharing = false;
     _cameraFlipAvailable = null;
     _watchedScreenShareIdentity = null;
@@ -1566,6 +1793,7 @@ class LiveSession extends ChangeNotifier {
       final wasScreenSharing = _screenSharing;
       _screenSharing = _localHasScreenShare();
       if (wasScreenSharing && !_screenSharing) {
+        _invalidateScreenShareQualityApplication(resetSource: true);
         unawaited(_stopScreenAudioPublisher());
       }
       if (_watchedScreenShareIdentity != null &&
@@ -1589,6 +1817,7 @@ class LiveSession extends ChangeNotifier {
       _resumedSignalConnection = false;
       _reconnectRecoveryRevision += 1;
       _suppressAutomaticMicReconcile = false;
+      _invalidateScreenShareQualityApplication(resetSource: true);
       _screenSharing = false;
       _watchedScreenShareIdentity = null;
       _watchedCameraIdentity = null;
@@ -1712,6 +1941,9 @@ class LiveSession extends ChangeNotifier {
     }
     if (_room != reconnectedRoom) return;
     _screenSharing = _localHasScreenShare();
+    if (_screenSharing) {
+      unawaited(_applyScreenShareQualityWithRetries());
+    }
     if (_screenSharing && _screenAudioPublisher?.isPublishing != true) {
       try {
         await _stopScreenAudioPublisher();
