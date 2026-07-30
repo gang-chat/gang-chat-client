@@ -214,6 +214,47 @@ void main() {
     ]);
   });
 
+  testWidgets(
+    'Android room card stays open while dragging a selection handle',
+    (tester) async {
+      await tester.pumpWidget(
+        _host(
+          RoomHoverCardForTest(room: _joinedRoom, currentUser: _currentUser),
+          platform: TargetPlatform.android,
+        ),
+      );
+
+      await _ensureRoomProfileCardOpen(tester);
+      final editable = _readOnlyFieldWithText(_joinedRoom.name);
+      final editableState = tester.state<EditableTextState>(editable);
+      editableState.userUpdateTextEditingValue(
+        editableState.textEditingValue.copyWith(
+          selection: const TextSelection(baseOffset: 1, extentOffset: 5),
+        ),
+        SelectionChangedCause.doubleTap,
+      );
+      editableState.showToolbar();
+      await tester.pumpAndSettle();
+
+      expect(_selectionHandleFades(), findsNWidgets(2));
+      final endpoint = editableState.renderEditable
+          .getEndpointsForSelection(editableState.textEditingValue.selection)
+          .last;
+      final handlePosition =
+          editableState.renderEditable.localToGlobal(endpoint.point) +
+          const Offset(0, 12);
+      final gesture = await tester.startGesture(handlePosition);
+      await tester.pump();
+      expect(find.text('RID: R10001'), findsOneWidget);
+      await gesture.moveBy(const Offset(18, 0));
+      await tester.pump();
+      expect(find.text('RID: R10001'), findsOneWidget);
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(find.text('RID: R10001'), findsOneWidget);
+    },
+  );
+
   testWidgets('preset room profile icon does not open image preview', (
     tester,
   ) async {
@@ -1781,6 +1822,15 @@ ChatImagePreviewActions _imagePreviewActions() {
 Finder _readOnlyFieldWithText(String text) {
   return find.byWidgetPredicate(
     (widget) => widget is EditableText && widget.controller.text == text,
+  );
+}
+
+Finder _selectionHandleFades() {
+  return find.descendant(
+    of: find.byWidgetPredicate(
+      (widget) => '${widget.runtimeType}' == '_SelectionHandleOverlay',
+    ),
+    matching: find.byType(FadeTransition),
   );
 }
 

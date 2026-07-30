@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
@@ -109,6 +110,9 @@ class _HoverCardAnchorState extends State<HoverCardAnchor> {
   bool _pinned = false;
   bool _portalVisible = false;
   bool _advertisedActiveToParent = false;
+  int? _deferredOutsidePointer;
+  Offset? _deferredOutsideStart;
+  bool _deferredOutsideMoved = false;
   Timer? _closeTimer;
   Future<void>? _openFuture;
 
@@ -160,6 +164,7 @@ class _HoverCardAnchorState extends State<HoverCardAnchor> {
       _advertisedActiveToParent = false;
     }
     _parentCoordinator?.releaseOpenChild(this);
+    _clearDeferredOutsidePointerRoute();
     _closeTimer?.cancel();
     super.dispose();
   }
@@ -335,6 +340,62 @@ class _HoverCardAnchorState extends State<HoverCardAnchor> {
     _dismissChainAfter(target);
   }
 
+  void _handleTapOutside(PointerDownEvent event) {
+    final isAndroid = Theme.of(context).platform == TargetPlatform.android;
+    if (!isAndroid || !_coordinator.hasActiveDescendants) {
+      _dismiss();
+      return;
+    }
+
+    // Android text selection handles live in a separate Overlay. Their pointer
+    // events therefore look like outside taps to this card even though they
+    // belong to an active text-selection interaction. Wait for this pointer to
+    // finish: a drag belongs to the handle and keeps the card mounted, while a
+    // regular outside tap still dismisses the card with one interaction.
+    _trackDeferredOutsidePointer(event);
+  }
+
+  void _trackDeferredOutsidePointer(PointerDownEvent event) {
+    _clearDeferredOutsidePointerRoute();
+    _deferredOutsidePointer = event.pointer;
+    _deferredOutsideStart = event.position;
+    _deferredOutsideMoved = false;
+    GestureBinding.instance.pointerRouter.addRoute(
+      event.pointer,
+      _handleDeferredOutsidePointer,
+    );
+  }
+
+  void _handleDeferredOutsidePointer(PointerEvent event) {
+    final pointer = _deferredOutsidePointer;
+    if (pointer == null || event.pointer != pointer) return;
+    if (event is PointerMoveEvent) {
+      final start = _deferredOutsideStart;
+      if (start != null && (event.position - start).distance >= kTouchSlop) {
+        _deferredOutsideMoved = true;
+      }
+      return;
+    }
+    if (event is! PointerUpEvent && event is! PointerCancelEvent) return;
+
+    final keepOpen = _deferredOutsideMoved;
+    _clearDeferredOutsidePointerRoute();
+    if (!keepOpen && mounted && _portalVisible) _dismiss();
+  }
+
+  void _clearDeferredOutsidePointerRoute() {
+    final pointer = _deferredOutsidePointer;
+    if (pointer != null) {
+      GestureBinding.instance.pointerRouter.removeRoute(
+        pointer,
+        _handleDeferredOutsidePointer,
+      );
+    }
+    _deferredOutsidePointer = null;
+    _deferredOutsideStart = null;
+    _deferredOutsideMoved = false;
+  }
+
   void _dismissChainAfter(_HoverCardAnchorState target) {
     if (this == target) {
       _coordinator.dismissOpenChild();
@@ -406,7 +467,7 @@ class _HoverCardAnchorState extends State<HoverCardAnchor> {
                 ),
                 child: TapRegion(
                   groupId: _tapRegionGroup,
-                  onTapOutside: (_) => _dismiss(),
+                  onTapOutside: _handleTapOutside,
                   onTapInside: _handleTapInside,
                   child: MouseRegion(
                     onEnter: (_) => _enterCard(),

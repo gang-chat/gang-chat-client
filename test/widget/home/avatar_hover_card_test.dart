@@ -43,9 +43,14 @@ const _currentUser = CurrentUser(
   createdAt: null,
 );
 
-Widget _host(Widget child, {ChatImagePreviewActions? imagePreviewActions}) {
+Widget _host(
+  Widget child, {
+  ChatImagePreviewActions? imagePreviewActions,
+  TargetPlatform? platform,
+}) {
   final scaffold = Scaffold(body: Center(child: child));
   return MaterialApp(
+    theme: platform == null ? null : ThemeData(platform: platform),
     home: imagePreviewActions == null
         ? scaffold
         : ChatImagePreviewActionsScope(
@@ -256,6 +261,51 @@ void main() {
 
     expect(clipboardWrites, ['log']);
   });
+
+  testWidgets(
+    'Android user card stays open while dragging a selection handle',
+    (tester) async {
+      await tester.pumpWidget(
+        _host(
+          const AvatarHoverCardForTest(user: _user),
+          platform: TargetPlatform.android,
+        ),
+      );
+
+      await _ensureUserProfileCardOpen(tester);
+      final editable = _readOnlyFieldWithText('@${_user.username}');
+      final editableState = tester.state<EditableTextState>(editable);
+      editableState.userUpdateTextEditingValue(
+        editableState.textEditingValue.copyWith(
+          selection: const TextSelection(baseOffset: 1, extentOffset: 5),
+        ),
+        SelectionChangedCause.doubleTap,
+      );
+      editableState.showToolbar();
+      await tester.pumpAndSettle();
+
+      expect(_selectionHandleFades(), findsNWidgets(2));
+      final endpoint = editableState.renderEditable
+          .getEndpointsForSelection(editableState.textEditingValue.selection)
+          .last;
+      final handlePosition =
+          editableState.renderEditable.localToGlobal(endpoint.point) +
+          const Offset(0, 12);
+      final gesture = await tester.startGesture(handlePosition);
+      await tester.pump();
+      expect(find.text('@${_user.username}'), findsOneWidget);
+      await gesture.moveBy(const Offset(18, 0));
+      await tester.pump();
+      expect(find.text('@${_user.username}'), findsOneWidget);
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(find.text('@${_user.username}'), findsOneWidget);
+
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+      expect(find.text('@${_user.username}'), findsNothing);
+    },
+  );
 
   testWidgets('preset profile card avatar does not open image preview', (
     tester,
@@ -1040,6 +1090,15 @@ ChatImagePreviewActions _imagePreviewActions() {
 Finder _readOnlyFieldWithText(String text) {
   return find.byWidgetPredicate(
     (widget) => widget is EditableText && widget.controller.text == text,
+  );
+}
+
+Finder _selectionHandleFades() {
+  return find.descendant(
+    of: find.byWidgetPredicate(
+      (widget) => '${widget.runtimeType}' == '_SelectionHandleOverlay',
+    ),
+    matching: find.byType(FadeTransition),
   );
 }
 
