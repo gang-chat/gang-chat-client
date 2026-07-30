@@ -123,6 +123,82 @@ void main() {
 
     expect(find.text('96 ms'), findsNothing);
   });
+
+  testWidgets('Android room scroll drag does not select a room on release', (
+    tester,
+  ) async {
+    final rooms = List<RoomCard>.generate(
+      8,
+      (index) => RoomCard(
+        id: 'room_$index',
+        name: 'Room $index',
+        avatarUrl: null,
+        defaultAvatarKey: 'room-${index % 6 + 1}',
+        memberCount: 2,
+        liveParticipantCount: 0,
+        liveAvatarPreview: const [],
+        lastMessage: null,
+        unreadCount: 0,
+        updatedAt: DateTime.utc(2026, 7, 30),
+      ),
+    );
+    final selectedRoomIds = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ui.uiTheme().copyWith(platform: TargetPlatform.android),
+        home: Scaffold(
+          body: SizedBox(
+            width: 320,
+            height: 430,
+            child: HomeSidebar(
+              width: 320,
+              currentUser: _currentUser,
+              servers: rooms,
+              timestampNow: DateTime.utc(2026, 7, 30),
+              selectedServerId: null,
+              joinedLiveRoomId: null,
+              realtimeReconnecting: false,
+              searchQuery: '',
+              loading: false,
+              error: null,
+              settingsActive: false,
+              createRoomActive: false,
+              notificationsActive: false,
+              logoutActive: false,
+              hasPendingNotifications: false,
+              pendingNotificationCount: 0,
+              includeWindowChromeOffset: false,
+              onServerSelected: (room) => selectedRoomIds.add(room.id),
+              onCreateRoom: () {},
+              onOpenNotifications: () {},
+              onOpenSettings: () {},
+              onLogout: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final firstRoom = find.byKey(
+      const ValueKey<String>('home-sidebar-room-room_0'),
+    );
+    final gesture = await tester.startGesture(
+      tester.getCenter(firstRoom),
+      kind: PointerDeviceKind.touch,
+    );
+    await gesture.moveBy(const Offset(0, -30));
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(selectedRoomIds, isEmpty);
+
+    await tester.tap(firstRoom, kind: PointerDeviceKind.touch);
+    await tester.pumpAndSettle();
+    expect(selectedRoomIds, ['room_0']);
+    expect(tester.takeException(), isNull);
+  });
 }
 
 Future<void> _pumpLatencySidebar(WidgetTester tester) {

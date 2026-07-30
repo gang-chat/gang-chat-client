@@ -625,7 +625,8 @@ class _ServerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hoverLift = Theme.of(context).platform == TargetPlatform.android
+    final platform = Theme.of(context).platform;
+    final hoverLift = platform == TargetPlatform.android
         ? 0.0
         : _serverCardHoverLift;
     final lastMessageTime = room_display.roomSidebarLastMessageTime(
@@ -651,6 +652,7 @@ class _ServerCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(
         horizontal: _serverCardHorizontalPadding,
       ),
+      cancelTouchPressOnDrag: platform == TargetPlatform.android,
       onPressed: onPressed,
       child: Stack(
         clipBehavior: Clip.none,

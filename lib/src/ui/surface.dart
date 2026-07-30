@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart' show PointerDeviceKind, kTouchSlop;
 import 'package:flutter/material.dart';
 
 import 'tokens.dart';
@@ -19,6 +20,7 @@ class PressableSurface extends StatefulWidget {
     this.interactive = false,
     this.loading = false,
     this.pressRequiresHover = false,
+    this.cancelTouchPressOnDrag = false,
     this.selected = false,
     this.backgroundColor = UiColors.surface,
     this.selectedBackgroundColor = UiColors.selected,
@@ -52,6 +54,11 @@ class PressableSurface extends StatefulWidget {
   final bool interactive;
   final bool loading;
   final bool pressRequiresHover;
+
+  /// Cancels [onPressed] when a touch-like pointer moves beyond Flutter's
+  /// normal touch slop. Opt in for surfaces nested in a scrollable whose raw
+  /// pointer handling would otherwise bypass the gesture arena.
+  final bool cancelTouchPressOnDrag;
   final bool selected;
   final Color backgroundColor;
   final Color selectedBackgroundColor;
@@ -85,6 +92,9 @@ class _PressableSurfaceState extends State<PressableSurface> {
   bool _hovered = false;
   bool _pressed = false;
   int? _pressedPointer;
+  Offset? _pressGlobalOrigin;
+  bool _trackingTouchDrag = false;
+  bool _touchDragCancelled = false;
 
   bool get _isInteractive =>
       widget.enabled && (widget.interactive || widget.onPressed != null);
@@ -120,11 +130,25 @@ class _PressableSurfaceState extends State<PressableSurface> {
   void _handlePointerDown(PointerDownEvent event) {
     if (!_isInteractive || widget.loading || _pressedPointer != null) return;
     _pressedPointer = event.pointer;
+    _pressGlobalOrigin = event.position;
+    _trackingTouchDrag =
+        widget.cancelTouchPressOnDrag && _isTouchLike(event.kind);
+    _touchDragCancelled = false;
     _setPressed(_isInsideHitTarget(event.localPosition));
   }
 
   void _handlePointerMove(PointerMoveEvent event) {
     if (event.pointer != _pressedPointer) return;
+    final origin = _pressGlobalOrigin;
+    if (_trackingTouchDrag &&
+        !_touchDragCancelled &&
+        origin != null &&
+        (event.position - origin).distanceSquared > kTouchSlop * kTouchSlop) {
+      _touchDragCancelled = true;
+      _setPressed(false);
+      return;
+    }
+    if (_touchDragCancelled) return;
     // Keep the pressed effect for the whole hold, even if the pointer wanders
     // outside the hit target. Whether the tap actually fires is decided at
     // pointer-up from the release position.
@@ -133,16 +157,30 @@ class _PressableSurfaceState extends State<PressableSurface> {
 
   void _handlePointerUp(PointerUpEvent event) {
     if (event.pointer != _pressedPointer) return;
-    final shouldPress = _isInsideHitTarget(event.localPosition);
-    _pressedPointer = null;
+    final shouldPress =
+        !_touchDragCancelled && _isInsideHitTarget(event.localPosition);
+    _clearPointerTracking();
     _setPressed(false);
     if (shouldPress) _handleTap();
   }
 
   void _handlePointerCancel(PointerCancelEvent event) {
     if (event.pointer != _pressedPointer) return;
-    _pressedPointer = null;
+    _clearPointerTracking();
     _setPressed(false);
+  }
+
+  void _clearPointerTracking() {
+    _pressedPointer = null;
+    _pressGlobalOrigin = null;
+    _trackingTouchDrag = false;
+    _touchDragCancelled = false;
+  }
+
+  bool _isTouchLike(PointerDeviceKind kind) {
+    return kind == PointerDeviceKind.touch ||
+        kind == PointerDeviceKind.stylus ||
+        kind == PointerDeviceKind.invertedStylus;
   }
 
   @override
