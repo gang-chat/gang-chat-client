@@ -119,6 +119,51 @@ void main() {
     expect(isLivePresenceSoundParticipantIdentity(''), isFalse);
   });
 
+  test('reconnect presence diff ignores users restored on both sides', () {
+    final changes = liveReconnectPresenceChanges(
+      before: {'stayed', 'left'},
+      after: {'stayed', 'joined'},
+    );
+
+    expect(changes.left, {'left'});
+    expect(changes.joined, {'joined'});
+  });
+
+  test('reconnect republishes only an established permitted microphone', () {
+    expect(
+      shouldRepublishLocalMicrophoneAfterReconnect(
+        resumedSignalConnection: true,
+        hadPublicationBeforeReconnect: true,
+        canPublish: true,
+      ),
+      isTrue,
+    );
+    expect(
+      shouldRepublishLocalMicrophoneAfterReconnect(
+        resumedSignalConnection: true,
+        hadPublicationBeforeReconnect: false,
+        canPublish: true,
+      ),
+      isFalse,
+    );
+    expect(
+      shouldRepublishLocalMicrophoneAfterReconnect(
+        resumedSignalConnection: true,
+        hadPublicationBeforeReconnect: true,
+        canPublish: false,
+      ),
+      isFalse,
+    );
+    expect(
+      shouldRepublishLocalMicrophoneAfterReconnect(
+        resumedSignalConnection: false,
+        hadPublicationBeforeReconnect: true,
+        canPublish: true,
+      ),
+      isFalse,
+    );
+  });
+
   test('latest subscription reconciliation runs last', () async {
     final reconciler = LatestLiveSubscriptionReconciler();
     final firstStarted = Completer<void>();

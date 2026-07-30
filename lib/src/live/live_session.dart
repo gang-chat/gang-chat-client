@@ -65,6 +65,44 @@ bool isLivePresenceSoundParticipantIdentity(String identity) {
       identity != musicBoxBotIdentity;
 }
 
+@visibleForTesting
+class LiveReconnectPresenceChanges {
+  const LiveReconnectPresenceChanges({
+    required this.joined,
+    required this.left,
+  });
+
+  final Set<String> joined;
+  final Set<String> left;
+}
+
+/// Computes real presence changes which happened while LiveKit callbacks were
+/// suppressed during a reconnect. A full transport restart removes and then
+/// recreates every remote participant, so replaying those raw SDK events would
+/// produce false leave/join sounds for users who never left the room.
+@visibleForTesting
+LiveReconnectPresenceChanges liveReconnectPresenceChanges({
+  required Set<String> before,
+  required Set<String> after,
+}) {
+  return LiveReconnectPresenceChanges(
+    joined: after.difference(before),
+    left: before.difference(after),
+  );
+}
+
+/// A publication object can survive signal recovery even when its underlying
+/// publisher SDP has fallen back to `recvonly`. In that state mute/unmute is
+/// insufficient because it never creates a new sender or renegotiates media.
+@visibleForTesting
+bool shouldRepublishLocalMicrophoneAfterReconnect({
+  required bool resumedSignalConnection,
+  required bool hadPublicationBeforeReconnect,
+  required bool canPublish,
+}) {
+  return resumedSignalConnection && hadPublicationBeforeReconnect && canPublish;
+}
+
 enum LiveParticipantDepartureKind { left, removed }
 
 LiveParticipantDepartureKind liveParticipantDepartureKind(
@@ -448,6 +486,12 @@ class LiveSession extends ChangeNotifier {
   String? _resolvedLiveKitUrl;
   bool _canPublish = true;
   bool _presenceCallbacksEnabled = false;
+  Set<String>? _participantIdentitiesBeforeReconnect;
+  bool? _microphonePublishedBeforeReconnect;
+  bool _resumedSignalConnection = false;
+  int _reconnectRecoveryRevision = 0;
+  Future<void> _reconnectRecoveryTail = Future<void>.value();
+  bool _suppressAutomaticMicReconcile = false;
   double _inputVolume = defaultAudioVolume;
   double _outputVolume = defaultAudioVolume;
   double _musicBoxVolume = defaultAudioVolume;
@@ -729,6 +773,11 @@ class LiveSession extends ChangeNotifier {
     _localMicrophonePublishUnavailable = false;
     _canPublish = true;
     _presenceCallbacksEnabled = false;
+    _participantIdentitiesBeforeReconnect = null;
+    _microphonePublishedBeforeReconnect = null;
+    _resumedSignalConnection = false;
+    _reconnectRecoveryRevision += 1;
+    _suppressAutomaticMicReconcile = false;
     _cancelEvents = room.events.listen(_onEvent);
 
     try {
@@ -776,6 +825,11 @@ class LiveSession extends ChangeNotifier {
       _watchedScreenShareIdentity = null;
       _watchedCameraIdentity = null;
       _presenceCallbacksEnabled = false;
+      _participantIdentitiesBeforeReconnect = null;
+      _microphonePublishedBeforeReconnect = null;
+      _resumedSignalConnection = false;
+      _reconnectRecoveryRevision += 1;
+      _suppressAutomaticMicReconcile = false;
       unawaited(_stopScreenAudioPublisher());
       _speakingIdentities.clear();
       _micMutedByIdentity.clear();
@@ -1278,6 +1332,11 @@ class LiveSession extends ChangeNotifier {
     _localMicrophonePublishUnavailable = false;
     _canPublish = true;
     _presenceCallbacksEnabled = false;
+    _participantIdentitiesBeforeReconnect = null;
+    _microphonePublishedBeforeReconnect = null;
+    _resumedSignalConnection = false;
+    _reconnectRecoveryRevision += 1;
+    _suppressAutomaticMicReconcile = false;
     _speakingIdentities.clear();
     _micMutedByIdentity.clear();
     await _resetLocalInputVolume();
@@ -1319,6 +1378,11 @@ class LiveSession extends ChangeNotifier {
     _watchedCameraIdentity = null;
     _localMicrophonePublishUnavailable = false;
     _presenceCallbacksEnabled = false;
+    _participantIdentitiesBeforeReconnect = null;
+    _microphonePublishedBeforeReconnect = null;
+    _resumedSignalConnection = false;
+    _reconnectRecoveryRevision += 1;
+    _suppressAutomaticMicReconcile = false;
     unawaited(_stopScreenAudioPublisher());
     _speakingIdentities.clear();
     _micMutedByIdentity.clear();
@@ -1352,6 +1416,20 @@ class LiveSession extends ChangeNotifier {
 
   void _onEvent(lk.RoomEvent event) {
     if (event is lk.ReconnectingEvent) {
+      final room = _room;
+      _participantIdentitiesBeforeReconnect ??= room == null
+          ? const <String>{}
+          : _presenceParticipantIdentities(room);
+      _microphonePublishedBeforeReconnect ??=
+          room?.localParticipant?.getTrackPublicationBySource(
+            lk.TrackSource.microphone,
+          ) !=
+          null;
+      if (event is lk.RoomResumingEvent) {
+        _resumedSignalConnection = true;
+      }
+      _reconnectRecoveryRevision += 1;
+      _suppressAutomaticMicReconcile = true;
       _presenceCallbacksEnabled = false;
       // Speaking and per-publication mute state are media-connection facts,
       // not durable room state. A reconnect can replace every publication
@@ -1368,14 +1446,27 @@ class LiveSession extends ChangeNotifier {
       return;
     }
     if (event is lk.RoomReconnectedEvent) {
-      _presenceCallbacksEnabled = true;
-      _refreshAllMicStates();
       // A full reconnect may restore already-published tracks without
       // replaying every participant/track event that normally applies these
       // local preferences. Reconcile them serially so native WebRTC operations
       // cannot overlap one another or continue into a newer room connection.
       final room = _room;
-      if (room != null) unawaited(_reconcileMediaAfterReconnect(room));
+      if (room != null) {
+        _scheduleReconnectRecovery(
+          room,
+          revision: _reconnectRecoveryRevision,
+          participantsBefore:
+              _participantIdentitiesBeforeReconnect ??
+              _presenceParticipantIdentities(room),
+          hadMicrophonePublication:
+              _microphonePublishedBeforeReconnect ??
+              room.localParticipant?.getTrackPublicationBySource(
+                    lk.TrackSource.microphone,
+                  ) !=
+                  null,
+          resumedSignalConnection: _resumedSignalConnection,
+        );
+      }
       notifyListeners();
       return;
     }
@@ -1461,7 +1552,9 @@ class LiveSession extends ChangeNotifier {
         event is lk.TrackUnpublishedEvent ||
         event is lk.TrackMutedEvent ||
         event is lk.TrackUnmutedEvent) {
-      unawaited(_applyLocalMicrophoneState());
+      if (!_suppressAutomaticMicReconcile) {
+        unawaited(_applyLocalMicrophoneState());
+      }
       unawaited(_applyOutputVolume());
       unawaited(_applyMusicBoxVolume());
       unawaited(_applyScreenShareVolume());
@@ -1489,6 +1582,11 @@ class LiveSession extends ChangeNotifier {
     }
     if (event is lk.RoomDisconnectedEvent) {
       _presenceCallbacksEnabled = false;
+      _participantIdentitiesBeforeReconnect = null;
+      _microphonePublishedBeforeReconnect = null;
+      _resumedSignalConnection = false;
+      _reconnectRecoveryRevision += 1;
+      _suppressAutomaticMicReconcile = false;
       _screenSharing = false;
       _watchedScreenShareIdentity = null;
       _watchedCameraIdentity = null;
@@ -1526,9 +1624,101 @@ class LiveSession extends ChangeNotifier {
     );
   }
 
-  Future<void> _reconcileMediaAfterReconnect(lk.Room reconnectedRoom) async {
+  Set<String> _presenceParticipantIdentities(lk.Room room) {
+    return room.remoteParticipants.values
+        .map((participant) => participant.identity)
+        .where(isLivePresenceSoundParticipantIdentity)
+        .toSet();
+  }
+
+  void _scheduleReconnectRecovery(
+    lk.Room reconnectedRoom, {
+    required int revision,
+    required Set<String> participantsBefore,
+    required bool hadMicrophonePublication,
+    required bool resumedSignalConnection,
+  }) {
+    final previous = _reconnectRecoveryTail;
+    final recovery = () async {
+      try {
+        await previous;
+      } catch (_) {}
+      if (_room != reconnectedRoom || revision != _reconnectRecoveryRevision) {
+        return;
+      }
+      await _reconcileMediaAfterReconnect(
+        reconnectedRoom,
+        hadMicrophonePublication: hadMicrophonePublication,
+        resumedSignalConnection: resumedSignalConnection,
+      );
+      if (_room != reconnectedRoom || revision != _reconnectRecoveryRevision) {
+        return;
+      }
+
+      final changes = liveReconnectPresenceChanges(
+        before: participantsBefore,
+        after: _presenceParticipantIdentities(reconnectedRoom),
+      );
+      _participantIdentitiesBeforeReconnect = null;
+      _microphonePublishedBeforeReconnect = null;
+      _resumedSignalConnection = false;
+      _presenceCallbacksEnabled = true;
+      _suppressAutomaticMicReconcile = false;
+      for (final identity in changes.left) {
+        onParticipantLeft?.call(identity, LiveParticipantDepartureKind.left);
+      }
+      for (final identity in changes.joined) {
+        onParticipantJoined?.call(identity);
+      }
+      _refreshAllMicStates();
+      notifyListeners();
+    }();
+    _reconnectRecoveryTail = recovery.catchError((_) {
+      if (_room == reconnectedRoom && revision == _reconnectRecoveryRevision) {
+        _participantIdentitiesBeforeReconnect = null;
+        _microphonePublishedBeforeReconnect = null;
+        _resumedSignalConnection = false;
+        _presenceCallbacksEnabled = true;
+        _suppressAutomaticMicReconcile = false;
+        _refreshAllMicStates();
+        notifyListeners();
+      }
+    });
+  }
+
+  Future<void> _reconcileMediaAfterReconnect(
+    lk.Room reconnectedRoom, {
+    required bool hadMicrophonePublication,
+    required bool resumedSignalConnection,
+  }) async {
     if (_room != reconnectedRoom) return;
-    await _applyLocalMicrophoneState();
+    final local = reconnectedRoom.localParticipant;
+    final previousCanPublish = _canPublish;
+    _canPublish = local?.permissions.canPublish ?? _canPublish;
+    if (previousCanPublish != _canPublish) {
+      onPublishPermissionChanged?.call(_canPublish);
+    }
+    if (local != null &&
+        shouldRepublishLocalMicrophoneAfterReconnect(
+          resumedSignalConnection: resumedSignalConnection,
+          hadPublicationBeforeReconnect: hadMicrophonePublication,
+          canPublish: _canPublish,
+        )) {
+      await _republishLocalMicrophoneAfterReconnect(reconnectedRoom, local);
+    } else {
+      await _applyLocalMicrophoneState();
+    }
+    if (_room != reconnectedRoom) return;
+    _screenSharing = _localHasScreenShare();
+    if (_screenSharing && _screenAudioPublisher?.isPublishing != true) {
+      try {
+        await _stopScreenAudioPublisher();
+        if (_room == reconnectedRoom) await _startScreenAudioPublisher();
+      } catch (_) {
+        // The video share remains usable when isolated system-audio recovery
+        // fails. A later explicit share can retry with a fresh aux session.
+      }
+    }
     if (_room != reconnectedRoom) return;
     await _applyOutputVolume();
     if (_room != reconnectedRoom) return;
@@ -1539,6 +1729,36 @@ class LiveSession extends ChangeNotifier {
     await _applyCameraSubscriptions();
     if (_room != reconnectedRoom) return;
     await _applyScreenShareVolume();
+  }
+
+  Future<void> _republishLocalMicrophoneAfterReconnect(
+    lk.Room reconnectedRoom,
+    lk.LocalParticipant local,
+  ) async {
+    try {
+      final publication = local.getTrackPublicationBySource(
+        lk.TrackSource.microphone,
+      );
+      if (publication != null) {
+        await local.removePublishedTrack(publication.sid);
+      }
+      if (_room != reconnectedRoom ||
+          reconnectedRoom.localParticipant != local ||
+          !_canPublish) {
+        return;
+      }
+      await local.setMicrophoneEnabled(
+        true,
+        audioCaptureOptions: _audioCaptureOptions(),
+      );
+      if (_room != reconnectedRoom) return;
+      _localMicrophonePublishUnavailable = false;
+      await _applyLocalInputVolume();
+    } catch (_) {
+      if (_room == reconnectedRoom) {
+        _markLocalMicrophonePublishUnavailable();
+      }
+    }
   }
 
   void _refreshAllMicStates() {

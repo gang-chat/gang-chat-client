@@ -2063,6 +2063,11 @@ void main() {
     final volumeReveal = find.byKey(
       const ValueKey<String>('live-fullscreen-stage:volume-reveal'),
     );
+    final pointerRegion = find.byKey(
+      const ValueKey<String>('live-fullscreen-stage:pointer-region'),
+    );
+    MouseCursor pointerCursor() =>
+        tester.widget<MouseRegion>(pointerRegion).cursor;
     AnimatedOpacity revealOpacity(Finder reveal) {
       return tester.widget<AnimatedOpacity>(
         find.descendant(of: reveal, matching: find.byType(AnimatedOpacity)),
@@ -2079,6 +2084,7 @@ void main() {
     expect(tester.getBottomRight(volumeReveal).dy, closeTo(556, 0.01));
     expect(revealOpacity(labelReveal).opacity, 1);
     expect(revealOpacity(viewersReveal).opacity, 1);
+    expect(pointerCursor(), MouseCursor.defer);
 
     final hover = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await hover.addPointer(location: tester.getCenter(labelReveal));
@@ -2088,6 +2094,7 @@ void main() {
     expect(revealOpacity(viewersReveal).opacity, 0);
     expect(revealOpacity(exitReveal).opacity, 0);
     expect(revealOpacity(volumeReveal).opacity, 0);
+    expect(pointerCursor(), SystemMouseCursors.none);
 
     await hover.moveTo(tester.getCenter(viewersReveal));
     await tester.pump();
@@ -2095,6 +2102,7 @@ void main() {
     expect(revealOpacity(viewersReveal).opacity, 1);
     expect(revealOpacity(exitReveal).opacity, 1);
     expect(revealOpacity(volumeReveal).opacity, 1);
+    expect(pointerCursor(), MouseCursor.defer);
 
     await tester.pump(const Duration(seconds: 2));
     await hover.moveTo(tester.getCenter(labelReveal));

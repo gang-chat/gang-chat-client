@@ -370,6 +370,8 @@ class _LiveFullScreenStageState extends State<LiveFullScreenStage> {
         }
       },
       child: MouseRegion(
+        key: const ValueKey<String>('live-fullscreen-stage:pointer-region'),
+        cursor: _controlsVisible ? MouseCursor.defer : SystemMouseCursors.none,
         onEnter: (_) => _showControlsAndRestartTimer(),
         onHover: (_) => _showControlsAndRestartTimer(),
         child: Listener(
