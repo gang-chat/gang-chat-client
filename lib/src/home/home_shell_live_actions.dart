@@ -9,6 +9,50 @@ extension _HomeShellLiveActions on _HomeShellState {
   }
 
   void _enterLiveFullScreen(LiveVideoTrack track) {
+    final generation = ++_liveFullScreenTransitionGeneration;
+    _queueLiveFullScreenTransition(
+      () => _performEnterLiveFullScreen(track, generation),
+    );
+  }
+
+  Future<void> _performEnterLiveFullScreen(
+    LiveVideoTrack track,
+    int generation,
+  ) async {
+    if (!mounted || generation != _liveFullScreenTransitionGeneration) return;
+    if (track.isLocal &&
+        track.isScreenShare &&
+        widget.androidSystemService.isSupported) {
+      showFloatingErrorNotice(context, 'Android 无法安全排除本机窗口，屏幕共享期间请使用小窗预览');
+      return;
+    }
+    final requiresCaptureExclusion =
+        track.isLocal &&
+        track.isScreenShare &&
+        widget.windowController.supportsWindowsCaptureExclusion;
+    if (requiresCaptureExclusion && !_windowCaptureExcludedForLiveFullScreen) {
+      final excluded = await widget.windowController.setWindowCaptureExcluded(
+        true,
+      );
+      if (!mounted || generation != _liveFullScreenTransitionGeneration) {
+        if (excluded) {
+          await widget.windowController.setWindowCaptureExcluded(false);
+        }
+        return;
+      }
+      if (!excluded) {
+        showFloatingErrorNotice(context, '无法将 Gang Chat 排除在屏幕捕获之外，已取消本机全屏预览');
+        return;
+      }
+      _windowCaptureExcludedForLiveFullScreen = true;
+    }
+    if (!requiresCaptureExclusion && _windowCaptureExcludedForLiveFullScreen) {
+      await _restoreLiveFullScreenCapture();
+      if (!mounted || generation != _liveFullScreenTransitionGeneration) {
+        return;
+      }
+    }
+
     _setHomeState(() => _fullScreenLiveTrack = track);
     if (!track.isLocal) {
       if (track.isScreenShare) {
@@ -21,13 +65,51 @@ extension _HomeShellLiveActions on _HomeShellState {
         );
       }
     }
-    unawaited(_setSystemFullScreen(true));
+    await _setSystemFullScreen(true);
   }
 
   void _exitLiveFullScreen() {
+    ++_liveFullScreenTransitionGeneration;
     _setHomeState(() => _fullScreenLiveTrack = null);
     _syncWatchedLiveStageSelection(_liveStageSelections[_selectedServerId]);
-    unawaited(_setSystemFullScreen(false));
+    _queueLiveFullScreenTransition(_performExitLiveFullScreen);
+  }
+
+  Future<void> _performExitLiveFullScreen() async {
+    await _setSystemFullScreen(false);
+    await _restoreLiveFullScreenCapture();
+  }
+
+  Future<void> _restoreLiveFullScreenCapture({
+    DesktopWindowController? windowController,
+  }) async {
+    if (!_windowCaptureExcludedForLiveFullScreen) return;
+    _windowCaptureExcludedForLiveFullScreen = false;
+    await (windowController ?? widget.windowController)
+        .setWindowCaptureExcluded(false);
+  }
+
+  void _resetLiveFullScreenForLifecycle({
+    DesktopWindowController? windowController,
+  }) {
+    ++_liveFullScreenTransitionGeneration;
+    _fullScreenLiveTrack = null;
+    _queueLiveFullScreenTransition(() async {
+      await _setSystemFullScreen(false, windowController: windowController);
+      await _restoreLiveFullScreenCapture(windowController: windowController);
+    });
+  }
+
+  void _queueLiveFullScreenTransition(Future<void> Function() transition) {
+    final previous = _liveFullScreenTransitionTail;
+    _liveFullScreenTransitionTail = () async {
+      try {
+        await previous;
+      } catch (_) {}
+      try {
+        await transition();
+      } catch (_) {}
+    }();
   }
 
   void _syncWatchedLiveStageSelection(LiveStageSelection? selection) {
@@ -92,8 +174,12 @@ extension _HomeShellLiveActions on _HomeShellState {
     }();
   }
 
-  Future<void> _setSystemFullScreen(bool fullScreen) async {
-    await widget.windowController.setFullScreenMediaPlaybackActive(fullScreen);
+  Future<void> _setSystemFullScreen(
+    bool fullScreen, {
+    DesktopWindowController? windowController,
+  }) async {
+    await (windowController ?? widget.windowController)
+        .setFullScreenMediaPlaybackActive(fullScreen);
     if (!_supportsWindowManagement) return;
     try {
       if (await windowManager.isFullScreen() != fullScreen) {
@@ -136,9 +222,7 @@ extension _HomeShellLiveActions on _HomeShellState {
       unawaited(_patchLiveState(screenSharing: false));
     }
     if (_fullScreenLiveTrack != null && _resolveFullScreenLiveTrack() == null) {
-      _fullScreenLiveTrack = null;
-      _syncWatchedLiveStageSelection(_liveStageSelections[_selectedServerId]);
-      unawaited(_setSystemFullScreen(false));
+      _exitLiveFullScreen();
     }
     _setHomeState(() {});
   }
@@ -162,6 +246,36 @@ extension _HomeShellLiveActions on _HomeShellState {
           ? LivePresenceAnnouncementAction.removed
           : LivePresenceAnnouncementAction.left,
     );
+    final roomId = _joinedLiveRoomId;
+    if (roomId == null || participantIdentity == _currentUser.id) return;
+
+    final patch = _liveController.removeUserFromLive(
+      live: _live,
+      rooms: _servers,
+      roomId: roomId,
+      userId: participantIdentity,
+    );
+    final selection = _liveStageSelections[roomId];
+    final clearSelection =
+        selection?.mode == LiveStageSelectionMode.track &&
+        selection?.identity == participantIdentity;
+    final fullScreenTrack = _fullScreenLiveTrack;
+    final exitFullScreen =
+        fullScreenTrack != null &&
+        !fullScreenTrack.isLocal &&
+        fullScreenTrack.identity == participantIdentity;
+    _setHomeState(() {
+      _live = patch.live;
+      _servers = patch.rooms;
+      if (clearSelection) {
+        _liveStageSelections[roomId] = const LiveStageSelection.none();
+      }
+    });
+    if (exitFullScreen) {
+      _exitLiveFullScreen();
+    } else if (clearSelection) {
+      _syncWatchedLiveStageSelection(const LiveStageSelection.none());
+    }
   }
 
   void _playLivePresenceSound(
@@ -1072,7 +1186,7 @@ extension _HomeShellLiveActions on _HomeShellState {
     }
     if (!screenSharing && _liveSessionController.isScreenSharing) {
       try {
-        await _liveSessionController.setScreenShareEnabled(false);
+        await _stopLocalScreenShareSafely();
       } catch (_) {}
     }
 
@@ -1338,7 +1452,7 @@ extension _HomeShellLiveActions on _HomeShellState {
     final enable = !_cameraOn;
     if (enable && _screenSharing) {
       try {
-        await _liveSessionController.setScreenShareEnabled(false);
+        await _stopLocalScreenShareSafely();
         if (mounted && _screenSharing) {
           _setHomeState(() => _screenSharing = false);
         }
@@ -1393,7 +1507,7 @@ extension _HomeShellLiveActions on _HomeShellState {
 
     if (_screenSharing) {
       try {
-        await _liveSessionController.setScreenShareEnabled(false);
+        await _stopLocalScreenShareSafely();
       } catch (_) {}
       await _patchLiveState(screenSharing: false);
       return;
@@ -1450,6 +1564,34 @@ extension _HomeShellLiveActions on _HomeShellState {
       return;
     }
     await _patchLiveState(screenSharing: true, cameraOn: false);
+  }
+
+  Future<void> _stopLocalScreenShareSafely() async {
+    final fullScreenTrack = _fullScreenLiveTrack;
+    final shouldDisposeAndroidFullScreenFirst =
+        mounted &&
+        widget.androidSystemService.isSupported &&
+        fullScreenTrack != null &&
+        fullScreenTrack.isLocal &&
+        fullScreenTrack.isScreenShare;
+    if (shouldDisposeAndroidFullScreenFirst) {
+      // A full-screen renderer can still own the MediaProjection texture for
+      // the current Flutter frame. Remove that renderer before asking WebRTC
+      // to release the virtual display; otherwise Android may synchronously
+      // wait for a texture/handler teardown that is itself waiting for the UI
+      // thread.
+      _exitLiveFullScreen();
+      await WidgetsBinding.instance.endOfFrame;
+      try {
+        await _liveFullScreenTransitionTail.timeout(
+          const Duration(milliseconds: 800),
+        );
+      } on TimeoutException {
+        // The renderer has already been disposed by the completed frame. A
+        // slow system-UI transition must not permanently block capture stop.
+      }
+    }
+    await _liveSessionController.setScreenShareEnabled(false);
   }
 }
 

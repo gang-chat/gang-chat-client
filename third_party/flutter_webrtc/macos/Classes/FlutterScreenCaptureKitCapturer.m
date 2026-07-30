@@ -83,7 +83,39 @@ static const NSInteger kScreenAudioChannels = 2;
           onStarted(noDisplay);
           return;
         }
-        filter = [[SCContentFilter alloc] initWithDisplay:display excludingWindows:@[]];
+        // Exclude this process from a full-display capture. Otherwise opening
+        // Gang Chat's local screen-share preview full screen creates a near
+        // 1:1 video feedback loop that continuously re-encodes its own output
+        // and can eventually exhaust the renderer. Application filtering also
+        // covers Flutter dialogs and full-screen windows created after capture
+        // starts, unlike a one-time list of window identifiers.
+        const pid_t currentProcessId =
+            [[NSProcessInfo processInfo] processIdentifier];
+        NSMutableArray<SCRunningApplication *> *excludedApplications =
+            [NSMutableArray array];
+        for (SCRunningApplication *application in content.applications) {
+          if (application.processID == currentProcessId) {
+            [excludedApplications addObject:application];
+          }
+        }
+        if (excludedApplications.count > 0) {
+          filter = [[SCContentFilter alloc]
+              initWithDisplay:display
+              excludingApplications:excludedApplications
+              exceptingWindows:@[]];
+        } else {
+          // Defensive fallback for unusual shareable-content snapshots where
+          // the process is absent from `applications` but its window is still
+          // listed. This keeps the capture safe without failing screen share.
+          NSMutableArray<SCWindow *> *excludedWindows = [NSMutableArray array];
+          for (SCWindow *window in content.windows) {
+            if (window.owningApplication.processID == currentProcessId) {
+              [excludedWindows addObject:window];
+            }
+          }
+          filter = [[SCContentFilter alloc] initWithDisplay:display
+                                          excludingWindows:excludedWindows];
+        }
         outputWidth = (size_t)MAX(1, display.width);
         outputHeight = (size_t)MAX(1, display.height);
       }

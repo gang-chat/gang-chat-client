@@ -224,7 +224,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   Map<String, FileTransferState> _fileDownloads = const {};
   final Map<String, LiveStageSelection?> _liveStageSelections = {};
   Future<void> _liveScreenViewSyncTail = Future<void>.value();
+  Future<void> _liveFullScreenTransitionTail = Future<void>.value();
+  int _liveFullScreenTransitionGeneration = 0;
   LiveVideoTrack? _fullScreenLiveTrack;
+  bool _windowCaptureExcludedForLiveFullScreen = false;
   bool _loadingRoom = false;
   String? _roomError;
   bool _sending = false;
@@ -448,6 +451,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     _pendingTitleSearchContextMenuUpdate = null;
     _titleSearchController.addListener(_handleTitleSearchChanged);
     _setComposerText('', saveDraft: false);
+    _resetLiveFullScreenForLifecycle(
+      windowController: oldWidget.windowController,
+    );
     setState(() {
       _currentUser = widget.app.currentUser;
       _servers = const [];
@@ -539,7 +545,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     }
     final fileDropEvents = _fileDropEvents;
     if (fileDropEvents != null) unawaited(fileDropEvents.cancel());
-    unawaited(_setSystemFullScreen(false));
+    _resetLiveFullScreenForLifecycle(windowController: widget.windowController);
     _detachLiveSessionCallbacks();
     widget.windowController.setCloseRequestHandler(null);
     widget.windowController.setTrayExitHandler(null);

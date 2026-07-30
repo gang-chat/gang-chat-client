@@ -7,10 +7,11 @@ import 'package:client/src/home/live_channel_pane.dart';
 import 'package:client/src/live/live_session.dart';
 import 'package:client/src/live/live_video_track_view.dart';
 import 'package:client/src/protocol/models.dart';
+import 'package:client/src/shell/full_screen_system_ui_controller.dart';
 import 'package:client/src/ui/app_config_scope.dart';
 import 'package:client/src/ui/ui.dart' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show LogicalKeyboardKey;
+import 'package:flutter/services.dart' show LogicalKeyboardKey, SystemUiMode;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
 
@@ -1949,74 +1950,83 @@ void main() {
     },
   );
 
-  testWidgets('local screen share stage only shows the exit control', (
-    tester,
-  ) async {
-    final searchController = TextEditingController();
-    addTearDown(searchController.dispose);
-    liveVideoTrackRendererForTest = (track, fit, mirrorLocal) {
-      return ColoredBox(
-        key: ValueKey<String>(
-          'live-video-renderer:${track.identity}:${track.isScreenShare}',
+  testWidgets(
+    'local screen share stage opens full screen without remote-only controls',
+    (tester) async {
+      final searchController = TextEditingController();
+      addTearDown(searchController.dispose);
+      liveVideoTrackRendererForTest = (track, fit, mirrorLocal) {
+        return ColoredBox(
+          key: ValueKey<String>(
+            'live-video-renderer:${track.identity}:${track.isScreenShare}',
+          ),
+          color: Colors.black,
+        );
+      };
+      addTearDown(resetLiveVideoTrackRendererForTest);
+      final live = _liveState([
+        _participant(
+          id: 'live_self',
+          user: _currentUser.toSummary().copyWith(
+            roomDisplayName: 'Room Me',
+            roomRole: 'member',
+          ),
+          screenSharing: true,
         ),
-        color: Colors.black,
-      );
-    };
-    addTearDown(resetLiveVideoTrackRendererForTest);
-    final live = _liveState([
-      _participant(
-        id: 'live_self',
-        user: _currentUser.toSummary().copyWith(
-          roomDisplayName: 'Room Me',
-          roomRole: 'member',
-        ),
-        screenSharing: true,
-      ),
-    ]);
+      ]);
+      LiveVideoTrack? fullScreenTrack;
 
-    await tester.pumpWidget(
-      _host(
-        searchController: searchController,
-        live: live,
-        height: 620,
-        videoTracks: [
-          _liveVideoTrack(
+      await tester.pumpWidget(
+        _host(
+          searchController: searchController,
+          live: live,
+          height: 620,
+          videoTracks: [
+            _liveVideoTrack(
+              identity: 'current_user',
+              isScreenShare: true,
+              isLocal: true,
+            ),
+          ],
+          stageSelection: const LiveStageSelection.track(
             identity: 'current_user',
             isScreenShare: true,
-            isLocal: true,
           ),
-        ],
-        stageSelection: const LiveStageSelection.track(
-          identity: 'current_user',
-          isScreenShare: true,
+          onEnterFullScreen: (track) => fullScreenTrack = track,
         ),
-      ),
-    );
-    await tester.pump();
+      );
+      await tester.pump();
 
-    final exitButton = find.byKey(const ValueKey<String>('live-stage:exit'));
-    expect(exitButton, findsOneWidget);
-    expect(
-      find.byKey(const ValueKey<String>('live-stage:fullscreen')),
-      findsNothing,
-    );
-    expect(
-      find.byKey(const ValueKey<String>('live-stage:screen-share-volume')),
-      findsNothing,
-    );
-    expect(
-      find.byKey(const ValueKey<String>('live-stage:screen-viewers')),
-      findsNothing,
-    );
+      final exitButton = find.byKey(const ValueKey<String>('live-stage:exit'));
+      final fullScreenButton = find.byKey(
+        const ValueKey<String>('live-stage:fullscreen'),
+      );
+      expect(exitButton, findsOneWidget);
+      expect(fullScreenButton, findsOneWidget);
+      expect(
+        find.byKey(const ValueKey<String>('live-stage:screen-share-volume')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('live-stage:screen-viewers')),
+        findsNothing,
+      );
 
-    final rendererRect = tester.getRect(
-      find.byKey(
-        const ValueKey<String>('live-video-renderer:current_user:true'),
-      ),
-    );
-    final exitRect = tester.getRect(exitButton);
-    expect(exitRect.right, closeTo(rendererRect.right - 8, 0.01));
-  });
+      final rendererRect = tester.getRect(
+        find.byKey(
+          const ValueKey<String>('live-video-renderer:current_user:true'),
+        ),
+      );
+      final fullScreenRect = tester.getRect(fullScreenButton);
+      expect(fullScreenRect.right, closeTo(rendererRect.right - 8, 0.01));
+
+      await tester.tap(fullScreenButton);
+      await tester.pump();
+      expect(fullScreenTrack?.identity, 'current_user');
+      expect(fullScreenTrack?.isScreenShare, isTrue);
+      expect(fullScreenTrack?.isLocal, isTrue);
+    },
+  );
 
   testWidgets('full screen live stage exits with Escape', (tester) async {
     liveVideoTrackRendererForTest = (track, fit, mirrorLocal) {
@@ -2124,6 +2134,13 @@ void main() {
         return const ColoredBox(color: Colors.black);
       };
       addTearDown(resetLiveVideoTrackRendererForTest);
+      final systemUiModes = <SystemUiMode>[];
+      final systemUiController = FullScreenSystemUiController(
+        platform: TargetPlatform.android,
+        setEnabledSystemUIMode: (mode, {overlays}) async {
+          systemUiModes.add(mode);
+        },
+      );
 
       await tester.pumpWidget(
         MaterialApp(
@@ -2140,10 +2157,12 @@ void main() {
             onScreenShareVolumeChanged: (_) {},
             onScreenShareMuteToggled: () {},
             onExit: () {},
+            systemUiController: systemUiController,
           ),
         ),
       );
       await tester.pump();
+      expect(systemUiModes.last, SystemUiMode.manual);
 
       final labelReveal = find.byKey(
         const ValueKey<String>('live-fullscreen-stage:label-reveal'),
@@ -2160,6 +2179,7 @@ void main() {
       await tester.pump(const Duration(seconds: 3));
       await tester.pump(const Duration(milliseconds: 180));
       expect(opacity(), 0);
+      expect(systemUiModes.last, SystemUiMode.immersiveSticky);
 
       final touch = await tester.startGesture(
         tester.getCenter(find.byType(LiveFullScreenStage)),
@@ -2167,6 +2187,7 @@ void main() {
       );
       await tester.pump();
       expect(opacity(), 1);
+      expect(systemUiModes.last, SystemUiMode.manual);
 
       await tester.pump(const Duration(milliseconds: 2500));
       await touch.moveBy(const Offset(12, 8));
@@ -2182,6 +2203,11 @@ void main() {
       expect(opacity(), 1);
       await tester.pump(const Duration(milliseconds: 100));
       expect(opacity(), 0);
+      expect(systemUiModes.last, SystemUiMode.immersiveSticky);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      expect(systemUiModes.last, SystemUiMode.manual);
     },
   );
 
@@ -2588,6 +2614,7 @@ Widget _host({
   VoidCallback? onToggleShare,
   bool screenShareSupported = true,
   ValueChanged<LiveStageSelection?>? onStageSelectionChanged,
+  ValueChanged<LiveVideoTrack>? onEnterFullScreen,
   LiveStageSelection? stageSelection,
   List<LiveVideoTrack> videoTracks = const [],
   bool suspendStageVideo = false,
@@ -2645,7 +2672,7 @@ Widget _host({
               stageSelection: stageSelection ?? const LiveStageSelection.none(),
               suspendStageVideo: suspendStageVideo,
               onStageSelectionChanged: onStageSelectionChanged ?? (_) {},
-              onEnterFullScreen: (_) {},
+              onEnterFullScreen: onEnterFullScreen ?? (_) {},
               onBackToChat: () {},
               onJoin: onJoin ?? () {},
               onLeave: () {},

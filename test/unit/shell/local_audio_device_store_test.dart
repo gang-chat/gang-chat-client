@@ -22,8 +22,8 @@ void main() {
     expect(stored.outputVolume, 0.5);
     expect(stored.musicBoxVolume, 0.5);
     expect(stored.screenShareVolume, 0.5);
-    expect(stored.screenShareMaxHeight, 1080);
-    expect(stored.screenShareFrameRate, 60);
+    expect(stored.screenShareMaxHeight, 720);
+    expect(stored.screenShareFrameRate, 30);
     expect(await store.readParticipantVoiceVolume('user_2'), 1.0);
   });
 
@@ -67,6 +67,17 @@ void main() {
     );
   });
 
+  test('keeps an explicitly selected desktop high profile', () async {
+    final store = const LocalAudioDeviceStore();
+
+    await store.writeScreenShareMaxHeight(1080);
+    await store.writeScreenShareFrameRate(60);
+    final stored = await store.read();
+
+    expect(stored.screenShareMaxHeight, 1080);
+    expect(stored.screenShareFrameRate, 60);
+  });
+
   test(
     'screen share height is coerced to a supported option on write',
     () async {
@@ -75,7 +86,7 @@ void main() {
       await store.writeScreenShareMaxHeight(999);
       final stored = await store.read();
 
-      expect(stored.screenShareMaxHeight, 1080);
+      expect(stored.screenShareMaxHeight, 720);
     },
   );
 
@@ -85,7 +96,7 @@ void main() {
     await store.writeScreenShareFrameRate(24);
     final stored = await store.read();
 
-    expect(stored.screenShareFrameRate, 60);
+    expect(stored.screenShareFrameRate, 30);
   });
 
   test('volumes are clamped to the valid range on write', () async {

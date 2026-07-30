@@ -595,6 +595,36 @@ class LocalParticipant extends Participant<LocalTrackPublication> {
     await pub.dispose();
   }
 
+  /// Updates the dimensions advertised for an already-published video track.
+  ///
+  /// This does not stop, replace, or re-publish the media track. It is the
+  /// signalling counterpart to changing RTCRtpSender encoding parameters and
+  /// lets remote clients refresh their TrackInfo immediately.
+  bool updatePublishedVideoTrackDimensions(
+    String trackSid,
+    VideoDimensions dimensions,
+  ) {
+    if (dimensions.width <= 0 || dimensions.height <= 0) return false;
+    final publication = trackPublications[trackSid];
+    if (publication is! LocalTrackPublication<LocalVideoTrack>) return false;
+
+    final currentInfo = publication.latestInfo;
+    if (currentInfo != null) {
+      final updatedInfo = currentInfo.deepCopy()
+        ..width = dimensions.width
+        ..height = dimensions.height;
+      publication.updateFromInfo(updatedInfo);
+    }
+    room.engine.signalClient.sendUpdateLocalVideoTrack(
+      lk_rtc.UpdateLocalVideoTrack(
+        trackSid: trackSid,
+        width: dimensions.width,
+        height: dimensions.height,
+      ),
+    );
+    return true;
+  }
+
   DegradationPreference getDefaultDegradationPreference(LocalVideoTrack track) {
     // a few of reasons we have different default paths:
     // 1. without this, Chrome seems to aggressively resize the SVC video stating `quality-limitation: bandwidth` even when BW isn't an issue

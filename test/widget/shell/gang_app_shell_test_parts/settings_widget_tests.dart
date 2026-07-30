@@ -1002,13 +1002,13 @@ void registerShellSettingsWidgetTests() {
       expect(find.text('30 FPS'), findsOneWidget);
       expect(find.text('60 FPS'), findsOneWidget);
 
-      await tester.tap(find.text('720p'));
+      await tester.tap(find.text('1080p'));
       await tester.pump();
-      await tester.tap(find.text('30 FPS'));
+      await tester.tap(find.text('60 FPS'));
       await tester.pump();
 
-      expect(heights, [720]);
-      expect(frameRates, [30]);
+      expect(heights, [1080]);
+      expect(frameRates, [60]);
       expect(tester.takeException(), isNull);
     },
   );

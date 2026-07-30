@@ -237,7 +237,8 @@ extension EncryptionTypeExt on lk_models.Encryption_Type {
 }
 
 extension DisconnectReasonExt on lk_models.DisconnectReason {
-  DisconnectReason toSDKType() => {
+  DisconnectReason toSDKType() =>
+      {
         lk_models.DisconnectReason.UNKNOWN_REASON: DisconnectReason.unknown,
         lk_models.DisconnectReason.CLIENT_INITIATED: DisconnectReason.clientInitiated,
         lk_models.DisconnectReason.DUPLICATE_IDENTITY: DisconnectReason.duplicateIdentity,
@@ -246,7 +247,21 @@ extension DisconnectReasonExt on lk_models.DisconnectReason {
         lk_models.DisconnectReason.ROOM_DELETED: DisconnectReason.roomDeleted,
         lk_models.DisconnectReason.STATE_MISMATCH: DisconnectReason.stateMismatch,
         lk_models.DisconnectReason.JOIN_FAILURE: DisconnectReason.joinFailure,
-      }[this]!;
+        // Protocol disconnect reasons added after this SDK's public enum are
+        // folded into the closest existing category. In particular, a mobile
+        // process killed by the OS is reported as CONNECTION_TIMEOUT. Throwing
+        // here prevents Room from removing that participant and leaves a ghost
+        // in every remaining client's roster.
+        lk_models.DisconnectReason.MIGRATION: DisconnectReason.disconnected,
+        lk_models.DisconnectReason.SIGNAL_CLOSE: DisconnectReason.signalingConnectionFailure,
+        lk_models.DisconnectReason.ROOM_CLOSED: DisconnectReason.roomDeleted,
+        lk_models.DisconnectReason.USER_UNAVAILABLE: DisconnectReason.disconnected,
+        lk_models.DisconnectReason.USER_REJECTED: DisconnectReason.disconnected,
+        lk_models.DisconnectReason.SIP_TRUNK_FAILURE: DisconnectReason.disconnected,
+        lk_models.DisconnectReason.CONNECTION_TIMEOUT: DisconnectReason.disconnected,
+        lk_models.DisconnectReason.MEDIA_FAILURE: DisconnectReason.disconnected,
+      }[this] ??
+      DisconnectReason.unknown;
 }
 
 extension ParticipantTypeExt on lk_models.ParticipantInfo_Kind {

@@ -836,6 +836,12 @@ void FlutterPeerConnection::RtpSenderSetParameters(
 
   EncodableMap map;
   map[EncodableValue("result")] = EncodableValue(success);
+  // Always return a native round-trip snapshot. The Dart-side sender used to
+  // cache the requested values before this call, which made a partial/no-op
+  // libwebrtc update look successful and prevented reliable runtime quality
+  // verification.
+  map[EncodableValue("parameters")] =
+      EncodableValue(rtpParametersToMap(sender->parameters()));
   result_ptr->Success(EncodableValue(map));
 }
 

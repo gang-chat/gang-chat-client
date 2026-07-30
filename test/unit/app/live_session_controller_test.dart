@@ -225,7 +225,7 @@ void main() {
       expect(session.inputVolumes, [defaultAudioVolume]);
       expect(session.outputVolumes, [defaultAudioVolume]);
       expect(session.screenShareMaxHeights, [480]);
-      expect(session.screenShareFrameRates, [60]);
+      expect(session.screenShareFrameRates, [30]);
       expect(restoredDevices, 1);
     },
   );
@@ -360,7 +360,7 @@ class _FakeLiveSession extends LiveSession {
   double _inputVolume = defaultAudioVolume;
   double _outputVolume = defaultAudioVolume;
   double _screenShareVolume = defaultAudioVolume;
-  int _screenShareFrameRate = 60;
+  int _screenShareFrameRate = 30;
   final _participantVoiceVolumes = <String, double>{};
 
   void emitChange() => notifyListeners();
@@ -475,8 +475,8 @@ class _FakeLiveSession extends LiveSession {
 
 class _RecordingAudioDeviceStore extends AudioDeviceStore {
   _RecordingAudioDeviceStore({
-    this.storedScreenShareMaxHeight = 1080,
-    this.storedScreenShareFrameRate = 60,
+    this.storedScreenShareMaxHeight = 720,
+    this.storedScreenShareFrameRate = 30,
     this.storedInputVolume = 0.35,
     this.storedOutputVolume = 0.75,
     this.failVolumeWrites = false,

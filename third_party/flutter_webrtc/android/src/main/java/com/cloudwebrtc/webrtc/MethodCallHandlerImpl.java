@@ -122,6 +122,7 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
   private AndroidScreenAudioCapturer screenAudioCapturer;
   private final Set<String> screenAudioPeerConnectionIds = new HashSet<>();
   private final Set<String> screenAudioTrackIds = new HashSet<>();
+  private final Set<String> screenAudioStreamIds = new HashSet<>();
   private final Map<String, MediaStream> localStreams = new HashMap<>();
   private final Map<String, LocalTrack> localTracks = new HashMap<>();
   private final LongSparseArray<FlutterRTCVideoRenderer> renders = new LongSparseArray<>();
@@ -163,6 +164,8 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
   }
 
   ExecutorService executor = Executors.newSingleThreadExecutor();
+  private final ExecutorService screenAudioCleanupExecutor =
+          Executors.newSingleThreadExecutor();
   Handler mainHandler = new Handler(Looper.getMainLooper());
 
   public static LogSink logSink = new LogSink();
@@ -180,9 +183,15 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
   }
 
   void dispose() {
-    for (final MediaStream mediaStream : localStreams.values()) {
-      streamDispose(mediaStream);
-      mediaStream.dispose();
+    for (final Entry<String, MediaStream> entry :
+            new ArrayList<>(localStreams.entrySet())) {
+      final MediaStream mediaStream = entry.getValue();
+      if (screenAudioStreamIds.remove(entry.getKey())) {
+        streamDisposeScreenAudio(mediaStream);
+      } else {
+        streamDispose(mediaStream);
+        mediaStream.dispose();
+      }
     }
     localStreams.clear();
     synchronized (localTracks) {
@@ -197,6 +206,7 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
     mPeerConnectionObservers.clear();
     screenAudioPeerConnectionIds.clear();
     screenAudioTrackIds.clear();
+    screenAudioStreamIds.clear();
     releaseScreenAudioFactory();
   }
   private void initialize(boolean bypassVoiceProcessing, boolean androidUseHardwareAudioProcessing, int networkIgnoreMask, boolean forceSWCodec, List<String> forceSWCodecList,
@@ -502,6 +512,7 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
 
     stream.addTrack(track);
     localStreams.put(streamId, stream);
+    screenAudioStreamIds.add(streamId);
     synchronized (localTracks) {
       localTracks.put(trackId, new LocalAudioTrack(track));
     }
@@ -520,7 +531,8 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
 
   private synchronized void maybeReleaseScreenAudioFactory() {
     if (!screenAudioPeerConnectionIds.isEmpty() ||
-            !screenAudioTrackIds.isEmpty()) {
+            !screenAudioTrackIds.isEmpty() ||
+            !screenAudioStreamIds.isEmpty()) {
       return;
     }
     releaseScreenAudioFactory();
@@ -534,9 +546,12 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
     screenAudioFactory = null;
     screenAudioDeviceModule = null;
 
-    if (capturer != null) capturer.releaseAudioResources();
-    if (factory != null) factory.dispose();
-    if (deviceModule != null) deviceModule.release();
+    if (capturer == null && factory == null && deviceModule == null) return;
+    screenAudioCleanupExecutor.execute(() -> {
+      if (capturer != null) capturer.releaseAudioResources();
+      if (factory != null) factory.dispose();
+      if (deviceModule != null) deviceModule.release();
+    });
   }
 
   @Override
@@ -2346,12 +2361,43 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
   public void streamDispose(final String streamId) {
     MediaStream stream = localStreams.get(streamId);
     if (stream != null) {
-      streamDispose(stream);
+      if (screenAudioStreamIds.remove(streamId)) {
+        streamDisposeScreenAudio(stream);
+      } else {
+        streamDispose(stream);
+      }
       localStreams.remove(streamId);
       removeStreamForRendererById(streamId);
     } else {
       Log.d(TAG, "streamDispose() mediaStream is null");
     }
+  }
+
+  private void streamDisposeScreenAudio(final MediaStream stream) {
+    final List<AudioTrack> audioTracks = new ArrayList<>(stream.audioTracks);
+    for (AudioTrack track : audioTracks) {
+      screenAudioTrackIds.remove(track.id());
+      synchronized (localTracks) {
+        localTracks.remove(track.id());
+      }
+    }
+
+    // MediaStream.removeTrack marshals synchronously to libwebrtc's signaling
+    // thread. On Android this has been observed waiting indefinitely after a
+    // full-screen screen-share preview, which blocks Flutter's platform/UI
+    // thread and causes an input-dispatch ANR. Keep ordinary camera/mic stream
+    // disposal unchanged, but release the isolated screen-audio stream on its
+    // dedicated worker. AnyThreadResult lets the Dart call return immediately.
+    screenAudioCleanupExecutor.execute(() -> {
+      for (AudioTrack track : audioTracks) {
+        try {
+          stream.removeTrack(track);
+        } catch (RuntimeException error) {
+          Log.w(TAG, "screen-audio stream track cleanup failed", error);
+        }
+      }
+    });
+    maybeReleaseScreenAudioFactory();
   }
 
   public void streamDispose(final MediaStream stream) {

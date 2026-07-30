@@ -6,7 +6,7 @@ import 'package:client/src/live/screen_audio_publisher.dart';
 import 'package:client/src/protocol/models.dart';
 
 void main() {
-  test('stop waits when token acquisition is still in flight', () async {
+  test('stop cancels before token acquisition completes', () async {
     final tokenRequested = Completer<void>();
     final releaseToken = Completer<void>();
     final events = <String>[];
@@ -29,18 +29,14 @@ void main() {
     );
     await tokenRequested.future;
 
-    var stopCompleted = false;
-    final stop = publisher.stop().then((_) => stopCompleted = true);
-    await Future<void>.delayed(Duration.zero);
-
-    expect(stopCompleted, isFalse);
+    await publisher.stop();
     expect(events, isEmpty);
 
     releaseToken.complete();
-    await Future.wait([start, stop]);
+    await start;
 
-    expect(events, ['connect', 'publish', 'stop']);
-    expect(backend.stopCount, 1);
+    expect(events, isEmpty);
+    expect(backend.stopCount, 0);
     expect(publisher.isPublishing, isFalse);
   });
 
@@ -83,6 +79,38 @@ void main() {
       expect(publisher.isPublishing, isFalse);
     },
   );
+
+  test('stop prevents publish after an in-flight connect', () async {
+    final connectStarted = Completer<void>();
+    final releaseConnect = Completer<void>();
+    final events = <String>[];
+    final backend = _FakeScreenAudioPublisherBackend(
+      events: events,
+      onConnect: () async {
+        connectStarted.complete();
+        await releaseConnect.future;
+      },
+      onPublish: () async {},
+    );
+    final publisher = ScreenAudioPublisher(
+      tokenProvider: _tokenProvider,
+      backendFactory: () => backend,
+    );
+
+    final start = publisher.start(
+      liveKitUrl: 'wss://live.example.test',
+      roomName: 'room-1',
+    );
+    await connectStarted.future;
+
+    final stop = publisher.stop();
+    releaseConnect.complete();
+    await Future.wait([start, stop]);
+
+    expect(events, ['connect', 'stop']);
+    expect(backend.stopCount, 1);
+    expect(publisher.isPublishing, isFalse);
+  });
 
   test('a failed publish releases the connected backend', () async {
     final events = <String>[];
@@ -130,10 +158,12 @@ class _FakeScreenAudioPublisherBackend implements ScreenAudioPublisherBackend {
   _FakeScreenAudioPublisherBackend({
     required this.events,
     required this.onPublish,
+    this.onConnect,
   });
 
   final List<String> events;
   final Future<void> Function() onPublish;
+  final Future<void> Function()? onConnect;
   int stopCount = 0;
 
   @override
@@ -142,6 +172,7 @@ class _FakeScreenAudioPublisherBackend implements ScreenAudioPublisherBackend {
     required String token,
   }) async {
     events.add('connect');
+    await onConnect?.call();
   }
 
   @override

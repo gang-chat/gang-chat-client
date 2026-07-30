@@ -64,6 +64,7 @@ class FlutterWindow : public Win32Window {
   bool taskbar_attention_active_ = false;
   bool tray_attention_icon_visible_ = true;
   bool media_playback_active_ = false;
+  bool window_capture_excluded_ = false;
   HICON tray_attention_blank_icon_ = nullptr;
 
   IMMDeviceEnumerator* audio_device_enumerator_ = nullptr;
@@ -86,6 +87,7 @@ class FlutterWindow : public Win32Window {
   void RemoveTrayIcon();
   void RequestMessageAttention();
   bool SetMediaPlaybackActive(bool active);
+  bool SetWindowCaptureExcluded(bool excluded);
   void StartMessageAttentionTimer();
   void ScheduleMessageAttentionStop();
   void StopMessageAttention();

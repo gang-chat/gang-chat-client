@@ -1,24 +1,23 @@
 /// Pure helpers for configurable screen-share output quality.
 ///
-/// Capture constraints are only hints: the vendored desktop, macOS and Android
-/// capturers can all return frames at the source's native size. The selected
-/// profile therefore controls the publisher encoding as the authoritative
-/// output cap. Capture still runs at the platform's maximum supported frame
-/// rate so a live switch from a lower profile to a higher profile never needs
-/// to restart screen capture or ask for permission again.
+/// Capture constraints are only hints in upstream flutter_webrtc. The vendored
+/// Windows and macOS capture paths therefore adapt desktop frames before they
+/// enter the encoder, while Android retains its MediaProjection session and
+/// applies publisher caps. A desktop live switch rebuilds only the capture
+/// track for the already-selected source, so it does not reopen the picker.
 library;
 
 /// Selectable target heights, in pixels.
 const List<int> screenShareHeightOptions = <int>[480, 720, 1080];
 
 /// The default when nothing is stored.
-const int defaultScreenShareMaxHeight = 1080;
+const int defaultScreenShareMaxHeight = 720;
 
 /// Selectable publisher frame-rate caps.
 const List<int> screenShareFrameRateOptions = <int>[15, 30, 60];
 
-/// The default on a platform that can publish the full desktop profile.
-const int defaultScreenShareFrameRate = 60;
+/// The balanced default on every supported platform.
+const int defaultScreenShareFrameRate = 30;
 
 /// Maximum capture/output rate supported by the Android screen capturer.
 const int androidScreenShareFrameRateCap = 30;
@@ -96,6 +95,84 @@ class ScreenShareQuality {
 
   @override
   int get hashCode => Object.hash(maxHeight, maxFrameRate, maxBitrate);
+}
+
+/// Result of checking a quality update against live outbound statistics.
+///
+/// WebRTC can intentionally stop producing outbound frames while a local
+/// screen-share track has no subscribers. That is not an apply failure: the
+/// sender parameters are ready and verification must resume when a viewer
+/// subscribes.
+enum ScreenShareQualityCheckResult { verified, awaitingOutboundFrames, retry }
+
+ScreenShareQualityCheckResult screenShareQualityCheckResult({
+  required bool parametersReady,
+  required bool hasOutboundFrames,
+  required bool resolutionVerified,
+  required bool frameRateCapVerified,
+}) {
+  if (!hasOutboundFrames) {
+    return parametersReady
+        ? ScreenShareQualityCheckResult.awaitingOutboundFrames
+        : ScreenShareQualityCheckResult.retry;
+  }
+  return parametersReady && resolutionVerified && frameRateCapVerified
+      ? ScreenShareQualityCheckResult.verified
+      : ScreenShareQualityCheckResult.retry;
+}
+
+/// Resolves which sender scale most likely produced an outbound sample.
+///
+/// Native Windows stats can omit both RID and SSRC. In that case, prefer the
+/// smallest reconstructed source that can still satisfy the selected target.
+/// This correctly identifies a 540p low simulcast layer from a 1080p source
+/// while avoiding the inverse mistake of treating a 1080p high layer as a 4K
+/// source. A known RID/SSRC always wins over this fallback.
+double screenShareSourceScaleForSample({
+  required int encodedHeight,
+  required int targetHeight,
+  required Iterable<double> encodingScales,
+  double? matchedScale,
+  int? knownSourceHeight,
+}) {
+  if (matchedScale != null && matchedScale >= 1) return matchedScale;
+  final scales =
+      encodingScales.map((scale) => scale < 1 ? 1.0 : scale).toSet().toList()
+        ..sort();
+  if (scales.isEmpty) return 1.0;
+  if (knownSourceHeight != null && knownSourceHeight > 0) {
+    return scales.reduce((best, candidate) {
+      final bestDelta = (knownSourceHeight / best - encodedHeight).abs();
+      final candidateDelta = (knownSourceHeight / candidate - encodedHeight)
+          .abs();
+      return candidateDelta < bestDelta ? candidate : best;
+    });
+  }
+  for (final scale in scales) {
+    if ((encodedHeight * scale).round() >= targetHeight) return scale;
+  }
+  return scales.last;
+}
+
+/// The actual output size for a selected height while preserving the source
+/// aspect ratio and never scaling a smaller source up.
+ScreenShareResolution screenShareCappedOutputResolution({
+  required int? sourceWidth,
+  required int? sourceHeight,
+  required int targetHeight,
+}) {
+  final target = normalizedScreenShareMaxHeight(targetHeight);
+  if (sourceWidth == null ||
+      sourceWidth <= 0 ||
+      sourceHeight == null ||
+      sourceHeight <= 0) {
+    return screenShareResolutionForHeight(target);
+  }
+  final outputHeight = sourceHeight < target ? sourceHeight : target;
+  var outputWidth = (sourceWidth * outputHeight / sourceHeight).round();
+  if (outputWidth < 2) outputWidth = 2;
+  if (outputWidth.isOdd) outputWidth += 1;
+  return ScreenShareResolution(outputWidth, outputHeight);
 }
 
 const Map<int, int> _screenShareBitrateAt30Fps = <int, int>{

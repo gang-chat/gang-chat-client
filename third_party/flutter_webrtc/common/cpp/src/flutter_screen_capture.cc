@@ -1,9 +1,21 @@
+#if defined(_WIN32) && !defined(NOMINMAX)
+#define NOMINMAX
+#endif
+
 #include "flutter_screen_capture.h"
+
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <mutex>
+#include <vector>
 
 #if defined(_WIN32)
 #include <windows.h>
 
-#include <cstdint>
 #include <iostream>
 #include <memory>
 #endif
@@ -11,6 +23,225 @@
 namespace flutter_webrtc_plugin {
 
 namespace {
+
+class DesktopFrameAdapter final
+    : public RTCVideoRenderer<scoped_refptr<RTCVideoFrame>> {
+ public:
+  DesktopFrameAdapter(scoped_refptr<RTCDesktopCapturer> capturer,
+                      scoped_refptr<RTCVideoTrack> input_track,
+                      scoped_refptr<RTCVideoSource> output_source,
+                      int target_width,
+                      int target_height,
+                      int max_frame_rate)
+      : capturer_(std::move(capturer)),
+        input_track_(std::move(input_track)),
+        output_source_(std::move(output_source)),
+        target_width_(std::max(2, target_width)),
+        target_height_(std::max(2, target_height)),
+        max_frame_rate_(std::max(1, max_frame_rate)) {}
+
+  ~DesktopFrameAdapter() override { Stop(); }
+
+  void Start() {
+    scoped_refptr<RTCVideoTrack> input_track;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      if (started_ || stopped_.load()) {
+        return;
+      }
+      started_ = true;
+      input_track = input_track_;
+    }
+    if (input_track != nullptr) {
+      input_track->AddRenderer(this);
+    }
+  }
+
+  void Stop() {
+    if (stopped_.exchange(true)) {
+      return;
+    }
+
+    scoped_refptr<RTCVideoTrack> input_track;
+    scoped_refptr<RTCDesktopCapturer> capturer;
+    bool was_started = false;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      input_track = input_track_;
+      capturer = capturer_;
+      was_started = started_;
+      started_ = false;
+    }
+    if (input_track != nullptr && was_started) {
+      input_track->RemoveRenderer(this);
+    }
+    if (capturer != nullptr) {
+      capturer->DeRegisterDesktopCapturerObserver();
+      if (capturer->IsRunning()) {
+        capturer->Stop();
+      }
+    }
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      output_source_ = nullptr;
+      input_track_ = nullptr;
+      capturer_ = nullptr;
+    }
+  }
+
+  void OnFrame(scoped_refptr<RTCVideoFrame> frame) override {
+    if (stopped_.load() || frame == nullptr) {
+      return;
+    }
+
+    const auto now = std::chrono::steady_clock::now();
+    const auto minimum_interval =
+        std::chrono::microseconds(1000000 / max_frame_rate_);
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      if (stopped_.load() ||
+          (last_frame_at_.time_since_epoch().count() != 0 &&
+           now - last_frame_at_ < minimum_interval)) {
+        return;
+      }
+      last_frame_at_ = now;
+    }
+
+    const int source_width = frame->width();
+    const int source_height = frame->height();
+    if (source_width <= 0 || source_height <= 0) {
+      return;
+    }
+
+    const double scale = std::min(
+        1.0, std::min(static_cast<double>(target_width_) / source_width,
+                      static_cast<double>(target_height_) / source_height));
+    int output_width =
+        std::max(2, static_cast<int>(std::floor(source_width * scale)));
+    int output_height =
+        std::max(2, static_cast<int>(std::floor(source_height * scale)));
+    output_width -= output_width % 2;
+    output_height -= output_height % 2;
+
+    scoped_refptr<RTCVideoSource> output_source;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      if (stopped_.load()) {
+        return;
+      }
+      output_source = output_source_;
+    }
+    if (output_source == nullptr) {
+      return;
+    }
+
+    if (output_width == source_width && output_height == source_height) {
+      output_source->OnCapturedFrame(frame);
+      return;
+    }
+
+    const uint8_t* source_y = frame->DataY();
+    const uint8_t* source_u = frame->DataU();
+    const uint8_t* source_v = frame->DataV();
+    if (source_y == nullptr || source_u == nullptr || source_v == nullptr) {
+      return;
+    }
+
+    const int output_chroma_width = (output_width + 1) / 2;
+    const int output_chroma_height = (output_height + 1) / 2;
+    std::vector<uint8_t> output_y(output_width * output_height);
+    std::vector<uint8_t> output_u(output_chroma_width * output_chroma_height);
+    std::vector<uint8_t> output_v(output_chroma_width * output_chroma_height);
+    ScalePlane(source_y, frame->StrideY(), source_width, source_height,
+               output_y.data(), output_width, output_width, output_height);
+    ScalePlane(source_u, frame->StrideU(), (source_width + 1) / 2,
+               (source_height + 1) / 2, output_u.data(), output_chroma_width,
+               output_chroma_width, output_chroma_height);
+    ScalePlane(source_v, frame->StrideV(), (source_width + 1) / 2,
+               (source_height + 1) / 2, output_v.data(), output_chroma_width,
+               output_chroma_width, output_chroma_height);
+
+    auto output_frame = RTCVideoFrame::Create(
+        output_width, output_height, output_y.data(), output_width,
+        output_u.data(), output_chroma_width, output_v.data(),
+        output_chroma_width);
+    if (output_frame != nullptr) {
+      output_source->OnCapturedFrame(output_frame);
+    }
+  }
+
+ private:
+  static void ScalePlane(const uint8_t* source,
+                         int source_stride,
+                         int source_width,
+                         int source_height,
+                         uint8_t* destination,
+                         int destination_stride,
+                         int destination_width,
+                         int destination_height) {
+    if (source_width == destination_width &&
+        source_height == destination_height) {
+      for (int row = 0; row < source_height; ++row) {
+        std::memcpy(destination + row * destination_stride,
+                    source + row * source_stride, source_width);
+      }
+      return;
+    }
+
+    // Fixed-point bilinear scaling keeps desktop text readable while doing the
+    // work once, before WebRTC creates simulcast layers. The target is never
+    // larger than the source, so this cannot accidentally upscale capture.
+    constexpr int kFractionBits = 14;
+    constexpr int kFractionOne = 1 << kFractionBits;
+    for (int destination_y = 0; destination_y < destination_height;
+         ++destination_y) {
+      const std::int64_t source_y_fixed =
+          static_cast<std::int64_t>(destination_y) * (source_height - 1) *
+          kFractionOne / std::max(1, destination_height - 1);
+      const int source_y =
+          static_cast<int>(source_y_fixed >> kFractionBits);
+      const int next_source_y = std::min(source_height - 1, source_y + 1);
+      const int y_fraction =
+          static_cast<int>(source_y_fixed & (kFractionOne - 1));
+      const uint8_t* top = source + source_y * source_stride;
+      const uint8_t* bottom = source + next_source_y * source_stride;
+      uint8_t* output = destination + destination_y * destination_stride;
+      for (int destination_x = 0; destination_x < destination_width;
+           ++destination_x) {
+        const std::int64_t source_x_fixed =
+            static_cast<std::int64_t>(destination_x) * (source_width - 1) *
+            kFractionOne / std::max(1, destination_width - 1);
+        const int source_x =
+            static_cast<int>(source_x_fixed >> kFractionBits);
+        const int next_source_x = std::min(source_width - 1, source_x + 1);
+        const int x_fraction =
+            static_cast<int>(source_x_fixed & (kFractionOne - 1));
+        const int top_value =
+            top[source_x] +
+            ((top[next_source_x] - top[source_x]) * x_fraction >>
+             kFractionBits);
+        const int bottom_value =
+            bottom[source_x] +
+            ((bottom[next_source_x] - bottom[source_x]) * x_fraction >>
+             kFractionBits);
+        output[destination_x] = static_cast<uint8_t>(
+            top_value +
+            ((bottom_value - top_value) * y_fraction >> kFractionBits));
+      }
+    }
+  }
+
+  std::mutex mutex_;
+  std::atomic<bool> stopped_{false};
+  bool started_ = false;
+  scoped_refptr<RTCDesktopCapturer> capturer_;
+  scoped_refptr<RTCVideoTrack> input_track_;
+  scoped_refptr<RTCVideoSource> output_source_;
+  const int target_width_;
+  const int target_height_;
+  const int max_frame_rate_;
+  std::chrono::steady_clock::time_point last_frame_at_;
+};
 
 bool WantsScreenAudio(const EncodableMap& constraints) {
   auto it = constraints.find(EncodableValue("audio"));
@@ -298,15 +529,33 @@ void FlutterScreenCapture::GetDisplayMedia(
 
   const char* video_source_label = "screen_capture_input";
 
-  scoped_refptr<RTCVideoSource> video_source =
+  scoped_refptr<RTCVideoSource> desktop_video_source =
       base_->factory_->CreateDesktopSource(
           desktop_capturer, video_source_label,
           base_->ParseMediaConstraints(video_constraints));
 
-  // TODO: RTCVideoSource -> RTCVideoTrack
-
+  scoped_refptr<RTCVideoTrack> desktop_track =
+      base_->factory_->CreateVideoTrack(desktop_video_source, uuid.c_str());
+  const int target_width =
+      std::max(2, toInt(findEncodableValue(video_constraints, "width"), 1920));
+  const int target_height =
+      std::max(2, toInt(findEncodableValue(video_constraints, "height"), 1080));
+  scoped_refptr<RTCVideoSource> video_source =
+      base_->factory_->CreateCustomVideoSource(
+          "screen_capture_output",
+          base_->ParseMediaConstraints(video_constraints));
   scoped_refptr<RTCVideoTrack> track =
       base_->factory_->CreateVideoTrack(video_source, uuid.c_str());
+  if (desktop_track == nullptr || video_source == nullptr || track == nullptr) {
+    desktop_capturer->DeRegisterDesktopCapturerObserver();
+    result->Error("GetDisplayMediaFailed",
+                  "Create scaled desktop capture track failed");
+    return;
+  }
+  auto frame_adapter = std::make_shared<DesktopFrameAdapter>(
+      desktop_capturer, desktop_track, video_source, target_width,
+      target_height, static_cast<int>(fps));
+  frame_adapter->Start();
 
   EncodableList videoTracks;
   EncodableMap info;
@@ -354,6 +603,9 @@ void FlutterScreenCapture::GetDisplayMedia(
 
   base_->local_streams_[uuid] = stream;
 
+  base_->RegisterLocalTrackCleanup(
+      track->id().std_string(),
+      [frame_adapter]() { frame_adapter->Stop(); });
   desktop_capturer->Start(uint32_t(fps));
 
   result->Success(EncodableValue(params));

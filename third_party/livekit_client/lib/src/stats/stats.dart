@@ -68,6 +68,8 @@ class VideoSenderStats extends SenderStats {
 
   String? rid;
 
+  num? ssrc;
+
   num? frameWidth;
 
   num? frameHeight;

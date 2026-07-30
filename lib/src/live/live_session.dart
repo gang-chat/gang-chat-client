@@ -518,13 +518,18 @@ class LiveSession extends ChangeNotifier {
   String? _inputDeviceId;
 
   // Target max height (px) for the local screen share — one of
-  // [screenShareHeightOptions]. Defaults to native (1080 cap). Applied at the
+  // [screenShareHeightOptions]. Defaults to balanced 720p. Applied at the
   // next share; a change while sharing re-scales the live publication.
   int _screenShareMaxHeight = defaultScreenShareMaxHeight;
   int _screenShareFrameRate = defaultScreenShareFrameRate;
+  int? _screenShareSourceWidth;
   int? _screenShareSourceHeight;
+  ScreenShareResolution? _screenShareAnnouncedResolution;
   int _screenShareQualityRevision = 0;
   Future<void> _screenShareQualityParameterTail = Future<void>.value();
+  ScreenShareQualityCheckResult _screenShareQualityLastCheck =
+      ScreenShareQualityCheckResult.retry;
+  String _screenShareQualityLastDiagnostic = 'not-attempted';
 
   final Set<String> _speakingIdentities = <String>{};
   final Map<String, bool> _micMutedByIdentity = <String, bool>{};
@@ -1061,10 +1066,13 @@ class LiveSession extends ChangeNotifier {
         isWindowsDesktop: !kIsWeb && Platform.isWindows,
         isAndroidPlatform: !kIsWeb && Platform.isAndroid,
       );
-      // Capture at the platform ceiling. The sender applies the selected FPS
-      // cap, which allows a live 15 -> 60 FPS switch without restarting capture
-      // or asking the user to select/authorize the source again.
-      final captureFrameRate = _platformScreenShareFrameRateCap.toDouble();
+      // Capture at the selected rate. Desktop quality changes rebuild only the
+      // capture track (without reopening the picker), so raising 15 -> 60 FPS
+      // remains possible while the native pre-encoder adapter enforces the
+      // selected frame size and cadence. Android keeps its existing
+      // MediaProjection session and uses sender caps because restarting it
+      // would require a new permission flow.
+      final captureFrameRate = quality.maxFrameRate.toDouble();
       final options = lk.ScreenShareCaptureOptions(
         captureScreenAudio: captureScreenAudio,
         sourceId: sourceId,
@@ -1116,9 +1124,22 @@ class LiveSession extends ChangeNotifier {
       }
     } else {
       _invalidateScreenShareQualityApplication(resetSource: true);
-      await local.setScreenShareEnabled(false);
-      _screenSharing = false;
-      await _stopScreenAudioPublisher();
+      if (!kIsWeb && Platform.isAndroid) {
+        // Playback capture uses the active MediaProjection. Cancel and tear
+        // down its auxiliary publisher before revoking that projection, or an
+        // in-flight publish can create an audio track against an invalid token.
+        _screenSharing = false;
+        try {
+          await _stopScreenAudioPublisher();
+        } catch (error) {
+          debugPrint('screen-audio publisher stop failed: $error');
+        }
+        await local.setScreenShareEnabled(false);
+      } else {
+        await local.setScreenShareEnabled(false);
+        _screenSharing = false;
+        await _stopScreenAudioPublisher();
+      }
       await _awaitAndroidScreenCaptureRelease();
     }
     notifyListeners();
@@ -1144,7 +1165,7 @@ class LiveSession extends ChangeNotifier {
     if (_screenShareMaxHeight == normalized) return;
     _screenShareMaxHeight = normalized;
     if (_screenSharing) {
-      await _applyScreenShareQualityWithRetries();
+      await _applyScreenShareQualityWithRetries(refreshDesktopCapture: true);
     }
     notifyListeners();
   }
@@ -1158,14 +1179,20 @@ class LiveSession extends ChangeNotifier {
     if (_screenShareFrameRate == normalized) return;
     _screenShareFrameRate = normalized;
     if (_screenSharing) {
-      await _applyScreenShareQualityWithRetries();
+      await _applyScreenShareQualityWithRetries(refreshDesktopCapture: true);
     }
     notifyListeners();
   }
 
   void _invalidateScreenShareQualityApplication({required bool resetSource}) {
     _screenShareQualityRevision += 1;
-    if (resetSource) _screenShareSourceHeight = null;
+    _screenShareQualityLastCheck = ScreenShareQualityCheckResult.retry;
+    _screenShareQualityLastDiagnostic = 'not-attempted';
+    if (resetSource) {
+      _screenShareSourceWidth = null;
+      _screenShareSourceHeight = null;
+      _screenShareAnnouncedResolution = null;
+    }
   }
 
   /// Applies and verifies the selected quality without interrupting capture.
@@ -1173,37 +1200,126 @@ class LiveSession extends ChangeNotifier {
   /// Native source dimensions and sender stats are not guaranteed to exist on
   /// the first event-loop turn after publishing. Retry for a bounded period so
   /// 480p/720p do not silently remain at the display's native resolution.
-  Future<void> _applyScreenShareQualityWithRetries() async {
+  Future<void> _applyScreenShareQualityWithRetries({
+    bool refreshDesktopCapture = false,
+  }) async {
     final revision = ++_screenShareQualityRevision;
+    if (refreshDesktopCapture && supportsDesktopScreenShare) {
+      // Prime the sender first. Replacing the source then rebuilds the native
+      // encoder with the requested scale/FPS already attached; doing this in
+      // the opposite order would leave desktop libwebrtc running with the old
+      // resolution when it ignores an in-place encoder resize.
+      await _serializeScreenShareQualityAttempt(
+        () => _applyScreenShareQualityAttempt(revision),
+      );
+      if (revision != _screenShareQualityRevision || !_screenSharing) return;
+      await _serializeScreenShareQualityAttempt(() async {
+        await _refreshDesktopScreenShareCapture(revision);
+        return ScreenShareQualityCheckResult.retry;
+      });
+      if (revision != _screenShareQualityRevision || !_screenSharing) return;
+    }
     const delays = <Duration>[
       Duration.zero,
       Duration(milliseconds: 220),
       Duration(milliseconds: 450),
       Duration(milliseconds: 850),
       Duration(milliseconds: 1400),
+      Duration(milliseconds: 2200),
     ];
     for (final delay in delays) {
       if (revision != _screenShareQualityRevision || !_screenSharing) return;
       if (delay != Duration.zero) await Future<void>.delayed(delay);
       if (revision != _screenShareQualityRevision || !_screenSharing) return;
-      final verified = await _serializeScreenShareQualityAttempt(
+      final check = await _serializeScreenShareQualityAttempt(
         () => _applyScreenShareQualityAttempt(revision),
       );
-      if (verified) return;
+      if (check == ScreenShareQualityCheckResult.verified) {
+        final quality = _selectedScreenShareQuality;
+        debugPrint(
+          'screen-share quality caps verified: '
+          '${quality.maxHeight}p/${quality.maxFrameRate}fps '
+          '($_screenShareQualityLastDiagnostic)',
+        );
+        return;
+      }
     }
     if (revision == _screenShareQualityRevision && _screenSharing) {
       final quality = _selectedScreenShareQuality;
-      debugPrint(
-        'screen-share quality could not be verified: '
-        '${quality.maxHeight}p/${quality.maxFrameRate}fps',
-      );
+      final profile = '${quality.maxHeight}p/${quality.maxFrameRate}fps';
+      if (_screenShareQualityLastCheck ==
+          ScreenShareQualityCheckResult.awaitingOutboundFrames) {
+        debugPrint(
+          'screen-share quality caps ready; outbound verification '
+          'will resume when a viewer subscribes: $profile '
+          '($_screenShareQualityLastDiagnostic)',
+        );
+      } else {
+        debugPrint(
+          'screen-share quality cap verification still pending: $profile '
+          '($_screenShareQualityLastDiagnostic)',
+        );
+      }
     }
   }
 
-  Future<bool> _serializeScreenShareQualityAttempt(
-    Future<bool> Function() operation,
+  /// Rebuilds only the desktop capture source while retaining the same
+  /// LiveKit publication/transceiver. flutter-webrtc's Windows/macOS desktop
+  /// capturers ignore live width/height constraint changes, so the vendored
+  /// plugin adapts frames before they reach this sender. Replacing the capture
+  /// track updates that native adapter without closing screen audio or showing
+  /// the source picker again.
+  Future<void> _refreshDesktopScreenShareCapture(int revision) async {
+    if (revision != _screenShareQualityRevision ||
+        !_screenSharing ||
+        !supportsDesktopScreenShare) {
+      return;
+    }
+    final local = _room?.localParticipant;
+    final publication = local?.getTrackPublicationBySource(
+      lk.TrackSource.screenShareVideo,
+    );
+    final track = publication?.track;
+    if (track is! lk.LocalVideoTrack) return;
+    final currentOptions = track.currentOptions;
+    if (currentOptions is! lk.ScreenShareCaptureOptions) return;
+
+    final quality = _selectedScreenShareQuality;
+    final target = quality.resolution;
+    final replacementOptions = currentOptions.copyWith(
+      maxFrameRate: quality.maxFrameRate.toDouble(),
+      params: lk.VideoParameters(
+        dimensions: lk.VideoDimensions(target.width, target.height),
+        encoding: lk.VideoEncoding(
+          maxFramerate: quality.maxFrameRate,
+          maxBitrate: quality.maxBitrate,
+        ),
+      ),
+    );
+    try {
+      await track.replaceScreenShareCapture(replacementOptions);
+    } catch (error, stackTrace) {
+      // The old capture remains active when replacement creation or sender
+      // swapping fails, so sender-parameter enforcement can still proceed.
+      debugPrint(
+        'screen-share desktop capture refresh failed: $error\n$stackTrace',
+      );
+      return;
+    }
+    if (revision != _screenShareQualityRevision || !_screenSharing) return;
+    _screenShareSourceWidth = null;
+    _screenShareSourceHeight = null;
+    _screenShareAnnouncedResolution = null;
+    debugPrint(
+      'screen-share desktop capture refreshed: '
+      '${quality.maxHeight}p/${quality.maxFrameRate}fps',
+    );
+  }
+
+  Future<ScreenShareQualityCheckResult> _serializeScreenShareQualityAttempt(
+    Future<ScreenShareQualityCheckResult> Function() operation,
   ) {
-    final completer = Completer<bool>();
+    final completer = Completer<ScreenShareQualityCheckResult>();
     final previous = _screenShareQualityParameterTail;
     _screenShareQualityParameterTail = () async {
       try {
@@ -1213,27 +1329,36 @@ class LiveSession extends ChangeNotifier {
         completer.complete(await operation());
       } catch (error, stackTrace) {
         debugPrint('screen-share quality apply failed: $error\n$stackTrace');
-        completer.complete(false);
+        completer.complete(ScreenShareQualityCheckResult.retry);
       }
     }();
     return completer.future;
   }
 
-  Future<bool> _applyScreenShareQualityAttempt(int revision) async {
-    if (revision != _screenShareQualityRevision || !_screenSharing) return true;
+  Future<ScreenShareQualityCheckResult> _applyScreenShareQualityAttempt(
+    int revision,
+  ) async {
+    if (revision != _screenShareQualityRevision || !_screenSharing) {
+      return ScreenShareQualityCheckResult.verified;
+    }
     final local = _room?.localParticipant;
-    if (local == null) return false;
+    if (local == null) return ScreenShareQualityCheckResult.retry;
     final pub = local.getTrackPublicationBySource(
       lk.TrackSource.screenShareVideo,
     );
     final track = pub?.track;
-    if (track is! lk.LocalVideoTrack) return false;
+    if (track is! lk.LocalVideoTrack) {
+      return ScreenShareQualityCheckResult.retry;
+    }
     final sender = track.sender;
-    if (sender == null) return false;
+    if (sender == null) return ScreenShareQualityCheckResult.retry;
 
     final params = sender.parameters;
     final encodings = params.encodings;
-    if (encodings == null || encodings.isEmpty) return false;
+    if (encodings == null || encodings.isEmpty) {
+      return ScreenShareQualityCheckResult.retry;
+    }
+    final quality = _selectedScreenShareQuality;
     double encodingScale(rtc.RTCRtpEncoding encoding) {
       final scale = encoding.scaleResolutionDownBy;
       return scale == null || scale < 1 ? 1.0 : scale;
@@ -1253,16 +1378,23 @@ class LiveSession extends ChangeNotifier {
     if (_screenShareSourceHeight == null) {
       try {
         final settings = track.mediaStreamTrack.getSettings();
+        final settingsWidth = _positiveScreenShareDimension(settings['width']);
         final settingsHeight = _positiveScreenShareDimension(
           settings['height'],
         );
-        if (settingsHeight != null) _screenShareSourceHeight = settingsHeight;
+        if (settingsHeight != null) {
+          _screenShareSourceWidth = settingsWidth;
+          _screenShareSourceHeight = settingsHeight;
+        }
       } catch (_) {}
     }
 
+    int? encodedWidth;
     int? encodedHeight;
+    int? observedSourceWidth;
     int? observedSourceHeight;
     num? outboundFrameRate;
+    final outboundSamples = <({int height, double scale})>[];
     try {
       final stats = await track.getSenderStats().timeout(
         const Duration(seconds: 1),
@@ -1273,6 +1405,7 @@ class LiveSession extends ChangeNotifier {
           final value = h.round();
           if (encodedHeight == null || value > encodedHeight) {
             encodedHeight = value;
+            encodedWidth = _positiveScreenShareDimension(s.frameWidth);
           }
           rtc.RTCRtpEncoding? matchingEncoding;
           final rid = s.rid;
@@ -1283,18 +1416,37 @@ class LiveSession extends ChangeNotifier {
                 break;
               }
             }
-          } else if (encodings.length == 1) {
+          }
+          final statsSsrc = s.ssrc?.round();
+          if (matchingEncoding == null && statsSsrc != null) {
+            for (final encoding in encodings) {
+              if (encoding.ssrc == statsSsrc) {
+                matchingEncoding = encoding;
+                break;
+              }
+            }
+          }
+          if (matchingEncoding == null && encodings.length == 1) {
             matchingEncoding = encodings.single;
           }
-          final sourceCandidate =
-              (value *
-                      (matchingEncoding == null
-                          ? currentHighQualityScale
-                          : encodingScale(matchingEncoding)))
-                  .round();
+          final sourceScale = screenShareSourceScaleForSample(
+            encodedHeight: value,
+            targetHeight: quality.maxHeight,
+            encodingScales: encodings.map(encodingScale),
+            matchedScale: matchingEncoding == null
+                ? null
+                : encodingScale(matchingEncoding),
+            knownSourceHeight: _screenShareSourceHeight,
+          );
+          outboundSamples.add((height: value, scale: sourceScale));
+          final sourceCandidate = (value * sourceScale).round();
+          final width = _positiveScreenShareDimension(s.frameWidth);
           if (observedSourceHeight == null ||
               sourceCandidate > observedSourceHeight) {
             observedSourceHeight = sourceCandidate;
+            observedSourceWidth = width == null
+                ? null
+                : (width * sourceScale).round();
           }
         }
         final fps = s.framesPerSecond;
@@ -1305,21 +1457,28 @@ class LiveSession extends ChangeNotifier {
       }
     } catch (_) {}
 
-    // Reconstruct native height from the encoded frame and the scale which
-    // produced it. Keep the largest observation so a delayed pre-change frame
-    // cannot make a 4K source look like a 480p source while switching upward.
-    if (observedSourceHeight != null) {
-      final observedSource = observedSourceHeight;
-      if (_screenShareSourceHeight == null ||
-          observedSource > _screenShareSourceHeight!) {
-        _screenShareSourceHeight = observedSource;
-      }
+    // Lock the native source size once per capture session. Reconstructing it
+    // repeatedly from delayed frames after changing scale can multiply the old
+    // output by the new scale and make a 1080p display look like a 4K source.
+    if (_screenShareSourceHeight == null && observedSourceHeight != null) {
+      _screenShareSourceWidth = observedSourceWidth;
+      _screenShareSourceHeight = observedSourceHeight;
+    } else if (_screenShareSourceWidth == null && observedSourceWidth != null) {
+      _screenShareSourceWidth = observedSourceWidth;
     }
 
-    if (revision != _screenShareQualityRevision || !_screenSharing) return true;
-    final quality = _selectedScreenShareQuality;
+    if (revision != _screenShareQualityRevision || !_screenSharing) {
+      return ScreenShareQualityCheckResult.verified;
+    }
     final sourceHeight = _screenShareSourceHeight;
-    final desiredHighQualityScale = sourceHeight == null
+    // The vendored desktop capturers now emit frames already bounded to the
+    // selected profile. Scaling their highest RTP layer again would turn a
+    // 720p -> 480p switch into a transient 320p stream. Keep the highest layer
+    // at 1x and preserve only the relative simulcast scales. Android keeps its
+    // native MediaProjection frames and therefore still needs sender scaling.
+    final desiredHighQualityScale = supportsDesktopScreenShare
+        ? 1.0
+        : sourceHeight == null
         ? currentHighQualityScale
         : screenShareScaleDownBy(
             sourceHeight: sourceHeight,
@@ -1344,18 +1503,42 @@ class LiveSession extends ChangeNotifier {
     }
 
     var resolutionVerified = false;
-    if (sourceHeight != null && encodedHeight != null) {
-      final expectedHeight = sourceHeight < quality.maxHeight
-          ? sourceHeight
-          : quality.maxHeight;
-      final proportionalTolerance = (expectedHeight * 0.05).round();
-      final tolerance = proportionalTolerance > 4 ? proportionalTolerance : 4;
-      resolutionVerified = (encodedHeight - expectedHeight).abs() <= tolerance;
+    if (sourceHeight != null && outboundSamples.isNotEmpty) {
+      var mismatchedSample = false;
+      for (final sample in outboundSamples) {
+        final expectedHeight = (sourceHeight / sample.scale).round();
+        final proportionalTolerance = (expectedHeight * 0.05).round();
+        final tolerance = proportionalTolerance > 4 ? proportionalTolerance : 4;
+        if ((sample.height - expectedHeight).abs() > tolerance) {
+          mismatchedSample = true;
+        }
+      }
+      resolutionVerified = !mismatchedSample;
     }
-    final frameRateVerified =
+    final frameRateCapVerified =
         outboundFrameRate == null ||
         outboundFrameRate <= quality.maxFrameRate + 1;
-    if (parametersMatch && resolutionVerified && frameRateVerified) return true;
+    if (parametersMatch) {
+      _syncScreenShareTrackDescription(
+        local: local,
+        trackSid: pub!.sid,
+        track: track,
+        quality: quality,
+      );
+    }
+    var check = screenShareQualityCheckResult(
+      parametersReady: parametersMatch,
+      hasOutboundFrames: outboundSamples.isNotEmpty,
+      resolutionVerified: resolutionVerified,
+      frameRateCapVerified: frameRateCapVerified,
+    );
+    _screenShareQualityLastCheck = check;
+    _screenShareQualityLastDiagnostic =
+        'source=${sourceHeight ?? 'unknown'}, '
+        'outbound=${encodedWidth ?? '?'}x${encodedHeight ?? 'none'}, '
+        'observedFps=${outboundFrameRate?.toStringAsFixed(1) ?? 'none'}, '
+        'parameters=${parametersMatch ? 'matched' : 'pending'}';
+    if (check != ScreenShareQualityCheckResult.retry) return check;
 
     for (final encoding in encodings) {
       final existingScale = encodingScale(encoding);
@@ -1374,9 +1557,62 @@ class LiveSession extends ChangeNotifier {
         .timeout(const Duration(seconds: 1), onTimeout: () => false);
     if (!applied) {
       debugPrint('screen-share sender rejected quality parameters');
+    } else {
+      _syncScreenShareTrackDescription(
+        local: local,
+        trackSid: pub!.sid,
+        track: track,
+        quality: quality,
+      );
     }
+    check = screenShareQualityCheckResult(
+      parametersReady: parametersMatch || applied,
+      hasOutboundFrames: outboundSamples.isNotEmpty,
+      // These samples were collected before setParameters. Never treat them
+      // as proof that a newly-applied scale/FPS cap has reached the encoder.
+      resolutionVerified: parametersMatch && resolutionVerified,
+      frameRateCapVerified: parametersMatch && frameRateCapVerified,
+    );
+    _screenShareQualityLastCheck = check;
+    _screenShareQualityLastDiagnostic =
+        'source=${sourceHeight ?? 'unknown'}, '
+        'outbound=${encodedWidth ?? '?'}x${encodedHeight ?? 'none'}, '
+        'observedFps=${outboundFrameRate?.toStringAsFixed(1) ?? 'none'}, '
+        'parameters=${applied ? 'applied' : 'rejected'}';
     // A later attempt verifies frames produced after the encoder reconfigures.
-    return false;
+    return check;
+  }
+
+  void _syncScreenShareTrackDescription({
+    required lk.LocalParticipant local,
+    required String trackSid,
+    required lk.LocalVideoTrack track,
+    required ScreenShareQuality quality,
+  }) {
+    final output = screenShareCappedOutputResolution(
+      sourceWidth: _screenShareSourceWidth,
+      sourceHeight: _screenShareSourceHeight,
+      targetHeight: quality.maxHeight,
+    );
+    final currentOptions = track.currentOptions;
+    if (currentOptions is lk.ScreenShareCaptureOptions) {
+      track.currentOptions = currentOptions.copyWith(
+        params: lk.VideoParameters(
+          dimensions: lk.VideoDimensions(output.width, output.height),
+          encoding: lk.VideoEncoding(
+            maxFramerate: quality.maxFrameRate,
+            maxBitrate: quality.maxBitrate,
+          ),
+        ),
+      );
+    }
+    track.lastPublishOptions = _screenSharePublishOptions(quality);
+    if (_screenShareAnnouncedResolution == output) return;
+    final sent = local.updatePublishedVideoTrackDimensions(
+      trackSid,
+      lk.VideoDimensions(output.width, output.height),
+    );
+    if (sent) _screenShareAnnouncedResolution = output;
   }
 
   int? _positiveScreenShareDimension(Object? value) {
@@ -1772,6 +2008,20 @@ class LiveSession extends ChangeNotifier {
       }
       return;
     }
+    if (event is lk.LocalTrackSubscribedEvent) {
+      final publication = _room?.localParticipant?.getTrackPublicationBySid(
+        event.trackSid,
+      );
+      if (_screenSharing &&
+          publication?.source == lk.TrackSource.screenShareVideo) {
+        // With dynacast, an unobserved local share may produce no outbound
+        // frames. The first subscriber activates the encoder, which is the
+        // earliest reliable point for measuring and enforcing native-source
+        // scaling on desktop platforms.
+        unawaited(_applyScreenShareQualityWithRetries());
+      }
+      return;
+    }
     // Video subscription / publish lifecycle: rebuild the rendered track list.
     if (event is lk.TrackSubscribedEvent ||
         event is lk.TrackUnsubscribedEvent ||
@@ -2122,7 +2372,10 @@ class LiveSession extends ChangeNotifier {
   Future<void> _applyOutputVolume() async {
     final room = _room;
     if (room == null) return;
-    for (final participant in room.remoteParticipants.values) {
+    final participants = List<lk.RemoteParticipant>.of(
+      room.remoteParticipants.values,
+    );
+    for (final participant in participants) {
       // The music box bot has its own independent volume knob; leave it to
       // _applyMusicBoxVolume so the two don't fight over the same track.
       if (participant.identity == musicBoxBotIdentity) continue;
@@ -2158,7 +2411,10 @@ class LiveSession extends ChangeNotifier {
   Future<void> _applyMusicBoxVolume() async {
     final room = _room;
     if (room == null) return;
-    for (final participant in room.remoteParticipants.values) {
+    final participants = List<lk.RemoteParticipant>.of(
+      room.remoteParticipants.values,
+    );
+    for (final participant in participants) {
       if (participant.identity != musicBoxBotIdentity) continue;
       for (final pub in participant.audioTrackPublications) {
         final track = pub.track;
@@ -2174,7 +2430,10 @@ class LiveSession extends ChangeNotifier {
     final room = _room;
     if (room == null) return;
     final localIdentity = room.localParticipant?.identity;
-    for (final participant in room.remoteParticipants.values) {
+    final participants = List<lk.RemoteParticipant>.of(
+      room.remoteParticipants.values,
+    );
+    for (final participant in participants) {
       // Self-echo suppression: the local user's own screen-audio aux
       // participant (`<ownId>--screen-audio`) is publishing audio the user
       // is already hearing locally (it's their own screen). Mute it to 0 so
@@ -2231,7 +2490,10 @@ class LiveSession extends ChangeNotifier {
   }) async {
     final room = _room;
     if (room == null) return;
-    for (final participant in room.remoteParticipants.values) {
+    final participants = List<lk.RemoteParticipant>.of(
+      room.remoteParticipants.values,
+    );
+    for (final participant in participants) {
       if (!isCurrent() || !identical(_room, room)) return;
       if (_isScreenAudioAux(participant.identity)) continue;
       for (final pub in participant.videoTrackPublications) {

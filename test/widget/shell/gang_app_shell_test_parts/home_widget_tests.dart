@@ -2593,7 +2593,6 @@ void registerShellHomeWidgetTests() {
     expect(presenceSpeech.announcements, isEmpty);
 
     liveSession.emitParticipantJoined();
-    liveSession.emitParticipantLeft();
     for (var index = 0; index < 8; index += 1) {
       await tester.pump(const Duration(milliseconds: 500));
     }
@@ -2601,11 +2600,9 @@ void registerShellHomeWidgetTests() {
     expect(presenceSounds.sounds, [
       LivePresenceSound.joined,
       LivePresenceSound.joined,
-      LivePresenceSound.left,
     ]);
     expect(presenceSpeech.announcements.map((item) => item.segments).toList(), [
       ['成员', 'Morgan', '进入了语音频道'],
-      ['成员', 'Morgan', '离开了语音频道'],
     ]);
     final selfLiveMemberCard = find.ancestor(
       of: find.byKey(const ValueKey<String>('live-member-status:mic:user-1')),
@@ -2980,7 +2977,7 @@ void registerShellHomeWidgetTests() {
     expect(liveSession.disconnects, 1);
     expect(presenceSounds.sounds, hasLength(soundCountBeforeExit + 1));
     expect(presenceSounds.sounds.last, LivePresenceSound.left);
-    expect(presenceSpeech.announcements, hasLength(4));
+    expect(presenceSpeech.announcements, hasLength(3));
     expect(find.widgetWithText(ui.Button, '加入'), findsOneWidget);
     expect(find.byTooltip('已加入语音'), findsNothing);
 
@@ -2991,6 +2988,54 @@ void registerShellHomeWidgetTests() {
     expect(find.text('Hello from Morgan'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'participant departure immediately removes the stale live roster entry',
+    (WidgetTester tester) async {
+      final liveSession = _FakeLiveSession();
+      final liveSessionController = _FakeLiveSessionController(
+        session: liveSession,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ui.uiTheme(),
+          home: HomePage(
+            app: _homeTestAppContext(),
+            audioDeviceStore: const _FakeAudioDeviceStore(),
+            liveSessionController: liveSessionController,
+            livePresenceSoundPlayer: _RecordingLivePresenceSoundPlayer(),
+            livePresenceSpeechPlayer: _RecordingLivePresenceSpeechPlayer(),
+            realtime: _NoopRealtimeService(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Alpha Room'));
+      await tester.pumpAndSettle();
+      await _openLiveChannelFromHeader(tester);
+      await tester.tap(find.widgetWithText(ui.Button, '加入'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey<String>('live-member-status:mic:user-2')),
+        findsOneWidget,
+      );
+
+      liveSession.emitParticipantLeft();
+      await tester.pump();
+
+      expect(
+        find.byKey(const ValueKey<String>('live-member-status:mic:user-2')),
+        findsNothing,
+      );
+      expect(find.text('Morgan'), findsNothing);
+      for (var index = 0; index < 3; index += 1) {
+        await tester.pump(const Duration(milliseconds: 500));
+      }
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'disabling personal AI announcements keeps participant join and leave cues',

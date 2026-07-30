@@ -480,6 +480,16 @@ extension SignalClientRequests on SignalClient {
         trackSetting: settings,
       ));
 
+  /// Reports a local video track's changed encoded dimensions to the server.
+  ///
+  /// LiveKit then broadcasts an updated TrackInfo to subscribers. This is
+  /// required when sender parameters resize a running track without a new
+  /// publish negotiation.
+  @internal
+  void sendUpdateLocalVideoTrack(lk_rtc.UpdateLocalVideoTrack update) => _sendRequest(
+        lk_rtc.SignalRequest(updateVideoTrack: update),
+      );
+
   @internal
   void sendUpdateSubscription(lk_rtc.UpdateSubscription subscription) => _sendRequest(lk_rtc.SignalRequest(
         subscription: subscription,

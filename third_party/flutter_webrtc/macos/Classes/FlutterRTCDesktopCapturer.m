@@ -148,6 +148,8 @@ NSArray<RTCDesktopSource*>* _captureSources;
   NSString* sourceId = nil;
   BOOL useDefaultScreen = NO;
   NSInteger fps = 30;
+  NSInteger targetWidth = 1920;
+  NSInteger targetHeight = 1080;
   id videoConstraints = constraints[@"video"];
   if ([videoConstraints isKindOfClass:[NSNumber class]] && [videoConstraints boolValue] == YES) {
     useDefaultScreen = YES;
@@ -172,7 +174,22 @@ NSArray<RTCDesktopSource*>* _captureSources;
         fps = [frameRate integerValue];
       }
     }
+    id width = videoConstraints[@"width"];
+    if ([width isKindOfClass:[NSNumber class]] && [width integerValue] > 0) {
+      targetWidth = [width integerValue];
+    }
+    id height = videoConstraints[@"height"];
+    if ([height isKindOfClass:[NSNumber class]] && [height integerValue] > 0) {
+      targetHeight = [height integerValue];
+    }
   }
+  // Desktop capturers deliver native display frames even when width/height
+  // constraints are present. Adapt at RTCVideoSource so both the initial
+  // publication and a hot track replacement produce real capped frames before
+  // simulcast/encoding, rather than merely advertising a smaller TrackInfo.
+  [videoSource adaptOutputFormatToWidth:(int)targetWidth
+                                height:(int)targetHeight
+                                   fps:(int)fps];
   RTCDesktopCapturer* desktopCapturer;
   FlutterScreenCaptureKitCapturer* screenCaptureKitCapturer = nil;
   RTCDesktopSource* source = nil;

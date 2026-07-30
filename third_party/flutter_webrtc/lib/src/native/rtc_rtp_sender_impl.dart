@@ -66,7 +66,6 @@ class RTCRtpSenderNative extends RTCRtpSender {
 
   @override
   Future<bool> setParameters(RTCRtpParameters parameters) async {
-    _parameters = parameters;
     try {
       final response =
           await WebRTC.invokeMethod('rtpSenderSetParameters', <String, dynamic>{
@@ -74,7 +73,19 @@ class RTCRtpSenderNative extends RTCRtpSender {
         'rtpSenderId': _id,
         'parameters': parameters.toMap()
       });
-      return response['result'];
+      final result = response['result'] == true;
+      final nativeParameters = response['parameters'];
+      if (nativeParameters is Map) {
+        // Desktop implementations can return the parameters read back from
+        // the native sender. Prefer that authoritative state over the values
+        // requested by Dart: libwebrtc may accept only part of an update.
+        _parameters = RTCRtpParameters.fromMap(nativeParameters);
+      } else if (result) {
+        // Older/mobile implementations only return a boolean. Preserve their
+        // existing behavior, but never cache a request that was rejected.
+        _parameters = parameters;
+      }
+      return result;
     } on PlatformException catch (e) {
       throw 'Unable to RTCRtpSenderNative::setParameters: ${e.message}';
     }

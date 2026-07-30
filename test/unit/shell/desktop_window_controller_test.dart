@@ -84,6 +84,45 @@ void main() {
       completes,
     );
   });
+
+  test('Windows capture exclusion uses the native tray channel', () async {
+    final calls = <MethodCall>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return true;
+    });
+    final controller = _SupportedDesktopWindowController(trayChannel: channel);
+
+    expect(await controller.setWindowCaptureExcluded(true), isTrue);
+    expect(await controller.setWindowCaptureExcluded(false), isTrue);
+
+    expect(calls, hasLength(2));
+    expect(calls[0].method, 'setWindowCaptureExcluded');
+    expect(calls[0].arguments, isTrue);
+    expect(calls[1].method, 'setWindowCaptureExcluded');
+    expect(calls[1].arguments, isFalse);
+  });
+
+  test('Windows capture exclusion reports native failure', () async {
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      throw PlatformException(code: 'unavailable');
+    });
+    final controller = _SupportedDesktopWindowController(trayChannel: channel);
+
+    expect(await controller.setWindowCaptureExcluded(true), isFalse);
+  });
+
+  test('capture exclusion stays disabled outside supported Windows', () async {
+    final calls = <MethodCall>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return true;
+    });
+    final controller = DesktopWindowController(trayChannel: channel);
+
+    expect(await controller.setWindowCaptureExcluded(true), isFalse);
+    expect(calls, isEmpty);
+  });
 }
 
 class _SupportedDesktopWindowController extends DesktopWindowController {
@@ -97,4 +136,7 @@ class _SupportedDesktopWindowController extends DesktopWindowController {
 
   @override
   bool get supportsWindowsPowerRequests => true;
+
+  @override
+  bool get supportsWindowsCaptureExclusion => true;
 }

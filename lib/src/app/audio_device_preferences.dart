@@ -38,7 +38,7 @@ class StoredAudioDevices {
   final double screenShareVolume;
 
   /// Target max height (px) for the local screen share — one of
-  /// [screenShareHeightOptions]. [defaultScreenShareMaxHeight] sends at native
+  /// [screenShareHeightOptions]. [defaultScreenShareMaxHeight] is the balanced
   /// resolution; lower values cap what we publish to save bandwidth.
   final int screenShareMaxHeight;
 

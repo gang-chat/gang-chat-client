@@ -10,6 +10,7 @@ import '../app/room_display.dart' as room_display;
 import '../live/live_session.dart';
 import '../live/live_video_track_view.dart';
 import '../protocol/models.dart';
+import '../shell/full_screen_system_ui_controller.dart';
 import '../ui/ui.dart';
 import 'room_profile_card.dart';
 

@@ -56,6 +56,9 @@ class ScreenAudioPublisher {
   ScreenAudioPublisherBackend? _backend;
   Future<void>? _startOperation;
   bool _publishing = false;
+  bool _stopRequested = false;
+
+  static const _inFlightStopWait = Duration(milliseconds: 800);
 
   bool get isPublishing => _publishing;
 
@@ -66,6 +69,7 @@ class ScreenAudioPublisher {
   /// on demand so it is always fresh regardless of how long the user has been
   /// in the call.
   Future<void> start({required String liveKitUrl, required String roomName}) {
+    if (_stopRequested) return Future<void>.value();
     return _startOperation ??= _runStart(
       liveKitUrl: liveKitUrl,
       roomName: roomName,
@@ -83,6 +87,7 @@ class ScreenAudioPublisher {
     debugPrint(
       'screen-audio: token acquired (identity=${tokenResult.identity})',
     );
+    if (_stopRequested) return;
 
     final backend = _backendFactory();
     _backend = backend;
@@ -90,43 +95,60 @@ class ScreenAudioPublisher {
       debugPrint('screen-audio: connecting aux room...');
       await backend.connect(liveKitUrl: liveKitUrl, token: tokenResult.token);
       debugPrint('screen-audio: aux room connected');
+      if (_stopRequested) {
+        await _releaseBackend(backend);
+        return;
+      }
 
       debugPrint('screen-audio: publishing track...');
       await backend.publish();
+      if (_stopRequested) {
+        await _releaseBackend(backend);
+        return;
+      }
       _publishing = true;
       debugPrint('screen-audio: track published successfully');
-    } catch (_) {
-      if (identical(_backend, backend)) {
-        _backend = null;
+    } catch (error, stackTrace) {
+      await _releaseBackend(backend);
+      if (!_stopRequested) {
+        Error.throwWithStackTrace(error, stackTrace);
       }
-      _publishing = false;
-      await backend.stop();
-      rethrow;
     }
   }
 
-  /// Waits for any in-flight start before releasing the aux room and track.
+  Future<void> _releaseBackend(ScreenAudioPublisherBackend backend) async {
+    if (!identical(_backend, backend)) return;
+    _backend = null;
+    _publishing = false;
+    await backend.stop();
+  }
+
+  /// Cancels any in-flight start before releasing the aux room and track.
   ///
-  /// Waiting is intentional: leaving the voice channel can race token fetch,
-  /// room connection, or track publication. Returning early would allow that
-  /// background start to recreate a publisher after teardown and poison the
-  /// next screen-share attempt.
+  /// Token acquisition can be arbitrarily slow, so a stop requested before a
+  /// backend exists returns immediately; `_runStart` observes the cancellation
+  /// before allocating native resources. Once a backend exists, give the
+  /// connect/publish operation a bounded opportunity to reach a cancellation
+  /// checkpoint. If it takes longer, `_runStart` owns the eventual cleanup and
+  /// cannot mark the publisher active after this method returns.
   Future<void> stop() async {
+    _stopRequested = true;
     final startOperation = _startOperation;
-    if (startOperation != null) {
+    if (_backend != null && startOperation != null) {
       try {
-        await startOperation;
+        await startOperation.timeout(_inFlightStopWait);
+      } on TimeoutException {
+        // The in-flight operation will stop its backend at the next checkpoint.
       } catch (_) {
         // A failed start already performs its own best-effort cleanup.
       }
     }
 
     final backend = _backend;
-    _backend = null;
     _startOperation = null;
     _publishing = false;
     if (backend != null) {
-      await backend.stop();
+      await _releaseBackend(backend);
     }
   }
 }

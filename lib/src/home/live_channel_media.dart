@@ -118,7 +118,6 @@ class _LiveMediaStageState extends State<_LiveMediaStage> {
   @override
   Widget build(BuildContext context) {
     final track = widget.track;
-    final isLocalScreenShare = track.isScreenShare && track.isLocal;
     final isRemoteScreenShare = track.isScreenShare && !track.isLocal;
     final content = ColoredBox(
       color: UiColors.surfacePressed,
@@ -165,15 +164,13 @@ class _LiveMediaStageState extends State<_LiveMediaStage> {
                   infoMessage: '退出焦点画面',
                   onPressed: widget.onExit,
                 ),
-                if (!isLocalScreenShare) ...[
-                  const SizedBox(width: 6),
-                  _StageOverlayIconButton(
-                    key: const ValueKey<String>('live-stage:fullscreen'),
-                    icon: Icons.fullscreen,
-                    infoMessage: '全屏查看',
-                    onPressed: widget.onFullScreen,
-                  ),
-                ],
+                const SizedBox(width: 6),
+                _StageOverlayIconButton(
+                  key: const ValueKey<String>('live-stage:fullscreen'),
+                  icon: Icons.fullscreen,
+                  infoMessage: '全屏查看',
+                  onPressed: widget.onFullScreen,
+                ),
               ],
             ),
           ),
@@ -273,6 +270,7 @@ class LiveFullScreenStage extends StatefulWidget {
     required this.onScreenShareVolumeChanged,
     required this.onScreenShareMuteToggled,
     required this.onExit,
+    this.systemUiController,
   });
 
   final LiveVideoTrack track;
@@ -283,6 +281,7 @@ class LiveFullScreenStage extends StatefulWidget {
   final ValueChanged<double> onScreenShareVolumeChanged;
   final VoidCallback onScreenShareMuteToggled;
   final VoidCallback onExit;
+  final FullScreenSystemUiController? systemUiController;
 
   @override
   State<LiveFullScreenStage> createState() => _LiveFullScreenStageState();
@@ -294,12 +293,19 @@ class _LiveFullScreenStageState extends State<LiveFullScreenStage> {
   final FocusNode _focusNode = FocusNode(debugLabel: 'LiveFullScreenStage');
   Timer? _controlsHideTimer;
   Size? _viewportSize;
+  Orientation? _viewportOrientation;
+  late FullScreenSystemUiController _systemUiController;
   int _controlsTimerGeneration = 0;
   bool _controlsVisible = true;
 
   @override
   void initState() {
     super.initState();
+    _systemUiController =
+        widget.systemUiController ?? FullScreenSystemUiController();
+    unawaited(
+      _ignoreSystemUiFailure(_systemUiController.setControlsVisible(true)),
+    );
     _scheduleControlsAutoHide();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _focusNode.requestFocus();
@@ -309,6 +315,16 @@ class _LiveFullScreenStageState extends State<LiveFullScreenStage> {
   @override
   void didUpdateWidget(LiveFullScreenStage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.systemUiController != widget.systemUiController) {
+      unawaited(_ignoreSystemUiFailure(_systemUiController.restore()));
+      _systemUiController =
+          widget.systemUiController ?? FullScreenSystemUiController();
+      unawaited(
+        _ignoreSystemUiFailure(
+          _systemUiController.setControlsVisible(_controlsVisible),
+        ),
+      );
+    }
     if (oldWidget.track.identity != widget.track.identity ||
         oldWidget.track.isScreenShare != widget.track.isScreenShare) {
       _showControlsAndRestartTimer();
@@ -319,9 +335,14 @@ class _LiveFullScreenStageState extends State<LiveFullScreenStage> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final nextViewportSize = MediaQuery.sizeOf(context);
-    final viewportChanged =
-        _viewportSize != null && _viewportSize != nextViewportSize;
+    final nextOrientation = MediaQuery.orientationOf(context);
+    final isAndroid = Theme.of(context).platform == TargetPlatform.android;
+    final viewportChanged = isAndroid
+        ? _viewportOrientation != null &&
+              _viewportOrientation != nextOrientation
+        : _viewportSize != null && _viewportSize != nextViewportSize;
     _viewportSize = nextViewportSize;
+    _viewportOrientation = nextOrientation;
     if (viewportChanged) {
       // A rotation or full-screen resize is itself a user-visible transition.
       // This lifecycle callback already schedules a build, so updating the
@@ -341,18 +362,35 @@ class _LiveFullScreenStageState extends State<LiveFullScreenStage> {
         return;
       }
       setState(() => _controlsVisible = false);
+      unawaited(
+        _ignoreSystemUiFailure(_systemUiController.setControlsVisible(false)),
+      );
     });
   }
 
   void _showControlsAndRestartTimer() {
-    if (!_controlsVisible) setState(() => _controlsVisible = true);
+    if (!_controlsVisible) {
+      setState(() => _controlsVisible = true);
+      unawaited(
+        _ignoreSystemUiFailure(_systemUiController.setControlsVisible(true)),
+      );
+    }
     _scheduleControlsAutoHide();
+  }
+
+  Future<void> _ignoreSystemUiFailure(Future<void> operation) async {
+    try {
+      await operation;
+    } catch (_) {
+      // System UI is best-effort and must never block media interaction.
+    }
   }
 
   @override
   void dispose() {
     _controlsTimerGeneration++;
     _controlsHideTimer?.cancel();
+    unawaited(_ignoreSystemUiFailure(_systemUiController.restore()));
     _focusNode.dispose();
     super.dispose();
   }

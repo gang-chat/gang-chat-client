@@ -65,6 +65,8 @@ constexpr char kTrayInitializeMethod[] = "initialize";
 constexpr char kTrayDisposeMethod[] = "dispose";
 constexpr char kTrayRequestAttentionMethod[] = "requestAttention";
 constexpr char kSetMediaPlaybackActiveMethod[] = "setMediaPlaybackActive";
+constexpr char kSetWindowCaptureExcludedMethod[] =
+    "setWindowCaptureExcluded";
 constexpr char kTrayOpenMethod[] = "open";
 constexpr char kTrayExitMethod[] = "exit";
 constexpr wchar_t kFileDropWindowProp[] = L"GangChatFileDropWindow";
@@ -92,6 +94,30 @@ constexpr int kTrayMenuDividerInset = 8;
 constexpr int kTrayMenuDividerHeight = 2;
 constexpr int kTrayMenuFontSize = 13;
 constexpr int kTrayMenuCornerRadius = 8;
+constexpr DWORD kWindowExcludedFromCaptureAffinity = 0x00000011;
+constexpr DWORD kWindows10Version = 10;
+constexpr DWORD kWindows10Version2004Build = 19041;
+
+bool SupportsWindowCaptureExclusion() {
+  const HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+  if (!ntdll) {
+    return false;
+  }
+  using RtlGetVersionFunction = LONG(WINAPI*)(OSVERSIONINFOW*);
+  const auto rtl_get_version = reinterpret_cast<RtlGetVersionFunction>(
+      GetProcAddress(ntdll, "RtlGetVersion"));
+  if (!rtl_get_version) {
+    return false;
+  }
+  OSVERSIONINFOW version{};
+  version.dwOSVersionInfoSize = sizeof(version);
+  if (rtl_get_version(&version) != 0) {
+    return false;
+  }
+  return version.dwMajorVersion > kWindows10Version ||
+         (version.dwMajorVersion == kWindows10Version &&
+          version.dwBuildNumber >= kWindows10Version2004Build);
+}
 
 struct TrayMenuItem {
   UINT command;
@@ -1394,6 +1420,16 @@ void FlutterWindow::RegisterTrayChannel() {
           result->Success(flutter::EncodableValue());
           return;
         }
+        if (call.method_name() == kSetWindowCaptureExcludedMethod) {
+          const auto* excluded = std::get_if<bool>(call.arguments());
+          if (!excluded) {
+            result->Error("invalid_arguments", "Expected an excluded boolean");
+            return;
+          }
+          result->Success(
+              flutter::EncodableValue(SetWindowCaptureExcluded(*excluded)));
+          return;
+        }
         result->NotImplemented();
       });
 }
@@ -1408,6 +1444,25 @@ bool FlutterWindow::SetMediaPlaybackActive(bool active) {
     return false;
   }
   media_playback_active_ = active;
+  return true;
+}
+
+bool FlutterWindow::SetWindowCaptureExcluded(bool excluded) {
+  const HWND window = GetHandle();
+  if (!window) {
+    return false;
+  }
+  if (excluded && !SupportsWindowCaptureExclusion()) {
+    // Before Windows 10 2004, 0x11 behaves as WDA_MONITOR and leaves a
+    // captured placeholder instead of safely breaking the feedback loop.
+    return false;
+  }
+  const DWORD affinity =
+      excluded ? kWindowExcludedFromCaptureAffinity : WDA_NONE;
+  if (!SetWindowDisplayAffinity(window, affinity)) {
+    return false;
+  }
+  window_capture_excluded_ = excluded;
   return true;
 }
 
@@ -1844,6 +1899,9 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  if (window_capture_excluded_) {
+    SetWindowCaptureExcluded(false);
+  }
   if (media_playback_active_) {
     SetMediaPlaybackActive(false);
   }

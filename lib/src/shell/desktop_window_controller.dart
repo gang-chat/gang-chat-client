@@ -57,6 +57,9 @@ class DesktopWindowController {
   bool get supportsWindowsPowerRequests =>
       supportsWindowManagement && Platform.isWindows;
 
+  bool get supportsWindowsCaptureExclusion =>
+      supportsWindowManagement && Platform.isWindows;
+
   void setCloseRequestHandler(AppCloseRequestHandler? handler) {
     _closeRequestHandler = handler;
   }
@@ -177,6 +180,26 @@ class DesktopWindowController {
       if (!supportsWindowsPowerRequests) return;
       await _trayChannel.invokeMethod<void>('setMediaPlaybackActive', active);
     });
+  }
+
+  /// Excludes the Gang Chat top-level window from Windows screen capture.
+  ///
+  /// This is used only while previewing a local screen share full screen. A
+  /// near-1:1 preview of the captured window otherwise creates an unbounded
+  /// video feedback loop that can exhaust the renderer and encoder. Returning
+  /// false lets the caller safely refuse that preview on unsupported Windows
+  /// versions instead of entering an unstable recursive capture.
+  Future<bool> setWindowCaptureExcluded(bool excluded) async {
+    if (!supportsWindowsCaptureExclusion) return false;
+    try {
+      return await _trayChannel.invokeMethod<bool>(
+            'setWindowCaptureExcluded',
+            excluded,
+          ) ??
+          false;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> hideAppWindowForExit() {

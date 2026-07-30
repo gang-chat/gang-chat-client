@@ -21,6 +21,7 @@ import 'package:meta/meta.dart';
 import '../../events.dart';
 import '../../exceptions.dart';
 import '../../extensions.dart';
+import '../../internal/events.dart';
 import '../../logger.dart';
 import '../../options.dart';
 import '../../proto/livekit_models.pb.dart' as lk_models;
@@ -138,6 +139,7 @@ class LocalVideoTrack extends LocalTrack with VideoTrack {
         vs.bytesSent = getNumValFromReport(v.values, 'bytesSent');
         vs.framesSent = getNumValFromReport(v.values, 'framesSent');
         vs.rid = getStringValFromReport(v.values, 'rid');
+        vs.ssrc = getNumValFromReport(v.values, 'ssrc');
         vs.encoderImplementation = getStringValFromReport(
           v.values,
           'encoderImplementation',
@@ -315,10 +317,91 @@ extension LocalVideoTrackExt on LocalVideoTrack {
   Future<void> replaceTrackForMultiCodecSimulcast(
     rtc.MediaStreamTrack newTrack,
   ) async {
-    simulcastCodecs.forEach((key, simulcastTrack) async {
+    await Future.wait(simulcastCodecs.values.map((simulcastTrack) async {
       await simulcastTrack.sender?.replaceTrack(newTrack);
-      simulcastTrack.mediaStreamTrack = mediaStreamTrack;
-    });
+      simulcastTrack.mediaStreamTrack = newTrack;
+    }));
+  }
+
+  /// Recreates a desktop screen-capture source while preserving this
+  /// publication, transceiver and track SID.
+  ///
+  /// The vendored desktop capture path adapts frames before the sender, but its
+  /// adapter is configured when getDisplayMedia creates the track. Build a new
+  /// adapted stream first, then atomically swap all senders. The previous
+  /// capture is stopped only after the swap succeeds, so a source creation
+  /// failure leaves the active share untouched and never asks LiveKit to
+  /// republish the track.
+  Future<void> replaceScreenShareCapture(
+    ScreenShareCaptureOptions options,
+  ) async {
+    if (source != TrackSource.screenShareVideo) {
+      throw TrackCreateException('track is not a screen share');
+    }
+    final primarySender = sender;
+    if (primarySender == null) {
+      throw TrackCreateException('screen share sender is unavailable');
+    }
+
+    final nextStream = await LocalTrack.createStream(options);
+    if (nextStream.getVideoTracks().isEmpty) {
+      await nextStream.dispose();
+      throw TrackCreateException('replacement screen share has no video');
+    }
+    final nextTrack = nextStream.getVideoTracks().first;
+    final previousStream = mediaStream;
+    final previousTrack = mediaStreamTrack;
+    nextTrack.enabled = previousTrack.enabled;
+
+    final senders = <rtc.RTCRtpSender>[
+      primarySender,
+      ...simulcastCodecs.values.map((item) => item.sender).whereType<rtc.RTCRtpSender>(),
+    ];
+    final replaced = <rtc.RTCRtpSender>[];
+    try {
+      for (final currentSender in senders) {
+        await currentSender.replaceTrack(nextTrack);
+        replaced.add(currentSender);
+      }
+    } catch (error) {
+      for (final currentSender in replaced.reversed) {
+        try {
+          await currentSender.replaceTrack(previousTrack);
+        } catch (_) {}
+      }
+      try {
+        await nextTrack.stop();
+      } catch (_) {}
+      try {
+        await nextStream.dispose();
+      } catch (_) {}
+      rethrow;
+    }
+
+    for (final item in simulcastCodecs.values) {
+      item.mediaStreamTrack = nextTrack;
+    }
+    currentOptions = options;
+    updateMediaStreamAndTrack(nextStream, nextTrack);
+    nextTrack.onEnded = () {
+      logger.fine('MediaStreamTrack.onEnded()');
+      events.emit(TrackEndedEvent(track: this));
+    };
+
+    // Programmatic cleanup of the superseded source must not be interpreted as
+    // the user pressing the operating system's "stop sharing" control.
+    previousTrack.onEnded = null;
+    try {
+      await previousTrack.stop();
+    } catch (_) {}
+    try {
+      await previousStream.dispose();
+    } catch (_) {}
+
+    events.emit(LocalTrackOptionsUpdatedEvent(
+      track: this,
+      options: currentOptions,
+    ));
   }
 
   Future<List<String>> setPublishingCodecs(

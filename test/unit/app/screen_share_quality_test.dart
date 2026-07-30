@@ -17,8 +17,8 @@ void main() {
       expect(normalizedScreenShareMaxHeight(2160), defaultScreenShareMaxHeight);
     });
 
-    test('default is 1080', () {
-      expect(defaultScreenShareMaxHeight, 1080);
+    test('default is 720', () {
+      expect(defaultScreenShareMaxHeight, 720);
     });
   });
 
@@ -47,7 +47,7 @@ void main() {
     test('coerces unsupported heights to the default resolution', () {
       expect(
         screenShareResolutionForHeight(999),
-        const ScreenShareResolution(1920, 1080),
+        const ScreenShareResolution(1280, 720),
       );
     });
   });
@@ -60,8 +60,8 @@ void main() {
     });
 
     test('falls back to the platform default and applies its cap', () {
-      expect(normalizedScreenShareFrameRate(null), 60);
-      expect(normalizedScreenShareFrameRate(24), 60);
+      expect(normalizedScreenShareFrameRate(null), 30);
+      expect(normalizedScreenShareFrameRate(24), 30);
       expect(
         normalizedScreenShareFrameRate(
           60,
@@ -180,10 +180,140 @@ void main() {
     });
 
     test('coerces an unsupported target to the default before scaling', () {
-      // target 999 -> 1080; a 1080p source then needs no scaling.
+      // target 999 -> 720; a 1080p source is capped at 720p.
       expect(
         screenShareScaleDownBy(sourceHeight: 1080, targetHeight: 999),
-        1.0,
+        1.5,
+      );
+    });
+  });
+
+  group('screenShareSourceScaleForSample', () {
+    test('uses an RID/SSRC matched scale without guessing', () {
+      expect(
+        screenShareSourceScaleForSample(
+          encodedHeight: 540,
+          targetHeight: 1080,
+          encodingScales: const [1, 2],
+          matchedScale: 2,
+        ),
+        2,
+      );
+    });
+
+    test('reconstructs a low simulcast sample when native stats omit ids', () {
+      expect(
+        screenShareSourceScaleForSample(
+          encodedHeight: 540,
+          targetHeight: 1080,
+          encodingScales: const [1, 2],
+        ),
+        2,
+      );
+      expect(
+        screenShareSourceScaleForSample(
+          encodedHeight: 1080,
+          targetHeight: 720,
+          encodingScales: const [1, 2],
+        ),
+        1,
+      );
+    });
+
+    test('uses a known source to identify the closest active layer', () {
+      expect(
+        screenShareSourceScaleForSample(
+          encodedHeight: 240,
+          targetHeight: 480,
+          encodingScales: const [2.25, 4.5],
+          knownSourceHeight: 1080,
+        ),
+        4.5,
+      );
+    });
+  });
+
+  group('screenShareCappedOutputResolution', () {
+    test('keeps source aspect ratio while capping height', () {
+      expect(
+        screenShareCappedOutputResolution(
+          sourceWidth: 3440,
+          sourceHeight: 1440,
+          targetHeight: 720,
+        ),
+        const ScreenShareResolution(1720, 720),
+      );
+    });
+
+    test('does not upscale a smaller source', () {
+      expect(
+        screenShareCappedOutputResolution(
+          sourceWidth: 960,
+          sourceHeight: 540,
+          targetHeight: 1080,
+        ),
+        const ScreenShareResolution(960, 540),
+      );
+    });
+
+    test('uses the selected preset before source dimensions are known', () {
+      expect(
+        screenShareCappedOutputResolution(
+          sourceWidth: null,
+          sourceHeight: null,
+          targetHeight: 720,
+        ),
+        const ScreenShareResolution(1280, 720),
+      );
+    });
+  });
+
+  group('screenShareQualityCheckResult', () {
+    test(
+      'defers verification when parameters are ready but no frames flow',
+      () {
+        expect(
+          screenShareQualityCheckResult(
+            parametersReady: true,
+            hasOutboundFrames: false,
+            resolutionVerified: false,
+            frameRateCapVerified: true,
+          ),
+          ScreenShareQualityCheckResult.awaitingOutboundFrames,
+        );
+      },
+    );
+
+    test('does not hide a rejected parameter update behind missing stats', () {
+      expect(
+        screenShareQualityCheckResult(
+          parametersReady: false,
+          hasOutboundFrames: false,
+          resolutionVerified: false,
+          frameRateCapVerified: true,
+        ),
+        ScreenShareQualityCheckResult.retry,
+      );
+    });
+
+    test('requires parameters, resolution and frame rate to match', () {
+      expect(
+        screenShareQualityCheckResult(
+          parametersReady: true,
+          hasOutboundFrames: true,
+          resolutionVerified: true,
+          frameRateCapVerified: true,
+        ),
+        ScreenShareQualityCheckResult.verified,
+      );
+      expect(
+        screenShareQualityCheckResult(
+          parametersReady: true,
+          hasOutboundFrames: true,
+          resolutionVerified: false,
+          frameRateCapVerified: true,
+        ),
+        ScreenShareQualityCheckResult.retry,
       );
     });
   });
@@ -199,8 +329,8 @@ void main() {
     });
 
     test('coerces unsupported values to default labels', () {
-      expect(screenShareResolutionLabel(999), '1080p');
-      expect(screenShareFrameRateLabel(24), '60 FPS');
+      expect(screenShareResolutionLabel(999), '720p');
+      expect(screenShareFrameRateLabel(24), '30 FPS');
     });
   });
 }
