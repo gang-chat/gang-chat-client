@@ -2,6 +2,7 @@ package com.cloudwebrtc.webrtc;
 
 import static com.cloudwebrtc.webrtc.utils.MediaConstraintsUtils.parseMediaConstraints;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.Context;
 import android.content.pm.PackageManager;
@@ -12,6 +13,7 @@ import android.media.AudioManager;
 import android.media.MediaRecorder;
 import android.media.AudioAttributes;
 import android.media.AudioDeviceInfo;
+import android.media.projection.MediaProjection;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
@@ -47,6 +49,7 @@ import com.cloudwebrtc.webrtc.video.LocalVideoTrack;
 import com.twilio.audioswitch.AudioDevice;
 
 import org.webrtc.AudioTrack;
+import org.webrtc.AudioSource;
 import org.webrtc.CryptoOptions;
 import org.webrtc.DtmfSender;
 import org.webrtc.EglBase;
@@ -89,9 +92,11 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -112,6 +117,11 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
   private final Context context;
   private final TextureRegistry textures;
   private PeerConnectionFactory mFactory;
+  private PeerConnectionFactory screenAudioFactory;
+  private JavaAudioDeviceModule screenAudioDeviceModule;
+  private AndroidScreenAudioCapturer screenAudioCapturer;
+  private final Set<String> screenAudioPeerConnectionIds = new HashSet<>();
+  private final Set<String> screenAudioTrackIds = new HashSet<>();
   private final Map<String, MediaStream> localStreams = new HashMap<>();
   private final Map<String, LocalTrack> localTracks = new HashMap<>();
   private final LongSparseArray<FlutterRTCVideoRenderer> renders = new LongSparseArray<>();
@@ -185,6 +195,9 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
       peerConnectionDispose(connection);
     }
     mPeerConnectionObservers.clear();
+    screenAudioPeerConnectionIds.clear();
+    screenAudioTrackIds.clear();
+    releaseScreenAudioFactory();
   }
   private void initialize(boolean bypassVoiceProcessing, boolean androidUseHardwareAudioProcessing, int networkIgnoreMask, boolean forceSWCodec, List<String> forceSWCodecList,
   @Nullable ConstraintsMap androidAudioConfiguration, Severity logSeverity, @Nullable Integer audioSampleRate, @Nullable Integer audioOutputSampleRate) {
@@ -344,6 +357,188 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
 
   }
 
+  private synchronized boolean ensureScreenAudioFactory(Result result) {
+    if (screenAudioFactory != null) return true;
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+      resultError(
+              "screenAudioCreatePeerConnection",
+              "Android playback capture requires Android 10 or newer",
+              result);
+      return false;
+    }
+    if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+            != PackageManager.PERMISSION_GRANTED) {
+      resultError(
+              "screenAudioCreatePeerConnection",
+              "RECORD_AUDIO permission is required for Android playback capture",
+              result);
+      return false;
+    }
+    if (getUserMediaImpl == null) {
+      resultError(
+              "screenAudioCreatePeerConnection",
+              "WebRTC has not been initialized",
+              result);
+      return false;
+    }
+
+    MediaProjection mediaProjection = getUserMediaImpl.getActiveScreenMediaProjection();
+    if (mediaProjection == null) {
+      resultError(
+              "screenAudioCreatePeerConnection",
+              "No active Android screen-share projection is available",
+              result);
+      return false;
+    }
+
+    AndroidScreenAudioCapturer capturer =
+            new AndroidScreenAudioCapturer(mediaProjection);
+    JavaAudioDeviceModule deviceModule = null;
+    PeerConnectionFactory factory = null;
+    try {
+      deviceModule = JavaAudioDeviceModule.builder(context)
+              .setInputSampleRate(48000)
+              .setAudioFormat(android.media.AudioFormat.ENCODING_PCM_16BIT)
+              .setUseStereoInput(true)
+              .setUseHardwareAcousticEchoCanceler(false)
+              .setUseHardwareNoiseSuppressor(false)
+              .setAudioBufferCallback(capturer)
+              .createAudioDeviceModule();
+      // The callback above supplies every 10 ms input buffer. Disabling the
+      // normal AudioRecord prevents the isolated factory from opening the mic.
+      deviceModule.setAudioRecordEnabled(false);
+      factory = PeerConnectionFactory.builder()
+              .setAudioDeviceModule(deviceModule)
+              .createPeerConnectionFactory();
+    } catch (RuntimeException error) {
+      Log.e(TAG, "Failed to create Android screen-audio factory", error);
+      capturer.releaseAudioResources();
+      if (factory != null) factory.dispose();
+      if (deviceModule != null) deviceModule.release();
+      resultError(
+              "screenAudioCreatePeerConnection",
+              "Failed to create Android screen-audio factory: " + error.getMessage(),
+              result);
+      return false;
+    }
+
+    screenAudioCapturer = capturer;
+    screenAudioDeviceModule = deviceModule;
+    screenAudioFactory = factory;
+    return true;
+  }
+
+  private void screenAudioCreatePeerConnection(MethodCall call, Result result) {
+    if (!ensureScreenAudioFactory(result)) return;
+
+    Map<String, Object> constraints = call.argument("constraints");
+    Map<String, Object> configuration = call.argument("configuration");
+    RTCConfiguration conf = parseRTCConfiguration(new ConstraintsMap(configuration));
+    String peerConnectionId = getNextStreamUUID();
+    PeerConnectionObserver observer =
+            new PeerConnectionObserver(conf, this, messenger, peerConnectionId);
+    PeerConnection peerConnection = screenAudioFactory.createPeerConnection(
+            conf,
+            parseMediaConstraints(new ConstraintsMap(constraints)),
+            observer);
+    if (peerConnection == null) {
+      maybeReleaseScreenAudioFactory();
+      resultError(
+              "screenAudioCreatePeerConnection",
+              "Failed to create Android screen-audio PeerConnection",
+              result);
+      return;
+    }
+
+    observer.setPeerConnection(peerConnection);
+    mPeerConnectionObservers.put(peerConnectionId, observer);
+    screenAudioPeerConnectionIds.add(peerConnectionId);
+
+    ConstraintsMap response = new ConstraintsMap();
+    response.putString("peerConnectionId", peerConnectionId);
+    result.success(response.toMap());
+  }
+
+  private void screenAudioCreateTrack(Result result) {
+    if (screenAudioFactory == null) {
+      resultError(
+              "screenAudioCreateTrack",
+              "Android screen-audio factory is unavailable",
+              result);
+      return;
+    }
+
+    MediaConstraints audioConstraints = new MediaConstraints();
+    audioConstraints.mandatory.add(
+            new KeyValuePair("googEchoCancellation", "false"));
+    audioConstraints.mandatory.add(
+            new KeyValuePair("googAutoGainControl", "false"));
+    audioConstraints.mandatory.add(
+            new KeyValuePair("googNoiseSuppression", "false"));
+    audioConstraints.mandatory.add(
+            new KeyValuePair("googHighpassFilter", "false"));
+
+    AudioSource audioSource = screenAudioFactory.createAudioSource(audioConstraints);
+    if (audioSource == null) {
+      resultError(
+              "screenAudioCreateTrack",
+              "Failed to create Android screen-audio source",
+              result);
+      return;
+    }
+
+    String streamId = getNextStreamUUID();
+    String trackId = getNextTrackUUID();
+    MediaStream stream = screenAudioFactory.createLocalMediaStream(streamId);
+    AudioTrack track = screenAudioFactory.createAudioTrack(trackId, audioSource);
+    if (stream == null || track == null) {
+      audioSource.dispose();
+      resultError(
+              "screenAudioCreateTrack",
+              "Failed to create Android screen-audio track",
+              result);
+      return;
+    }
+
+    stream.addTrack(track);
+    localStreams.put(streamId, stream);
+    synchronized (localTracks) {
+      localTracks.put(trackId, new LocalAudioTrack(track));
+    }
+    screenAudioTrackIds.add(trackId);
+
+    ConstraintsMap response = new ConstraintsMap();
+    response.putString("id", trackId);
+    response.putString("streamId", streamId);
+    response.putString("kind", track.kind());
+    response.putString("label", trackId);
+    response.putBoolean("enabled", track.enabled());
+    response.putBoolean("remote", false);
+    response.putMap("settings", new HashMap<>());
+    result.success(response.toMap());
+  }
+
+  private synchronized void maybeReleaseScreenAudioFactory() {
+    if (!screenAudioPeerConnectionIds.isEmpty() ||
+            !screenAudioTrackIds.isEmpty()) {
+      return;
+    }
+    releaseScreenAudioFactory();
+  }
+
+  private synchronized void releaseScreenAudioFactory() {
+    AndroidScreenAudioCapturer capturer = screenAudioCapturer;
+    PeerConnectionFactory factory = screenAudioFactory;
+    JavaAudioDeviceModule deviceModule = screenAudioDeviceModule;
+    screenAudioCapturer = null;
+    screenAudioFactory = null;
+    screenAudioDeviceModule = null;
+
+    if (capturer != null) capturer.releaseAudioResources();
+    if (factory != null) factory.dispose();
+    if (deviceModule != null) deviceModule.release();
+  }
+
   @Override
   public void onMethodCall(MethodCall call, @NonNull Result notSafeResult) {
 
@@ -449,6 +644,14 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
         ConstraintsMap res = new ConstraintsMap();
         res.putString("peerConnectionId", peerConnectionId);
         result.success(res.toMap());
+        break;
+      }
+      case "screenAudioCreatePeerConnection": {
+        screenAudioCreatePeerConnection(call, result);
+        break;
+      }
+      case "screenAudioCreateTrack": {
+        screenAudioCreateTrack(result);
         break;
       }
       case "getUserMedia": {
@@ -1736,12 +1939,14 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
   }
 
   public void trackDispose(final String trackId) {
+    final boolean wasScreenAudioTrack = screenAudioTrackIds.remove(trackId);
     LocalTrack track;
     synchronized (localTracks) {
       track = localTracks.get(trackId);
     }
     if (track == null) {
       Log.d(TAG, "trackDispose() track is null");
+      if (wasScreenAudioTrack) maybeReleaseScreenAudioFactory();
       return;
     }
     removeTrackForRendererById(trackId);
@@ -1752,6 +1957,7 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
     synchronized (localTracks) {
       localTracks.remove(trackId);
     }
+    if (wasScreenAudioTrack) maybeReleaseScreenAudioFactory();
   }
 
   public void mediaStreamTrackSetEnabled(final String id, final boolean enabled, String peerConnectionId) {
@@ -2110,6 +2316,8 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
   }
 
   public void peerConnectionDispose(final String id) {
+    final boolean wasScreenAudioPeerConnection =
+            screenAudioPeerConnectionIds.remove(id);
     PeerConnectionObserver pco = mPeerConnectionObservers.get(id);
     if (pco != null) {
       if (peerConnectionDispose(pco)) {
@@ -2122,6 +2330,7 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
     if (mPeerConnectionObservers.size() == 0) {
       AudioSwitchManager.instance.stop();
     }
+    if (wasScreenAudioPeerConnection) maybeReleaseScreenAudioFactory();
   }
 
   public boolean peerConnectionDispose(final PeerConnectionObserver pco) {
@@ -2155,12 +2364,15 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
       stream.removeTrack(track);
     }
     List<AudioTrack> audioTracks = stream.audioTracks;
+    boolean removedScreenAudioTrack = false;
     for (AudioTrack track : audioTracks) {
+      removedScreenAudioTrack |= screenAudioTrackIds.remove(track.id());
       synchronized (localTracks) {
         localTracks.remove(track.id());
       }
       stream.removeTrack(track);
     }
+    if (removedScreenAudioTrack) maybeReleaseScreenAudioFactory();
   }
 
   private void removeStreamForRendererById(String streamId) {

@@ -1,5 +1,6 @@
 package com.cloudwebrtc.webrtc;
 
+import android.Manifest;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -8,6 +9,7 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
+import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -49,10 +51,18 @@ public final class ScreenCaptureForegroundService extends Service {
         ensureChannel();
         Notification notification = buildNotification();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            int foregroundServiceTypes =
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+                    checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+                            == PackageManager.PERMISSION_GRANTED) {
+                foregroundServiceTypes |=
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE;
+            }
             startForeground(
                     NOTIFICATION_ID,
                     notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
+                    foregroundServiceTypes);
         } else {
             startForeground(NOTIFICATION_ID, notification);
         }

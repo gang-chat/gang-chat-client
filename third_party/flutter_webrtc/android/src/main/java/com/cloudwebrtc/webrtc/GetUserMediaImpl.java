@@ -1032,6 +1032,20 @@ public class GetUserMediaImpl {
         return mVideoCapturers.get(trackId);
     }
 
+    @Nullable
+    MediaProjection getActiveScreenMediaProjection() {
+        for (VideoCapturerInfoEx info : mVideoCapturers.values()) {
+            if (!info.isScreenCapture ||
+                    !(info.capturer instanceof OrientationAwareScreenCapturer)) {
+                continue;
+            }
+            MediaProjection projection =
+                    ((OrientationAwareScreenCapturer) info.capturer).getMediaProjection();
+            if (projection != null) return projection;
+        }
+        return null;
+    }
+
     @RequiresApi(api = VERSION_CODES.M)
     void setPreferredInputDevice(String deviceId) {
         android.media.AudioManager audioManager = ((android.media.AudioManager) applicationContext.getSystemService(Context.AUDIO_SERVICE));

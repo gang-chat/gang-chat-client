@@ -42,7 +42,7 @@ public class OrientationAwareScreenCapturer implements VideoCapturer, VideoSink 
     private SurfaceTextureHelper surfaceTextureHelper;
     private CapturerObserver capturerObserver;
     private long numCapturedFrames = 0;
-    private MediaProjection mediaProjection;
+    private volatile MediaProjection mediaProjection;
     private boolean isDisposed = false;
     private MediaProjectionManager mediaProjectionManager;
     private WindowManager windowManager;
@@ -238,5 +238,13 @@ public class OrientationAwareScreenCapturer implements VideoCapturer, VideoSink 
 
     public long getNumCapturedFrames() {
         return numCapturedFrames;
+    }
+
+    /**
+     * Returns the active projection so Android playback capture can share the
+     * same one-shot consent session as the screen video.
+     */
+    public MediaProjection getMediaProjection() {
+        return mediaProjection;
     }
 }

@@ -2,11 +2,12 @@
   package="com.cloudwebrtc.webrtc">
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 
   <application>
     <service
       android:name=".ScreenCaptureForegroundService"
       android:exported="false"
-      android:foregroundServiceType="mediaProjection" />
+      android:foregroundServiceType="mediaProjection|microphone" />
   </application>
 </manifest>

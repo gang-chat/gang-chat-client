@@ -229,12 +229,13 @@ bool shouldRequestScreenShareAudio({
   required String? sourceId,
   required bool isDesktopSourcePickerPlatform,
   required bool isWindowsDesktop,
+  required bool isAndroidPlatform,
 }) {
   // Screen audio is published by ScreenAudioPublisher through a separate
   // native factory/aux participant. getDisplayMedia still receives audio=true
   // so platform capture can be configured, but the returned stream remains
   // video-only and is never published on the main factory.
-  return isDesktopSourcePickerPlatform;
+  return isDesktopSourcePickerPlatform || isAndroidPlatform;
 }
 
 // libwebrtc's RTCDesktopSource thumbnails shear on Retina screens (same stride
@@ -1024,6 +1025,7 @@ class LiveSession extends ChangeNotifier {
         sourceId: sourceId,
         isDesktopSourcePickerPlatform: supportsDesktopScreenShare,
         isWindowsDesktop: !kIsWeb && Platform.isWindows,
+        isAndroidPlatform: !kIsWeb && Platform.isAndroid,
       );
       final isAndroid = !kIsWeb && Platform.isAndroid;
       final maxFrameRate = isAndroid ? 30.0 : 60.0;

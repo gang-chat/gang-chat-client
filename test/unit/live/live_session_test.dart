@@ -293,12 +293,13 @@ void main() {
     expect(sources.map((s) => s.thumbnailKey), ['screen:1', 'window:1']);
   });
 
-  test('screen-share requests audio only for desktop capture', () {
+  test('screen-share requests audio for desktop and Android capture', () {
     expect(
       shouldRequestScreenShareAudio(
         sourceId: 'screen-primary',
         isDesktopSourcePickerPlatform: true,
         isWindowsDesktop: false,
+        isAndroidPlatform: false,
       ),
       isTrue,
     );
@@ -307,6 +308,7 @@ void main() {
         sourceId: null,
         isDesktopSourcePickerPlatform: true,
         isWindowsDesktop: false,
+        isAndroidPlatform: false,
       ),
       isTrue,
     );
@@ -315,8 +317,18 @@ void main() {
         sourceId: 'screen-primary',
         isDesktopSourcePickerPlatform: false,
         isWindowsDesktop: false,
+        isAndroidPlatform: false,
       ),
       isFalse,
+    );
+    expect(
+      shouldRequestScreenShareAudio(
+        sourceId: null,
+        isDesktopSourcePickerPlatform: false,
+        isWindowsDesktop: false,
+        isAndroidPlatform: true,
+      ),
+      isTrue,
     );
   });
 
@@ -326,6 +338,7 @@ void main() {
         sourceId: 'screen-primary',
         isDesktopSourcePickerPlatform: true,
         isWindowsDesktop: true,
+        isAndroidPlatform: false,
       ),
       isTrue,
     );

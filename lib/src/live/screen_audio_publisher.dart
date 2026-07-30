@@ -32,10 +32,10 @@ typedef ScreenAudioPublisherBackendFactory =
 ///
 /// The isolated factory is fully separate from the primary microphone factory:
 /// macOS feeds it through `FlutterScreenAudioDevice`/ScreenCaptureKit, while
-/// Windows creates the screen-audio track on a second native factory and feeds
-/// it from WASAPI loopback. This removes the shared `AudioState` that would
-/// otherwise fan mic capture into the screen-audio send stream and race its
-/// capture checker (the fatal `audio_send_stream.cc:393` `RTC_CHECK`).
+/// Windows feeds it from WASAPI loopback and Android feeds it from playback
+/// capture on the active MediaProjection. This removes the shared `AudioState`
+/// that would otherwise fan mic capture into the screen-audio send stream and
+/// race its capture checker (the fatal `audio_send_stream.cc:393` `RTC_CHECK`).
 ///
 /// The aux participant joins with identity `<ownerId>--screen-audio`, is
 /// publish-only (`canSubscribe=false`), and never appears in the roster (no
