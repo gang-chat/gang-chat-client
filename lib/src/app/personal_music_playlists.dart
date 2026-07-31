@@ -2,6 +2,22 @@ import '../protocol/api_client.dart';
 import '../protocol/models.dart';
 
 const int personalMusicPlaylistPageSize = 50;
+const String personalPlaylistCountAll = '';
+const String personalPlaylistCountEmpty = 'empty';
+const String personalPlaylistCount1To10 = '1-10';
+const String personalPlaylistCount11To50 = '11-50';
+const String personalPlaylistCount51To100 = '51-100';
+const String personalPlaylistCountOver100 = '101+';
+
+class PersonalPlaylistFilterDraft {
+  const PersonalPlaylistFilterDraft({
+    required this.keyword,
+    required this.countFilter,
+  });
+
+  final String keyword;
+  final String countFilter;
+}
 
 class PersonalMusicPlaylistsController {
   const PersonalMusicPlaylistsController(this.api);
@@ -141,6 +157,94 @@ bool personalPlaylistFilterActive({
   required String source,
 }) {
   return keyword.trim().isNotEmpty || source.trim().isNotEmpty;
+}
+
+bool personalPlaylistListFilterActive({
+  required String keyword,
+  required String countFilter,
+}) {
+  return keyword.trim().isNotEmpty || countFilter.trim().isNotEmpty;
+}
+
+List<PersonalMusicPlaylist> filteredPersonalMusicPlaylists(
+  Iterable<PersonalMusicPlaylist> playlists, {
+  required String keyword,
+  required String countFilter,
+}) {
+  final needle = keyword.trim().toLowerCase();
+  return [
+    for (final playlist in playlists)
+      if ((needle.isEmpty || playlist.name.toLowerCase().contains(needle)) &&
+          personalPlaylistMatchesCountFilter(playlist.itemCount, countFilter))
+        playlist,
+  ];
+}
+
+bool personalPlaylistMatchesCountFilter(int count, String filter) {
+  return switch (filter) {
+    personalPlaylistCountAll => true,
+    personalPlaylistCountEmpty => count == 0,
+    personalPlaylistCount1To10 => count >= 1 && count <= 10,
+    personalPlaylistCount11To50 => count >= 11 && count <= 50,
+    personalPlaylistCount51To100 => count >= 51 && count <= 100,
+    personalPlaylistCountOver100 => count >= 101,
+    _ => true,
+  };
+}
+
+List<String> toggledPersonalPlaylistListSelection(
+  List<String> selected,
+  String playlistId,
+) {
+  final next = List<String>.of(selected);
+  final index = next.indexOf(playlistId);
+  if (index >= 0) {
+    next.removeAt(index);
+  } else {
+    next.add(playlistId);
+  }
+  return next;
+}
+
+bool personalPlaylistAllVisibleSelected({
+  required List<String> selectedPlaylistIds,
+  required List<PersonalMusicPlaylist> visiblePlaylists,
+}) {
+  return visiblePlaylists.isNotEmpty &&
+      visiblePlaylists.every(
+        (playlist) => selectedPlaylistIds.contains(playlist.id),
+      );
+}
+
+List<String> toggledVisiblePersonalPlaylistSelection({
+  required List<String> selectedPlaylistIds,
+  required List<PersonalMusicPlaylist> visiblePlaylists,
+}) {
+  if (visiblePlaylists.isEmpty) return List<String>.of(selectedPlaylistIds);
+  final visibleIds = {for (final playlist in visiblePlaylists) playlist.id};
+  if (personalPlaylistAllVisibleSelected(
+    selectedPlaylistIds: selectedPlaylistIds,
+    visiblePlaylists: visiblePlaylists,
+  )) {
+    return [
+      for (final id in selectedPlaylistIds)
+        if (!visibleIds.contains(id)) id,
+    ];
+  }
+  final next = List<String>.of(selectedPlaylistIds);
+  for (final playlist in visiblePlaylists) {
+    if (!next.contains(playlist.id)) next.add(playlist.id);
+  }
+  return next;
+}
+
+Map<String, int> personalPlaylistSelectionNumbers(
+  List<String> selectedPlaylistIds,
+) {
+  return {
+    for (final entry in selectedPlaylistIds.asMap().entries)
+      entry.value: entry.key + 1,
+  };
 }
 
 String personalPlaylistArtistsLabel(List<String> artists) {
