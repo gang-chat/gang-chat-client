@@ -1076,35 +1076,62 @@ class _RoomMembersDialogState extends State<RoomMembersDialog> {
       );
     }
 
-    return ListView.separated(
-      padding: EdgeInsets.zero,
-      itemCount: members.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 8),
-      itemBuilder: (context, index) {
-        final member = members[index];
-        final permission = member_filter.roomMemberPermissionState(
-          member: member,
-          currentUser: widget.currentUser,
-          canEditCreatorOnly: _canEditCreatorOnly,
-          canManageMembers: _canManageMembers,
-          ownerUserId: _room.createdBy?.id,
-        );
-        return _MemberRow(
-          member: member,
-          currentUser: widget.currentUser,
-          live: _live,
-          permission: permission,
-          ownerUserId: _room.createdBy?.id,
-          query: _memberQuery,
-          busy: _busyMemberIds.contains(member.user.id),
-          onResolveProfile: _resolveMemberProfile,
-          onResolveRoomProfile: _resolveRoomProfile,
-          onOpenRoom: widget.onOpenRoom,
-          onEditRoomDisplayName: () => _editRoomDisplayName(member),
-          onSetAdmin: () => _setMemberRole(member, 'admin'),
-          onUnsetAdmin: () => _setMemberRole(member, 'member'),
-          onRemoveMember: () => _removeMember(member),
-          onTransferCreator: () => _transferCreator(member),
+    member_filter.RoomMemberPermissionState permissionFor(RoomMember member) {
+      return member_filter.roomMemberPermissionState(
+        member: member,
+        currentUser: widget.currentUser,
+        canEditCreatorOnly: _canEditCreatorOnly,
+        canManageMembers: _canManageMembers,
+        ownerUserId: _room.createdBy?.id,
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const rowSurfaceHorizontalPadding = 20.0;
+        final rowContentWidth = constraints.maxWidth.isFinite
+            ? (constraints.maxWidth - rowSurfaceHorizontalPadding)
+                  .clamp(0.0, double.infinity)
+                  .toDouble()
+            : double.infinity;
+        final stackMemberActions =
+            HomeAdaptiveLayout.usesCompactLayout(context) ||
+            members.any(
+              (member) => _memberRowNeedsStackedActions(
+                context: context,
+                availableWidth: rowContentWidth,
+                member: member,
+                live: _live,
+                permission: permissionFor(member),
+                ownerUserId: _room.createdBy?.id,
+              ),
+            );
+        return ListView.separated(
+          padding: EdgeInsets.zero,
+          itemCount: members.length,
+          separatorBuilder: (context, index) => const SizedBox(height: 8),
+          itemBuilder: (context, index) {
+            final member = members[index];
+            final permission = permissionFor(member);
+            return _MemberRow(
+              member: member,
+              currentUser: widget.currentUser,
+              live: _live,
+              permission: permission,
+              stackActions: stackMemberActions,
+              ownerUserId: _room.createdBy?.id,
+              query: _memberQuery,
+              busy: _busyMemberIds.contains(member.user.id),
+              onResolveProfile: _resolveMemberProfile,
+              onResolveRoomProfile: _resolveRoomProfile,
+              onOpenRoom: widget.onOpenRoom,
+              onEditRoomDisplayName: () => _editRoomDisplayName(member),
+              onSetAdmin: () => _setMemberRole(member, 'admin'),
+              onUnsetAdmin: () => _setMemberRole(member, 'member'),
+              onRemoveMember: () => _removeMember(member),
+              onTransferCreator: () => _transferCreator(member),
+            );
+          },
         );
       },
     );

@@ -855,7 +855,7 @@ void registerShellRoomManagementWidgetTests() {
   );
 
   testWidgets(
-    'narrow member management stacks filters and groups member actions',
+    'narrow member management stacks filters and wraps member actions',
     (WidgetTester tester) async {
       tester.view.devicePixelRatio = 1;
       tester.view.physicalSize = const Size(360, 800);
@@ -891,31 +891,100 @@ void registerShellRoomManagementWidgetTests() {
       expect(presenceRect.right, closeTo(roleRect.right, 0.01));
 
       expect(find.byKey(const ValueKey('member-actions-user-1')), findsNothing);
-      final memberActions = find.byKey(const ValueKey('member-actions-user-2'));
+      expect(find.byTooltip('成员设置'), findsNothing);
+      final memberActions = find.byKey(
+        const ValueKey('member-action-wrap-user-2'),
+      );
       expect(memberActions, findsOneWidget);
-      expect(find.byTooltip('修改房间内用户名'), findsNothing);
-      expect(find.byTooltip('设为管理员'), findsNothing);
-      expect(find.byTooltip('踢出此用户'), findsNothing);
-      expect(find.byTooltip('转让创建者'), findsNothing);
+      expect(find.byTooltip('修改房间内用户名'), findsOneWidget);
+      expect(find.byTooltip('设为管理员'), findsOneWidget);
+      expect(find.byTooltip('踢出此用户'), findsOneWidget);
+      expect(find.byTooltip('转让创建者'), findsOneWidget);
 
       await tester.ensureVisible(memberActions);
       await tester.pumpAndSettle();
-      await tester.tap(memberActions);
-      await tester.pumpAndSettle();
-
-      expect(find.text('修改房间内用户名'), findsOneWidget);
-      expect(find.text('设为管理员'), findsOneWidget);
-      expect(find.text('踢出此用户'), findsOneWidget);
-      expect(find.text('转让创建者'), findsOneWidget);
+      expect(
+        tester.getRect(memberActions).top,
+        greaterThan(tester.getRect(find.text('Morgan').first).bottom),
+      );
       expect(find.byIcon(Icons.edit_outlined), findsOneWidget);
       expect(find.byIcon(Icons.admin_panel_settings), findsOneWidget);
       expect(find.byIcon(Icons.person_remove_outlined), findsOneWidget);
       expect(find.byIcon(Icons.swap_horiz), findsOneWidget);
 
-      await tester.tap(find.text('修改房间内用户名'));
+      await tester.tap(find.byTooltip('修改房间内用户名'));
       await tester.pumpAndSettle();
 
       expect(find.text('修改Morgan Account的房间内用户名'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'one long member name stacks every actionable member on wide layouts',
+    (WidgetTester tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(900, 800);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      const longRoomDisplayName = 'Morgan 的一个比较长但信息独占一行时能完整显示的房间昵称';
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ui.uiTheme().copyWith(platform: TargetPlatform.windows),
+          home: HomePage(
+            app: _homeTestAppContext(
+              secondaryMemberRoomDisplayName: longRoomDisplayName,
+              includeActionComparisonMember: true,
+            ),
+            realtime: _NoopRealtimeService(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Alpha Room'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('房间成员'));
+      await tester.pumpAndSettle();
+
+      final longName = find.text(longRoomDisplayName);
+      final morganActions = find.byKey(
+        const ValueKey('member-action-wrap-user-2'),
+      );
+      final taylorActions = find.byKey(
+        const ValueKey('member-action-wrap-user-5'),
+      );
+      final morganInformation = find.byKey(
+        const ValueKey('member-information-user-2'),
+      );
+      final morganPresence = find.byKey(
+        const ValueKey('member-presence-user-2'),
+      );
+      final morganRole = find.byKey(const ValueKey('member-role-user-2'));
+      expect(longName, findsOneWidget);
+      expect(morganActions, findsOneWidget);
+      expect(taylorActions, findsOneWidget);
+      expect(morganInformation, findsOneWidget);
+      expect(morganPresence, findsOneWidget);
+      expect(morganRole, findsOneWidget);
+      expect(
+        tester.getRect(morganActions).top,
+        greaterThan(tester.getRect(morganInformation).bottom),
+      );
+      expect(
+        tester.getRect(taylorActions).top,
+        greaterThan(tester.getRect(find.text('Taylor')).bottom),
+      );
+      final informationRect = tester.getRect(morganInformation);
+      expect(
+        tester.getCenter(morganPresence).dy,
+        closeTo(informationRect.center.dy, 0.01),
+      );
+      expect(
+        tester.getCenter(morganRole).dy,
+        closeTo(informationRect.center.dy, 0.01),
+      );
       expect(tester.takeException(), isNull);
     },
   );
@@ -1092,9 +1161,17 @@ void registerShellRoomManagementWidgetTests() {
     expect(_buttonIconWithTooltip('转让创建者'), findsOneWidget);
 
     final creatorRemoveRect = tester.getRect(
-      _buttonIconWithTooltip('踢出此用户').first,
+      find.descendant(
+        of: find.byKey(const ValueKey('member-action-wrap-user-2')),
+        matching: _buttonIconWithTooltip('踢出此用户'),
+      ),
     );
-    final memberTransferRect = tester.getRect(_buttonIconWithTooltip('转让创建者'));
+    final memberTransferRect = tester.getRect(
+      find.descendant(
+        of: find.byKey(const ValueKey('member-action-wrap-user-5')),
+        matching: _buttonIconWithTooltip('转让创建者'),
+      ),
+    );
     expect(creatorRemoveRect.right, closeTo(memberTransferRect.right, 0.01));
   });
 

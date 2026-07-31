@@ -136,55 +136,13 @@ class _MemberFilters extends StatelessWidget {
   }
 }
 
-class _MemberActionsButton extends StatefulWidget {
-  const _MemberActionsButton({super.key, required this.items});
-
-  final List<UiContextMenuItem> items;
-
-  @override
-  State<_MemberActionsButton> createState() => _MemberActionsButtonState();
-}
-
-class _MemberActionsButtonState extends State<_MemberActionsButton> {
-  final GlobalKey _anchorKey = GlobalKey();
-  bool _open = false;
-
-  Future<void> _showMenu() async {
-    if (_open || widget.items.isEmpty) return;
-    final anchorBox = _anchorKey.currentContext?.findRenderObject();
-    if (anchorBox is! RenderBox || !anchorBox.hasSize) return;
-    final position = anchorBox.localToGlobal(Offset(0, anchorBox.size.height));
-    setState(() => _open = true);
-    try {
-      await showUiContextMenu(
-        context,
-        position: position,
-        sections: [UiContextMenuSection(widget.items)],
-      );
-    } finally {
-      if (mounted) setState(() => _open = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return ButtonIcon(
-      key: _anchorKey,
-      tooltip: '成员设置',
-      icon: const Icon(Icons.settings_outlined),
-      selected: _open,
-      onPressed: () => unawaited(_showMenu()),
-      size: 34,
-    );
-  }
-}
-
 class _MemberRow extends StatelessWidget {
   const _MemberRow({
     required this.member,
     required this.currentUser,
     required this.live,
     required this.permission,
+    required this.stackActions,
     required this.ownerUserId,
     required this.query,
     required this.busy,
@@ -202,6 +160,7 @@ class _MemberRow extends StatelessWidget {
   final CurrentUser currentUser;
   final LiveState live;
   final member_filter.RoomMemberPermissionState permission;
+  final bool stackActions;
   final String? ownerUserId;
   final String query;
   final bool busy;
@@ -213,39 +172,6 @@ class _MemberRow extends StatelessWidget {
   final VoidCallback onUnsetAdmin;
   final VoidCallback onRemoveMember;
   final VoidCallback onTransferCreator;
-
-  List<UiContextMenuItem> _menuItems() {
-    return [
-      if (permission.canEditRoomDisplayName)
-        UiContextMenuItem(
-          label: '修改房间内用户名',
-          icon: Icons.edit_outlined,
-          onPressed: onEditRoomDisplayName,
-        ),
-      if (permission.canRoleEdit)
-        UiContextMenuItem(
-          label: permission.isAdmin ? '移除管理员' : '设为管理员',
-          icon: permission.isAdmin
-              ? Icons.admin_panel_settings_outlined
-              : Icons.admin_panel_settings,
-          onPressed: permission.isAdmin ? onUnsetAdmin : onSetAdmin,
-        ),
-      if (permission.canRemoveMember)
-        UiContextMenuItem(
-          label: '踢出此用户',
-          icon: Icons.person_remove_outlined,
-          danger: true,
-          onPressed: onRemoveMember,
-        ),
-      if (permission.canRoleEdit)
-        UiContextMenuItem(
-          label: '转让创建者',
-          icon: Icons.swap_horiz,
-          danger: true,
-          onPressed: onTransferCreator,
-        ),
-    ];
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -262,12 +188,59 @@ class _MemberRow extends StatelessWidget {
       defaultAvatarKey: member.user.defaultAvatarKey,
       size: 38,
     );
-    final menuItems = _menuItems();
+    final actionCount = _memberActionCount(permission);
+    final hasActions = actionCount > 0;
+    final actions = SizedBox(
+      width: _memberActionsWidth(actionCount),
+      child: Wrap(
+        key: ValueKey('member-action-wrap-${member.user.id}'),
+        spacing: 6,
+        runSpacing: 8,
+        alignment: WrapAlignment.end,
+        children: [
+          if (permission.canEditRoomDisplayName)
+            ButtonIcon(
+              tooltip: '修改房间内用户名',
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: onEditRoomDisplayName,
+              size: 34,
+            ),
+          if (permission.canRoleEdit)
+            ButtonIcon(
+              tooltip: permission.isAdmin ? '移除管理员' : '设为管理员',
+              icon: Icon(
+                permission.isAdmin
+                    ? Icons.admin_panel_settings_outlined
+                    : Icons.admin_panel_settings,
+              ),
+              selected: permission.isAdmin,
+              onPressed: permission.isAdmin ? onUnsetAdmin : onSetAdmin,
+              size: 34,
+            ),
+          if (permission.canRemoveMember)
+            ButtonIcon(
+              tooltip: '踢出此用户',
+              icon: const Icon(Icons.person_remove_outlined),
+              tone: ButtonTone.danger,
+              onPressed: onRemoveMember,
+              size: 34,
+            ),
+          if (permission.canRoleEdit)
+            ButtonIcon(
+              tooltip: '转让创建者',
+              icon: const Icon(Icons.swap_horiz),
+              tone: ButtonTone.danger,
+              onPressed: onTransferCreator,
+              size: 34,
+            ),
+        ],
+      ),
+    );
     return _RowSurface(
-      child: LayoutBuilder(
-        builder: (context, _) {
-          final narrow = HomeAdaptiveLayout.usesCompactLayout(context);
-          return SizedBox(
+      child: Builder(
+        builder: (context) {
+          final information = SizedBox(
+            key: ValueKey('member-information-${member.user.id}'),
             height: 48,
             child: Row(
               children: [
@@ -310,9 +283,13 @@ class _MemberRow extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 10),
-                PresencePill.member(presence),
+                PresencePill.member(
+                  presence,
+                  key: ValueKey('member-presence-${member.user.id}'),
+                ),
                 const SizedBox(width: 6),
                 RoleBadge(
+                  key: ValueKey('member-role-${member.user.id}'),
                   label: role,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 8,
@@ -328,67 +305,121 @@ class _MemberRow extends StatelessWidget {
                       strokeWidth: 2,
                     ),
                   ),
-                ] else if (menuItems.isNotEmpty) ...[
-                  const SizedBox(width: 8),
-                  if (narrow)
-                    _MemberActionsButton(
-                      key: ValueKey('member-actions-${member.user.id}'),
-                      items: menuItems,
-                    )
-                  else ...[
-                    if (permission.canEditRoomDisplayName) ...[
-                      ButtonIcon(
-                        tooltip: '修改房间内用户名',
-                        icon: const Icon(Icons.edit_outlined),
-                        onPressed: onEditRoomDisplayName,
-                        size: 34,
-                      ),
-                      if (permission.canRoleEdit || permission.canRemoveMember)
-                        const SizedBox(width: 6),
-                    ],
-                    if (permission.canRoleEdit) ...[
-                      ButtonIcon(
-                        tooltip: permission.isAdmin ? '移除管理员' : '设为管理员',
-                        icon: Icon(
-                          permission.isAdmin
-                              ? Icons.admin_panel_settings_outlined
-                              : Icons.admin_panel_settings,
-                        ),
-                        selected: permission.isAdmin,
-                        onPressed: permission.isAdmin
-                            ? onUnsetAdmin
-                            : onSetAdmin,
-                        size: 34,
-                      ),
-                      const SizedBox(width: 6),
-                    ],
-                    if (permission.canRemoveMember) ...[
-                      ButtonIcon(
-                        tooltip: '踢出此用户',
-                        icon: const Icon(Icons.person_remove_outlined),
-                        tone: ButtonTone.danger,
-                        onPressed: onRemoveMember,
-                        size: 34,
-                      ),
-                      if (permission.canRoleEdit) const SizedBox(width: 6),
-                    ],
-                    if (permission.canRoleEdit)
-                      ButtonIcon(
-                        tooltip: '转让创建者',
-                        icon: const Icon(Icons.swap_horiz),
-                        tone: ButtonTone.danger,
-                        onPressed: onTransferCreator,
-                        size: 34,
-                      ),
-                  ],
                 ],
               ],
             ),
+          );
+          if (stackActions && !busy && hasActions) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                information,
+                const SizedBox(height: 8),
+                Align(alignment: Alignment.centerRight, child: actions),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: information),
+              if (!busy && hasActions) ...[const SizedBox(width: 8), actions],
+            ],
           );
         },
       ),
     );
   }
+}
+
+bool _memberRowNeedsStackedActions({
+  required BuildContext context,
+  required double availableWidth,
+  required RoomMember member,
+  required LiveState live,
+  required member_filter.RoomMemberPermissionState permission,
+  required String? ownerUserId,
+}) {
+  final actionCount = _memberActionCount(permission);
+  if (actionCount == 0) return false;
+
+  final presence = member_filter.roomMemberPresence(member, live: live);
+  final role = room_display.roomRoleLabel(
+    member.user,
+    ownerUserId: ownerUserId,
+  );
+  final displayNameStyle = UiTypography.body.copyWith(
+    fontWeight: FontWeight.w600,
+  );
+  final usernameStyle = UiTypography.label.copyWith(
+    color: UiColors.textMuted,
+    fontSize: 12,
+  );
+  final presenceStyle = UiTypography.label.copyWith(
+    fontWeight: FontWeight.w600,
+  );
+  final roleStyle = UiTypography.label.copyWith(
+    fontSize: 12,
+    fontWeight: FontWeight.w600,
+  );
+  final displayNameWidth = _memberRowTextWidth(
+    context,
+    member_filter.roomMemberDisplayName(member),
+    displayNameStyle,
+  );
+  final usernameWidth = _memberRowTextWidth(
+    context,
+    '@${member.user.username}',
+    usernameStyle,
+  );
+  final identityWidth = displayNameWidth > usernameWidth
+      ? displayNameWidth
+      : usernameWidth;
+  final presenceWidth =
+      2 +
+      18 +
+      10 +
+      6 +
+      _memberRowTextWidth(
+        context,
+        member_filter.roomMemberPresenceLabel(presence),
+        presenceStyle,
+      );
+  final roleWidth = 2 + 16 + _memberRowTextWidth(context, role, roleStyle);
+  final actionsWidth = _memberActionsWidth(actionCount);
+  const measurementSafety = 2.0;
+  final requiredWidth =
+      38 +
+      10 +
+      identityWidth +
+      10 +
+      presenceWidth +
+      6 +
+      roleWidth +
+      8 +
+      actionsWidth +
+      measurementSafety;
+  return requiredWidth > availableWidth;
+}
+
+int _memberActionCount(member_filter.RoomMemberPermissionState permission) {
+  return (permission.canEditRoomDisplayName ? 1 : 0) +
+      (permission.canRoleEdit ? 2 : 0) +
+      (permission.canRemoveMember ? 1 : 0);
+}
+
+double _memberActionsWidth(int actionCount) {
+  if (actionCount <= 0) return 0;
+  return actionCount * 34 + (actionCount - 1) * 6;
+}
+
+double _memberRowTextWidth(BuildContext context, String text, TextStyle style) {
+  final painter = TextPainter(
+    text: TextSpan(text: text, style: style),
+    maxLines: 1,
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+  )..layout();
+  return painter.width;
 }
 
 class _EditRoomDisplayNameDialog extends StatefulWidget {

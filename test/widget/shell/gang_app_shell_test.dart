@@ -224,6 +224,7 @@ AuthenticatedAppContext _homeTestAppContext({
   String currentRoomJoinPolicy = 'approval_required',
   bool currentUserIsSuperuser = false,
   String secondaryMemberRole = 'member',
+  String secondaryMemberRoomDisplayName = 'Morgan',
   bool includeActionComparisonMember = false,
   bool includeUnreadRoomNotification = false,
   bool includeFreshRoomNotificationOnRefresh = false,
@@ -279,6 +280,7 @@ AuthenticatedAppContext _homeTestAppContext({
       currentRoomRole: currentRoomRole,
       currentRoomJoinPolicy: currentRoomJoinPolicy,
       secondaryMemberRole: secondaryMemberRole,
+      secondaryMemberRoomDisplayName: secondaryMemberRoomDisplayName,
       includeActionComparisonMember: includeActionComparisonMember,
       includeUnreadRoomNotification: includeUnreadRoomNotification,
       includeFreshRoomNotificationOnRefresh:
@@ -310,6 +312,7 @@ GangApi _roomsApi({
   String currentRoomRole = 'owner',
   String currentRoomJoinPolicy = 'approval_required',
   String secondaryMemberRole = 'member',
+  String secondaryMemberRoomDisplayName = 'Morgan',
   bool includeActionComparisonMember = false,
   bool includeUnreadRoomNotification = false,
   bool includeFreshRoomNotificationOnRefresh = false,
@@ -775,7 +778,7 @@ GangApi _roomsApi({
                 displayName: 'Morgan Account',
                 uid: 'uid-2',
                 isOnline: true,
-              )..['room_display_name'] = 'Morgan',
+              )..['room_display_name'] = secondaryMemberRoomDisplayName,
               role: secondaryMemberRole,
             ),
             if (includeActionComparisonMember)
