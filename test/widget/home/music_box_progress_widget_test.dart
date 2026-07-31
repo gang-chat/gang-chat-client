@@ -16,6 +16,8 @@ Widget _host(
   bool resizeToAvoidBottomInset = true,
   List<MusicBoxSearchResult> searchResults = const [],
   String source = 'netease',
+  double volume = 1,
+  ValueChanged<double>? onVolumeChanged,
 }) {
   return MaterialApp(
     theme: uiTheme().copyWith(platform: platform),
@@ -37,8 +39,8 @@ Widget _host(
           onRemoveItem: (_) {},
           onSourceChanged: (_) {},
           onClose: () {},
-          volume: 1.0,
-          onVolumeChanged: (_) {},
+          volume: volume,
+          onVolumeChanged: onVolumeChanged ?? (_) {},
         ),
       ),
     ),
@@ -107,6 +109,40 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('music box volume uses a flat surface', (tester) async {
+    final controller = TextEditingController();
+    final volumeChanges = <double>[];
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      _host(
+        _state(playbackState: MusicBoxPlaybackState.stopped, positionMs: 0),
+        controller,
+        onVolumeChanged: volumeChanges.add,
+      ),
+    );
+
+    final volume = find.byKey(
+      const ValueKey<String>('music-box-volume-control'),
+    );
+    expect(volume, findsOneWidget);
+    expect(
+      find.ancestor(of: volume, matching: find.byType(PressableSurface)),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: volume, matching: find.byType(UiSlider)),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.descendant(of: volume, matching: find.byIcon(Icons.volume_up)),
+    );
+    await tester.pump();
+    expect(volumeChanges, [0]);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('height pressure shrinks only the search results viewport', (
     tester,

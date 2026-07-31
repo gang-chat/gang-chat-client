@@ -113,6 +113,60 @@ void main() {
     );
   });
 
+  testWidgets('compact desktop search centers both affix icons vertically', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '132');
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.windows),
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 260,
+              child: Input(
+                controller: controller,
+                hintText: '搜索歌曲点歌',
+                prefixIcon: Icons.search,
+                showClearButton: true,
+                height: 30,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    void expectContentsCentered() {
+      final surface = find
+          .ancestor(
+            of: find.byType(TextField),
+            matching: find.byType(ClipRRect),
+          )
+          .first;
+      final surfaceCenter = tester.getCenter(surface).dy;
+      expect(
+        tester.getCenter(find.byType(EditableText)).dy,
+        closeTo(surfaceCenter, 0.01),
+      );
+      expect(
+        tester.getCenter(find.byIcon(Icons.search)).dy,
+        closeTo(surfaceCenter, 0.01),
+      );
+      expect(
+        tester.getCenter(find.byIcon(Icons.close)).dy,
+        closeTo(surfaceCenter, 0.01),
+      );
+    }
+
+    expectContentsCentered();
+    await tester.tap(find.byType(TextField));
+    await tester.pumpAndSettle();
+    expectContentsCentered();
+  });
+
   testWidgets('android regular input centers text and icon vertically', (
     tester,
   ) async {

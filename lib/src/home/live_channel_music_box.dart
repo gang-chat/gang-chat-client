@@ -234,9 +234,9 @@ class _MusicBoxNowPlaying extends StatelessWidget {
   }
 }
 
-/// A volume control shaped like a single icon button at rest that elongates
-/// rightward on hover, the extra width revealing an inline [UiSlider] within the
-/// same raised pill. Drives the local listening volume of the music box bot's
+/// A flat volume control shaped like a single icon button at rest that
+/// elongates rightward on hover, the extra width revealing an inline [UiSlider]
+/// within the same pill. Drives the local listening volume of the music box bot's
 /// audio track via [onChanged] — purely a per-listener preference, independent
 /// of the room's output volume. [initialVolume] seeds it from the restored
 /// store; the widget then owns the value while mounted.
@@ -334,16 +334,10 @@ class _MusicBoxVolumeState extends State<_MusicBoxVolume> {
     final p = _palette;
     final height = _size;
 
-    // The width is tweened explicitly — PressableSurface sizes itself with a
-    // plain SizedBox, so without this the hover expansion would snap instantly.
-    //
-    // The pill carries the raised face's own hover-lift and press-sink
-    // (interactive, with no onPressed of its own). Muting is the inner icon's
-    // GestureDetector — its tap recognizer goes through the gesture arena, so
-    // it doesn't fight the pill's bare pointer Listener — and the slider drives
-    // its own pointer handling. A press anywhere sinks the whole pill (it and
-    // its contents move down as one piece); releasing on the icon toggles mute,
-    // releasing on the slider commits the dragged volume.
+    // The width is tweened explicitly so hover expansion remains smooth even
+    // though the control is a flat decorated surface rather than a button.
+    // Muting remains the inner icon's gesture; the slider owns its own pointer
+    // handling, so removing the button press layer does not change interaction.
     return LayoutBuilder(
       builder: (context, constraints) {
         // Expand to the full available row width; fall back to the legacy fixed
@@ -362,18 +356,18 @@ class _MusicBoxVolumeState extends State<_MusicBoxVolume> {
               curve: Curves.easeOutCubic,
               tween: Tween(end: _expanded ? expandedWidth : height),
               builder: (context, width, child) {
-                return PressableSurface(
+                return SizedBox(
+                  key: const ValueKey<String>('music-box-volume-control'),
                   height: height,
                   width: width,
-                  enabled: true,
-                  interactive: true,
-                  borderRadius: UiRadii.md,
-                  padding: EdgeInsets.zero,
-                  backgroundColor: p.background,
-                  selectedBackgroundColor: p.background,
-                  borderColor: p.border,
-                  selectedBorderColor: p.border,
-                  child: child!,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: p.background,
+                      borderRadius: BorderRadius.circular(UiRadii.md),
+                      border: Border.all(color: p.border),
+                    ),
+                    child: child!,
+                  ),
                 );
               },
               child: Row(
@@ -395,9 +389,7 @@ class _MusicBoxVolumeState extends State<_MusicBoxVolume> {
   }
 }
 
-/// A bare, borderless tap target for the mute icon inside the volume pill — the
-/// pill itself supplies the raised face, so this only needs the icon and a
-/// click region.
+/// A bare, borderless tap target for the mute icon inside the volume pill.
 class _VolumeIconButton extends StatelessWidget {
   const _VolumeIconButton({
     required this.icon,
