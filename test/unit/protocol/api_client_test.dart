@@ -2897,6 +2897,190 @@ void main() {
     expect(state.enabled, isTrue);
     api.close();
   });
+
+  test(
+    'personal playlist endpoints parse paginated metadata and items',
+    () async {
+      var requests = 0;
+      final api = GangApiClient(
+        baseUrl: 'http://example.test/api/v1',
+        accessTokenProvider: ({bool forceRefresh = false}) async => 'token',
+        httpClient: MockClient((request) async {
+          requests += 1;
+          expect(request.method, 'GET');
+          expect(request.headers['authorization'], 'Bearer token');
+          if (requests == 1) {
+            expect(request.url.path, '/api/v1/me/music-box/playlists');
+            expect(request.url.queryParameters['page'], '1');
+            expect(request.url.queryParameters['page_size'], '50');
+            return http.Response(
+              jsonEncode({
+                'playlists': [
+                  {
+                    'id': 'mbp_1',
+                    'name': '夜晚',
+                    'description': '',
+                    'revision': 3,
+                    'item_count': 1,
+                    'created_at': '2026-07-31T01:00:00Z',
+                    'updated_at': '2026-07-31T01:05:00Z',
+                  },
+                ],
+                'pagination': {
+                  'page': 1,
+                  'page_size': 50,
+                  'total': 1,
+                  'has_more': false,
+                },
+                'limits': {'max_playlists': 50, 'max_playlist_items': 500},
+              }),
+              200,
+              headers: {'content-type': 'application/json; charset=utf-8'},
+            );
+          }
+          expect(request.url.path, '/api/v1/me/music-box/playlists/mbp_1');
+          expect(request.url.queryParameters['keyword'], '晴');
+          expect(request.url.queryParameters['source'], 'netease');
+          return http.Response(
+            jsonEncode({
+              'playlist': {
+                'id': 'mbp_1',
+                'name': '夜晚',
+                'description': '',
+                'revision': 3,
+                'item_count': 1,
+              },
+              'items': [
+                {
+                  'id': 'mbpi_1',
+                  'playlist_id': 'mbp_1',
+                  'track_id': 'track_1',
+                  'source': 'netease',
+                  'title': '晴天',
+                  'artists': ['周杰伦'],
+                  'duration_ms': 269000,
+                  'sort_order': 10,
+                },
+              ],
+              'pagination': {
+                'page': 1,
+                'page_size': 50,
+                'total': 1,
+                'has_more': false,
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }),
+      );
+
+      final playlists = await api.listPersonalMusicPlaylists();
+      final items = await api.getPersonalMusicPlaylist(
+        playlistId: 'mbp_1',
+        keyword: '晴',
+        source: 'netease',
+      );
+
+      expect(playlists.playlists.single.name, '夜晚');
+      expect(playlists.maxPlaylistItems, 500);
+      expect(items.items.single.title, '晴天');
+      expect(items.items.single.artists, ['周杰伦']);
+      api.close();
+    },
+  );
+
+  test(
+    'personal playlist mutations use scoped routes and request bodies',
+    () async {
+      final seen = <String>[];
+      final api = GangApiClient(
+        baseUrl: 'http://example.test/api/v1',
+        accessTokenProvider: ({bool forceRefresh = false}) async => 'token',
+        httpClient: MockClient((request) async {
+          seen.add('${request.method} ${request.url.path}');
+          switch ((request.method, request.url.path)) {
+            case ('POST', '/api/v1/me/music-box/playlists'):
+              expect(jsonDecode(request.body), {'name': '夜晚'});
+              return http.Response(
+                jsonEncode({
+                  'playlist': {
+                    'id': 'mbp_1',
+                    'name': '夜晚',
+                    'description': '',
+                    'revision': 1,
+                    'item_count': 0,
+                  },
+                }),
+                201,
+                headers: {'content-type': 'application/json; charset=utf-8'},
+              );
+            case ('POST', '/api/v1/me/music-box/playlists/mbp_1/items'):
+              expect(jsonDecode(request.body), {
+                'track_id': 'track_1',
+                'source': 'netease',
+                'title': '晴天',
+                'artists': ['周杰伦'],
+              });
+              return http.Response(
+                jsonEncode({
+                  'item': {
+                    'id': 'mbpi_1',
+                    'playlist_id': 'mbp_1',
+                    'track_id': 'track_1',
+                    'source': 'netease',
+                    'title': '晴天',
+                    'artists': ['周杰伦'],
+                    'sort_order': 10,
+                  },
+                }),
+                201,
+                headers: {'content-type': 'application/json; charset=utf-8'},
+              );
+            case ('PATCH', '/api/v1/me/music-box/playlists/mbp_1/items/order'):
+              expect(jsonDecode(request.body), {
+                'item_id': 'mbpi_1',
+                'direction': 'down',
+              });
+              return http.Response(jsonEncode({'ok': true}), 200);
+            case ('DELETE', '/api/v1/me/music-box/playlists/mbp_1/items'):
+              expect(jsonDecode(request.body), {
+                'item_ids': ['mbpi_1'],
+              });
+              return http.Response(jsonEncode({'ok': true, 'deleted': 1}), 200);
+            case ('DELETE', '/api/v1/me/music-box/playlists/mbp_1'):
+              return http.Response(jsonEncode({'ok': true}), 200);
+            default:
+              fail('unexpected request: ${request.method} ${request.url}');
+          }
+        }),
+      );
+
+      final playlist = await api.createPersonalMusicPlaylist(name: '夜晚');
+      final item = await api.addPersonalMusicPlaylistItem(
+        playlistId: playlist.id,
+        track: const MusicBoxSearchResult(
+          trackId: 'track_1',
+          name: '晴天',
+          artists: ['周杰伦'],
+          source: 'netease',
+        ),
+      );
+      await api.movePersonalMusicPlaylistItem(
+        playlistId: playlist.id,
+        itemId: item.id,
+        direction: 'down',
+      );
+      await api.deletePersonalMusicPlaylistItems(
+        playlistId: playlist.id,
+        itemIds: [item.id],
+      );
+      await api.deletePersonalMusicPlaylist(playlist.id);
+
+      expect(seen, hasLength(5));
+      api.close();
+    },
+  );
 }
 
 Map<String, Object?> _roomInviteJson({

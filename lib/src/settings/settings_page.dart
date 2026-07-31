@@ -22,12 +22,14 @@ import '../app/error_display.dart';
 import '../app/confirmation.dart';
 import '../app/language_preference.dart';
 import '../app/password_reset_controller.dart';
+import '../app/personal_music_playlists.dart';
 import '../app/settings_about.dart';
 import '../app/settings_controller.dart';
 import '../app/settings_shell_state.dart';
 import '../app/sticker_management.dart';
 import '../app/sticker_ordering.dart' as sticker_ordering;
 import '../app/sticker_uploads.dart';
+import '../app/music_box_display.dart';
 import '../live/audio_device_restorer.dart';
 import '../live/audio_device_service.dart';
 import '../live/audio_test_service.dart';
@@ -57,6 +59,7 @@ import '../ui/ui.dart';
 part 'settings_components.dart';
 part 'settings_profile_widgets.dart';
 part 'settings_audio_widgets.dart';
+part 'settings_music_playlists.dart';
 
 const _primaryDark = Color(0xFF14171D);
 const _primaryDarkLow = Color(0xFF181C24);
@@ -195,6 +198,8 @@ class _SettingsPageState extends State<SettingsPage>
   String _stickerFilterKeyword = '';
   String _stickerFilterMimeType = '';
   String? _stickerError;
+  int _playlistReloadToken = 0;
+  bool _loadingPlaylists = false;
   bool _obscureCurrentPassword = true;
   bool _obscureNewPassword = true;
   bool _obscureConfirmPassword = true;
@@ -279,6 +284,15 @@ class _SettingsPageState extends State<SettingsPage>
   }
 
   bool get _isManagingUser => _settingsController.isManagingUser;
+  PersonalMusicPlaylistsController get _musicPlaylistsController {
+    final api = widget.api;
+    return PersonalMusicPlaylistsController(
+      !_isManagingUser && api is PersonalMusicPlaylistApi
+          ? api as PersonalMusicPlaylistApi
+          : null,
+    );
+  }
+
   bool get _accountSuspended =>
       _user?.status?.trim().toLowerCase() == 'suspended';
 
@@ -1174,6 +1188,11 @@ class _SettingsPageState extends State<SettingsPage>
         break;
       case SettingsSection.stickers:
         await _loadStickers(forceReload: true);
+        break;
+      case SettingsSection.playlists:
+        if (mounted) {
+          setState(() => _playlistReloadToken += 1);
+        }
         break;
       case SettingsSection.security:
         await Future.wait([_loadAccount(), _loadSessions()]);
@@ -3575,6 +3594,7 @@ class _SettingsPageState extends State<SettingsPage>
       loadingStickers: _loadingStickers,
       loadingSessions: _loadingSessions,
       loadingVoice: _loading,
+      loadingPlaylists: _loadingPlaylists,
       loadingAbout: _loadingAbout || _checkingAppVersion,
     );
   }
@@ -3604,10 +3624,25 @@ class _SettingsPageState extends State<SettingsPage>
       SettingsSection.profile => _buildProfileContent(),
       SettingsSection.preferences => _buildPreferencesContent(),
       SettingsSection.stickers => _buildStickersContent(),
+      SettingsSection.playlists => _buildMusicPlaylistsContent(),
       SettingsSection.security => _buildSecurityContent(),
       SettingsSection.voice => _buildVoiceContent(),
       SettingsSection.about => _buildAboutContent(),
     };
+  }
+
+  Widget _buildMusicPlaylistsContent() {
+    return _PersonalMusicPlaylistsPanel(
+      controller: _musicPlaylistsController,
+      reloadToken: _playlistReloadToken,
+      unavailableMessage: _isManagingUser
+          ? '管理其他账号时不能编辑个人歌单'
+          : '我的歌单需要登录后从服务端读取',
+      onLoadingChanged: (loading) {
+        if (!mounted || loading == _loadingPlaylists) return;
+        setState(() => _loadingPlaylists = loading);
+      },
+    );
   }
 
   Widget _buildStickersContent() {

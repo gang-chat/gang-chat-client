@@ -71,6 +71,7 @@ void main() {
     expect(settingsSectionTitle(SettingsSection.security), '隐私和安全');
     expect(settingsSectionTitle(SettingsSection.voice), '语音和视频');
     expect(settingsSectionTitle(SettingsSection.stickers), '表情包管理');
+    expect(settingsSectionTitle(SettingsSection.playlists), '我的歌单');
     expect(settingsSectionTitle(SettingsSection.about), '关于Gang Chat');
   });
 
@@ -79,6 +80,18 @@ void main() {
   });
 
   test('settings section refreshing maps section to backing loads', () {
+    expect(
+      settingsSectionRefreshing(
+        section: SettingsSection.playlists,
+        loadingAccount: false,
+        loadingPreferences: false,
+        loadingStickers: false,
+        loadingSessions: false,
+        loadingVoice: false,
+        loadingPlaylists: true,
+      ),
+      isTrue,
+    );
     expect(
       settingsSectionRefreshing(
         section: SettingsSection.profile,

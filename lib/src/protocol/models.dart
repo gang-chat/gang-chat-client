@@ -2471,6 +2471,162 @@ class MusicBoxSearchResult {
   }
 }
 
+class PersonalMusicPlaylist {
+  const PersonalMusicPlaylist({
+    required this.id,
+    required this.name,
+    required this.description,
+    required this.revision,
+    required this.itemCount,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  final String id;
+  final String name;
+  final String description;
+  final int revision;
+  final int itemCount;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+
+  PersonalMusicPlaylist copyWith({int? itemCount, int? revision}) {
+    return PersonalMusicPlaylist(
+      id: id,
+      name: name,
+      description: description,
+      revision: revision ?? this.revision,
+      itemCount: itemCount ?? this.itemCount,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+    );
+  }
+
+  factory PersonalMusicPlaylist.fromJson(Map<String, Object?> json) {
+    return PersonalMusicPlaylist(
+      id: _stringFromJson(json, const ['id']) ?? '',
+      name: _stringFromJson(json, const ['name']) ?? '',
+      description: json['description']?.toString() ?? '',
+      revision: _intFromJson(json, const ['revision']) ?? 0,
+      itemCount: _intFromJson(json, const ['item_count']) ?? 0,
+      createdAt: _parseDateTime(json['created_at']),
+      updatedAt: _parseDateTime(json['updated_at']),
+    );
+  }
+}
+
+class PersonalMusicPlaylistItem {
+  const PersonalMusicPlaylistItem({
+    required this.id,
+    required this.playlistId,
+    required this.trackId,
+    required this.source,
+    required this.title,
+    required this.artists,
+    required this.durationMs,
+    required this.sortOrder,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String playlistId;
+  final String trackId;
+  final String source;
+  final String title;
+  final List<String> artists;
+  final int durationMs;
+  final int sortOrder;
+  final DateTime? createdAt;
+
+  factory PersonalMusicPlaylistItem.fromJson(Map<String, Object?> json) {
+    return PersonalMusicPlaylistItem(
+      id: _stringFromJson(json, const ['id']) ?? '',
+      playlistId: _stringFromJson(json, const ['playlist_id']) ?? '',
+      trackId: _stringFromJson(json, const ['track_id']) ?? '',
+      source: _stringFromJson(json, const ['source']) ?? '',
+      title: _stringFromJson(json, const ['title', 'name']) ?? '',
+      artists: (json['artists'] as List<Object?>? ?? const [])
+          .map((value) => value?.toString().trim() ?? '')
+          .where((value) => value.isNotEmpty)
+          .toList(),
+      durationMs: _intFromJson(json, const ['duration_ms']) ?? 0,
+      sortOrder: _intFromJson(json, const ['sort_order']) ?? 0,
+      createdAt: _parseDateTime(json['created_at']),
+    );
+  }
+}
+
+class PersonalMusicPlaylistPage {
+  const PersonalMusicPlaylistPage({
+    required this.playlists,
+    required this.page,
+    required this.pageSize,
+    required this.total,
+    required this.hasMore,
+    required this.maxPlaylists,
+    required this.maxPlaylistItems,
+  });
+
+  final List<PersonalMusicPlaylist> playlists;
+  final int page;
+  final int pageSize;
+  final int total;
+  final bool hasMore;
+  final int maxPlaylists;
+  final int maxPlaylistItems;
+
+  factory PersonalMusicPlaylistPage.fromJson(Map<String, Object?> json) {
+    final pagination = _nullableMap(json['pagination']);
+    final limits = _nullableMap(json['limits']);
+    return PersonalMusicPlaylistPage(
+      playlists: _listOfMaps(
+        json['playlists'],
+      ).map(PersonalMusicPlaylist.fromJson).toList(),
+      page: _intFromJson(pagination, const ['page']) ?? 1,
+      pageSize: _intFromJson(pagination, const ['page_size']) ?? 50,
+      total: _intFromJson(pagination, const ['total']) ?? 0,
+      hasMore: _boolFromJson(pagination, const ['has_more']) ?? false,
+      maxPlaylists: _intFromJson(limits, const ['max_playlists']) ?? 50,
+      maxPlaylistItems:
+          _intFromJson(limits, const ['max_playlist_items']) ?? 500,
+    );
+  }
+}
+
+class PersonalMusicPlaylistItemsPage {
+  const PersonalMusicPlaylistItemsPage({
+    required this.playlist,
+    required this.items,
+    required this.page,
+    required this.pageSize,
+    required this.total,
+    required this.hasMore,
+  });
+
+  final PersonalMusicPlaylist playlist;
+  final List<PersonalMusicPlaylistItem> items;
+  final int page;
+  final int pageSize;
+  final int total;
+  final bool hasMore;
+
+  factory PersonalMusicPlaylistItemsPage.fromJson(Map<String, Object?> json) {
+    final pagination = _nullableMap(json['pagination']);
+    return PersonalMusicPlaylistItemsPage(
+      playlist: PersonalMusicPlaylist.fromJson(
+        json['playlist']! as Map<String, Object?>,
+      ),
+      items: _listOfMaps(
+        json['items'],
+      ).map(PersonalMusicPlaylistItem.fromJson).toList(),
+      page: _intFromJson(pagination, const ['page']) ?? 1,
+      pageSize: _intFromJson(pagination, const ['page_size']) ?? 50,
+      total: _intFromJson(pagination, const ['total']) ?? 0,
+      hasMore: _boolFromJson(pagination, const ['has_more']) ?? false,
+    );
+  }
+}
+
 List<Map<String, Object?>> _listOfMaps(Object? value) {
   return (value as List<Object?>? ?? const [])
       .cast<Map<String, Object?>>()

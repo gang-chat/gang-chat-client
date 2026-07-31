@@ -39,6 +39,11 @@ class _SettingsNavigation extends StatelessWidget {
           icon: Icons.emoji_emotions_outlined,
         ),
         Segment(
+          value: SettingsSection.playlists,
+          label: '我的歌单',
+          icon: Icons.queue_music_outlined,
+        ),
+        Segment(
           value: SettingsSection.about,
           label: '关于Gang Chat',
           icon: Icons.info_outline,
