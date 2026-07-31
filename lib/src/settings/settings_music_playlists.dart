@@ -254,7 +254,12 @@ class _PersonalMusicPlaylistsPanelState
     if (_busy || _playlists.length >= _maxPlaylists) return;
     final name = await showDialog<String>(
       context: context,
-      builder: (context) => const _CreateMusicPlaylistDialog(),
+      builder: (context) => const _MusicPlaylistNameDialog(
+        title: '新建歌单',
+        icon: Icons.playlist_add,
+        confirmLabel: '创建',
+        confirmIcon: Icons.add,
+      ),
     );
     if (!mounted || name == null) return;
     setState(() {
@@ -268,6 +273,38 @@ class _PersonalMusicPlaylistsPanelState
       if (mounted) setState(() => _error = error.toString());
     } finally {
       if (mounted) setState(() => _creating = false);
+    }
+  }
+
+  Future<void> _renamePlaylist(PersonalMusicPlaylist playlist) async {
+    if (_playlistManagementBusy) return;
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => _MusicPlaylistNameDialog(
+        title: '重命名歌单',
+        icon: Icons.edit_outlined,
+        confirmLabel: '重命名',
+        confirmIcon: Icons.check,
+        initialName: playlist.name,
+      ),
+    );
+    if (!mounted || name == null || name == playlist.name) return;
+    setState(() {
+      _busyPlaylistIds.add(playlist.id);
+      _error = null;
+    });
+    try {
+      await widget.controller.renamePlaylist(
+        playlistId: playlist.id,
+        name: name,
+      );
+      await _loadPlaylists();
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) {
+        setState(() => _busyPlaylistIds.remove(playlist.id));
+      }
     }
   }
 
@@ -782,6 +819,7 @@ class _PersonalMusicPlaylistsPanelState
       children: [
         _SettingsGroup(
           title: '歌单管理',
+          spacing: 10,
           trailing: Text(
             _playlistFilterActive
                 ? '筛选 ${visiblePlaylists.length} / ${_playlists.length}'
@@ -938,6 +976,8 @@ class _PersonalMusicPlaylistsPanelState
                       playlistIndex < visiblePlaylists.length - 1,
                   onTap: () =>
                       _openOrSelectPlaylist(visiblePlaylists[playlistIndex]),
+                  onRename: () =>
+                      _renamePlaylist(visiblePlaylists[playlistIndex]),
                   onMoveUp: () =>
                       _movePlaylist(visiblePlaylists[playlistIndex], -1),
                   onMoveDown: () =>
@@ -960,6 +1000,7 @@ class _PersonalMusicPlaylistsPanelState
       children: [
         _SettingsGroup(
           title: playlist.name,
+          spacing: 10,
           trailing: Text(
             '${playlist.itemCount} / $_maxPlaylistItems 首',
             style: const TextStyle(
@@ -981,6 +1022,7 @@ class _PersonalMusicPlaylistsPanelState
         ),
         _SettingsGroup(
           title: '搜索添加',
+          spacing: 10,
           children: [
             SegmentedControl<String>(
               expanded: true,
@@ -1019,6 +1061,7 @@ class _PersonalMusicPlaylistsPanelState
         ),
         _SettingsGroup(
           title: '管理歌曲',
+          spacing: 10,
           trailing: Text(
             _filterActive ? '筛选 $_itemTotal 首' : '共 $_itemTotal 首',
             style: const TextStyle(
@@ -1147,6 +1190,7 @@ class _MusicPlaylistSummaryTile extends StatelessWidget {
     required this.canMoveUp,
     required this.canMoveDown,
     required this.onTap,
+    required this.onRename,
     required this.onMoveUp,
     required this.onMoveDown,
     required this.onDelete,
@@ -1159,6 +1203,7 @@ class _MusicPlaylistSummaryTile extends StatelessWidget {
   final bool canMoveUp;
   final bool canMoveDown;
   final VoidCallback onTap;
+  final VoidCallback onRename;
   final VoidCallback onMoveUp;
   final VoidCallback onMoveDown;
   final VoidCallback onDelete;
@@ -1235,6 +1280,12 @@ class _MusicPlaylistSummaryTile extends StatelessWidget {
       alignment: WrapAlignment.end,
       children: [
         ButtonIcon(
+          tooltip: '重命名',
+          onPressed: busy ? null : onRename,
+          icon: const Icon(Icons.edit_outlined),
+          size: 36,
+        ),
+        ButtonIcon(
           tooltip: '上移',
           onPressed: !busy && canMoveUp ? onMoveUp : null,
           icon: const Icon(Icons.arrow_upward),
@@ -1256,6 +1307,12 @@ class _MusicPlaylistSummaryTile extends StatelessWidget {
       ],
     );
     return _SettingsSubPanel(
+      key: ValueKey('personal-music-playlist-card-${playlist.id}'),
+      hoverable: true,
+      highlighted: selected,
+      mouseCursor: managing
+          ? SystemMouseCursors.basic
+          : SystemMouseCursors.click,
       child: LayoutBuilder(
         builder: (context, constraints) {
           if (managing && constraints.maxWidth < 420) {
@@ -1716,22 +1773,49 @@ class _MusicPlaylistFieldLabel extends StatelessWidget {
   }
 }
 
-class _CreateMusicPlaylistDialog extends StatefulWidget {
-  const _CreateMusicPlaylistDialog();
+class _MusicPlaylistNameDialog extends StatefulWidget {
+  const _MusicPlaylistNameDialog({
+    required this.title,
+    required this.icon,
+    required this.confirmLabel,
+    required this.confirmIcon,
+    this.initialName = '',
+  });
+
+  final String title;
+  final IconData icon;
+  final String confirmLabel;
+  final IconData confirmIcon;
+  final String initialName;
 
   @override
-  State<_CreateMusicPlaylistDialog> createState() =>
-      _CreateMusicPlaylistDialogState();
+  State<_MusicPlaylistNameDialog> createState() =>
+      _MusicPlaylistNameDialogState();
 }
 
-class _CreateMusicPlaylistDialogState
-    extends State<_CreateMusicPlaylistDialog> {
-  final _controller = TextEditingController();
+class _MusicPlaylistNameDialogState extends State<_MusicPlaylistNameDialog> {
+  late final TextEditingController _controller;
+  final FocusNode _focusNode = FocusNode();
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialName);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _focusNode.requestFocus();
+      _controller.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: _controller.text.length,
+      );
+    });
+  }
 
   @override
   void dispose() {
     _controller.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -1747,16 +1831,16 @@ class _CreateMusicPlaylistDialogState
   @override
   Widget build(BuildContext context) {
     return DialogFrame(
-      title: '新建歌单',
-      icon: Icons.playlist_add,
+      title: widget.title,
+      icon: widget.icon,
       adaptiveActions: [
         ResponsiveDialogAction(
           label: '取消',
           onPressed: () => Navigator.of(context).pop(),
         ),
         ResponsiveDialogAction(
-          label: '创建',
-          icon: Icons.add,
+          label: widget.confirmLabel,
+          icon: widget.confirmIcon,
           tone: ButtonTone.primary,
           onPressed: _submit,
         ),
@@ -1768,7 +1852,8 @@ class _CreateMusicPlaylistDialogState
           Input(
             key: const ValueKey('personal-music-playlist-name-input'),
             controller: _controller,
-            hintText: '歌单名称',
+            focusNode: _focusNode,
+            hintText: widget.initialName.isEmpty ? '歌单名称' : '',
             textInputAction: TextInputAction.done,
             onSubmitted: (_) => _submit(),
           ),

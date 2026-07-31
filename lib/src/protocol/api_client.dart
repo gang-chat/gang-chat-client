@@ -558,6 +558,11 @@ abstract interface class PersonalMusicPlaylistApi {
     required String name,
   });
 
+  Future<PersonalMusicPlaylist> renamePersonalMusicPlaylist({
+    required String playlistId,
+    required String name,
+  });
+
   Future<void> deletePersonalMusicPlaylist(String playlistId);
 
   Future<void> pinPersonalMusicPlaylists({required List<String> playlistIds});
@@ -2267,6 +2272,23 @@ class GangApiClient implements GangApi, PersonalMusicPlaylistApi {
     final decoded = await _sendJson((token) {
       return _httpClient.post(
         _uri('/me/music-box/playlists'),
+        headers: _headers(token),
+        body: encodeJsonBody({'name': name}),
+      );
+    });
+    return PersonalMusicPlaylist.fromJson(
+      decoded['playlist']! as Map<String, Object?>,
+    );
+  }
+
+  @override
+  Future<PersonalMusicPlaylist> renamePersonalMusicPlaylist({
+    required String playlistId,
+    required String name,
+  }) async {
+    final decoded = await _sendJson((token) {
+      return _httpClient.patch(
+        _uri('/me/music-box/playlists/$playlistId'),
         headers: _headers(token),
         body: encodeJsonBody({'name': name}),
       );

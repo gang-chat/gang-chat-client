@@ -43,6 +43,20 @@ class PersonalMusicPlaylistsController {
     return client.createPersonalMusicPlaylist(name: normalized);
   }
 
+  Future<PersonalMusicPlaylist?> renamePlaylist({
+    required String playlistId,
+    required String name,
+  }) {
+    final normalized = normalizedPersonalPlaylistName(name);
+    if (normalized == null) return Future.value();
+    final client = api;
+    if (client == null) return Future.value();
+    return client.renamePersonalMusicPlaylist(
+      playlistId: playlistId,
+      name: normalized,
+    );
+  }
+
   Future<void> deletePlaylist(String playlistId) {
     return api?.deletePersonalMusicPlaylist(playlistId) ?? Future.value();
   }

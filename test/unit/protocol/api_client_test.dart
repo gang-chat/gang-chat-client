@@ -3053,6 +3053,21 @@ void main() {
                 expect(body, {'playlist_id': 'mbp_1', 'direction': 'up'});
               }
               return http.Response(jsonEncode({'ok': true}), 200);
+            case ('PATCH', '/api/v1/me/music-box/playlists/mbp_1'):
+              expect(jsonDecode(request.body), {'name': '夜间精选'});
+              return http.Response(
+                jsonEncode({
+                  'playlist': {
+                    'id': 'mbp_1',
+                    'name': '夜间精选',
+                    'description': '',
+                    'revision': 2,
+                    'item_count': 1,
+                  },
+                }),
+                200,
+                headers: {'content-type': 'application/json; charset=utf-8'},
+              );
             case ('DELETE', '/api/v1/me/music-box/playlists/mbp_1/items'):
               expect(jsonDecode(request.body), {
                 'item_ids': ['mbpi_1'],
@@ -3086,13 +3101,18 @@ void main() {
         playlistId: playlist.id,
         direction: 'up',
       );
+      final renamed = await api.renamePersonalMusicPlaylist(
+        playlistId: playlist.id,
+        name: '夜间精选',
+      );
       await api.deletePersonalMusicPlaylistItems(
         playlistId: playlist.id,
         itemIds: [item.id],
       );
       await api.deletePersonalMusicPlaylist(playlist.id);
 
-      expect(seen, hasLength(7));
+      expect(renamed.name, '夜间精选');
+      expect(seen, hasLength(8));
       api.close();
     },
   );

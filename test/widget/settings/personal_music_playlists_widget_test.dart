@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -183,6 +184,7 @@ void main() {
       expect(find.text('分享'), findsOneWidget);
       expect(find.text('置顶'), findsOneWidget);
       expect(find.text('全选'), findsOneWidget);
+      expect(find.byTooltip('重命名'), findsOneWidget);
       expect(find.byTooltip('上移'), findsOneWidget);
       expect(find.byTooltip('下移'), findsOneWidget);
       expect(find.byTooltip('删除'), findsOneWidget);
@@ -198,6 +200,21 @@ void main() {
       await tester.tap(find.text('夜晚'));
       await tester.pumpAndSettle();
       expect(find.text('搜索添加'), findsNothing);
+      final selectedCard = find.byKey(
+        const ValueKey('personal-music-playlist-card-mbp_1'),
+      );
+      final selectedPanel = tester.widget<AnimatedContainer>(
+        find
+            .descendant(
+              of: selectedCard,
+              matching: find.byType(AnimatedContainer),
+            )
+            .first,
+      );
+      expect(
+        (selectedPanel.decoration as BoxDecoration).color,
+        ui.UiColors.selected,
+      );
 
       final deleteButton = tester.widget<ui.Button>(
         find.byKey(const ValueKey('delete-selected-personal-music-playlists')),
@@ -296,6 +313,93 @@ void main() {
     ]);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('playlist rename dialog starts with the current name', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(720, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final api = _FakePersonalPlaylistApi();
+
+    await _pumpPlaylistSettings(tester, api);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('管理'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('重命名'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('重命名歌单'), findsOneWidget);
+    final nameInput = find.byKey(
+      const ValueKey('personal-music-playlist-name-input'),
+    );
+    expect(tester.widget<ui.Input>(nameInput).controller?.text, '夜晚');
+
+    await tester.enterText(nameInput, '夜间精选');
+    await tester.tap(find.text('重命名'));
+    await tester.pumpAndSettle();
+
+    expect(api.renameRequests, ['mbp_1:夜间精选']);
+    expect(find.text('夜间精选'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('playlist cards use hover feedback and consistent spacing', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(720, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final api = _FakePersonalPlaylistApi(
+      playlists: const [
+        _FakePersonalPlaylistApi.playlist,
+        PersonalMusicPlaylist(
+          id: 'mbp_2',
+          name: '白天',
+          description: '',
+          revision: 1,
+          itemCount: 2,
+          createdAt: null,
+          updatedAt: null,
+        ),
+      ],
+    );
+
+    await _pumpPlaylistSettings(tester, api);
+    await tester.pumpAndSettle();
+
+    final firstCard = find.byKey(
+      const ValueKey('personal-music-playlist-card-mbp_1'),
+    );
+    final secondCard = find.byKey(
+      const ValueKey('personal-music-playlist-card-mbp_2'),
+    );
+    expect(firstCard, findsOneWidget);
+    expect(secondCard, findsOneWidget);
+    expect(
+      tester.getRect(secondCard).top - tester.getRect(firstCard).bottom,
+      greaterThanOrEqualTo(9),
+    );
+
+    final animatedPanel = find
+        .descendant(of: firstCard, matching: find.byType(AnimatedContainer))
+        .first;
+    final before = tester.widget<AnimatedContainer>(animatedPanel);
+    final beforeDecoration = before.decoration as BoxDecoration;
+    expect(beforeDecoration.color, isNot(ui.UiColors.selected));
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer(location: tester.getCenter(firstCard));
+    await tester.pumpAndSettle();
+
+    final hovered = tester.widget<AnimatedContainer>(animatedPanel);
+    final hoveredDecoration = hovered.decoration as BoxDecoration;
+    expect(hoveredDecoration.color, ui.UiColors.selected);
+    expect(
+      (hoveredDecoration.border! as Border).top.color,
+      ui.UiColors.selectedBorder,
+    );
+    expect(tester.takeException(), isNull);
+  });
 }
 
 Future<void> _pumpPlaylistSettings(
@@ -346,6 +450,7 @@ class _FakePersonalPlaylistApi implements GangApi, PersonalMusicPlaylistApi {
   final List<PersonalMusicPlaylist> playlists;
   final List<List<String>> pinRequests = [];
   final List<String> moveRequests = [];
+  final List<String> renameRequests = [];
 
   @override
   Future<PersonalMusicPlaylistPage> listPersonalMusicPlaylists({
@@ -398,6 +503,28 @@ class _FakePersonalPlaylistApi implements GangApi, PersonalMusicPlaylistApi {
     required String name,
   }) async {
     return playlist;
+  }
+
+  @override
+  Future<PersonalMusicPlaylist> renamePersonalMusicPlaylist({
+    required String playlistId,
+    required String name,
+  }) async {
+    renameRequests.add('$playlistId:$name');
+    final index = playlists.indexWhere((playlist) => playlist.id == playlistId);
+    if (index < 0) return playlist;
+    final current = playlists[index];
+    final renamed = PersonalMusicPlaylist(
+      id: current.id,
+      name: name,
+      description: current.description,
+      revision: current.revision + 1,
+      itemCount: current.itemCount,
+      createdAt: current.createdAt,
+      updatedAt: current.updatedAt,
+    );
+    playlists[index] = renamed;
+    return renamed;
   }
 
   @override

@@ -59,40 +59,75 @@ class _SettingsGroup extends StatelessWidget {
     required this.children,
     this.trailing,
     this.danger = false,
+    this.spacing = 0,
   });
 
   final String title;
   final List<Widget> children;
   final Widget? trailing;
   final bool danger;
+  final double spacing;
 
   @override
   Widget build(BuildContext context) {
-    // 复用统一的分区模版;children 自带手写间距,故关闭自动间距。
+    // 默认保留既有手写间距；需要统一间距的页面可显式开启。
     return SettingsCard(
       title: title,
       trailing: trailing,
       danger: danger,
-      spacing: 0,
+      spacing: spacing,
       children: children,
     );
   }
 }
 
-class _SettingsSubPanel extends StatelessWidget {
-  const _SettingsSubPanel({required this.child});
+class _SettingsSubPanel extends StatefulWidget {
+  const _SettingsSubPanel({
+    super.key,
+    required this.child,
+    this.hoverable = false,
+    this.highlighted = false,
+    this.mouseCursor,
+  });
 
   final Widget child;
+  final bool hoverable;
+  final bool highlighted;
+  final MouseCursor? mouseCursor;
+
+  @override
+  State<_SettingsSubPanel> createState() => _SettingsSubPanelState();
+}
+
+class _SettingsSubPanelState extends State<_SettingsSubPanel> {
+  bool _hovered = false;
+
+  void _setHovered(bool hovered) {
+    if (!widget.hoverable || _hovered == hovered) return;
+    setState(() => _hovered = hovered);
+  }
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
+    final highlighted = widget.highlighted || (widget.hoverable && _hovered);
+    final panel = AnimatedContainer(
+      duration: const Duration(milliseconds: 90),
+      curve: Curves.easeOutCubic,
       decoration: BoxDecoration(
-        color: _primaryDark,
+        color: highlighted ? UiColors.selected : _primaryDark,
         borderRadius: BorderRadius.circular(UiRadii.md),
-        border: Border.all(color: _borderColor),
+        border: Border.all(
+          color: highlighted ? UiColors.selectedBorder : _borderColor,
+        ),
       ),
-      child: Padding(padding: const EdgeInsets.all(14), child: child),
+      child: Padding(padding: const EdgeInsets.all(14), child: widget.child),
+    );
+    if (!widget.hoverable) return panel;
+    return MouseRegion(
+      cursor: widget.mouseCursor ?? MouseCursor.defer,
+      onEnter: (_) => _setHovered(true),
+      onExit: (_) => _setHovered(false),
+      child: panel,
     );
   }
 }
