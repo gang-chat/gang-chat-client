@@ -47,6 +47,25 @@ class PersonalMusicPlaylistsController {
     return api?.deletePersonalMusicPlaylist(playlistId) ?? Future.value();
   }
 
+  Future<void> pinPlaylists(List<String> playlistIds) {
+    final ids = uniquePersonalPlaylistIds(playlistIds);
+    if (ids.isEmpty) return Future.value();
+    return api?.pinPersonalMusicPlaylists(playlistIds: ids) ?? Future.value();
+  }
+
+  Future<void> movePlaylist({required String playlistId, required int delta}) {
+    if (delta != -1 && delta != 1) {
+      return Future.error(
+        ArgumentError.value(delta, 'delta', 'must be -1 or 1'),
+      );
+    }
+    return api?.movePersonalMusicPlaylist(
+          playlistId: playlistId,
+          direction: delta < 0 ? 'up' : 'down',
+        ) ??
+        Future.value();
+  }
+
   Future<PersonalMusicPlaylistItemsPage?> loadItems({
     required String playlistId,
     int page = 1,
@@ -133,6 +152,14 @@ String? normalizedPersonalPlaylistName(String value) {
 }
 
 List<String> uniquePersonalPlaylistItemIds(Iterable<String> values) {
+  return _uniqueNonEmptyStrings(values);
+}
+
+List<String> uniquePersonalPlaylistIds(Iterable<String> values) {
+  return _uniqueNonEmptyStrings(values);
+}
+
+List<String> _uniqueNonEmptyStrings(Iterable<String> values) {
   final result = <String>[];
   final seen = <String>{};
   for (final value in values) {
@@ -245,6 +272,29 @@ Map<String, int> personalPlaylistSelectionNumbers(
     for (final entry in selectedPlaylistIds.asMap().entries)
       entry.value: entry.key + 1,
   };
+}
+
+List<String>? personalPlaylistOrderWithSelectionPinnedToFront({
+  required List<PersonalMusicPlaylist> playlists,
+  required List<String> selectedPlaylistIds,
+}) {
+  final currentOrder = [for (final playlist in playlists) playlist.id];
+  final currentSet = currentOrder.toSet();
+  final selectedOrder = [
+    for (final playlistId in uniquePersonalPlaylistIds(selectedPlaylistIds))
+      if (currentSet.contains(playlistId)) playlistId,
+  ];
+  if (selectedOrder.isEmpty) return null;
+  final selectedSet = selectedOrder.toSet();
+  final nextOrder = [
+    ...selectedOrder,
+    for (final playlistId in currentOrder)
+      if (!selectedSet.contains(playlistId)) playlistId,
+  ];
+  for (var index = 0; index < currentOrder.length; index += 1) {
+    if (currentOrder[index] != nextOrder[index]) return nextOrder;
+  }
+  return null;
 }
 
 String personalPlaylistArtistsLabel(List<String> artists) {

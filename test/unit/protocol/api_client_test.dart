@@ -3043,6 +3043,16 @@ void main() {
                 'direction': 'down',
               });
               return http.Response(jsonEncode({'ok': true}), 200);
+            case ('PATCH', '/api/v1/me/music-box/playlists/order'):
+              final body = jsonDecode(request.body) as Map<String, dynamic>;
+              if (body.containsKey('playlist_ids')) {
+                expect(body, {
+                  'playlist_ids': ['mbp_1', 'mbp_2'],
+                });
+              } else {
+                expect(body, {'playlist_id': 'mbp_1', 'direction': 'up'});
+              }
+              return http.Response(jsonEncode({'ok': true}), 200);
             case ('DELETE', '/api/v1/me/music-box/playlists/mbp_1/items'):
               expect(jsonDecode(request.body), {
                 'item_ids': ['mbpi_1'],
@@ -3071,13 +3081,18 @@ void main() {
         itemId: item.id,
         direction: 'down',
       );
+      await api.pinPersonalMusicPlaylists(playlistIds: [playlist.id, 'mbp_2']);
+      await api.movePersonalMusicPlaylist(
+        playlistId: playlist.id,
+        direction: 'up',
+      );
       await api.deletePersonalMusicPlaylistItems(
         playlistId: playlist.id,
         itemIds: [item.id],
       );
       await api.deletePersonalMusicPlaylist(playlist.id);
 
-      expect(seen, hasLength(5));
+      expect(seen, hasLength(7));
       api.close();
     },
   );

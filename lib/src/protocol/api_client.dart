@@ -560,6 +560,13 @@ abstract interface class PersonalMusicPlaylistApi {
 
   Future<void> deletePersonalMusicPlaylist(String playlistId);
 
+  Future<void> pinPersonalMusicPlaylists({required List<String> playlistIds});
+
+  Future<void> movePersonalMusicPlaylist({
+    required String playlistId,
+    required String direction,
+  });
+
   Future<PersonalMusicPlaylistItemsPage> getPersonalMusicPlaylist({
     required String playlistId,
     int page = 1,
@@ -2275,6 +2282,36 @@ class GangApiClient implements GangApi, PersonalMusicPlaylistApi {
       return _httpClient.delete(
         _uri('/me/music-box/playlists/$playlistId'),
         headers: _headers(token),
+      );
+    });
+  }
+
+  @override
+  Future<void> pinPersonalMusicPlaylists({
+    required List<String> playlistIds,
+  }) async {
+    await _sendJson((token) {
+      return _httpClient.patch(
+        _uri('/me/music-box/playlists/order'),
+        headers: _headers(token),
+        body: encodeJsonBody({'playlist_ids': playlistIds}),
+      );
+    });
+  }
+
+  @override
+  Future<void> movePersonalMusicPlaylist({
+    required String playlistId,
+    required String direction,
+  }) async {
+    await _sendJson((token) {
+      return _httpClient.patch(
+        _uri('/me/music-box/playlists/order'),
+        headers: _headers(token),
+        body: encodeJsonBody({
+          'playlist_id': playlistId,
+          'direction': direction,
+        }),
       );
     });
   }

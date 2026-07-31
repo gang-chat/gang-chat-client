@@ -46,9 +46,8 @@ void main() {
         expect(find.text('歌单管理'), findsOneWidget);
         expect(find.text('夜晚'), findsOneWidget);
         expect(find.text('新建歌单'), findsOneWidget);
-        expect(find.text('批量管理'), findsOneWidget);
+        expect(find.text('管理'), findsOneWidget);
         expect(find.text('筛选'), findsOneWidget);
-        expect(find.text('管理'), findsNothing);
         expect(find.text('删除'), findsNothing);
         expect(
           find.byKey(const ValueKey('create-personal-music-playlist')),
@@ -177,11 +176,24 @@ void main() {
       await _pumpPlaylistSettings(tester, api);
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('批量管理'));
+      await tester.tap(find.text('管理'));
       await tester.pumpAndSettle();
       expect(find.text('取消管理'), findsOneWidget);
       expect(find.text('删除'), findsOneWidget);
+      expect(find.text('分享'), findsOneWidget);
+      expect(find.text('置顶'), findsOneWidget);
       expect(find.text('全选'), findsOneWidget);
+      expect(find.byTooltip('上移'), findsOneWidget);
+      expect(find.byTooltip('下移'), findsOneWidget);
+      expect(find.byTooltip('删除'), findsOneWidget);
+      expect(
+        tester
+            .widget<ui.Button>(
+              find.byKey(const ValueKey('share-personal-music-playlists')),
+            )
+            .onPressed,
+        isNull,
+      );
 
       await tester.tap(find.text('夜晚'));
       await tester.pumpAndSettle();
@@ -192,9 +204,21 @@ void main() {
       );
       expect(deleteButton.onPressed, isNotNull);
 
+      await tester.tap(find.byTooltip('删除'));
+      await tester.pumpAndSettle();
+      expect(find.text('删除歌单'), findsOneWidget);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+
       await tester.tap(find.text('筛选'));
       await tester.pumpAndSettle();
       expect(find.text('歌曲数量'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (widget) => widget is ui.Input && widget.hintText == '',
+        ),
+        findsOneWidget,
+      );
       await tester.tap(find.text('空歌单'));
       await tester.tap(find.text('确认'));
       await tester.pumpAndSettle();
@@ -204,6 +228,74 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('batch pin follows card selection order', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(720, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final api = _FakePersonalPlaylistApi(
+      playlists: const [
+        _FakePersonalPlaylistApi.playlist,
+        PersonalMusicPlaylist(
+          id: 'mbp_2',
+          name: '白天',
+          description: '',
+          revision: 1,
+          itemCount: 2,
+          createdAt: null,
+          updatedAt: null,
+        ),
+        PersonalMusicPlaylist(
+          id: 'mbp_3',
+          name: '清晨',
+          description: '',
+          revision: 1,
+          itemCount: 3,
+          createdAt: null,
+          updatedAt: null,
+        ),
+      ],
+    );
+
+    await _pumpPlaylistSettings(tester, api);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('管理'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('清晨'));
+    await tester.tap(find.text('白天'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('pin-selected-personal-music-playlists')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(api.pinRequests, [
+      ['mbp_3', 'mbp_2'],
+    ]);
+    expect(api.playlists.map((playlist) => playlist.id), [
+      'mbp_3',
+      'mbp_2',
+      'mbp_1',
+    ]);
+    expect(
+      tester.getTopLeft(find.text('清晨')).dy,
+      lessThan(tester.getTopLeft(find.text('白天')).dy),
+    );
+    expect(
+      tester.getTopLeft(find.text('白天')).dy,
+      lessThan(tester.getTopLeft(find.text('夜晚')).dy),
+    );
+
+    await tester.tap(find.byTooltip('下移').first);
+    await tester.pumpAndSettle();
+    expect(api.moveRequests, ['mbp_3:down']);
+    expect(api.playlists.map((playlist) => playlist.id), [
+      'mbp_2',
+      'mbp_3',
+      'mbp_1',
+    ]);
+    expect(tester.takeException(), isNull);
+  });
 }
 
 Future<void> _pumpPlaylistSettings(
@@ -228,7 +320,12 @@ Future<void> _pumpPlaylistSettings(
 }
 
 class _FakePersonalPlaylistApi implements GangApi, PersonalMusicPlaylistApi {
-  _FakePersonalPlaylistApi({this.onSearch});
+  _FakePersonalPlaylistApi({
+    this.onSearch,
+    List<PersonalMusicPlaylist>? playlists,
+  }) : playlists = List<PersonalMusicPlaylist>.of(
+         playlists ?? const [playlist],
+       );
 
   static const playlist = PersonalMusicPlaylist(
     id: 'mbp_1',
@@ -246,17 +343,20 @@ class _FakePersonalPlaylistApi implements GangApi, PersonalMusicPlaylistApi {
   )?
   onSearch;
   final List<String> searchRequests = [];
+  final List<PersonalMusicPlaylist> playlists;
+  final List<List<String>> pinRequests = [];
+  final List<String> moveRequests = [];
 
   @override
   Future<PersonalMusicPlaylistPage> listPersonalMusicPlaylists({
     int page = 1,
     int pageSize = 50,
   }) async {
-    return const PersonalMusicPlaylistPage(
-      playlists: [playlist],
+    return PersonalMusicPlaylistPage(
+      playlists: List<PersonalMusicPlaylist>.of(playlists),
       page: 1,
       pageSize: 50,
-      total: 1,
+      total: playlists.length,
       hasMore: false,
       maxPlaylists: 50,
       maxPlaylistItems: 500,
@@ -301,7 +401,41 @@ class _FakePersonalPlaylistApi implements GangApi, PersonalMusicPlaylistApi {
   }
 
   @override
-  Future<void> deletePersonalMusicPlaylist(String playlistId) async {}
+  Future<void> deletePersonalMusicPlaylist(String playlistId) async {
+    playlists.removeWhere((playlist) => playlist.id == playlistId);
+  }
+
+  @override
+  Future<void> pinPersonalMusicPlaylists({
+    required List<String> playlistIds,
+  }) async {
+    pinRequests.add(List<String>.of(playlistIds));
+    final selected = <PersonalMusicPlaylist>[];
+    for (final playlistId in playlistIds) {
+      final index = playlists.indexWhere(
+        (playlist) => playlist.id == playlistId,
+      );
+      if (index >= 0) selected.add(playlists[index]);
+    }
+    final selectedIDs = playlistIds.toSet();
+    playlists
+      ..removeWhere((playlist) => selectedIDs.contains(playlist.id))
+      ..insertAll(0, selected);
+  }
+
+  @override
+  Future<void> movePersonalMusicPlaylist({
+    required String playlistId,
+    required String direction,
+  }) async {
+    moveRequests.add('$playlistId:$direction');
+    final from = playlists.indexWhere((playlist) => playlist.id == playlistId);
+    final delta = direction == 'up' ? -1 : 1;
+    final to = from + delta;
+    if (from < 0 || to < 0 || to >= playlists.length) return;
+    final moving = playlists.removeAt(from);
+    playlists.insert(to, moving);
+  }
 
   @override
   Future<List<MusicBoxSearchResult>> searchPersonalMusicPlaylistTracks({

@@ -135,4 +135,58 @@ void main() {
     });
     expect(cleared, ['hidden']);
   });
+
+  test('batch pin follows selection order and preserves unselected order', () {
+    const playlists = [
+      PersonalMusicPlaylist(
+        id: 'first',
+        name: '一',
+        description: '',
+        revision: 1,
+        itemCount: 0,
+        createdAt: null,
+        updatedAt: null,
+      ),
+      PersonalMusicPlaylist(
+        id: 'second',
+        name: '二',
+        description: '',
+        revision: 1,
+        itemCount: 0,
+        createdAt: null,
+        updatedAt: null,
+      ),
+      PersonalMusicPlaylist(
+        id: 'third',
+        name: '三',
+        description: '',
+        revision: 1,
+        itemCount: 0,
+        createdAt: null,
+        updatedAt: null,
+      ),
+    ];
+
+    expect(
+      personalPlaylistOrderWithSelectionPinnedToFront(
+        playlists: playlists,
+        selectedPlaylistIds: ['third', 'second'],
+      ),
+      ['third', 'second', 'first'],
+    );
+    expect(
+      personalPlaylistOrderWithSelectionPinnedToFront(
+        playlists: playlists,
+        selectedPlaylistIds: ['first', 'second'],
+      ),
+      isNull,
+    );
+    expect(
+      personalPlaylistOrderWithSelectionPinnedToFront(
+        playlists: playlists,
+        selectedPlaylistIds: ['missing', ' third ', 'third'],
+      ),
+      ['third', 'first', 'second'],
+    );
+  });
 }

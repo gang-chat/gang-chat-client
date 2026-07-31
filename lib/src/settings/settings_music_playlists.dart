@@ -48,10 +48,12 @@ class _PersonalMusicPlaylistsPanelState
   bool _searching = false;
   bool _creating = false;
   bool _deletingPlaylists = false;
+  bool _pinningPlaylists = false;
   bool _deletingItems = false;
   bool _managingPlaylists = false;
   bool _managingItems = false;
   String? _error;
+  final Set<String> _busyPlaylistIds = {};
   final Set<String> _busyTrackKeys = {};
   final Set<String> _busyItemIds = {};
   int _loadGeneration = 0;
@@ -68,7 +70,11 @@ class _PersonalMusicPlaylistsPanelState
   );
 
   bool get _playlistManagementBusy =>
-      _loading || _creating || _deletingPlaylists;
+      _loading ||
+      _creating ||
+      _deletingPlaylists ||
+      _pinningPlaylists ||
+      _busyPlaylistIds.isNotEmpty;
 
   bool get _busy =>
       _loading ||
@@ -76,6 +82,8 @@ class _PersonalMusicPlaylistsPanelState
       _loadingMore ||
       _creating ||
       _deletingPlaylists ||
+      _pinningPlaylists ||
+      _busyPlaylistIds.isNotEmpty ||
       _deletingItems;
 
   @override
@@ -357,6 +365,77 @@ class _PersonalMusicPlaylistsPanelState
         _error = '已删除 $deletedCount 个歌单，${failedIDs.length} 个删除失败：$firstError';
       }
     });
+  }
+
+  Future<void> _pinSelectedPlaylists() async {
+    if (_playlistManagementBusy ||
+        personalPlaylistOrderWithSelectionPinnedToFront(
+              playlists: _playlists,
+              selectedPlaylistIds: _selectedPlaylistIds,
+            ) ==
+            null) {
+      return;
+    }
+    final selectedIDs = List<String>.of(_selectedPlaylistIds);
+    setState(() {
+      _pinningPlaylists = true;
+      _error = null;
+    });
+    try {
+      await widget.controller.pinPlaylists(selectedIDs);
+      await _loadPlaylists();
+      if (mounted) setState(() => _selectedPlaylistIds = const []);
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _pinningPlaylists = false);
+    }
+  }
+
+  Future<void> _movePlaylist(PersonalMusicPlaylist playlist, int delta) async {
+    if (_playlistManagementBusy || _playlistFilterActive) return;
+    setState(() {
+      _busyPlaylistIds.add(playlist.id);
+      _error = null;
+    });
+    try {
+      await widget.controller.movePlaylist(
+        playlistId: playlist.id,
+        delta: delta,
+      );
+      await _loadPlaylists();
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _busyPlaylistIds.remove(playlist.id));
+    }
+  }
+
+  Future<void> _deleteSinglePlaylist(PersonalMusicPlaylist playlist) async {
+    if (_playlistManagementBusy) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => StickerConfirmDialog(
+        title: '删除歌单',
+        body: '确定删除“${playlist.name}”吗？歌单中的歌曲记录也会一并删除。',
+        confirmLabel: '删除',
+        confirmIcon: Icons.delete_outline,
+        danger: true,
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+    setState(() {
+      _busyPlaylistIds.add(playlist.id);
+      _error = null;
+    });
+    try {
+      await widget.controller.deletePlaylist(playlist.id);
+      await _loadPlaylists();
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _busyPlaylistIds.remove(playlist.id));
+    }
   }
 
   void _openOrSelectPlaylist(PersonalMusicPlaylist playlist) {
@@ -693,6 +772,12 @@ class _PersonalMusicPlaylistsPanelState
       selectedPlaylistIds: _selectedPlaylistIds,
       visiblePlaylists: visiblePlaylists,
     );
+    final canPinSelection =
+        personalPlaylistOrderWithSelectionPinnedToFront(
+          playlists: _playlists,
+          selectedPlaylistIds: _selectedPlaylistIds,
+        ) !=
+        null;
     return SettingsList(
       children: [
         _SettingsGroup(
@@ -743,7 +828,7 @@ class _PersonalMusicPlaylistsPanelState
                   ),
                 ),
                 StickerActionGridEntry(
-                  label: _managingPlaylists ? '取消管理' : '批量管理',
+                  label: _managingPlaylists ? '取消管理' : '管理',
                   button: Button(
                     key: const ValueKey('manage-personal-music-playlists'),
                     onPressed: _playlistManagementBusy
@@ -757,7 +842,7 @@ class _PersonalMusicPlaylistsPanelState
                       _managingPlaylists ? Icons.close : Icons.checklist_rtl,
                     ),
                     width: double.infinity,
-                    child: Text(_managingPlaylists ? '取消管理' : '批量管理'),
+                    child: Text(_managingPlaylists ? '取消管理' : '管理'),
                   ),
                 ),
                 StickerActionGridEntry(
@@ -773,6 +858,33 @@ class _PersonalMusicPlaylistsPanelState
                     child: const Text('筛选'),
                   ),
                 ),
+                if (_managingPlaylists)
+                  StickerActionGridEntry(
+                    label: '分享',
+                    button: const Button(
+                      key: ValueKey('share-personal-music-playlists'),
+                      onPressed: null,
+                      icon: Icon(Icons.share_outlined),
+                      width: double.infinity,
+                      child: Text('分享'),
+                    ),
+                  ),
+                if (_managingPlaylists)
+                  StickerActionGridEntry(
+                    label: '置顶',
+                    button: Button(
+                      key: const ValueKey(
+                        'pin-selected-personal-music-playlists',
+                      ),
+                      onPressed: !_playlistManagementBusy && canPinSelection
+                          ? _pinSelectedPlaylists
+                          : null,
+                      loading: _pinningPlaylists,
+                      icon: const Icon(Icons.vertical_align_top),
+                      width: double.infinity,
+                      child: const Text('置顶'),
+                    ),
+                  ),
                 if (_managingPlaylists)
                   StickerActionGridEntry(
                     label: allVisibleSelected ? '取消全选' : '全选',
@@ -809,13 +921,29 @@ class _PersonalMusicPlaylistsPanelState
             else if (visiblePlaylists.isEmpty)
               const _SettingsEmptyState(text: '没有符合筛选条件的歌单')
             else
-              for (final playlist in visiblePlaylists)
+              for (
+                var playlistIndex = 0;
+                playlistIndex < visiblePlaylists.length;
+                playlistIndex++
+              )
                 _MusicPlaylistSummaryTile(
-                  playlist: playlist,
+                  playlist: visiblePlaylists[playlistIndex],
                   managing: _managingPlaylists,
-                  selectionNumber: selectionNumbers[playlist.id],
+                  selectionNumber:
+                      selectionNumbers[visiblePlaylists[playlistIndex].id],
                   busy: _playlistManagementBusy,
-                  onTap: () => _openOrSelectPlaylist(playlist),
+                  canMoveUp: !_playlistFilterActive && playlistIndex > 0,
+                  canMoveDown:
+                      !_playlistFilterActive &&
+                      playlistIndex < visiblePlaylists.length - 1,
+                  onTap: () =>
+                      _openOrSelectPlaylist(visiblePlaylists[playlistIndex]),
+                  onMoveUp: () =>
+                      _movePlaylist(visiblePlaylists[playlistIndex], -1),
+                  onMoveDown: () =>
+                      _movePlaylist(visiblePlaylists[playlistIndex], 1),
+                  onDelete: () =>
+                      _deleteSinglePlaylist(visiblePlaylists[playlistIndex]),
                 ),
           ],
         ),
@@ -1016,90 +1144,137 @@ class _MusicPlaylistSummaryTile extends StatelessWidget {
     required this.managing,
     required this.selectionNumber,
     required this.busy,
+    required this.canMoveUp,
+    required this.canMoveDown,
     required this.onTap,
+    required this.onMoveUp,
+    required this.onMoveDown,
+    required this.onDelete,
   });
 
   final PersonalMusicPlaylist playlist;
   final bool managing;
   final int? selectionNumber;
   final bool busy;
+  final bool canMoveUp;
+  final bool canMoveDown;
   final VoidCallback onTap;
+  final VoidCallback onMoveUp;
+  final VoidCallback onMoveDown;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
     final selected = selectionNumber != null;
-    return PressableSurface(
-      onPressed: busy ? null : onTap,
-      enabled: !busy,
-      cancelTouchPressOnDrag: true,
-      selected: selected,
-      height: 76,
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      backgroundColor: _primaryDark,
-      selectedBackgroundColor: UiColors.selected,
-      pressedBackgroundColor: _primaryDarkLow,
-      borderColor: _borderColor,
-      selectedBorderColor: UiColors.selectedBorder,
-      hoverLift: 2,
-      pressDepth: 3,
-      baseDepth: 4,
-      child: Row(
-        children: [
-          if (managing) ...[
-            Icon(
-              selected ? Icons.check_box : Icons.check_box_outline_blank,
-              color: selected ? _cyan : _textMuted,
-              size: 20,
+    final information = InkWell(
+      onTap: busy ? null : onTap,
+      borderRadius: BorderRadius.circular(UiRadii.md),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 5),
+        child: Row(
+          children: [
+            if (managing) ...[
+              Icon(
+                selected ? Icons.check_box : Icons.check_box_outline_blank,
+                color: selected ? _cyan : _textMuted,
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+            ],
+            const Icon(Icons.queue_music, color: _cyan, size: 24),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    playlist.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _textPrimary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '${playlist.itemCount} 首歌曲',
+                    style: const TextStyle(color: _textMuted, fontSize: 12),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(width: 10),
-          ],
-          const Icon(Icons.queue_music, color: _cyan, size: 24),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  playlist.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+            if (managing && selected)
+              Container(
+                width: 28,
+                height: 28,
+                decoration: const BoxDecoration(
+                  color: _cyan,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  '$selectionNumber',
                   style: const TextStyle(
-                    color: _textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
+                    color: _primaryDark,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  '${playlist.itemCount} 首歌曲',
-                  style: const TextStyle(color: _textMuted, fontSize: 12),
-                ),
+              )
+            else if (!managing)
+              const Icon(Icons.chevron_right, color: _textMuted, size: 22),
+          ],
+        ),
+      ),
+    );
+    final controls = Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      alignment: WrapAlignment.end,
+      children: [
+        ButtonIcon(
+          tooltip: '上移',
+          onPressed: !busy && canMoveUp ? onMoveUp : null,
+          icon: const Icon(Icons.arrow_upward),
+          size: 36,
+        ),
+        ButtonIcon(
+          tooltip: '下移',
+          onPressed: !busy && canMoveDown ? onMoveDown : null,
+          icon: const Icon(Icons.arrow_downward),
+          size: 36,
+        ),
+        ButtonIcon(
+          tooltip: '删除',
+          onPressed: busy ? null : onDelete,
+          tone: ButtonTone.danger,
+          icon: const Icon(Icons.delete_outline),
+          size: 36,
+        ),
+      ],
+    );
+    return _SettingsSubPanel(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (managing && constraints.maxWidth < 420) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                information,
+                const SizedBox(height: 10),
+                Align(alignment: Alignment.centerRight, child: controls),
               ],
-            ),
-          ),
-          if (managing && selected)
-            Container(
-              width: 28,
-              height: 28,
-              decoration: const BoxDecoration(
-                color: _cyan,
-                shape: BoxShape.circle,
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                '$selectionNumber',
-                style: const TextStyle(
-                  color: _primaryDark,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            )
-          else if (!managing)
-            const Icon(Icons.chevron_right, color: _textMuted, size: 22),
-        ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: information),
+              if (managing) ...[const SizedBox(width: 10), controls],
+            ],
+          );
+        },
       ),
     );
   }
@@ -1457,6 +1632,7 @@ class _MusicPlaylistFilterDialogState
           Input(
             controller: _keywordController,
             focusNode: _keywordFocusNode,
+            hintText: '',
             showClearButton: true,
             minLines: 1,
             maxLines: 1,
