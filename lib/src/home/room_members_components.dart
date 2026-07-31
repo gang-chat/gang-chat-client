@@ -143,6 +143,7 @@ class _MemberRow extends StatelessWidget {
     required this.live,
     required this.permission,
     required this.stackActions,
+    required this.nameMaxLines,
     required this.ownerUserId,
     required this.query,
     required this.busy,
@@ -161,6 +162,7 @@ class _MemberRow extends StatelessWidget {
   final LiveState live;
   final member_filter.RoomMemberPermissionState permission;
   final bool stackActions;
+  final int nameMaxLines;
   final String? ownerUserId;
   final String query;
   final bool busy;
@@ -239,9 +241,9 @@ class _MemberRow extends StatelessWidget {
     return _RowSurface(
       child: Builder(
         builder: (context) {
-          final information = SizedBox(
+          final information = ConstrainedBox(
             key: ValueKey('member-information-${member.user.id}'),
-            height: 48,
+            constraints: const BoxConstraints(minHeight: 48),
             child: Row(
               children: [
                 UserHoverCard(
@@ -257,13 +259,14 @@ class _MemberRow extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       HighlightedText(
                         text: member_filter.roomMemberDisplayName(member),
                         query: query,
-                        maxLines: 1,
+                        maxLines: nameMaxLines,
                         overflow: TextOverflow.ellipsis,
                         style: UiTypography.body.copyWith(
                           fontWeight: FontWeight.w600,
@@ -374,6 +377,15 @@ bool _memberRowNeedsStackedActions({
   final identityWidth = displayNameWidth > usernameWidth
       ? displayNameWidth
       : usernameWidth;
+  final displayNameGuardWidth = _memberRowTextWidth(
+    context,
+    '…',
+    displayNameStyle,
+  );
+  final usernameGuardWidth = _memberRowTextWidth(context, '…', usernameStyle);
+  final truncationGuardWidth = displayNameGuardWidth > usernameGuardWidth
+      ? displayNameGuardWidth
+      : usernameGuardWidth;
   final presenceWidth =
       2 +
       18 +
@@ -397,7 +409,60 @@ bool _memberRowNeedsStackedActions({
       roleWidth +
       8 +
       actionsWidth +
+      truncationGuardWidth +
       measurementSafety;
+  return requiredWidth > availableWidth;
+}
+
+bool _memberRowNeedsTwoLineName({
+  required BuildContext context,
+  required double availableWidth,
+  required RoomMember member,
+  required LiveState live,
+  required String? ownerUserId,
+  required bool busy,
+}) {
+  final presence = member_filter.roomMemberPresence(member, live: live);
+  final role = room_display.roomRoleLabel(
+    member.user,
+    ownerUserId: ownerUserId,
+  );
+  final displayNameStyle = UiTypography.body.copyWith(
+    fontWeight: FontWeight.w600,
+  );
+  final presenceStyle = UiTypography.label.copyWith(
+    fontWeight: FontWeight.w600,
+  );
+  final roleStyle = UiTypography.label.copyWith(
+    fontSize: 12,
+    fontWeight: FontWeight.w600,
+  );
+  final presenceWidth =
+      2 +
+      18 +
+      10 +
+      6 +
+      _memberRowTextWidth(
+        context,
+        member_filter.roomMemberPresenceLabel(presence),
+        presenceStyle,
+      );
+  final roleWidth = 2 + 16 + _memberRowTextWidth(context, role, roleStyle);
+  final requiredWidth =
+      38 +
+      10 +
+      _memberRowTextWidth(
+        context,
+        member_filter.roomMemberDisplayName(member),
+        displayNameStyle,
+      ) +
+      _memberRowTextWidth(context, '…', displayNameStyle) +
+      10 +
+      presenceWidth +
+      6 +
+      roleWidth +
+      (busy ? 10 + 18 : 0) +
+      2;
   return requiredWidth > availableWidth;
 }
 

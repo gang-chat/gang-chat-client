@@ -959,32 +959,17 @@ class _PersonalMusicPlaylistsPanelState
             else if (visiblePlaylists.isEmpty)
               const _SettingsEmptyState(text: '没有符合筛选条件的歌单')
             else
-              for (
-                var playlistIndex = 0;
-                playlistIndex < visiblePlaylists.length;
-                playlistIndex++
-              )
-                _MusicPlaylistSummaryTile(
-                  playlist: visiblePlaylists[playlistIndex],
-                  managing: _managingPlaylists,
-                  selectionNumber:
-                      selectionNumbers[visiblePlaylists[playlistIndex].id],
-                  busy: _playlistManagementBusy,
-                  canMoveUp: !_playlistFilterActive && playlistIndex > 0,
-                  canMoveDown:
-                      !_playlistFilterActive &&
-                      playlistIndex < visiblePlaylists.length - 1,
-                  onTap: () =>
-                      _openOrSelectPlaylist(visiblePlaylists[playlistIndex]),
-                  onRename: () =>
-                      _renamePlaylist(visiblePlaylists[playlistIndex]),
-                  onMoveUp: () =>
-                      _movePlaylist(visiblePlaylists[playlistIndex], -1),
-                  onMoveDown: () =>
-                      _movePlaylist(visiblePlaylists[playlistIndex], 1),
-                  onDelete: () =>
-                      _deleteSinglePlaylist(visiblePlaylists[playlistIndex]),
-                ),
+              _MusicPlaylistSummaryList(
+                playlists: visiblePlaylists,
+                managing: _managingPlaylists,
+                selectionNumbers: selectionNumbers,
+                busy: _playlistManagementBusy,
+                filterActive: _playlistFilterActive,
+                onTap: _openOrSelectPlaylist,
+                onRename: _renamePlaylist,
+                onMove: _movePlaylist,
+                onDelete: _deleteSinglePlaylist,
+              ),
           ],
         ),
       ],
@@ -1181,6 +1166,89 @@ class _PersonalMusicPlaylistsPanelState
   }
 }
 
+class _MusicPlaylistSummaryList extends StatelessWidget {
+  const _MusicPlaylistSummaryList({
+    required this.playlists,
+    required this.managing,
+    required this.selectionNumbers,
+    required this.busy,
+    required this.filterActive,
+    required this.onTap,
+    required this.onRename,
+    required this.onMove,
+    required this.onDelete,
+  });
+
+  final List<PersonalMusicPlaylist> playlists;
+  final bool managing;
+  final Map<String, int> selectionNumbers;
+  final bool busy;
+  final bool filterActive;
+  final ValueChanged<PersonalMusicPlaylist> onTap;
+  final ValueChanged<PersonalMusicPlaylist> onRename;
+  final void Function(PersonalMusicPlaylist playlist, int direction) onMove;
+  final ValueChanged<PersonalMusicPlaylist> onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const subPanelHorizontalPadding = 28.0;
+        final contentWidth = constraints.maxWidth.isFinite
+            ? (constraints.maxWidth - subPanelHorizontalPadding)
+                  .clamp(0.0, double.infinity)
+                  .toDouble()
+            : double.infinity;
+        final stackControls =
+            managing &&
+            playlists.any(
+              (playlist) => _playlistNameNeedsStackedControls(
+                context: context,
+                availableWidth: contentWidth,
+                name: playlist.name,
+                selected: selectionNumbers.containsKey(playlist.id),
+              ),
+            );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var index = 0; index < playlists.length; index++) ...[
+              _MusicPlaylistSummaryTile(
+                playlist: playlists[index],
+                managing: managing,
+                selectionNumber: selectionNumbers[playlists[index].id],
+                busy: busy,
+                canMoveUp: !filterActive && index > 0,
+                canMoveDown: !filterActive && index < playlists.length - 1,
+                stackControls: stackControls,
+                nameMaxLines:
+                    _playlistNameNeedsTwoLines(
+                      context: context,
+                      availableWidth: contentWidth,
+                      name: playlists[index].name,
+                      managing: managing,
+                      selected: selectionNumbers.containsKey(
+                        playlists[index].id,
+                      ),
+                      controlsStacked: stackControls,
+                    )
+                    ? 2
+                    : 1,
+                onTap: () => onTap(playlists[index]),
+                onRename: () => onRename(playlists[index]),
+                onMoveUp: () => onMove(playlists[index], -1),
+                onMoveDown: () => onMove(playlists[index], 1),
+                onDelete: () => onDelete(playlists[index]),
+              ),
+              if (index < playlists.length - 1) const SizedBox(height: 10),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
 class _MusicPlaylistSummaryTile extends StatelessWidget {
   const _MusicPlaylistSummaryTile({
     required this.playlist,
@@ -1189,6 +1257,8 @@ class _MusicPlaylistSummaryTile extends StatelessWidget {
     required this.busy,
     required this.canMoveUp,
     required this.canMoveDown,
+    required this.stackControls,
+    required this.nameMaxLines,
     required this.onTap,
     required this.onRename,
     required this.onMoveUp,
@@ -1202,6 +1272,8 @@ class _MusicPlaylistSummaryTile extends StatelessWidget {
   final bool busy;
   final bool canMoveUp;
   final bool canMoveDown;
+  final bool stackControls;
+  final int nameMaxLines;
   final VoidCallback onTap;
   final VoidCallback onRename;
   final VoidCallback onMoveUp;
@@ -1211,8 +1283,13 @@ class _MusicPlaylistSummaryTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final selected = selectionNumber != null;
+    final cardMouseCursor = managing
+        ? SystemMouseCursors.basic
+        : SystemMouseCursors.click;
     final information = InkWell(
+      key: ValueKey('personal-music-playlist-information-${playlist.id}'),
       onTap: busy ? null : onTap,
+      mouseCursor: cardMouseCursor,
       borderRadius: BorderRadius.circular(UiRadii.md),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 5),
@@ -1234,13 +1311,9 @@ class _MusicPlaylistSummaryTile extends StatelessWidget {
                 children: [
                   Text(
                     playlist.name,
-                    maxLines: 2,
+                    maxLines: nameMaxLines,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: _textPrimary,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: _playlistSummaryNameStyle,
                   ),
                   const SizedBox(height: 3),
                   Text(
@@ -1275,6 +1348,7 @@ class _MusicPlaylistSummaryTile extends StatelessWidget {
       ),
     );
     final controls = Wrap(
+      key: ValueKey('personal-music-playlist-controls-${playlist.id}'),
       spacing: 8,
       runSpacing: 8,
       alignment: WrapAlignment.end,
@@ -1310,31 +1384,93 @@ class _MusicPlaylistSummaryTile extends StatelessWidget {
       key: ValueKey('personal-music-playlist-card-${playlist.id}'),
       hoverable: true,
       highlighted: selected,
-      mouseCursor: managing
-          ? SystemMouseCursors.basic
-          : SystemMouseCursors.click,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          if (managing && constraints.maxWidth < 420) {
-            return Column(
+      mouseCursor: cardMouseCursor,
+      child: stackControls && managing
+          ? Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 information,
                 const SizedBox(height: 10),
                 Align(alignment: Alignment.centerRight, child: controls),
               ],
-            );
-          }
-          return Row(
-            children: [
-              Expanded(child: information),
-              if (managing) ...[const SizedBox(width: 10), controls],
-            ],
-          );
-        },
-      ),
+            )
+          : Row(
+              children: [
+                Expanded(child: information),
+                if (managing) ...[const SizedBox(width: 10), controls],
+              ],
+            ),
     );
   }
+}
+
+const _playlistSummaryNameStyle = TextStyle(
+  color: _textPrimary,
+  fontSize: 14,
+  fontWeight: FontWeight.w600,
+);
+const _playlistSummaryControlsWidth = 4 * 36.0 + 3 * 8.0;
+const _playlistSummaryControlsGap = 10.0;
+
+bool _playlistNameNeedsStackedControls({
+  required BuildContext context,
+  required double availableWidth,
+  required String name,
+  required bool selected,
+}) {
+  final requiredWidth =
+      _playlistSummaryInformationFixedWidth(
+        managing: true,
+        selected: selected,
+      ) +
+      _playlistSummaryTextWidth(context, name) +
+      _playlistSummaryTruncationGuardWidth(context) +
+      _playlistSummaryControlsGap +
+      _playlistSummaryControlsWidth;
+  return requiredWidth > availableWidth;
+}
+
+bool _playlistNameNeedsTwoLines({
+  required BuildContext context,
+  required double availableWidth,
+  required String name,
+  required bool managing,
+  required bool selected,
+  required bool controlsStacked,
+}) {
+  if (managing && !controlsStacked) return false;
+  final requiredWidth =
+      _playlistSummaryInformationFixedWidth(
+        managing: managing,
+        selected: selected,
+      ) +
+      _playlistSummaryTextWidth(context, name) +
+      _playlistSummaryTruncationGuardWidth(context);
+  return requiredWidth > availableWidth;
+}
+
+double _playlistSummaryInformationFixedWidth({
+  required bool managing,
+  required bool selected,
+}) {
+  return (managing ? 20 + 10 : 0) +
+      24 +
+      12 +
+      (managing ? (selected ? 28 : 0) : 22);
+}
+
+double _playlistSummaryTextWidth(BuildContext context, String text) {
+  final painter = TextPainter(
+    text: TextSpan(text: text, style: _playlistSummaryNameStyle),
+    maxLines: 1,
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+  )..layout();
+  return painter.width;
+}
+
+double _playlistSummaryTruncationGuardWidth(BuildContext context) {
+  return _playlistSummaryTextWidth(context, '…');
 }
 
 class _MusicPlaylistSearchRow extends StatelessWidget {

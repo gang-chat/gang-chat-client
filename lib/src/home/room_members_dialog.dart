@@ -1113,15 +1113,29 @@ class _RoomMembersDialogState extends State<RoomMembersDialog> {
           itemBuilder: (context, index) {
             final member = members[index];
             final permission = permissionFor(member);
+            final busy = _busyMemberIds.contains(member.user.id);
+            final canMoveActions = _memberActionCount(permission) > 0;
             return _MemberRow(
               member: member,
               currentUser: widget.currentUser,
               live: _live,
               permission: permission,
               stackActions: stackMemberActions,
+              nameMaxLines:
+                  (stackMemberActions || !canMoveActions) &&
+                      _memberRowNeedsTwoLineName(
+                        context: context,
+                        availableWidth: rowContentWidth,
+                        member: member,
+                        live: _live,
+                        ownerUserId: _room.createdBy?.id,
+                        busy: busy,
+                      )
+                  ? 2
+                  : 1,
               ownerUserId: _room.createdBy?.id,
               query: _memberQuery,
-              busy: _busyMemberIds.contains(member.user.id),
+              busy: busy,
               onResolveProfile: _resolveMemberProfile,
               onResolveRoomProfile: _resolveRoomProfile,
               onOpenRoom: widget.onOpenRoom,

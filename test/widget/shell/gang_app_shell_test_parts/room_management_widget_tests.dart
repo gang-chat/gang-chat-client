@@ -927,7 +927,7 @@ void registerShellRoomManagementWidgetTests() {
       tester.view.physicalSize = const Size(900, 800);
       addTearDown(tester.view.resetDevicePixelRatio);
       addTearDown(tester.view.resetPhysicalSize);
-      const longRoomDisplayName = 'Morgan 的一个比较长但信息独占一行时能完整显示的房间昵称';
+      const longRoomDisplayName = 'Morgan 的较长且独占信息行时能完整显示的房间昵称';
 
       await tester.pumpWidget(
         MaterialApp(
@@ -968,6 +968,10 @@ void registerShellRoomManagementWidgetTests() {
       expect(morganInformation, findsOneWidget);
       expect(morganPresence, findsOneWidget);
       expect(morganRole, findsOneWidget);
+      expect(
+        tester.renderObject<RenderParagraph>(longName).didExceedMaxLines,
+        isFalse,
+      );
       expect(
         tester.getRect(morganActions).top,
         greaterThan(tester.getRect(morganInformation).bottom),
@@ -1054,6 +1058,64 @@ void registerShellRoomManagementWidgetTests() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('member names use two lines only after every action row stacks', (
+    WidgetTester tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(900, 800);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    const longRoomDisplayName = 'Morgan 的一个比较长但信息独占一行时仍然不能完整显示的房间成员昵称';
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ui.uiTheme().copyWith(platform: TargetPlatform.windows),
+        home: HomePage(
+          app: _homeTestAppContext(
+            secondaryMemberRoomDisplayName: longRoomDisplayName,
+            includeActionComparisonMember: true,
+          ),
+          realtime: _NoopRealtimeService(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Alpha Room'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('房间成员'));
+    await tester.pumpAndSettle();
+
+    final longName = find.text(longRoomDisplayName);
+    final morganInformation = find.byKey(
+      const ValueKey('member-information-user-2'),
+    );
+    final morganActions = find.byKey(
+      const ValueKey('member-action-wrap-user-2'),
+    );
+    final taylorInformation = find.byKey(
+      const ValueKey('member-information-user-5'),
+    );
+    final taylorActions = find.byKey(
+      const ValueKey('member-action-wrap-user-5'),
+    );
+    expect(tester.widget<Text>(longName).maxLines, 2);
+    expect(
+      tester.renderObject<RenderParagraph>(longName).didExceedMaxLines,
+      isFalse,
+    );
+    expect(tester.getRect(morganInformation).height, greaterThan(48));
+    expect(
+      tester.getRect(morganActions).top,
+      greaterThan(tester.getRect(morganInformation).bottom),
+    );
+    expect(
+      tester.getRect(taylorActions).top,
+      greaterThan(tester.getRect(taylorInformation).bottom),
+    );
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('authenticated home shell hides new members for closed rooms', (
     WidgetTester tester,

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph, RendererBinding;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -343,6 +344,66 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('playlist names move every control row before using two lines', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(600, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    const mediumName = '需要先让所有管理按钮换行但仍可单行显示的歌单';
+    const longName = '需要先让所有管理按钮换行并且按钮换行以后名称仍然需要使用两行显示的超长歌单名称';
+    final api = _FakePersonalPlaylistApi(
+      playlists: const [
+        PersonalMusicPlaylist(
+          id: 'mbp_1',
+          name: mediumName,
+          description: '',
+          revision: 1,
+          itemCount: 1,
+          createdAt: null,
+          updatedAt: null,
+        ),
+        PersonalMusicPlaylist(
+          id: 'mbp_2',
+          name: longName,
+          description: '',
+          revision: 1,
+          itemCount: 2,
+          createdAt: null,
+          updatedAt: null,
+        ),
+      ],
+    );
+
+    await _pumpPlaylistSettings(tester, api);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('管理'));
+    await tester.pumpAndSettle();
+
+    for (final id in ['mbp_1', 'mbp_2']) {
+      final information = find.byKey(
+        ValueKey('personal-music-playlist-information-$id'),
+      );
+      final controls = find.byKey(
+        ValueKey('personal-music-playlist-controls-$id'),
+      );
+      expect(information, findsOneWidget);
+      expect(controls, findsOneWidget);
+      expect(
+        tester.getRect(controls).top,
+        greaterThan(tester.getRect(information).bottom),
+      );
+    }
+    expect(tester.widget<Text>(find.text(mediumName)).maxLines, 1);
+    expect(tester.widget<Text>(find.text(longName)).maxLines, 2);
+    expect(
+      tester
+          .renderObject<RenderParagraph>(find.text(longName))
+          .didExceedMaxLines,
+      isFalse,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('playlist cards use hover feedback and consistent spacing', (
     tester,
   ) async {
@@ -386,10 +447,20 @@ void main() {
     final beforeDecoration = before.decoration as BoxDecoration;
     expect(beforeDecoration.color, isNot(ui.UiColors.selected));
 
-    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    const mouseDevice = 1;
+    final mouse = await tester.createGesture(
+      pointer: 42,
+      kind: PointerDeviceKind.mouse,
+    );
     addTearDown(mouse.removePointer);
     await mouse.addPointer(location: tester.getCenter(firstCard));
     await tester.pumpAndSettle();
+    expect(
+      RendererBinding.instance.mouseTracker.debugDeviceActiveCursor(
+        mouseDevice,
+      ),
+      SystemMouseCursors.click,
+    );
 
     final hovered = tester.widget<AnimatedContainer>(animatedPanel);
     final hoveredDecoration = hovered.decoration as BoxDecoration;
@@ -397,6 +468,14 @@ void main() {
     expect(
       (hoveredDecoration.border! as Border).top.color,
       ui.UiColors.selectedBorder,
+    );
+    await mouse.moveTo(tester.getTopLeft(firstCard) + const Offset(2, 2));
+    await tester.pump();
+    expect(
+      RendererBinding.instance.mouseTracker.debugDeviceActiveCursor(
+        mouseDevice,
+      ),
+      SystemMouseCursors.click,
     );
     expect(tester.takeException(), isNull);
   });
