@@ -2389,6 +2389,11 @@ class _SettingsPageState extends State<SettingsPage>
         !canStartStickerSelectionAction(
           busy: _stickerManagementBusy,
           selectedStickerIds: selectedIds,
+        ) ||
+        !sticker_ordering.stickerSelectionWouldChangePinnedOrder(
+          packs: _stickerPacks,
+          selectedStickerIds: selectedIds,
+          orderByPack: _stickerOrderDrafts,
         )) {
       return;
     }
@@ -3632,7 +3637,7 @@ class _SettingsPageState extends State<SettingsPage>
   }
 
   Widget _buildMusicPlaylistsContent() {
-    return _PersonalMusicPlaylistsPanel(
+    return MusicPlaylistsPanel(
       controller: _musicPlaylistsController,
       reloadToken: _playlistReloadToken,
       unavailableMessage: _isManagingUser
@@ -3655,175 +3660,188 @@ class _SettingsPageState extends State<SettingsPage>
       selectedStickerIds: _selectedStickerIds,
       visibleItems: items,
     );
+    final canPinSelection =
+        canStartStickerSelectionAction(
+          busy: busy,
+          selectedStickerIds: _selectedStickerIds,
+        ) &&
+        sticker_ordering.stickerSelectionWouldChangePinnedOrder(
+          packs: _stickerPacks,
+          selectedStickerIds: _selectedStickerIds,
+          orderByPack: _stickerOrderDrafts,
+        );
+    final Widget stickerBody;
+    if (_loadingStickers && _stickerPacks.isEmpty) {
+      stickerBody = const Center(
+        child: CircularProgressIndicator(color: _cyan),
+      );
+    } else if (totalCount == 0) {
+      stickerBody = const Align(
+        alignment: Alignment.topCenter,
+        child: SizedBox(
+          width: double.infinity,
+          child: _SettingsEmptyState(text: '暂无表情，点击本地上传会自动创建'),
+        ),
+      );
+    } else if (items.isEmpty) {
+      stickerBody = const Align(
+        alignment: Alignment.topCenter,
+        child: SizedBox(
+          width: double.infinity,
+          child: _SettingsEmptyState(text: '没有匹配的表情'),
+        ),
+      );
+    } else {
+      stickerBody = StickerGrid(
+        key: const ValueKey('personal-sticker-items-scroll'),
+        items: items,
+        managing: _managingStickers,
+        selectionNumbers: selectionNumbers,
+        busy: busy,
+        scrollable: true,
+        onTap: (item) {
+          if (_managingStickers) {
+            _toggleStickerSelection(item.sticker.id);
+          } else {
+            _previewSticker(item);
+          }
+        },
+      );
+    }
 
-    return SettingsList(
-      children: [
-        if (unavailable)
-          const _SettingsEmptyState(text: '表情包需要登录后从服务端读取')
-        else
-          _SettingsGroup(
-            title: '表情包管理',
-            trailing: Text(
-              stickerManagementCountText(
-                filterActive: _stickerFilterActive,
-                visibleCount: items.length,
-                totalCount: totalCount,
-              ),
-              style: const TextStyle(
-                color: _textMuted,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+    if (unavailable) {
+      return SettingsList(
+        children: const [_SettingsEmptyState(text: '表情包需要登录后从服务端读取')],
+      );
+    }
+    return SettingsFixedHeaderCard(
+      title: '表情包管理',
+      spacing: 10,
+      trailing: Text(
+        stickerManagementCountText(
+          filterActive: _stickerFilterActive,
+          visibleCount: items.length,
+          totalCount: totalCount,
+        ),
+        style: const TextStyle(
+          color: _textMuted,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      headerChildren: [
+        StickerActionGrid(
+          actions: [
+            StickerActionGridEntry(
+              label: _managingStickers ? '删除' : '本地上传',
+              button: Button(
+                onPressed: canStartStickerPrimaryAction(busy: busy)
+                    ? _managingStickers
+                          ? _deleteSelectedStickers
+                          : _pickAndUploadStickers
+                    : null,
+                loading: _managingStickers
+                    ? _deletingStickers
+                    : _uploadingStickers,
+                tone: _managingStickers
+                    ? ButtonTone.danger
+                    : ButtonTone.primary,
+                icon: Icon(
+                  _managingStickers ? Icons.delete_outline : Icons.upload_file,
+                ),
+                width: double.infinity,
+                child: Text(_managingStickers ? '删除' : '本地上传'),
               ),
             ),
-            children: [
-              StickerActionGrid(
-                actions: [
-                  StickerActionGridEntry(
-                    label: _managingStickers ? '删除' : '本地上传',
-                    button: Button(
-                      onPressed: canStartStickerPrimaryAction(busy: busy)
-                          ? _managingStickers
-                                ? _deleteSelectedStickers
-                                : _pickAndUploadStickers
-                          : null,
-                      loading: _managingStickers
-                          ? _deletingStickers
-                          : _uploadingStickers,
-                      tone: _managingStickers
-                          ? ButtonTone.danger
-                          : ButtonTone.primary,
-                      icon: Icon(
-                        _managingStickers
-                            ? Icons.delete_outline
-                            : Icons.upload_file,
-                      ),
-                      width: double.infinity,
-                      child: Text(_managingStickers ? '删除' : '本地上传'),
-                    ),
-                  ),
-                  StickerActionGridEntry(
-                    label: _managingStickers ? '取消管理' : '批量管理',
-                    button: Button(
-                      onPressed: canUseStickerManagementControl(busy: busy)
-                          ? _toggleStickerManageMode
-                          : null,
-                      selected: _managingStickers,
-                      tone: _managingStickers
-                          ? ButtonTone.primary
-                          : ButtonTone.neutral,
-                      icon: Icon(
-                        _managingStickers ? Icons.close : Icons.checklist_rtl,
-                      ),
-                      width: double.infinity,
-                      child: Text(_managingStickers ? '取消管理' : '批量管理'),
-                    ),
-                  ),
-                  StickerActionGridEntry(
-                    label: '筛选',
-                    button: Button(
-                      onPressed: canUseStickerManagementControl(busy: busy)
-                          ? _openStickerFilter
-                          : null,
-                      selected: _stickerFilterActive,
-                      tone: _stickerFilterActive
-                          ? ButtonTone.primary
-                          : ButtonTone.neutral,
-                      icon: const Icon(Icons.filter_alt_outlined),
-                      width: double.infinity,
-                      child: const Text('筛选'),
-                    ),
-                  ),
-                  if (_managingStickers) ...[
-                    StickerActionGridEntry(
-                      label: '下载',
-                      button: Button(
-                        onPressed:
-                            canStartStickerSelectionAction(
-                              busy: busy,
-                              selectedStickerIds: _selectedStickerIds,
-                            )
-                            ? _downloadSelectedStickers
-                            : null,
-                        loading: _downloadingStickers,
-                        icon: const Icon(Icons.download_outlined),
-                        width: double.infinity,
-                        child: const Text('下载'),
-                      ),
-                    ),
-                    StickerActionGridEntry(
-                      label: '置顶',
-                      button: Button(
-                        onPressed:
-                            canStartStickerSelectionAction(
-                              busy: busy,
-                              selectedStickerIds: _selectedStickerIds,
-                            )
-                            ? _pinSelectedStickers
-                            : null,
-                        loading: _savingStickerOrder,
-                        icon: const Icon(Icons.vertical_align_top),
-                        width: double.infinity,
-                        child: const Text('置顶'),
-                      ),
-                    ),
-                    StickerActionGridEntry(
-                      label: stickerVisibleSelectionButtonText(
-                        selectedStickerIds: _selectedStickerIds,
-                        visibleItems: items,
-                      ),
-                      button: Button(
-                        onPressed:
-                            canSelectVisibleStickers(
-                              busy: busy,
-                              visibleItems: items,
-                            )
-                            ? () => _selectAllVisibleStickers(items)
-                            : null,
-                        selected: allVisibleSelected,
-                        icon: Icon(
-                          allVisibleSelected
-                              ? Icons.check_box
-                              : Icons.check_box_outline_blank,
-                        ),
-                        width: double.infinity,
-                        child: Text(
-                          stickerVisibleSelectionButtonText(
-                            selectedStickerIds: _selectedStickerIds,
-                            visibleItems: items,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 14),
-              if (_loadingStickers && _stickerPacks.isEmpty)
-                const SizedBox(
-                  height: 128,
-                  child: Center(child: CircularProgressIndicator(color: _cyan)),
-                )
-              else if (totalCount == 0)
-                const _SettingsEmptyState(text: '暂无表情，点击本地上传会自动创建')
-              else if (items.isEmpty)
-                const _SettingsEmptyState(text: '没有匹配的表情')
-              else
-                StickerGrid(
-                  items: items,
-                  managing: _managingStickers,
-                  selectionNumbers: selectionNumbers,
-                  busy: busy,
-                  onTap: (item) {
-                    if (_managingStickers) {
-                      _toggleStickerSelection(item.sticker.id);
-                    } else {
-                      _previewSticker(item);
-                    }
-                  },
+            StickerActionGridEntry(
+              label: _managingStickers ? '取消管理' : '批量管理',
+              button: Button(
+                onPressed: canUseStickerManagementControl(busy: busy)
+                    ? _toggleStickerManageMode
+                    : null,
+                selected: _managingStickers,
+                tone: _managingStickers
+                    ? ButtonTone.primary
+                    : ButtonTone.neutral,
+                icon: Icon(
+                  _managingStickers ? Icons.close : Icons.checklist_rtl,
                 ),
+                width: double.infinity,
+                child: Text(_managingStickers ? '取消管理' : '批量管理'),
+              ),
+            ),
+            StickerActionGridEntry(
+              label: '筛选',
+              button: Button(
+                onPressed: canUseStickerManagementControl(busy: busy)
+                    ? _openStickerFilter
+                    : null,
+                selected: _stickerFilterActive,
+                tone: _stickerFilterActive
+                    ? ButtonTone.primary
+                    : ButtonTone.neutral,
+                icon: const Icon(Icons.filter_alt_outlined),
+                width: double.infinity,
+                child: const Text('筛选'),
+              ),
+            ),
+            if (_managingStickers) ...[
+              StickerActionGridEntry(
+                label: '下载',
+                button: Button(
+                  onPressed:
+                      canStartStickerSelectionAction(
+                        busy: busy,
+                        selectedStickerIds: _selectedStickerIds,
+                      )
+                      ? _downloadSelectedStickers
+                      : null,
+                  loading: _downloadingStickers,
+                  icon: const Icon(Icons.download_outlined),
+                  width: double.infinity,
+                  child: const Text('下载'),
+                ),
+              ),
+              StickerActionGridEntry(
+                label: '置顶',
+                button: Button(
+                  onPressed: canPinSelection ? _pinSelectedStickers : null,
+                  loading: _savingStickerOrder,
+                  icon: const Icon(Icons.vertical_align_top),
+                  width: double.infinity,
+                  child: const Text('置顶'),
+                ),
+              ),
+              StickerActionGridEntry(
+                label: stickerVisibleSelectionButtonText(
+                  selectedStickerIds: _selectedStickerIds,
+                  visibleItems: items,
+                ),
+                button: Button(
+                  onPressed:
+                      canSelectVisibleStickers(busy: busy, visibleItems: items)
+                      ? () => _selectAllVisibleStickers(items)
+                      : null,
+                  selected: allVisibleSelected,
+                  icon: Icon(
+                    allVisibleSelected
+                        ? Icons.check_box
+                        : Icons.check_box_outline_blank,
+                  ),
+                  width: double.infinity,
+                  child: Text(
+                    stickerVisibleSelectionButtonText(
+                      selectedStickerIds: _selectedStickerIds,
+                      visibleItems: items,
+                    ),
+                  ),
+                ),
+              ),
             ],
-          ),
+          ],
+        ),
       ],
+      body: stickerBody,
     );
   }
 

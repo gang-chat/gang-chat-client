@@ -615,7 +615,84 @@ abstract interface class PersonalMusicPlaylistApi {
   });
 }
 
-class GangApiClient implements GangApi, PersonalMusicPlaylistApi {
+abstract interface class RoomMusicPlaylistApi {
+  Future<PersonalMusicPlaylistPage> listRoomMusicPlaylists({
+    required String roomId,
+    int page = 1,
+    int pageSize = 50,
+  });
+
+  Future<PersonalMusicPlaylist> createRoomMusicPlaylist({
+    required String roomId,
+    required String name,
+  });
+
+  Future<PersonalMusicPlaylist> renameRoomMusicPlaylist({
+    required String roomId,
+    required String playlistId,
+    required String name,
+  });
+
+  Future<void> deleteRoomMusicPlaylist({
+    required String roomId,
+    required String playlistId,
+  });
+
+  Future<void> pinRoomMusicPlaylists({
+    required String roomId,
+    required List<String> playlistIds,
+  });
+
+  Future<void> moveRoomMusicPlaylist({
+    required String roomId,
+    required String playlistId,
+    required String direction,
+  });
+
+  Future<PersonalMusicPlaylistItemsPage> getRoomMusicPlaylist({
+    required String roomId,
+    required String playlistId,
+    int page = 1,
+    int pageSize = 50,
+    String? keyword,
+    String? source,
+  });
+
+  Future<PersonalMusicPlaylistItem> addRoomMusicPlaylistItem({
+    required String roomId,
+    required String playlistId,
+    required MusicBoxSearchResult track,
+    int? durationMs,
+  });
+
+  Future<void> deleteRoomMusicPlaylistItem({
+    required String roomId,
+    required String playlistId,
+    required String itemId,
+  });
+
+  Future<void> deleteRoomMusicPlaylistItems({
+    required String roomId,
+    required String playlistId,
+    required List<String> itemIds,
+  });
+
+  Future<void> moveRoomMusicPlaylistItem({
+    required String roomId,
+    required String playlistId,
+    required String itemId,
+    required String direction,
+  });
+
+  Future<void> reorderRoomMusicPlaylistItems({
+    required String roomId,
+    required String playlistId,
+    required List<String> itemIds,
+  });
+}
+
+class GangApiClient
+    implements GangApi, PersonalMusicPlaylistApi, RoomMusicPlaylistApi {
   GangApiClient({
     required this.baseUrl,
     required this.accessTokenProvider,
@@ -2464,6 +2541,215 @@ class GangApiClient implements GangApi, PersonalMusicPlaylistApi {
     await _sendJson((token) {
       return _httpClient.patch(
         _uri('/me/music-box/playlists/$playlistId/items/order'),
+        headers: _headers(token),
+        body: encodeJsonBody({'item_ids': itemIds}),
+      );
+    });
+  }
+
+  @override
+  Future<PersonalMusicPlaylistPage> listRoomMusicPlaylists({
+    required String roomId,
+    int page = 1,
+    int pageSize = 50,
+  }) async {
+    final decoded = await _sendJson((token) {
+      return _httpClient.get(
+        _uri('/rooms/$roomId/music-box/playlists', {
+          'page': '$page',
+          'page_size': '$pageSize',
+        }),
+        headers: _headers(token),
+      );
+    }, retryTransientFailures: true);
+    return PersonalMusicPlaylistPage.fromJson(decoded);
+  }
+
+  @override
+  Future<PersonalMusicPlaylist> createRoomMusicPlaylist({
+    required String roomId,
+    required String name,
+  }) async {
+    final decoded = await _sendJson((token) {
+      return _httpClient.post(
+        _uri('/rooms/$roomId/music-box/playlists'),
+        headers: _headers(token),
+        body: encodeJsonBody({'name': name}),
+      );
+    });
+    return PersonalMusicPlaylist.fromJson(
+      decoded['playlist']! as Map<String, Object?>,
+    );
+  }
+
+  @override
+  Future<PersonalMusicPlaylist> renameRoomMusicPlaylist({
+    required String roomId,
+    required String playlistId,
+    required String name,
+  }) async {
+    final decoded = await _sendJson((token) {
+      return _httpClient.patch(
+        _uri('/rooms/$roomId/music-box/playlists/$playlistId'),
+        headers: _headers(token),
+        body: encodeJsonBody({'name': name}),
+      );
+    });
+    return PersonalMusicPlaylist.fromJson(
+      decoded['playlist']! as Map<String, Object?>,
+    );
+  }
+
+  @override
+  Future<void> deleteRoomMusicPlaylist({
+    required String roomId,
+    required String playlistId,
+  }) async {
+    await _sendJson((token) {
+      return _httpClient.delete(
+        _uri('/rooms/$roomId/music-box/playlists/$playlistId'),
+        headers: _headers(token),
+      );
+    });
+  }
+
+  @override
+  Future<void> pinRoomMusicPlaylists({
+    required String roomId,
+    required List<String> playlistIds,
+  }) async {
+    await _sendJson((token) {
+      return _httpClient.patch(
+        _uri('/rooms/$roomId/music-box/playlists/order'),
+        headers: _headers(token),
+        body: encodeJsonBody({'playlist_ids': playlistIds}),
+      );
+    });
+  }
+
+  @override
+  Future<void> moveRoomMusicPlaylist({
+    required String roomId,
+    required String playlistId,
+    required String direction,
+  }) async {
+    await _sendJson((token) {
+      return _httpClient.patch(
+        _uri('/rooms/$roomId/music-box/playlists/order'),
+        headers: _headers(token),
+        body: encodeJsonBody({
+          'playlist_id': playlistId,
+          'direction': direction,
+        }),
+      );
+    });
+  }
+
+  @override
+  Future<PersonalMusicPlaylistItemsPage> getRoomMusicPlaylist({
+    required String roomId,
+    required String playlistId,
+    int page = 1,
+    int pageSize = 50,
+    String? keyword,
+    String? source,
+  }) async {
+    final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
+    }
+    if (source != null && source.trim().isNotEmpty) {
+      query['source'] = source.trim();
+    }
+    final decoded = await _sendJson((token) {
+      return _httpClient.get(
+        _uri('/rooms/$roomId/music-box/playlists/$playlistId', query),
+        headers: _headers(token),
+      );
+    }, retryTransientFailures: true);
+    return PersonalMusicPlaylistItemsPage.fromJson(decoded);
+  }
+
+  @override
+  Future<PersonalMusicPlaylistItem> addRoomMusicPlaylistItem({
+    required String roomId,
+    required String playlistId,
+    required MusicBoxSearchResult track,
+    int? durationMs,
+  }) async {
+    final body = <String, Object?>{
+      'track_id': track.trackId,
+      'source': track.source,
+      'title': track.name,
+      'artists': track.artists,
+    };
+    if (durationMs != null) body['duration_ms'] = durationMs;
+    final decoded = await _sendJson((token) {
+      return _httpClient.post(
+        _uri('/rooms/$roomId/music-box/playlists/$playlistId/items'),
+        headers: _headers(token),
+        body: encodeJsonBody(body),
+      );
+    });
+    return PersonalMusicPlaylistItem.fromJson(
+      decoded['item']! as Map<String, Object?>,
+    );
+  }
+
+  @override
+  Future<void> deleteRoomMusicPlaylistItem({
+    required String roomId,
+    required String playlistId,
+    required String itemId,
+  }) async {
+    await _sendJson((token) {
+      return _httpClient.delete(
+        _uri('/rooms/$roomId/music-box/playlists/$playlistId/items/$itemId'),
+        headers: _headers(token),
+      );
+    });
+  }
+
+  @override
+  Future<void> deleteRoomMusicPlaylistItems({
+    required String roomId,
+    required String playlistId,
+    required List<String> itemIds,
+  }) async {
+    await _sendJson((token) {
+      return _httpClient.delete(
+        _uri('/rooms/$roomId/music-box/playlists/$playlistId/items'),
+        headers: _headers(token),
+        body: encodeJsonBody({'item_ids': itemIds}),
+      );
+    });
+  }
+
+  @override
+  Future<void> moveRoomMusicPlaylistItem({
+    required String roomId,
+    required String playlistId,
+    required String itemId,
+    required String direction,
+  }) async {
+    await _sendJson((token) {
+      return _httpClient.patch(
+        _uri('/rooms/$roomId/music-box/playlists/$playlistId/items/order'),
+        headers: _headers(token),
+        body: encodeJsonBody({'item_id': itemId, 'direction': direction}),
+      );
+    });
+  }
+
+  @override
+  Future<void> reorderRoomMusicPlaylistItems({
+    required String roomId,
+    required String playlistId,
+    required List<String> itemIds,
+  }) async {
+    await _sendJson((token) {
+      return _httpClient.patch(
+        _uri('/rooms/$roomId/music-box/playlists/$playlistId/items/order'),
         headers: _headers(token),
         body: encodeJsonBody({'item_ids': itemIds}),
       );

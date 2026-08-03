@@ -714,6 +714,28 @@ GangApi _roomsApi({
           },
         });
       }
+      if (request.url.path ==
+          '/api/v1/rooms/server-alpha/music-box/playlists') {
+        expect(request.method, 'GET');
+        return _jsonResponse({
+          'playlists': [
+            {
+              'id': 'mbp-room-alpha',
+              'name': 'Alpha 房间歌单',
+              'description': '',
+              'revision': 1,
+              'item_count': 0,
+            },
+          ],
+          'pagination': {
+            'page': 1,
+            'page_size': 50,
+            'total': 1,
+            'has_more': false,
+          },
+          'limits': {'max_playlists': 50, 'max_playlist_items': 500},
+        });
+      }
       if (request.url.path == '/api/v1/rooms/server-alpha') {
         if (request.method == 'PATCH') {
           final body =

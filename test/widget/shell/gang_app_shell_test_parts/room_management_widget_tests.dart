@@ -177,6 +177,12 @@ void registerShellRoomManagementWidgetTests() {
     expect(find.text('房间信息'), findsAtLeastNWidgets(1));
     expect(find.text('个人偏好'), findsOneWidget);
     expect(find.text('消息记录'), findsOneWidget);
+    expect(find.text('表情包'), findsOneWidget);
+    expect(find.text('歌单'), findsOneWidget);
+    expect(
+      tester.getCenter(find.text('表情包')).dx,
+      lessThan(tester.getCenter(find.text('歌单')).dx),
+    );
     expect(find.text('设置'), findsNothing);
     expect(find.byIcon(Icons.info_outline), findsOneWidget);
     expect(find.byType(ui.UiSwitch), findsNothing);
@@ -616,6 +622,23 @@ void registerShellRoomManagementWidgetTests() {
     expect(selectedHistoryDecoration.color, ui.UiColors.selected);
     expect(selectedHistoryBorder.top.color, ui.UiColors.selectedBorder);
     expect(selectedHistoryBorder.top.width, 1);
+
+    await tester.tap(find.text('歌单'));
+    await tester.pumpAndSettle();
+    expect(find.text('房间歌单'), findsOneWidget);
+    expect(find.text('Alpha 房间歌单'), findsOneWidget);
+    expect(
+      requestedPaths,
+      contains('/api/v1/rooms/server-alpha/music-box/playlists'),
+    );
+    expect(
+      tester
+          .widget<ui.Button>(
+            find.byKey(const ValueKey('create-personal-music-playlist')),
+          )
+          .onPressed,
+      isNotNull,
+    );
 
     await tester.tap(find.byTooltip('返回').last);
     await tester.pumpAndSettle();

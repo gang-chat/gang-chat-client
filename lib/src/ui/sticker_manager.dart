@@ -777,10 +777,14 @@ class _StickerManagerPanelState extends State<StickerManagerPanel> {
   Future<void> _pinSelected() async {
     final selectedIds = _selectedStickerIds;
     if (!canStartStickerSelectionAction(
-      busy: _busy,
-      selectedStickerIds: selectedIds,
-      allowed: _capabilities.canPin,
-    )) {
+          busy: _busy,
+          selectedStickerIds: selectedIds,
+          allowed: _capabilities.canPin,
+        ) ||
+        !sticker_ordering.stickerSelectionWouldChangePinnedOrder(
+          packs: _packs,
+          selectedStickerIds: selectedIds,
+        )) {
       return;
     }
     final selectedByPack = <String, List<String>>{};
@@ -1008,6 +1012,54 @@ class _StickerManagerPanelState extends State<StickerManagerPanel> {
       selectedStickerIds: _selectedStickerIds,
       visibleItems: items,
     );
+    final canPinSelection =
+        canStartStickerSelectionAction(
+          busy: busy,
+          selectedStickerIds: _selectedStickerIds,
+          allowed: capabilities.canPin,
+        ) &&
+        sticker_ordering.stickerSelectionWouldChangePinnedOrder(
+          packs: _packs,
+          selectedStickerIds: _selectedStickerIds,
+        );
+    final Widget stickerBody;
+    if (_loading && _packs.isEmpty) {
+      stickerBody = const Center(
+        child: CircularProgressIndicator(color: UiColors.accent),
+      );
+    } else if (totalCount == 0) {
+      stickerBody = const Align(
+        alignment: Alignment.topCenter,
+        child: SizedBox(
+          width: double.infinity,
+          child: StickerEmptyState(text: '暂无表情,点击本地上传会自动创建'),
+        ),
+      );
+    } else if (items.isEmpty) {
+      stickerBody = const Align(
+        alignment: Alignment.topCenter,
+        child: SizedBox(
+          width: double.infinity,
+          child: StickerEmptyState(text: '没有匹配的表情'),
+        ),
+      );
+    } else {
+      stickerBody = StickerGrid(
+        key: const ValueKey('sticker-manager-items-scroll'),
+        items: items,
+        managing: _managing,
+        selectionNumbers: selectionNumbers,
+        busy: busy,
+        scrollable: true,
+        onTap: (item) {
+          if (_managing) {
+            _toggleSelection(item.sticker.id);
+          } else {
+            _preview(item);
+          }
+        },
+      );
+    }
 
     return FloatingNoticeEmitter(
       notices: [
@@ -1025,14 +1077,13 @@ class _StickerManagerPanelState extends State<StickerManagerPanel> {
             eventKey: _floatingNoticeEventKey('error'),
           ),
       ],
-      child: SettingsList(
-        children: [
-          if (!widget.backend.hasApi)
-            StickerEmptyState(text: widget.unavailableText)
-          else
-            SettingsCard(
+      child: !widget.backend.hasApi
+          ? SettingsList(
+              children: [StickerEmptyState(text: widget.unavailableText)],
+            )
+          : SettingsFixedHeaderCard(
               title: widget.title,
-              spacing: 0,
+              spacing: 10,
               trailing: Text(
                 stickerManagementCountText(
                   filterActive: _filterActive,
@@ -1045,7 +1096,7 @@ class _StickerManagerPanelState extends State<StickerManagerPanel> {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              children: [
+              headerChildren: [
                 StickerActionGrid(
                   actions: [
                     StickerActionGridEntry(
@@ -1134,14 +1185,7 @@ class _StickerManagerPanelState extends State<StickerManagerPanel> {
                       StickerActionGridEntry(
                         label: '置顶',
                         button: Button(
-                          onPressed:
-                              canStartStickerSelectionAction(
-                                busy: busy,
-                                selectedStickerIds: _selectedStickerIds,
-                                allowed: capabilities.canPin,
-                              )
-                              ? _pinSelected
-                              : null,
+                          onPressed: canPinSelection ? _pinSelected : null,
                           loading: _savingOrder,
                           icon: const Icon(Icons.vertical_align_top),
                           width: double.infinity,
@@ -1180,36 +1224,9 @@ class _StickerManagerPanelState extends State<StickerManagerPanel> {
                     ],
                   ],
                 ),
-                const SizedBox(height: 14),
-                if (_loading && _packs.isEmpty)
-                  const SizedBox(
-                    height: 128,
-                    child: Center(
-                      child: CircularProgressIndicator(color: UiColors.accent),
-                    ),
-                  )
-                else if (totalCount == 0)
-                  const StickerEmptyState(text: '暂无表情,点击本地上传会自动创建')
-                else if (items.isEmpty)
-                  const StickerEmptyState(text: '没有匹配的表情')
-                else
-                  StickerGrid(
-                    items: items,
-                    managing: _managing,
-                    selectionNumbers: selectionNumbers,
-                    busy: busy,
-                    onTap: (item) {
-                      if (_managing) {
-                        _toggleSelection(item.sticker.id);
-                      } else {
-                        _preview(item);
-                      }
-                    },
-                  ),
               ],
+              body: stickerBody,
             ),
-        ],
-      ),
     );
   }
 }
@@ -1324,6 +1341,7 @@ class StickerGrid extends StatelessWidget {
     required this.selectionNumbers,
     required this.busy,
     required this.onTap,
+    this.scrollable = false,
   });
 
   final List<ManagedSticker> items;
@@ -1331,6 +1349,7 @@ class StickerGrid extends StatelessWidget {
   final Map<String, int> selectionNumbers;
   final bool busy;
   final ValueChanged<ManagedSticker> onTap;
+  final bool scrollable;
 
   @override
   Widget build(BuildContext context) {
@@ -1341,8 +1360,8 @@ class StickerGrid extends StatelessWidget {
             : 360.0;
         final columns = (width / 92).floor().clamp(3, 9);
         return GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
+          shrinkWrap: !scrollable,
+          physics: scrollable ? null : const NeverScrollableScrollPhysics(),
           itemCount: items.length,
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: columns,

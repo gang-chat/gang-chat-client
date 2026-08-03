@@ -68,6 +68,52 @@ void main() {
       'pack_1': ['a'],
     });
   });
+
+  test('batch pin is available only when selected order would change', () {
+    final packs = [
+      _pack('pack_1', ['a', 'b', 'c']),
+      _pack('pack_2', ['d', 'e']),
+    ];
+
+    expect(
+      stickerSelectionWouldChangePinnedOrder(
+        packs: packs,
+        selectedStickerIds: ['a', 'b'],
+      ),
+      isFalse,
+    );
+    expect(
+      stickerSelectionWouldChangePinnedOrder(
+        packs: packs,
+        selectedStickerIds: ['b'],
+      ),
+      isTrue,
+    );
+    expect(
+      stickerSelectionWouldChangePinnedOrder(
+        packs: packs,
+        selectedStickerIds: ['b', 'a'],
+      ),
+      isTrue,
+    );
+    expect(
+      stickerSelectionWouldChangePinnedOrder(
+        packs: packs,
+        selectedStickerIds: ['d'],
+        orderByPack: const {
+          'pack_2': ['e', 'd'],
+        },
+      ),
+      isTrue,
+    );
+    expect(
+      stickerSelectionWouldChangePinnedOrder(
+        packs: packs,
+        selectedStickerIds: ['missing'],
+      ),
+      isFalse,
+    );
+  });
 }
 
 StickerPack _pack(String id, List<String> stickerIds) {

@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:client/src/app/settings_controller.dart';
 import 'package:client/src/app/settings_shell_state.dart';
+import 'package:client/src/app/personal_music_playlists.dart';
 import 'package:client/src/protocol/api_client.dart';
 import 'package:client/src/protocol/models.dart';
 import 'package:client/src/protocol/sticker_pack_store.dart';
@@ -171,6 +172,97 @@ void main() {
       lessThan(tester.getCenter(playlistName).dx),
     );
     expect(find.text('返回歌单列表'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('playlist list and detail keep controls while content scrolls', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(720, 600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final playlists = List.generate(
+      16,
+      (index) => PersonalMusicPlaylist(
+        id: index == 0 ? 'mbp_1' : 'sticky_playlist_$index',
+        name: '列表 $index',
+        description: '',
+        revision: 1,
+        itemCount: 16,
+        createdAt: null,
+        updatedAt: null,
+      ),
+    );
+    final playlistItems = List.generate(
+      16,
+      (index) => PersonalMusicPlaylistItem(
+        id: 'sticky_item_$index',
+        playlistId: 'mbp_1',
+        trackId: 'track_$index',
+        source: 'netease',
+        title: '歌曲 $index',
+        artists: const ['歌手'],
+        durationMs: 180000,
+        sortOrder: (index + 1) * 10,
+        createdAt: null,
+      ),
+    );
+    final api = _FakePersonalPlaylistApi(
+      playlists: playlists,
+      playlistItems: playlistItems,
+    );
+
+    await _pumpPlaylistSettings(tester, api);
+    await tester.pumpAndSettle();
+
+    final playlistScroll = find.byKey(
+      const ValueKey('personal-music-playlists-scroll'),
+    );
+    final createButton = find.byKey(
+      const ValueKey('create-personal-music-playlist'),
+    );
+    final listTitleTop = tester.getTopLeft(find.text('歌单管理')).dy;
+    final createButtonTop = tester.getTopLeft(createButton).dy;
+    await tester.drag(playlistScroll, const Offset(0, -300));
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(find.text('歌单管理')).dy, listTitleTop);
+    expect(tester.getTopLeft(createButton).dy, createButtonTop);
+
+    final playlistScrollable = find.descendant(
+      of: playlistScroll,
+      matching: find.byType(Scrollable),
+    );
+    expect(
+      tester.state<ScrollableState>(playlistScrollable).position.pixels,
+      greaterThan(0),
+    );
+    tester.state<ScrollableState>(playlistScrollable).position.jumpTo(0);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('列表 0'));
+    await tester.pumpAndSettle();
+
+    final detailHeader = find.byKey(
+      const ValueKey('personal-music-playlist-header'),
+    );
+    final searchButton = find.byKey(
+      const ValueKey('search-add-personal-music-playlist-item'),
+    );
+    final itemScroll = find.byKey(
+      const ValueKey('personal-music-playlist-items-scroll'),
+    );
+    final detailHeaderTop = tester.getTopLeft(detailHeader).dy;
+    final searchButtonTop = tester.getTopLeft(searchButton).dy;
+    await tester.drag(itemScroll, const Offset(0, -300));
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(detailHeader).dy, detailHeaderTop);
+    expect(tester.getTopLeft(searchButton).dy, searchButtonTop);
+    final itemScrollable = find.descendant(
+      of: itemScroll,
+      matching: find.byType(Scrollable),
+    );
+    expect(
+      tester.state<ScrollableState>(itemScrollable).position.pixels,
+      greaterThan(0),
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -339,7 +431,22 @@ void main() {
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(360, 900));
       addTearDown(() => tester.binding.setSurfaceSize(null));
-      final api = _FakePersonalPlaylistApi();
+      final api = _FakePersonalPlaylistApi(
+        playlistItems: const [
+          _FakePersonalPlaylistApi.playlistItem,
+          PersonalMusicPlaylistItem(
+            id: 'mbpi_2',
+            playlistId: 'mbp_1',
+            trackId: 'track_2',
+            source: 'netease',
+            title: '夜曲',
+            artists: ['周杰伦'],
+            durationMs: 226000,
+            sortOrder: 20,
+            createdAt: null,
+          ),
+        ],
+      );
 
       await _pumpPlaylistSettings(tester, api);
       await tester.pumpAndSettle();
@@ -376,7 +483,7 @@ void main() {
       expect(find.text('取消管理'), findsOneWidget);
       expect(find.text('分享'), findsOneWidget);
       expect(find.text('置顶'), findsOneWidget);
-      expect(find.text('全选当前页'), findsOneWidget);
+      expect(find.text('全选已加载'), findsOneWidget);
       expect(
         find.descendant(of: item, matching: find.byTooltip('上移')),
         findsOneWidget,
@@ -404,7 +511,7 @@ void main() {
       final blankPoint = tester.getTopLeft(item) + const Offset(2, 2);
       await tester.tapAt(blankPoint);
       await tester.pumpAndSettle();
-      expect(tester.widget<ui.Button>(pinButton).onPressed, isNotNull);
+      expect(tester.widget<ui.Button>(pinButton).onPressed, isNull);
       final selectionNumber = find.byKey(
         const ValueKey('personal-music-playlist-item-selection-number-mbpi_1'),
       );
@@ -425,7 +532,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.widget<ui.Button>(pinButton).onPressed, isNull);
 
-      await tester.tap(find.text('晴天'));
+      final secondItem = find.byKey(
+        const ValueKey('personal-music-playlist-item-mbpi_2'),
+      );
+      await tester.tapAt(tester.getTopLeft(secondItem) + const Offset(2, 2));
       await tester.pumpAndSettle();
       expect(
         tester
@@ -769,6 +879,88 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+
+  for (final platform in [
+    TargetPlatform.windows,
+    TargetPlatform.macOS,
+    TargetPlatform.android,
+  ]) {
+    testWidgets(
+      'room playlist panel is readable but not editable by members on ${platform.name}',
+      (tester) async {
+        final size = platform == TargetPlatform.android
+            ? const Size(360, 800)
+            : const Size(720, 800);
+        await tester.binding.setSurfaceSize(size);
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final api = _FakeRoomPlaylistApi();
+        final controller = PersonalMusicPlaylistsController.room(
+          roomApi: api,
+          roomId: 'room_1',
+          canManage: false,
+          searchTracks: ({required keyword, required source}) async => const [],
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ui.uiTheme().copyWith(platform: platform),
+            home: Scaffold(
+              body: MusicPlaylistsPanel(
+                controller: controller,
+                title: '房间歌单',
+                unavailableMessage: '房间歌单暂不可用',
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('房间歌单'), findsOneWidget);
+        expect(find.text('房间精选'), findsOneWidget);
+        expect(
+          tester
+              .widget<ui.Button>(
+                find.byKey(const ValueKey('create-personal-music-playlist')),
+              )
+              .onPressed,
+          isNull,
+        );
+        expect(
+          tester
+              .widget<ui.Button>(
+                find.byKey(const ValueKey('manage-personal-music-playlists')),
+              )
+              .onPressed,
+          isNull,
+        );
+
+        await tester.tap(find.text('房间精选'));
+        await tester.pumpAndSettle();
+        expect(find.text('房间歌曲'), findsOneWidget);
+        expect(
+          tester
+              .widget<ui.Button>(
+                find.byKey(
+                  const ValueKey('search-add-personal-music-playlist-item'),
+                ),
+              )
+              .onPressed,
+          isNull,
+        );
+        expect(
+          tester
+              .widget<ui.Button>(
+                find.byKey(
+                  const ValueKey('manage-personal-music-playlist-items'),
+                ),
+              )
+              .onPressed,
+          isNull,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 }
 
 Future<void> _pumpPlaylistSettings(
@@ -798,8 +990,12 @@ class _FakePersonalPlaylistApi implements GangApi, PersonalMusicPlaylistApi {
   _FakePersonalPlaylistApi({
     this.onSearch,
     List<PersonalMusicPlaylist>? playlists,
+    List<PersonalMusicPlaylistItem>? playlistItems,
   }) : playlists = List<PersonalMusicPlaylist>.of(
          playlists ?? const [playlist],
+       ),
+       playlistItems = List<PersonalMusicPlaylistItem>.of(
+         playlistItems ?? const [playlistItem],
        );
 
   static const playlist = PersonalMusicPlaylist(
@@ -822,6 +1018,18 @@ class _FakePersonalPlaylistApi implements GangApi, PersonalMusicPlaylistApi {
     updatedAt: null,
   );
 
+  static const playlistItem = PersonalMusicPlaylistItem(
+    id: 'mbpi_1',
+    playlistId: 'mbp_1',
+    trackId: 'track_1',
+    source: 'netease',
+    title: '晴天',
+    artists: ['周杰伦'],
+    durationMs: 269000,
+    sortOrder: 10,
+    createdAt: null,
+  );
+
   final Future<List<MusicBoxSearchResult>> Function(
     String keyword,
     String source,
@@ -829,6 +1037,7 @@ class _FakePersonalPlaylistApi implements GangApi, PersonalMusicPlaylistApi {
   onSearch;
   final List<String> searchRequests = [];
   final List<PersonalMusicPlaylist> playlists;
+  final List<PersonalMusicPlaylistItem> playlistItems;
   final List<List<String>> pinRequests = [];
   final List<String> moveRequests = [];
   final List<String> renameRequests = [];
@@ -879,24 +1088,21 @@ class _FakePersonalPlaylistApi implements GangApi, PersonalMusicPlaylistApi {
         hasMore: false,
       );
     }
-    return const PersonalMusicPlaylistItemsPage(
-      playlist: playlist,
-      items: [
-        PersonalMusicPlaylistItem(
-          id: 'mbpi_1',
-          playlistId: 'mbp_1',
-          trackId: 'track_1',
-          source: 'netease',
-          title: '晴天',
-          artists: ['周杰伦'],
-          durationMs: 269000,
-          sortOrder: 10,
-          createdAt: null,
-        ),
-      ],
+    final currentPlaylist = PersonalMusicPlaylist(
+      id: playlist.id,
+      name: playlist.name,
+      description: playlist.description,
+      revision: playlist.revision,
+      itemCount: playlistItems.length,
+      createdAt: playlist.createdAt,
+      updatedAt: playlist.updatedAt,
+    );
+    return PersonalMusicPlaylistItemsPage(
+      playlist: currentPlaylist,
+      items: List<PersonalMusicPlaylistItem>.of(playlistItems),
       page: 1,
       pageSize: 50,
-      total: 1,
+      total: playlistItems.length,
       hasMore: false,
     );
   }
@@ -1014,6 +1220,72 @@ class _FakePersonalPlaylistApi implements GangApi, PersonalMusicPlaylistApi {
     required String playlistId,
     required List<String> itemIds,
   }) async {}
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _FakeRoomPlaylistApi implements RoomMusicPlaylistApi {
+  static const playlist = PersonalMusicPlaylist(
+    id: 'mbp_room_1',
+    name: '房间精选',
+    description: '',
+    revision: 1,
+    itemCount: 1,
+    createdAt: null,
+    updatedAt: null,
+  );
+
+  static const item = PersonalMusicPlaylistItem(
+    id: 'mbpi_room_1',
+    playlistId: 'mbp_room_1',
+    trackId: 'track_room_1',
+    source: 'netease',
+    title: '房间歌曲',
+    artists: ['歌手'],
+    durationMs: 180000,
+    sortOrder: 10,
+    createdAt: null,
+  );
+
+  @override
+  Future<PersonalMusicPlaylistPage> listRoomMusicPlaylists({
+    required String roomId,
+    int page = 1,
+    int pageSize = 50,
+  }) async {
+    expect(roomId, 'room_1');
+    return const PersonalMusicPlaylistPage(
+      playlists: [playlist],
+      page: 1,
+      pageSize: 50,
+      total: 1,
+      hasMore: false,
+      maxPlaylists: 50,
+      maxPlaylistItems: 500,
+    );
+  }
+
+  @override
+  Future<PersonalMusicPlaylistItemsPage> getRoomMusicPlaylist({
+    required String roomId,
+    required String playlistId,
+    int page = 1,
+    int pageSize = 50,
+    String? keyword,
+    String? source,
+  }) async {
+    expect(roomId, 'room_1');
+    expect(playlistId, playlist.id);
+    return const PersonalMusicPlaylistItemsPage(
+      playlist: playlist,
+      items: [item],
+      page: 1,
+      pageSize: 50,
+      total: 1,
+      hasMore: false,
+    );
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

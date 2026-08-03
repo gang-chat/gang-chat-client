@@ -36,6 +36,7 @@ import '../app/message_display.dart' as message_display;
 import '../app/messages_controller.dart';
 import '../app/music_box_controller.dart';
 import '../app/music_box_display.dart' as music_box_display;
+import '../app/personal_music_playlists.dart';
 import '../app/realtime_controller.dart';
 import '../app/realtime_live_events.dart';
 import '../app/room_badges.dart' as room_badges;
@@ -60,6 +61,7 @@ import '../protocol/api_client.dart'
     show
         ApiException,
         MessagePage,
+        RoomMusicPlaylistApi,
         UploadCancelledException,
         UploadTransferController;
 import '../protocol/models.dart';

@@ -132,6 +132,27 @@ List<String>? stickerOrderWithStickerIdsPinnedToFront(
   return nextOrder;
 }
 
+bool stickerSelectionWouldChangePinnedOrder({
+  required List<StickerPack> packs,
+  required List<String> selectedStickerIds,
+  Map<String, List<String>> orderByPack = const {},
+}) {
+  final selectedByPack = selectedStickerIdsByPack(packs, selectedStickerIds);
+  for (final pack in packs) {
+    final selectedInPack = selectedByPack[pack.id];
+    if (selectedInPack == null || selectedInPack.isEmpty) continue;
+    if (stickerOrderWithStickerIdsPinnedToFront(
+          pack,
+          selectedInPack,
+          order: orderByPack[pack.id],
+        ) !=
+        null) {
+      return true;
+    }
+  }
+  return false;
+}
+
 Map<String, List<String>> selectedStickerIdsByPack(
   List<StickerPack> packs,
   List<String> selectedIds,

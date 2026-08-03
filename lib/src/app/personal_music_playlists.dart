@@ -9,6 +9,12 @@ const String personalPlaylistCount11To50 = '11-50';
 const String personalPlaylistCount51To100 = '51-100';
 const String personalPlaylistCountOver100 = '101+';
 
+typedef MusicPlaylistTrackSearch =
+    Future<List<MusicBoxSearchResult>> Function({
+      required String keyword,
+      required String source,
+    });
+
 class PersonalPlaylistFilterDraft {
   const PersonalPlaylistFilterDraft({
     required this.keyword,
@@ -29,28 +35,138 @@ class PersonalPlaylistItemFilterDraft {
   final String source;
 }
 
+class MusicPlaylistManagementCapabilities {
+  const MusicPlaylistManagementCapabilities({
+    this.canCreatePlaylists = true,
+    this.canRenamePlaylists = true,
+    this.canDeletePlaylists = true,
+    this.canReorderPlaylists = true,
+    this.canAddItems = true,
+    this.canDeleteItems = true,
+    this.canReorderItems = true,
+  });
+
+  const MusicPlaylistManagementCapabilities.readOnly()
+    : canCreatePlaylists = false,
+      canRenamePlaylists = false,
+      canDeletePlaylists = false,
+      canReorderPlaylists = false,
+      canAddItems = false,
+      canDeleteItems = false,
+      canReorderItems = false;
+
+  final bool canCreatePlaylists;
+  final bool canRenamePlaylists;
+  final bool canDeletePlaylists;
+  final bool canReorderPlaylists;
+  final bool canAddItems;
+  final bool canDeleteItems;
+  final bool canReorderItems;
+
+  bool get canManagePlaylists =>
+      canRenamePlaylists || canDeletePlaylists || canReorderPlaylists;
+
+  bool get canManageItems => canDeleteItems || canReorderItems;
+}
+
+abstract interface class _MusicPlaylistsBackend {
+  Object get identity;
+
+  MusicPlaylistManagementCapabilities get capabilities;
+
+  Future<PersonalMusicPlaylistPage> loadPlaylists();
+
+  Future<PersonalMusicPlaylist> createPlaylist({required String name});
+
+  Future<PersonalMusicPlaylist> renamePlaylist({
+    required String playlistId,
+    required String name,
+  });
+
+  Future<void> deletePlaylist(String playlistId);
+
+  Future<void> pinPlaylists({required List<String> playlistIds});
+
+  Future<void> movePlaylist({
+    required String playlistId,
+    required String direction,
+  });
+
+  Future<PersonalMusicPlaylistItemsPage> loadItems({
+    required String playlistId,
+    required int page,
+    required int pageSize,
+    String? keyword,
+    String? source,
+  });
+
+  Future<List<MusicBoxSearchResult>> searchTracks({
+    required String keyword,
+    required String source,
+  });
+
+  Future<PersonalMusicPlaylistItem> addTrack({
+    required String playlistId,
+    required MusicBoxSearchResult track,
+  });
+
+  Future<void> deleteItems({
+    required String playlistId,
+    required List<String> itemIds,
+  });
+
+  Future<void> moveItem({
+    required String playlistId,
+    required String itemId,
+    required String direction,
+  });
+
+  Future<void> reorderItems({
+    required String playlistId,
+    required List<String> itemIds,
+  });
+}
+
 class PersonalMusicPlaylistsController {
-  const PersonalMusicPlaylistsController(this.api);
+  PersonalMusicPlaylistsController(PersonalMusicPlaylistApi? api)
+    : _backend = api == null ? null : _PersonalMusicPlaylistsBackend(api);
 
-  final PersonalMusicPlaylistApi? api;
+  PersonalMusicPlaylistsController.room({
+    required RoomMusicPlaylistApi? roomApi,
+    required String roomId,
+    required bool canManage,
+    required MusicPlaylistTrackSearch searchTracks,
+  }) : _backend = roomApi == null
+           ? null
+           : _RoomMusicPlaylistsBackend(
+               roomApi: roomApi,
+               roomId: roomId,
+               canManage: canManage,
+               searchTracksCallback: searchTracks,
+             );
 
-  bool get available => api != null;
+  final _MusicPlaylistsBackend? _backend;
+
+  Object? get api => _backend?.identity;
+
+  MusicPlaylistManagementCapabilities get capabilities =>
+      _backend?.capabilities ??
+      const MusicPlaylistManagementCapabilities.readOnly();
+
+  bool get available => _backend != null;
 
   Future<PersonalMusicPlaylistPage?> loadPlaylists() {
-    final client = api;
+    final client = _backend;
     if (client == null) return Future.value();
-    return client.listPersonalMusicPlaylists(
-      page: 1,
-      pageSize: personalMusicPlaylistPageSize,
-    );
+    return client.loadPlaylists();
   }
 
   Future<PersonalMusicPlaylist?> createPlaylist(String name) {
     final normalized = normalizedPersonalPlaylistName(name);
     if (normalized == null) return Future.value();
-    final client = api;
+    final client = _backend;
     if (client == null) return Future.value();
-    return client.createPersonalMusicPlaylist(name: normalized);
+    return client.createPlaylist(name: normalized);
   }
 
   Future<PersonalMusicPlaylist?> renamePlaylist({
@@ -59,22 +175,19 @@ class PersonalMusicPlaylistsController {
   }) {
     final normalized = normalizedPersonalPlaylistName(name);
     if (normalized == null) return Future.value();
-    final client = api;
+    final client = _backend;
     if (client == null) return Future.value();
-    return client.renamePersonalMusicPlaylist(
-      playlistId: playlistId,
-      name: normalized,
-    );
+    return client.renamePlaylist(playlistId: playlistId, name: normalized);
   }
 
   Future<void> deletePlaylist(String playlistId) {
-    return api?.deletePersonalMusicPlaylist(playlistId) ?? Future.value();
+    return _backend?.deletePlaylist(playlistId) ?? Future.value();
   }
 
   Future<void> pinPlaylists(List<String> playlistIds) {
     final ids = uniquePersonalPlaylistIds(playlistIds);
     if (ids.isEmpty) return Future.value();
-    return api?.pinPersonalMusicPlaylists(playlistIds: ids) ?? Future.value();
+    return _backend?.pinPlaylists(playlistIds: ids) ?? Future.value();
   }
 
   Future<void> movePlaylist({required String playlistId, required int delta}) {
@@ -83,7 +196,7 @@ class PersonalMusicPlaylistsController {
         ArgumentError.value(delta, 'delta', 'must be -1 or 1'),
       );
     }
-    return api?.movePersonalMusicPlaylist(
+    return _backend?.movePlaylist(
           playlistId: playlistId,
           direction: delta < 0 ? 'up' : 'down',
         ) ??
@@ -96,9 +209,9 @@ class PersonalMusicPlaylistsController {
     String keyword = '',
     String source = '',
   }) {
-    final client = api;
+    final client = _backend;
     if (client == null) return Future.value();
-    return client.getPersonalMusicPlaylist(
+    return client.loadItems(
       playlistId: playlistId,
       page: page,
       pageSize: personalMusicPlaylistPageSize,
@@ -115,26 +228,18 @@ class PersonalMusicPlaylistsController {
     if (normalizedKeyword.isEmpty) {
       return Future.value(const <MusicBoxSearchResult>[]);
     }
-    final client = api;
+    final client = _backend;
     if (client == null) return Future.value();
-    return client.searchPersonalMusicPlaylistTracks(
-      keyword: normalizedKeyword,
-      source: source,
-      count: 20,
-      page: 1,
-    );
+    return client.searchTracks(keyword: normalizedKeyword, source: source);
   }
 
   Future<PersonalMusicPlaylistItem?> addTrack({
     required String playlistId,
     required MusicBoxSearchResult track,
   }) {
-    final client = api;
+    final client = _backend;
     if (client == null) return Future.value();
-    return client.addPersonalMusicPlaylistItem(
-      playlistId: playlistId,
-      track: track,
-    );
+    return client.addTrack(playlistId: playlistId, track: track);
   }
 
   Future<void> deleteItems({
@@ -143,10 +248,7 @@ class PersonalMusicPlaylistsController {
   }) {
     final ids = uniquePersonalPlaylistItemIds(itemIds);
     if (ids.isEmpty) return Future.value();
-    return api?.deletePersonalMusicPlaylistItems(
-          playlistId: playlistId,
-          itemIds: ids,
-        ) ??
+    return _backend?.deleteItems(playlistId: playlistId, itemIds: ids) ??
         Future.value();
   }
 
@@ -160,7 +262,7 @@ class PersonalMusicPlaylistsController {
         ArgumentError.value(delta, 'delta', 'must be -1 or 1'),
       );
     }
-    return api?.movePersonalMusicPlaylistItem(
+    return _backend?.moveItem(
           playlistId: playlistId,
           itemId: itemId,
           direction: delta < 0 ? 'up' : 'down',
@@ -172,7 +274,7 @@ class PersonalMusicPlaylistsController {
     required String playlistId,
     required Iterable<String> selectedItemIds,
   }) async {
-    final client = api;
+    final client = _backend;
     if (client == null) return;
     final selectedIds = uniquePersonalPlaylistItemIds(selectedItemIds);
     if (selectedIds.isEmpty) return;
@@ -180,7 +282,7 @@ class PersonalMusicPlaylistsController {
     final items = <PersonalMusicPlaylistItem>[];
     var page = 1;
     while (true) {
-      final result = await client.getPersonalMusicPlaylist(
+      final result = await client.loadItems(
         playlistId: playlistId,
         page: page,
         pageSize: personalMusicPlaylistPageSize,
@@ -198,9 +300,295 @@ class PersonalMusicPlaylistsController {
       selectedItemIds: selectedIds,
     );
     if (order == null) return;
-    await client.reorderPersonalMusicPlaylistItems(
+    await client.reorderItems(playlistId: playlistId, itemIds: order);
+  }
+}
+
+class _PersonalMusicPlaylistsBackend implements _MusicPlaylistsBackend {
+  const _PersonalMusicPlaylistsBackend(this.api);
+
+  final PersonalMusicPlaylistApi api;
+
+  @override
+  Object get identity => api;
+
+  @override
+  MusicPlaylistManagementCapabilities get capabilities =>
+      const MusicPlaylistManagementCapabilities();
+
+  @override
+  Future<PersonalMusicPlaylistPage> loadPlaylists() {
+    return api.listPersonalMusicPlaylists();
+  }
+
+  @override
+  Future<PersonalMusicPlaylist> createPlaylist({required String name}) {
+    return api.createPersonalMusicPlaylist(name: name);
+  }
+
+  @override
+  Future<PersonalMusicPlaylist> renamePlaylist({
+    required String playlistId,
+    required String name,
+  }) {
+    return api.renamePersonalMusicPlaylist(playlistId: playlistId, name: name);
+  }
+
+  @override
+  Future<void> deletePlaylist(String playlistId) {
+    return api.deletePersonalMusicPlaylist(playlistId);
+  }
+
+  @override
+  Future<void> pinPlaylists({required List<String> playlistIds}) {
+    return api.pinPersonalMusicPlaylists(playlistIds: playlistIds);
+  }
+
+  @override
+  Future<void> movePlaylist({
+    required String playlistId,
+    required String direction,
+  }) {
+    return api.movePersonalMusicPlaylist(
       playlistId: playlistId,
-      itemIds: order,
+      direction: direction,
+    );
+  }
+
+  @override
+  Future<PersonalMusicPlaylistItemsPage> loadItems({
+    required String playlistId,
+    required int page,
+    required int pageSize,
+    String? keyword,
+    String? source,
+  }) {
+    return api.getPersonalMusicPlaylist(
+      playlistId: playlistId,
+      page: page,
+      pageSize: pageSize,
+      keyword: keyword,
+      source: source,
+    );
+  }
+
+  @override
+  Future<List<MusicBoxSearchResult>> searchTracks({
+    required String keyword,
+    required String source,
+  }) {
+    return api.searchPersonalMusicPlaylistTracks(
+      keyword: keyword,
+      source: source,
+    );
+  }
+
+  @override
+  Future<PersonalMusicPlaylistItem> addTrack({
+    required String playlistId,
+    required MusicBoxSearchResult track,
+  }) {
+    return api.addPersonalMusicPlaylistItem(
+      playlistId: playlistId,
+      track: track,
+    );
+  }
+
+  @override
+  Future<void> deleteItems({
+    required String playlistId,
+    required List<String> itemIds,
+  }) {
+    return api.deletePersonalMusicPlaylistItems(
+      playlistId: playlistId,
+      itemIds: itemIds,
+    );
+  }
+
+  @override
+  Future<void> moveItem({
+    required String playlistId,
+    required String itemId,
+    required String direction,
+  }) {
+    return api.movePersonalMusicPlaylistItem(
+      playlistId: playlistId,
+      itemId: itemId,
+      direction: direction,
+    );
+  }
+
+  @override
+  Future<void> reorderItems({
+    required String playlistId,
+    required List<String> itemIds,
+  }) {
+    return api.reorderPersonalMusicPlaylistItems(
+      playlistId: playlistId,
+      itemIds: itemIds,
+    );
+  }
+}
+
+class _RoomMusicPlaylistsBackend implements _MusicPlaylistsBackend {
+  const _RoomMusicPlaylistsBackend({
+    required this.roomApi,
+    required this.roomId,
+    required this.canManage,
+    required this.searchTracksCallback,
+  });
+
+  final RoomMusicPlaylistApi roomApi;
+  final String roomId;
+  final bool canManage;
+  final MusicPlaylistTrackSearch searchTracksCallback;
+
+  void _requireManagePermission() {
+    if (!canManage) {
+      throw StateError('当前账号没有管理房间歌单的权限');
+    }
+  }
+
+  @override
+  Object get identity => (roomApi, roomId, canManage);
+
+  @override
+  MusicPlaylistManagementCapabilities get capabilities => canManage
+      ? const MusicPlaylistManagementCapabilities()
+      : const MusicPlaylistManagementCapabilities.readOnly();
+
+  @override
+  Future<PersonalMusicPlaylistPage> loadPlaylists() {
+    return roomApi.listRoomMusicPlaylists(roomId: roomId);
+  }
+
+  @override
+  Future<PersonalMusicPlaylist> createPlaylist({required String name}) {
+    _requireManagePermission();
+    return roomApi.createRoomMusicPlaylist(roomId: roomId, name: name);
+  }
+
+  @override
+  Future<PersonalMusicPlaylist> renamePlaylist({
+    required String playlistId,
+    required String name,
+  }) {
+    _requireManagePermission();
+    return roomApi.renameRoomMusicPlaylist(
+      roomId: roomId,
+      playlistId: playlistId,
+      name: name,
+    );
+  }
+
+  @override
+  Future<void> deletePlaylist(String playlistId) {
+    _requireManagePermission();
+    return roomApi.deleteRoomMusicPlaylist(
+      roomId: roomId,
+      playlistId: playlistId,
+    );
+  }
+
+  @override
+  Future<void> pinPlaylists({required List<String> playlistIds}) {
+    _requireManagePermission();
+    return roomApi.pinRoomMusicPlaylists(
+      roomId: roomId,
+      playlistIds: playlistIds,
+    );
+  }
+
+  @override
+  Future<void> movePlaylist({
+    required String playlistId,
+    required String direction,
+  }) {
+    _requireManagePermission();
+    return roomApi.moveRoomMusicPlaylist(
+      roomId: roomId,
+      playlistId: playlistId,
+      direction: direction,
+    );
+  }
+
+  @override
+  Future<PersonalMusicPlaylistItemsPage> loadItems({
+    required String playlistId,
+    required int page,
+    required int pageSize,
+    String? keyword,
+    String? source,
+  }) {
+    return roomApi.getRoomMusicPlaylist(
+      roomId: roomId,
+      playlistId: playlistId,
+      page: page,
+      pageSize: pageSize,
+      keyword: keyword,
+      source: source,
+    );
+  }
+
+  @override
+  Future<List<MusicBoxSearchResult>> searchTracks({
+    required String keyword,
+    required String source,
+  }) {
+    return searchTracksCallback(keyword: keyword, source: source);
+  }
+
+  @override
+  Future<PersonalMusicPlaylistItem> addTrack({
+    required String playlistId,
+    required MusicBoxSearchResult track,
+  }) {
+    _requireManagePermission();
+    return roomApi.addRoomMusicPlaylistItem(
+      roomId: roomId,
+      playlistId: playlistId,
+      track: track,
+    );
+  }
+
+  @override
+  Future<void> deleteItems({
+    required String playlistId,
+    required List<String> itemIds,
+  }) {
+    _requireManagePermission();
+    return roomApi.deleteRoomMusicPlaylistItems(
+      roomId: roomId,
+      playlistId: playlistId,
+      itemIds: itemIds,
+    );
+  }
+
+  @override
+  Future<void> moveItem({
+    required String playlistId,
+    required String itemId,
+    required String direction,
+  }) {
+    _requireManagePermission();
+    return roomApi.moveRoomMusicPlaylistItem(
+      roomId: roomId,
+      playlistId: playlistId,
+      itemId: itemId,
+      direction: direction,
+    );
+  }
+
+  @override
+  Future<void> reorderItems({
+    required String playlistId,
+    required List<String> itemIds,
+  }) {
+    _requireManagePermission();
+    return roomApi.reorderRoomMusicPlaylistItems(
+      roomId: roomId,
+      playlistId: playlistId,
+      itemIds: itemIds,
     );
   }
 }

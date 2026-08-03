@@ -212,3 +212,44 @@ class SettingsCard extends StatelessWidget {
     );
   }
 }
+
+/// A settings card whose title and controls stay visible while only [body]
+/// scrolls. The parent must provide bounded height, as [SettingsScaffold]
+/// does for its body.
+class SettingsFixedHeaderCard extends StatelessWidget {
+  const SettingsFixedHeaderCard({
+    super.key,
+    required this.title,
+    required this.body,
+    this.headerChildren = const [],
+    this.titleWidget,
+    this.trailing,
+    this.spacing = 10,
+    this.padding = const EdgeInsets.fromLTRB(22, 0, 22, 22),
+  });
+
+  final String title;
+  final Widget body;
+  final List<Widget> headerChildren;
+  final Widget? titleWidget;
+  final Widget? trailing;
+  final double spacing;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: padding,
+      child: SettingsCard(
+        title: title,
+        titleWidget: titleWidget,
+        trailing: trailing,
+        spacing: spacing,
+        children: [
+          ...headerChildren,
+          Expanded(child: body),
+        ],
+      ),
+    );
+  }
+}

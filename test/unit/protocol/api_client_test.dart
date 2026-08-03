@@ -3116,6 +3116,136 @@ void main() {
       api.close();
     },
   );
+
+  test('room playlist APIs use room-scoped routes and bodies', () async {
+    final seen = <String>[];
+    final api = GangApiClient(
+      baseUrl: 'http://example.test/api/v1',
+      accessTokenProvider: ({bool forceRefresh = false}) async => 'token',
+      httpClient: MockClient((request) async {
+        seen.add('${request.method} ${request.url.path}');
+        expect(request.headers['authorization'], 'Bearer token');
+        switch ((request.method, request.url.path)) {
+          case ('GET', '/api/v1/rooms/room_1/music-box/playlists'):
+            expect(request.url.queryParameters, {
+              'page': '1',
+              'page_size': '50',
+            });
+            return http.Response(
+              jsonEncode({
+                'playlists': [
+                  {
+                    'id': 'mbp_room_1',
+                    'name': '房间精选',
+                    'description': '',
+                    'revision': 1,
+                    'item_count': 0,
+                  },
+                ],
+                'pagination': {
+                  'page': 1,
+                  'page_size': 50,
+                  'total': 1,
+                  'has_more': false,
+                },
+                'limits': {'max_playlists': 50, 'max_playlist_items': 500},
+              }),
+              200,
+              headers: {'content-type': 'application/json; charset=utf-8'},
+            );
+          case ('POST', '/api/v1/rooms/room_1/music-box/playlists'):
+            expect(jsonDecode(request.body), {'name': '新歌单'});
+            return http.Response(
+              jsonEncode({
+                'playlist': {
+                  'id': 'mbp_room_2',
+                  'name': '新歌单',
+                  'description': '',
+                  'revision': 1,
+                  'item_count': 0,
+                },
+              }),
+              201,
+              headers: {'content-type': 'application/json; charset=utf-8'},
+            );
+          case (
+            'POST',
+            '/api/v1/rooms/room_1/music-box/playlists/mbp_room_2/items',
+          ):
+            expect(jsonDecode(request.body), {
+              'track_id': 'track_1',
+              'source': 'netease',
+              'title': '晴天',
+              'artists': ['周杰伦'],
+            });
+            return http.Response(
+              jsonEncode({
+                'item': {
+                  'id': 'mbpi_room_1',
+                  'playlist_id': 'mbp_room_2',
+                  'track_id': 'track_1',
+                  'source': 'netease',
+                  'title': '晴天',
+                  'artists': ['周杰伦'],
+                  'sort_order': 10,
+                },
+              }),
+              201,
+              headers: {'content-type': 'application/json; charset=utf-8'},
+            );
+          case ('PATCH', '/api/v1/rooms/room_1/music-box/playlists/order'):
+            expect(jsonDecode(request.body), {
+              'playlist_ids': ['mbp_room_2', 'mbp_room_1'],
+            });
+            return http.Response(jsonEncode({'ok': true}), 200);
+          case (
+            'DELETE',
+            '/api/v1/rooms/room_1/music-box/playlists/mbp_room_2/items',
+          ):
+            expect(jsonDecode(request.body), {
+              'item_ids': ['mbpi_room_1'],
+            });
+            return http.Response(jsonEncode({'ok': true, 'deleted': 1}), 200);
+          case (
+            'DELETE',
+            '/api/v1/rooms/room_1/music-box/playlists/mbp_room_2',
+          ):
+            return http.Response(jsonEncode({'ok': true}), 200);
+          default:
+            fail('unexpected request: ${request.method} ${request.url}');
+        }
+      }),
+    );
+
+    final listed = await api.listRoomMusicPlaylists(roomId: 'room_1');
+    final created = await api.createRoomMusicPlaylist(
+      roomId: 'room_1',
+      name: '新歌单',
+    );
+    final item = await api.addRoomMusicPlaylistItem(
+      roomId: 'room_1',
+      playlistId: created.id,
+      track: const MusicBoxSearchResult(
+        trackId: 'track_1',
+        name: '晴天',
+        artists: ['周杰伦'],
+        source: 'netease',
+      ),
+    );
+    await api.pinRoomMusicPlaylists(
+      roomId: 'room_1',
+      playlistIds: [created.id, listed.playlists.single.id],
+    );
+    await api.deleteRoomMusicPlaylistItems(
+      roomId: 'room_1',
+      playlistId: created.id,
+      itemIds: [item.id],
+    );
+    await api.deleteRoomMusicPlaylist(roomId: 'room_1', playlistId: created.id);
+
+    expect(seen, hasLength(6));
+    api.close();
+  });
 }
 
 Map<String, Object?> _roomInviteJson({

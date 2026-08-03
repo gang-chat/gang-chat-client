@@ -103,6 +103,88 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('sticker pin disables an unchanged top selection', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(720, 760));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final backend = _FakeStickerBackend(
+      capabilities: const sticker_management.StickerManagementCapabilities(),
+      packs: [
+        _pack('personal_pack', ['alpha', 'beta']),
+      ],
+    );
+    await tester.pumpWidget(
+      _host(
+        ui.StickerManagerPanel(
+          backend: backend,
+          fileSelectionService: _FakeFileSelectionService(),
+          title: '表情包管理',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('批量管理'));
+    await tester.pumpAndSettle();
+    expect(_buttonEnabled(tester, '置顶'), isFalse);
+
+    await tester.tap(find.byTooltip('alpha'));
+    await tester.pumpAndSettle();
+    expect(_buttonEnabled(tester, '置顶'), isFalse);
+
+    await tester.tap(find.byTooltip('alpha'));
+    await tester.tap(find.byTooltip('beta'));
+    await tester.pumpAndSettle();
+    expect(_buttonEnabled(tester, '置顶'), isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('sticker management keeps controls while stickers scroll', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(720, 600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final backend = _FakeStickerBackend(
+      capabilities: const sticker_management.StickerManagementCapabilities(),
+      packs: [
+        _pack('personal_pack', List.generate(32, (index) => 'sticker_$index')),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _host(
+        ui.StickerManagerPanel(
+          backend: backend,
+          fileSelectionService: _FakeFileSelectionService(),
+          title: '表情包管理',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final title = find.text('表情包管理');
+    final actions = find.byKey(const ValueKey('sticker-action-grid'));
+    final stickers = find.byKey(const ValueKey('sticker-manager-items-scroll'));
+    final titleTop = tester.getTopLeft(title).dy;
+    final actionsTop = tester.getTopLeft(actions).dy;
+    await tester.drag(stickers, const Offset(0, -260));
+    await tester.pumpAndSettle();
+
+    expect(tester.getTopLeft(title).dy, titleTop);
+    expect(tester.getTopLeft(actions).dy, actionsTop);
+    final scrollable = find.descendant(
+      of: stickers,
+      matching: find.byType(Scrollable),
+    );
+    expect(
+      tester.state<ScrollableState>(scrollable).position.pixels,
+      greaterThan(0),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('room sticker panel keeps read-only actions disabled', (
     tester,
   ) async {

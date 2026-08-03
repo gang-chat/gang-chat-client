@@ -339,6 +339,28 @@ extension _HomeShellLayout on _HomeShellState {
             );
           },
         ),
+        musicPlaylistsBuilder: (context) => MusicPlaylistsPanel(
+          key: ValueKey('room-music-playlists-${room.id}'),
+          controller: PersonalMusicPlaylistsController.room(
+            roomApi: _services.api is RoomMusicPlaylistApi
+                ? _services.api as RoomMusicPlaylistApi
+                : null,
+            roomId: room.id,
+            canManage: room_display
+                .roomAccessState(room: room, currentUser: _currentUser)
+                .canManageRoom,
+            searchTracks: ({required keyword, required source}) =>
+                _services.api.searchMusicBox(
+                  roomId: room.id,
+                  keyword: keyword,
+                  source: source,
+                  count: 20,
+                  page: 1,
+                ),
+          ),
+          title: '房间歌单',
+          unavailableMessage: '房间歌单需要登录后从服务端读取',
+        ),
       );
     }
     if (_contentMode == _ContentMode.live) {

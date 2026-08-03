@@ -2,8 +2,14 @@ part of 'room_management.dart';
 
 enum _RoomSettingsDialogMode { create, edit }
 
-/// 房间设置的分段:房间信息、个人偏好与房间表情包管理。
-enum _RoomSettingsSection { info, preferences, messageHistory, stickers }
+/// 房间设置的分段:房间信息、个人偏好与房间资源管理。
+enum _RoomSettingsSection {
+  info,
+  preferences,
+  messageHistory,
+  stickers,
+  playlists,
+}
 
 class RoomSettingsDialog extends StatefulWidget {
   const RoomSettingsDialog({
@@ -19,6 +25,7 @@ class RoomSettingsDialog extends StatefulWidget {
     this.onResult,
     this.stickerImagePreviewOpener,
     this.messageHistoryBuilder,
+    this.musicPlaylistsBuilder,
     bool createMode = false,
   }) : _mode = createMode
            ? _RoomSettingsDialogMode.create
@@ -60,6 +67,7 @@ class RoomSettingsDialog extends StatefulWidget {
   final ValueChanged<RoomManagementResult>? onResult;
   final StickerImagePreviewOpener? stickerImagePreviewOpener;
   final WidgetBuilder? messageHistoryBuilder;
+  final WidgetBuilder? musicPlaylistsBuilder;
   final _RoomSettingsDialogMode _mode;
 
   @override
@@ -676,6 +684,12 @@ class _RoomSettingsDialogState extends State<RoomSettingsDialog> {
                     label: '表情包',
                     icon: Icons.emoji_emotions_outlined,
                   ),
+                  if (widget.musicPlaylistsBuilder != null)
+                    const Segment(
+                      value: _RoomSettingsSection.playlists,
+                      label: '歌单',
+                      icon: Icons.queue_music_outlined,
+                    ),
                 ],
               ),
         child: _creating
@@ -696,6 +710,14 @@ class _RoomSettingsDialogState extends State<RoomSettingsDialog> {
                   title: '房间表情包',
                   unavailableText: '房间表情包需要登录后从服务端读取',
                 ),
+                _RoomSettingsSection.playlists =>
+                  widget.musicPlaylistsBuilder?.call(context) ??
+                      const Center(
+                        child: Text(
+                          '房间歌单暂不可用',
+                          style: TextStyle(color: UiColors.textMuted),
+                        ),
+                      ),
               },
       ),
     );
