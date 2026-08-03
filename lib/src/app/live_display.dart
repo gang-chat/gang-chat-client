@@ -134,10 +134,15 @@ bool liveParticipantVisibleInRoster(
   LiveParticipant participant, {
   Set<String> connectedParticipantIds = const <String>{},
 }) {
-  // The server can still report "joining" during a reconnect. LiveKit room
-  // membership is enough to prove the remote participant is present; mic
-  // mute is an independent state and must never decide roster visibility.
+  final connectionState = participant.connectionState.trim().toLowerCase();
+  // A participant marked reconnecting remains part of the server's live
+  // count during its bounded reconnect grace period. Keep that same member in
+  // the open roster even while LiveKit is rebuilding the remote-participant
+  // map, otherwise the room card says X users while the channel shows X - 1.
+  // A provisional first-time "joining" participant is still hidden until
+  // LiveKit confirms it; mic mute is independent of roster visibility.
   return liveParticipantConnectionReady(participant) ||
+      connectionState == 'reconnecting' ||
       connectedParticipantIds.contains(participant.user.id);
 }
 

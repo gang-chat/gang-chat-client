@@ -164,6 +164,56 @@ void main() {
     );
   });
 
+  test(
+    'reconnect microphone recovery retries after native teardown races',
+    () async {
+      var attempts = 0;
+      final waits = <Duration>[];
+
+      final recovered = await retryLiveReconnectMicrophoneRecovery(
+        attempt: () async {
+          attempts += 1;
+          return attempts == 3;
+        },
+        isCurrent: () => true,
+        retryDelays: const [
+          Duration.zero,
+          Duration(milliseconds: 10),
+          Duration(milliseconds: 20),
+        ],
+        wait: (delay) async => waits.add(delay),
+      );
+
+      expect(recovered, isTrue);
+      expect(attempts, 3);
+      expect(waits, const [
+        Duration(milliseconds: 10),
+        Duration(milliseconds: 20),
+      ]);
+    },
+  );
+
+  test(
+    'reconnect microphone recovery stops when its room is superseded',
+    () async {
+      var current = true;
+      var attempts = 0;
+
+      final recovered = await retryLiveReconnectMicrophoneRecovery(
+        attempt: () async {
+          attempts += 1;
+          current = false;
+          return false;
+        },
+        isCurrent: () => current,
+        retryDelays: const [Duration.zero, Duration.zero],
+      );
+
+      expect(recovered, isFalse);
+      expect(attempts, 1);
+    },
+  );
+
   test('latest subscription reconciliation runs last', () async {
     final reconciler = LatestLiveSubscriptionReconciler();
     final firstStarted = Completer<void>();

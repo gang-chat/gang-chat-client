@@ -93,6 +93,22 @@ void main() {
     );
   });
 
+  test('visible live participants keep reconnecting users in the roster', () {
+    final live = _liveWithParticipants([
+      _participant('alice', connectionState: 'reconnecting'),
+      _participant('bob', connectionState: 'online'),
+    ]);
+
+    expect(
+      visibleLiveParticipantsForStage(
+        live.participants,
+        currentUserId: 'missing',
+        localParticipantReady: true,
+      ).map((participant) => participant.user.id),
+      ['alice', 'bob'],
+    );
+  });
+
   test(
     'visible live participants show connected muted users after reconnect',
     () {

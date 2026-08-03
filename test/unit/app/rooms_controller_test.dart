@@ -908,6 +908,7 @@ void main() {
         joinedLiveRoomId: 'room_1',
         currentUserId: 'me',
         previousLive: previousLive,
+        localParticipantConnected: true,
       );
 
       expect(patch, isNotNull);
@@ -916,6 +917,47 @@ void main() {
           .toList();
       expect(ids, containsAll(<String>['me', 'other']));
       expect(patch.selectedLive!.participantCount, 2);
+      expect(patch.rooms.single.liveParticipantCount, 2);
+      expect(
+        patch.rooms.single.liveAvatarPreview.map((user) => user.id),
+        containsAll(<String>['me', 'other']),
+      );
+    },
+  );
+
+  test(
+    'patchLiveSnapshot drops self after the local media session detached',
+    () async {
+      final api = GangApiClient(
+        baseUrl: 'http://example.test/api/v1',
+        accessTokenProvider: ({bool forceRefresh = false}) async => 'token',
+        httpClient: MockClient((request) async {
+          fail('Patch test should not call the API: ${request.url}');
+        }),
+      );
+      addTearDown(api.close);
+      final controller = RoomsController(api: api);
+      final previousLive = LiveState.fromJson(
+        _liveJsonWithParticipants(['me', 'other']),
+      );
+
+      final patch = controller.patchLiveSnapshot(
+        rooms: [_roomCard('room_1', liveParticipantCount: 2)],
+        selectedRoomId: 'room_1',
+        data: _liveSnapshotData(['other']),
+        joinedLiveRoomId: 'room_1',
+        currentUserId: 'me',
+        previousLive: previousLive,
+        localParticipantConnected: false,
+      );
+
+      expect(
+        patch!.selectedLive!.participants.map(
+          (participant) => participant.user.id,
+        ),
+        ['other'],
+      );
+      expect(patch.rooms.single.liveParticipantCount, 1);
     },
   );
 

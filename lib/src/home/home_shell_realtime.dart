@@ -70,20 +70,25 @@ extension _HomeShellRealtime on _HomeShellState {
         currentLive: _live,
       );
       if (patch == null) return;
-      _setHomeState(() => _live = patch.live);
+      _cacheJoinedLiveParticipantUsers(patch.live);
+      _setHomeState(() {
+        _live = patch.live;
+        _servers = _roomsController.patchRoomLiveCount(
+          _servers,
+          roomId,
+          patch.live,
+        );
+      });
       _syncJoinedLiveAudioFromSnapshot(patch.live);
     } catch (_) {}
   }
 
   void _onRealtimeEvent(RealtimeEvent event) {
+    if (isLiveSnapshotRealtimeEventType(event.type)) {
+      _applyLiveSnapshot(event.data);
+      return;
+    }
     switch (event.type) {
-      case 'live_participant_joined':
-      case 'live_participant_left':
-      case 'live_participant_updated':
-      case 'live_participant_moderated':
-      case 'live_room_finished':
-        _applyLiveSnapshot(event.data);
-        break;
       case 'room_added':
         _applyRoomAdded(event.data);
         break;
@@ -131,11 +136,13 @@ extension _HomeShellRealtime on _HomeShellState {
   void _applyLiveSnapshot(Map<String, dynamic> data) {
     final eventRoomId = data['room_id'] as String?;
     final liveJson = data['live'];
+    LiveState? joinedRoomSnapshot;
     if (eventRoomId == _joinedLiveRoomId && liveJson is Map) {
       try {
-        _cacheJoinedLiveParticipantUsers(
-          LiveState.fromJson(Map<String, Object?>.from(liveJson)),
+        joinedRoomSnapshot = LiveState.fromJson(
+          Map<String, Object?>.from(liveJson),
         );
+        _cacheJoinedLiveParticipantUsers(joinedRoomSnapshot);
       } catch (_) {}
     }
     final patch = _roomsController.patchLiveSnapshot(
@@ -145,6 +152,12 @@ extension _HomeShellRealtime on _HomeShellState {
       joinedLiveRoomId: _joinedLiveRoomId,
       currentUserId: _currentUser.id,
       previousLive: _live,
+      localParticipantConnected:
+          eventRoomId != null &&
+          _liveSessionController.isAttachedToRoom(eventRoomId) &&
+          _liveSessionController.connectedParticipantIdentities.contains(
+            _currentUser.id,
+          ),
     );
     if (patch == null || !mounted) return;
     _setHomeState(() {
@@ -154,6 +167,12 @@ extension _HomeShellRealtime on _HomeShellState {
     final selectedLive = patch.selectedLive;
     if (selectedLive != null) {
       _syncJoinedLiveAudioFromSnapshot(selectedLive);
+    } else if (joinedRoomSnapshot != null) {
+      // Voice participation continues while the user browses another room.
+      // Moderation/reconnect snapshots for that joined room must still update
+      // the actual microphone/headphones state even though its roster is not
+      // the currently rendered one.
+      _syncJoinedLiveAudioFromSnapshot(joinedRoomSnapshot);
     }
   }
 

@@ -103,6 +103,41 @@ bool shouldRepublishLocalMicrophoneAfterReconnect({
   return resumedSignalConnection && hadPublicationBeforeReconnect && canPublish;
 }
 
+const _liveReconnectMicrophoneRetryDelays = <Duration>[
+  Duration.zero,
+  Duration(milliseconds: 400),
+  Duration(milliseconds: 1200),
+];
+
+/// Retries a reconnect-only microphone publication after the LiveKit
+/// publisher transport has reported itself connected.
+///
+/// Native WebRTC teardown can finish slightly after RoomReconnectedEvent. A
+/// first publication attempt may therefore race a closing receiver even
+/// though the subscriber path is already usable. Keep retry policy independent
+/// from the platform implementation so Windows, macOS and Android recover with
+/// identical bounded semantics.
+@visibleForTesting
+Future<bool> retryLiveReconnectMicrophoneRecovery({
+  required Future<bool> Function() attempt,
+  required bool Function() isCurrent,
+  List<Duration> retryDelays = _liveReconnectMicrophoneRetryDelays,
+  Future<void> Function(Duration)? wait,
+}) async {
+  final waitFor = wait ?? Future<void>.delayed;
+  for (final delay in retryDelays) {
+    if (!isCurrent()) return false;
+    if (delay > Duration.zero) await waitFor(delay);
+    if (!isCurrent()) return false;
+    try {
+      if (await attempt()) return true;
+    } catch (_) {
+      // The caller owns diagnostics and the final unavailable-state update.
+    }
+  }
+  return false;
+}
+
 enum LiveParticipantDepartureKind { left, removed }
 
 LiveParticipantDepartureKind liveParticipantDepartureKind(
@@ -2185,7 +2220,22 @@ class LiveSession extends ChangeNotifier {
           hadPublicationBeforeReconnect: hadMicrophonePublication,
           canPublish: _canPublish,
         )) {
-      await _republishLocalMicrophoneAfterReconnect(reconnectedRoom, local);
+      final microphoneRecovered = await _republishLocalMicrophoneAfterReconnect(
+        reconnectedRoom,
+        local,
+      );
+      if (!microphoneRecovered &&
+          _room == reconnectedRoom &&
+          reconnectedRoom.localParticipant == local &&
+          _canPublish) {
+        // The subscriber can recover while the publisher remains wedged. A
+        // bounded republish failure is not a usable voice connection: replace
+        // the whole LiveKit session so the app-level reconnect obtains a new
+        // token, participant SID and publisher PeerConnection.
+        await _disconnect(clearWatchedTargets: false);
+        onUnexpectedlyDisconnected?.call();
+        return;
+      }
     } else {
       await _applyLocalMicrophoneState();
     }
@@ -2215,34 +2265,62 @@ class LiveSession extends ChangeNotifier {
     await _applyScreenShareVolume();
   }
 
-  Future<void> _republishLocalMicrophoneAfterReconnect(
+  Future<bool> _republishLocalMicrophoneAfterReconnect(
     lk.Room reconnectedRoom,
     lk.LocalParticipant local,
   ) async {
-    try {
-      final publication = local.getTrackPublicationBySource(
-        lk.TrackSource.microphone,
-      );
-      if (publication != null) {
-        await local.removePublishedTrack(publication.sid);
-      }
-      if (_room != reconnectedRoom ||
-          reconnectedRoom.localParticipant != local ||
-          !_canPublish) {
-        return;
-      }
-      await local.setMicrophoneEnabled(
-        true,
-        audioCaptureOptions: _audioCaptureOptions(),
-      );
-      if (_room != reconnectedRoom) return;
-      _localMicrophonePublishUnavailable = false;
-      await _applyLocalInputVolume();
-    } catch (_) {
-      if (_room == reconnectedRoom) {
-        _markLocalMicrophonePublishUnavailable();
-      }
+    var attemptNumber = 0;
+    final recovered = await retryLiveReconnectMicrophoneRecovery(
+      isCurrent: () =>
+          _room == reconnectedRoom &&
+          reconnectedRoom.localParticipant == local &&
+          _canPublish,
+      attempt: () async {
+        attemptNumber += 1;
+        try {
+          final publication = local.getTrackPublicationBySource(
+            lk.TrackSource.microphone,
+          );
+          if (publication != null) {
+            await local.removePublishedTrack(publication.sid);
+          }
+          if (_room != reconnectedRoom ||
+              reconnectedRoom.localParticipant != local ||
+              !_canPublish) {
+            return false;
+          }
+          await local.setMicrophoneEnabled(
+            true,
+            audioCaptureOptions: _audioCaptureOptions(),
+          );
+          if (_room != reconnectedRoom ||
+              reconnectedRoom.localParticipant != local) {
+            return false;
+          }
+          final recoveredPublication = local.getTrackPublicationBySource(
+            lk.TrackSource.microphone,
+          );
+          if (recoveredPublication == null ||
+              recoveredPublication.track == null) {
+            return false;
+          }
+          _localMicrophonePublishUnavailable = false;
+          await _applyLocalInputVolume();
+          return true;
+        } catch (error) {
+          debugPrint(
+            'live reconnect: microphone recovery attempt '
+            '$attemptNumber failed: $error',
+          );
+          return false;
+        }
+      },
+    );
+    if (!recovered && _room == reconnectedRoom) {
+      _markLocalMicrophonePublishUnavailable();
+      notifyListeners();
     }
+    return recovered;
   }
 
   void _refreshAllMicStates() {

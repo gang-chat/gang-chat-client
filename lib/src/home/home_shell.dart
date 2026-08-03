@@ -37,6 +37,7 @@ import '../app/messages_controller.dart';
 import '../app/music_box_controller.dart';
 import '../app/music_box_display.dart' as music_box_display;
 import '../app/realtime_controller.dart';
+import '../app/realtime_live_events.dart';
 import '../app/room_badges.dart' as room_badges;
 import '../app/room_display.dart' as room_display;
 import '../app/room_invites.dart' as room_invites;

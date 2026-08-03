@@ -1394,6 +1394,7 @@ class RoomsController {
     String? joinedLiveRoomId,
     String? currentUserId,
     LiveState? previousLive,
+    bool localParticipantConnected = false,
   }) {
     final roomId = data['room_id'] as String?;
     if (roomId == null) return null;
@@ -1465,7 +1466,8 @@ class RoomsController {
     // that prior state. A later, correct snapshot reconciles.
     if (selectedLive != null &&
         joinedLiveRoomId == roomId &&
-        currentUserId != null) {
+        currentUserId != null &&
+        localParticipantConnected) {
       final present = selectedLive.participants.any(
         (p) => p.user.id == currentUserId,
       );
@@ -1488,6 +1490,18 @@ class RoomsController {
           );
         }
       }
+    }
+
+    // The selected-room roster may have been reconciled above (most notably
+    // by retaining a locally connected participant while an older server
+    // snapshot is in flight). Derive the room-card count and preview from that
+    // exact same snapshot so the outside and inside views cannot diverge.
+    if (selectedLive != null) {
+      nextRooms = room_live_state.patchRoomLiveCount(
+        rooms: nextRooms,
+        roomId: roomId,
+        live: selectedLive,
+      );
     }
 
     return RoomLiveSnapshotPatch(

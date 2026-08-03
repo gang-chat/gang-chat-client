@@ -628,6 +628,70 @@ void registerShellRealtimeLiveWidgetTests() {
   });
 
   testWidgets(
+    'joined-room snapshots reconcile audio while another room is selected',
+    (WidgetTester tester) async {
+      final realtime = _FakeRealtimeService();
+      final liveSession = _FakeLiveSession();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ui.uiTheme().copyWith(platform: TargetPlatform.windows),
+          home: HomePage(
+            app: _homeTestAppContext(),
+            liveSessionController: _FakeLiveSessionController(
+              session: liveSession,
+            ),
+            realtime: realtime,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Alpha Room'));
+      await tester.pumpAndSettle();
+      await _openLiveChannelFromHeader(tester);
+      await tester.tap(
+        find.byKey(const ValueKey<String>('live-control:join')),
+      );
+      await tester.pumpAndSettle();
+      expect(liveSession.localMicMuted, isFalse);
+
+      await tester.tap(find.text('Beta Room'));
+      await tester.pumpAndSettle();
+
+      realtime.add(
+        RealtimeEvent(
+          type: 'live_participant_moderated',
+          data: {
+            'room_id': 'server-alpha',
+            'participant_count': 1,
+            'preview': <Object?>[],
+            'live': {
+              ..._liveStateJson(
+                roomId: 'server-alpha',
+                participantCount: 1,
+                participants: [
+                  _liveParticipantJson(
+                    user: _currentUserJson,
+                    liveSessionId: 'live-session-joined',
+                    micMuted: true,
+                    headphonesMuted: true,
+                  ),
+                ],
+              ),
+              'updated_at': '2099-06-05T08:00:00Z',
+            },
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(liveSession.localMicMuted, isTrue);
+      expect(liveSession.outputMutes.last, isTrue);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'Android keeps live state muted when microphone publication fails',
     (WidgetTester tester) async {
       tester.view.physicalSize = const Size(420, 740);
