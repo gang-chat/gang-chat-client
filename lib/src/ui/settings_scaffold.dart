@@ -145,6 +145,7 @@ class SettingsCard extends StatelessWidget {
     super.key,
     required this.title,
     required this.children,
+    this.titleWidget,
     this.trailing,
     this.danger = false,
     this.spacing = 12,
@@ -152,6 +153,9 @@ class SettingsCard extends StatelessWidget {
 
   /// 分区小标题。
   final String title;
+
+  /// 自定义分区标题。为空时使用 [title] 与统一的标题文字样式。
+  final Widget? titleWidget;
 
   /// 分区内容。相邻项之间会自动插入 [spacing] 的间距。
   final List<Widget> children;
@@ -187,20 +191,21 @@ class SettingsCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      color: danger ? UiColors.danger : UiColors.text,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  child:
+                      titleWidget ??
+                      Text(
+                        title,
+                        style: TextStyle(
+                          color: danger ? UiColors.danger : UiColors.text,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                 ),
                 ?trailing,
               ],
             ),
-            const SizedBox(height: 14),
-            ...items,
+            if (items.isNotEmpty) ...[const SizedBox(height: 14), ...items],
           ],
         ),
       ),

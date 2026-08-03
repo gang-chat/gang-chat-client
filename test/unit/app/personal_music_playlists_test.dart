@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:client/src/app/personal_music_playlists.dart';
+import 'package:client/src/protocol/api_client.dart';
 import 'package:client/src/protocol/models.dart';
 
 void main() {
@@ -189,4 +190,157 @@ void main() {
       ['third', 'first', 'second'],
     );
   });
+
+  test('batch item pin follows selection order', () {
+    const items = [
+      PersonalMusicPlaylistItem(
+        id: 'first',
+        playlistId: 'playlist',
+        trackId: 'track_1',
+        source: 'netease',
+        title: '一',
+        artists: [],
+        durationMs: 0,
+        sortOrder: 10,
+        createdAt: null,
+      ),
+      PersonalMusicPlaylistItem(
+        id: 'second',
+        playlistId: 'playlist',
+        trackId: 'track_2',
+        source: 'netease',
+        title: '二',
+        artists: [],
+        durationMs: 0,
+        sortOrder: 20,
+        createdAt: null,
+      ),
+      PersonalMusicPlaylistItem(
+        id: 'third',
+        playlistId: 'playlist',
+        trackId: 'track_3',
+        source: 'netease',
+        title: '三',
+        artists: [],
+        durationMs: 0,
+        sortOrder: 30,
+        createdAt: null,
+      ),
+    ];
+
+    expect(
+      personalPlaylistItemOrderWithSelectionPinnedToFront(
+        items: items,
+        selectedItemIds: ['third', 'second'],
+      ),
+      ['third', 'second', 'first'],
+    );
+    expect(
+      personalPlaylistItemOrderWithSelectionPinnedToFront(
+        items: items,
+        selectedItemIds: ['first', 'second'],
+      ),
+      isNull,
+    );
+  });
+
+  test(
+    'item pin loads every page before submitting the complete order',
+    () async {
+      final api = _PagingPlaylistApi();
+      final controller = PersonalMusicPlaylistsController(api);
+
+      await controller.pinItems(
+        playlistId: 'playlist',
+        selectedItemIds: const ['third', 'second'],
+      );
+
+      expect(api.requestedPages, [1, 2]);
+      expect(api.reorderedItemIds, ['third', 'second', 'first']);
+    },
+  );
+}
+
+class _PagingPlaylistApi implements PersonalMusicPlaylistApi {
+  static const playlist = PersonalMusicPlaylist(
+    id: 'playlist',
+    name: '测试歌单',
+    description: '',
+    revision: 1,
+    itemCount: 3,
+    createdAt: null,
+    updatedAt: null,
+  );
+
+  static const items = [
+    PersonalMusicPlaylistItem(
+      id: 'first',
+      playlistId: 'playlist',
+      trackId: 'track_1',
+      source: 'netease',
+      title: '一',
+      artists: [],
+      durationMs: 0,
+      sortOrder: 10,
+      createdAt: null,
+    ),
+    PersonalMusicPlaylistItem(
+      id: 'second',
+      playlistId: 'playlist',
+      trackId: 'track_2',
+      source: 'netease',
+      title: '二',
+      artists: [],
+      durationMs: 0,
+      sortOrder: 20,
+      createdAt: null,
+    ),
+    PersonalMusicPlaylistItem(
+      id: 'third',
+      playlistId: 'playlist',
+      trackId: 'track_3',
+      source: 'netease',
+      title: '三',
+      artists: [],
+      durationMs: 0,
+      sortOrder: 30,
+      createdAt: null,
+    ),
+  ];
+
+  final List<int> requestedPages = [];
+  List<String>? reorderedItemIds;
+
+  @override
+  Future<PersonalMusicPlaylistItemsPage> getPersonalMusicPlaylist({
+    required String playlistId,
+    int page = 1,
+    int pageSize = 50,
+    String? keyword,
+    String? source,
+  }) async {
+    requestedPages.add(page);
+    final pageItems = page == 1
+        ? items.take(2).toList()
+        : items.skip(2).toList();
+    return PersonalMusicPlaylistItemsPage(
+      playlist: playlist,
+      items: pageItems,
+      page: page,
+      pageSize: 2,
+      total: items.length,
+      hasMore: page == 1,
+    );
+  }
+
+  @override
+  Future<void> reorderPersonalMusicPlaylistItems({
+    required String playlistId,
+    required List<String> itemIds,
+  }) async {
+    reorderedItemIds = List<String>.of(itemIds);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

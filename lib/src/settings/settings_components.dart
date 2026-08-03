@@ -57,6 +57,7 @@ class _SettingsGroup extends StatelessWidget {
   const _SettingsGroup({
     required this.title,
     required this.children,
+    this.titleWidget,
     this.trailing,
     this.danger = false,
     this.spacing = 0,
@@ -64,6 +65,7 @@ class _SettingsGroup extends StatelessWidget {
 
   final String title;
   final List<Widget> children;
+  final Widget? titleWidget;
   final Widget? trailing;
   final bool danger;
   final double spacing;
@@ -73,6 +75,7 @@ class _SettingsGroup extends StatelessWidget {
     // 默认保留既有手写间距；需要统一间距的页面可显式开启。
     return SettingsCard(
       title: title,
+      titleWidget: titleWidget,
       trailing: trailing,
       danger: danger,
       spacing: spacing,

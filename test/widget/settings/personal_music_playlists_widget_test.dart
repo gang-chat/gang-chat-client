@@ -61,7 +61,9 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('搜索添加'), findsOneWidget);
-        expect(find.text('管理歌曲'), findsOneWidget);
+        expect(find.text('管理歌曲'), findsNothing);
+        expect(find.text('管理'), findsOneWidget);
+        expect(find.text('筛选'), findsOneWidget);
         expect(find.text('晴天'), findsOneWidget);
         expect(find.textContaining('周杰伦'), findsWidgets);
         expect(tester.takeException(), isNull);
@@ -129,6 +131,46 @@ void main() {
 
     expect(find.text('搜索添加'), findsOneWidget);
     expect(find.text('歌单还是空的'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('playlist detail header places back, icon, and name in one row', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(360, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final api = _FakePersonalPlaylistApi();
+
+    await _pumpPlaylistSettings(tester, api);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('夜晚'));
+    await tester.pumpAndSettle();
+
+    final header = find.byKey(const ValueKey('personal-music-playlist-header'));
+    final back = find.descendant(
+      of: header,
+      matching: find.byKey(const ValueKey('back-to-personal-music-playlists')),
+    );
+    final playlistIcon = find.descendant(
+      of: header,
+      matching: find.byIcon(Icons.queue_music_outlined),
+    );
+    final playlistName = find.descendant(of: header, matching: find.text('夜晚'));
+
+    expect(header, findsOneWidget);
+    expect(back, findsOneWidget);
+    expect(tester.widget(back), isA<ui.ButtonIconPlain>());
+    expect(playlistIcon, findsOneWidget);
+    expect(playlistName, findsOneWidget);
+    expect(
+      tester.getCenter(back).dx,
+      lessThan(tester.getCenter(playlistIcon).dx),
+    );
+    expect(
+      tester.getCenter(playlistIcon).dx,
+      lessThan(tester.getCenter(playlistName).dx),
+    );
+    expect(find.text('返回歌单列表'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -205,11 +247,16 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('夜晚'));
       await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('search-add-personal-music-playlist-item')),
+      );
+      await tester.pumpAndSettle();
 
       final searchField = find.byWidgetPredicate(
         (widget) => widget is ui.Input && widget.hintText == '搜索歌曲添加到歌单',
       );
       expect(searchField, findsOneWidget);
+      expect(find.widgetWithText(ui.Button, '搜索'), findsNothing);
 
       await tester.enterText(searchField, '旧搜索');
       await tester.pump(const Duration(milliseconds: 360));
@@ -267,6 +314,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('夜晚'));
     await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('search-add-personal-music-playlist-item')),
+    );
+    await tester.pumpAndSettle();
 
     final searchField = find.byWidgetPredicate(
       (widget) => widget is ui.Input && widget.hintText == '搜索歌曲添加到歌单',
@@ -282,6 +333,113 @@ void main() {
     expect(api.searchRequests.last, 'bilibili:晴天');
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'playlist item actions use dialogs and management-only card controls',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(360, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final api = _FakePersonalPlaylistApi();
+
+      await _pumpPlaylistSettings(tester, api);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('夜晚'));
+      await tester.pumpAndSettle();
+
+      final item = find.byKey(
+        const ValueKey('personal-music-playlist-item-mbpi_1'),
+      );
+      expect(
+        find.byWidgetPredicate(
+          (widget) => widget is ui.Input && widget.hintText == '筛选歌名或歌手',
+        ),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: item, matching: find.byTooltip('上移')),
+        findsNothing,
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey('filter-personal-music-playlist-items')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('筛选歌曲'), findsOneWidget);
+      expect(find.text('歌曲来源'), findsOneWidget);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey('manage-personal-music-playlist-items')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('取消管理'), findsOneWidget);
+      expect(find.text('分享'), findsOneWidget);
+      expect(find.text('置顶'), findsOneWidget);
+      expect(find.text('全选当前页'), findsOneWidget);
+      expect(
+        find.descendant(of: item, matching: find.byTooltip('上移')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: item, matching: find.byTooltip('下移')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: item, matching: find.byTooltip('删除')),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<ui.Button>(
+              find.byKey(const ValueKey('share-personal-music-playlist-items')),
+            )
+            .onPressed,
+        isNull,
+      );
+
+      final pinButton = find.byKey(
+        const ValueKey('pin-selected-personal-music-playlist-items'),
+      );
+      final blankPoint = tester.getTopLeft(item) + const Offset(2, 2);
+      await tester.tapAt(blankPoint);
+      await tester.pumpAndSettle();
+      expect(tester.widget<ui.Button>(pinButton).onPressed, isNotNull);
+      final selectionNumber = find.byKey(
+        const ValueKey('personal-music-playlist-item-selection-number-mbpi_1'),
+      );
+      expect(selectionNumber, findsOneWidget);
+      expect(
+        find.descendant(of: selectionNumber, matching: find.text('1')),
+        findsOneWidget,
+      );
+
+      await tester.tapAt(blankPoint);
+      await tester.pumpAndSettle();
+      expect(tester.widget<ui.Button>(pinButton).onPressed, isNull);
+      expect(selectionNumber, findsNothing);
+
+      await tester.tap(
+        find.descendant(of: item, matching: find.byTooltip('上移')),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.widget<ui.Button>(pinButton).onPressed, isNull);
+
+      await tester.tap(find.text('晴天'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<ui.Button>(
+              find.byKey(
+                const ValueKey('pin-selected-personal-music-playlist-items'),
+              ),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'playlist batch mode selects cards instead of opening and filters by count',
@@ -313,12 +471,12 @@ void main() {
         isNull,
       );
 
-      await tester.tap(find.text('夜晚'));
-      await tester.pumpAndSettle();
-      expect(find.text('搜索添加'), findsNothing);
       final selectedCard = find.byKey(
         const ValueKey('personal-music-playlist-card-mbp_1'),
       );
+      await tester.tapAt(tester.getTopLeft(selectedCard) + const Offset(2, 2));
+      await tester.pumpAndSettle();
+      expect(find.text('搜索添加'), findsNothing);
       final selectedPanel = tester.widget<AnimatedContainer>(
         find
             .descendant(
@@ -329,6 +487,23 @@ void main() {
       );
       expect(
         (selectedPanel.decoration as BoxDecoration).color,
+        ui.UiColors.selected,
+      );
+
+      await tester.tap(
+        find.descendant(of: selectedCard, matching: find.byTooltip('上移')),
+      );
+      await tester.pumpAndSettle();
+      final panelAfterDisabledAction = tester.widget<AnimatedContainer>(
+        find
+            .descendant(
+              of: selectedCard,
+              matching: find.byType(AnimatedContainer),
+            )
+            .first,
+      );
+      expect(
+        (panelAfterDisabledAction.decoration as BoxDecoration).color,
         ui.UiColors.selected,
       );
 

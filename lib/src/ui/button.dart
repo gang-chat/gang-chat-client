@@ -194,6 +194,64 @@ class ButtonIcon extends StatelessWidget {
   }
 }
 
+/// 无背景、无边框的图标按钮，适用于标题行内的返回或导航操作。
+///
+/// [width] 和 [height] 定义完整点击热区；图标本身保持较小尺寸，避免为了
+/// 扩大热区而破坏标题行的视觉对齐。
+class ButtonIconPlain extends StatelessWidget {
+  const ButtonIconPlain({
+    super.key,
+    required this.icon,
+    required this.onPressed,
+    this.tooltip,
+    this.width = 30,
+    this.height = 36,
+    this.iconSize = 20,
+  });
+
+  final Widget icon;
+  final VoidCallback? onPressed;
+  final String? tooltip;
+  final double width;
+  final double height;
+  final double iconSize;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onPressed != null;
+    Widget result = Semantics(
+      button: true,
+      enabled: enabled,
+      label: tooltip,
+      onTap: onPressed,
+      child: MouseRegion(
+        cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          excludeFromSemantics: true,
+          onTap: onPressed,
+          child: SizedBox(
+            width: width,
+            height: height,
+            child: IconTheme.merge(
+              data: IconThemeData(
+                color: enabled ? UiColors.textSecondary : UiColors.textMuted,
+                size: iconSize,
+              ),
+              child: Center(child: icon),
+            ),
+          ),
+        ),
+      ),
+    );
+    final message = tooltip;
+    if (message != null && message.isNotEmpty) {
+      result = Tooltip(message: message, child: result);
+    }
+    return result;
+  }
+}
+
 class _ButtonLoadingIndicator extends StatelessWidget {
   const _ButtonLoadingIndicator({required this.size});
 

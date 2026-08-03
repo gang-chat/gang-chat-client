@@ -292,31 +292,13 @@ class _LiveHeaderBackColumn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: '返回房间列表',
-      child: Semantics(
-        button: true,
-        label: '返回房间列表',
-        onTap: onPressed,
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            excludeFromSemantics: true,
-            onTap: onPressed,
-            child: SizedBox(
-              key: const ValueKey('chat-header-back-button'),
-              width: _liveHeaderBackColumnWidth,
-              height: double.infinity,
-              child: const Icon(
-                Icons.arrow_back_rounded,
-                color: UiColors.textSecondary,
-                size: 20,
-              ),
-            ),
-          ),
-        ),
-      ),
+    return ButtonIconPlain(
+      key: const ValueKey('chat-header-back-button'),
+      tooltip: '返回房间列表',
+      onPressed: onPressed,
+      width: _liveHeaderBackColumnWidth,
+      height: double.infinity,
+      icon: const Icon(Icons.arrow_back_rounded),
     );
   }
 }

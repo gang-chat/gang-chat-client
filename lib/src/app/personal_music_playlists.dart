@@ -19,6 +19,16 @@ class PersonalPlaylistFilterDraft {
   final String countFilter;
 }
 
+class PersonalPlaylistItemFilterDraft {
+  const PersonalPlaylistItemFilterDraft({
+    required this.keyword,
+    required this.source,
+  });
+
+  final String keyword;
+  final String source;
+}
+
 class PersonalMusicPlaylistsController {
   const PersonalMusicPlaylistsController(this.api);
 
@@ -156,6 +166,42 @@ class PersonalMusicPlaylistsController {
           direction: delta < 0 ? 'up' : 'down',
         ) ??
         Future.value();
+  }
+
+  Future<void> pinItems({
+    required String playlistId,
+    required Iterable<String> selectedItemIds,
+  }) async {
+    final client = api;
+    if (client == null) return;
+    final selectedIds = uniquePersonalPlaylistItemIds(selectedItemIds);
+    if (selectedIds.isEmpty) return;
+
+    final items = <PersonalMusicPlaylistItem>[];
+    var page = 1;
+    while (true) {
+      final result = await client.getPersonalMusicPlaylist(
+        playlistId: playlistId,
+        page: page,
+        pageSize: personalMusicPlaylistPageSize,
+      );
+      items.addAll(result.items);
+      if (!result.hasMore) break;
+      if (result.items.isEmpty || items.length >= result.total) {
+        throw StateError('歌单分页数据不完整，请刷新后重试');
+      }
+      page += 1;
+    }
+
+    final order = personalPlaylistItemOrderWithSelectionPinnedToFront(
+      items: items,
+      selectedItemIds: selectedIds,
+    );
+    if (order == null) return;
+    await client.reorderPersonalMusicPlaylistItems(
+      playlistId: playlistId,
+      itemIds: order,
+    );
   }
 }
 
@@ -304,6 +350,29 @@ List<String>? personalPlaylistOrderWithSelectionPinnedToFront({
     ...selectedOrder,
     for (final playlistId in currentOrder)
       if (!selectedSet.contains(playlistId)) playlistId,
+  ];
+  for (var index = 0; index < currentOrder.length; index += 1) {
+    if (currentOrder[index] != nextOrder[index]) return nextOrder;
+  }
+  return null;
+}
+
+List<String>? personalPlaylistItemOrderWithSelectionPinnedToFront({
+  required Iterable<PersonalMusicPlaylistItem> items,
+  required Iterable<String> selectedItemIds,
+}) {
+  final currentOrder = [for (final item in items) item.id];
+  final currentSet = currentOrder.toSet();
+  final selectedOrder = [
+    for (final itemId in uniquePersonalPlaylistItemIds(selectedItemIds))
+      if (currentSet.contains(itemId)) itemId,
+  ];
+  if (selectedOrder.isEmpty) return null;
+  final selectedSet = selectedOrder.toSet();
+  final nextOrder = [
+    ...selectedOrder,
+    for (final itemId in currentOrder)
+      if (!selectedSet.contains(itemId)) itemId,
   ];
   for (var index = 0; index < currentOrder.length; index += 1) {
     if (currentOrder[index] != nextOrder[index]) return nextOrder;

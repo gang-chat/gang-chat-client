@@ -20,19 +20,12 @@ class _PersonalMusicPlaylistsPanel extends StatefulWidget {
 
 class _PersonalMusicPlaylistsPanelState
     extends State<_PersonalMusicPlaylistsPanel> {
-  final _trackSearchController = TextEditingController();
-  final _itemFilterController = TextEditingController();
-  Timer? _trackSearchDebounce;
-  String _lastTrackSearchText = '';
-
   List<PersonalMusicPlaylist> _playlists = const [];
   PersonalMusicPlaylist? _activePlaylist;
   List<PersonalMusicPlaylistItem> _items = const [];
-  List<MusicBoxSearchResult> _searchResults = const [];
   List<String> _selectedPlaylistIds = const [];
   Set<String> _selectedItemIds = const {};
 
-  String _searchSource = musicBoxDefaultSource;
   String _playlistFilterKeyword = '';
   String _playlistCountFilter = personalPlaylistCountAll;
   String _filterSource = '';
@@ -45,20 +38,18 @@ class _PersonalMusicPlaylistsPanelState
   bool _loading = false;
   bool _loadingItems = false;
   bool _loadingMore = false;
-  bool _searching = false;
   bool _creating = false;
   bool _deletingPlaylists = false;
   bool _pinningPlaylists = false;
   bool _deletingItems = false;
+  bool _pinningItems = false;
   bool _managingPlaylists = false;
   bool _managingItems = false;
   String? _error;
   final Set<String> _busyPlaylistIds = {};
-  final Set<String> _busyTrackKeys = {};
   final Set<String> _busyItemIds = {};
   int _playlistLoadGeneration = 0;
   int _itemLoadGeneration = 0;
-  int _searchGeneration = 0;
 
   bool get _filterActive => personalPlaylistFilterActive(
     keyword: _appliedFilterKeyword,
@@ -85,13 +76,12 @@ class _PersonalMusicPlaylistsPanelState
       _deletingPlaylists ||
       _pinningPlaylists ||
       _busyPlaylistIds.isNotEmpty ||
-      _deletingItems;
+      _deletingItems ||
+      _pinningItems;
 
   @override
   void initState() {
     super.initState();
-    _lastTrackSearchText = _trackSearchController.text;
-    _trackSearchController.addListener(_handleTrackSearchChanged);
     scheduleMicrotask(_loadPlaylists);
   }
 
@@ -106,13 +96,8 @@ class _PersonalMusicPlaylistsPanelState
 
   @override
   void dispose() {
-    _trackSearchDebounce?.cancel();
     _playlistLoadGeneration += 1;
     _itemLoadGeneration += 1;
-    _searchGeneration += 1;
-    _trackSearchController.removeListener(_handleTrackSearchChanged);
-    _trackSearchController.dispose();
-    _itemFilterController.dispose();
     super.dispose();
   }
 
@@ -185,7 +170,6 @@ class _PersonalMusicPlaylistsPanelState
       _selectedItemIds = const {};
       _managingItems = false;
       _error = null;
-      _itemFilterController.clear();
       _appliedFilterKeyword = '';
       _filterSource = '';
     });
@@ -193,21 +177,15 @@ class _PersonalMusicPlaylistsPanelState
   }
 
   void _closePlaylist() {
-    _trackSearchDebounce?.cancel();
     _itemLoadGeneration += 1;
-    _searchGeneration += 1;
-    _lastTrackSearchText = '';
-    _trackSearchController.clear();
     setState(() {
       _activePlaylist = null;
       _items = const [];
-      _searchResults = const [];
       _selectedItemIds = const {};
       _managingItems = false;
       _loadingItems = false;
       _loadingMore = false;
       _error = null;
-      _itemFilterController.clear();
       _appliedFilterKeyword = '';
       _filterSource = '';
     });
@@ -497,124 +475,23 @@ class _PersonalMusicPlaylistsPanelState
     unawaited(_openPlaylist(playlist));
   }
 
-  void _handleTrackSearchChanged() {
-    final rawKeyword = _trackSearchController.text;
-    if (rawKeyword == _lastTrackSearchText) return;
-    _lastTrackSearchText = rawKeyword;
-    _scheduleTrackSearch();
-  }
-
-  void _scheduleTrackSearch({bool immediate = false}) {
-    _trackSearchDebounce?.cancel();
-    final keyword = _trackSearchController.text.trim();
-    final source = _searchSource;
-    final generation = ++_searchGeneration;
-    if (keyword.isEmpty) {
-      if (!mounted) return;
-      setState(() {
-        _searchResults = const [];
-        _searching = false;
-        _error = null;
-      });
-      return;
-    }
-    setState(() {
-      _searching = true;
-      _searchResults = const [];
-      _error = null;
-    });
-    if (immediate) {
-      unawaited(
-        _runTrackSearch(
-          keyword: keyword,
-          source: source,
-          generation: generation,
-        ),
-      );
-      return;
-    }
-    _trackSearchDebounce = Timer(
-      const Duration(milliseconds: 350),
-      () => unawaited(
-        _runTrackSearch(
-          keyword: keyword,
-          source: source,
-          generation: generation,
-        ),
+  Future<void> _openTrackSearchDialog() async {
+    final playlist = _activePlaylist;
+    if (playlist == null || _busy) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => _MusicPlaylistTrackSearchDialog(
+        controller: widget.controller,
+        playlistId: playlist.id,
+        onTrackAdded: _refreshAfterTrackAdded,
       ),
     );
   }
 
-  Future<void> _searchTracks() async {
-    _trackSearchDebounce?.cancel();
-    final keyword = _trackSearchController.text.trim();
-    if (keyword.isEmpty) {
-      _scheduleTrackSearch(immediate: true);
-      return;
-    }
-    final source = _searchSource;
-    final generation = ++_searchGeneration;
-    setState(() {
-      _searching = true;
-      _searchResults = const [];
-      _error = null;
-    });
-    await _runTrackSearch(
-      keyword: keyword,
-      source: source,
-      generation: generation,
-    );
-  }
-
-  Future<void> _runTrackSearch({
-    required String keyword,
-    required String source,
-    required int generation,
-  }) async {
-    try {
-      final results = await widget.controller.searchTracks(
-        keyword: keyword,
-        source: source,
-      );
-      if (!mounted ||
-          generation != _searchGeneration ||
-          _trackSearchController.text.trim() != keyword ||
-          _searchSource != source ||
-          results == null) {
-        return;
-      }
-      setState(() => _searchResults = results);
-    } catch (error) {
-      if (!mounted || generation != _searchGeneration) return;
-      setState(() {
-        _searchResults = const [];
-        _error = error.toString();
-      });
-    } finally {
-      if (mounted && generation == _searchGeneration) {
-        setState(() => _searching = false);
-      }
-    }
-  }
-
-  Future<void> _addTrack(MusicBoxSearchResult track) async {
-    final playlist = _activePlaylist;
-    if (playlist == null) return;
-    final key = '${track.source}:${track.trackId}';
-    if (_busyTrackKeys.contains(key)) return;
-    setState(() {
-      _busyTrackKeys.add(key);
-      _error = null;
-    });
-    try {
-      await widget.controller.addTrack(playlistId: playlist.id, track: track);
-      await _loadItems(reset: true);
-      await _reloadPlaylistSummariesWithoutClosing();
-    } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
-    } finally {
-      if (mounted) setState(() => _busyTrackKeys.remove(key));
-    }
+  Future<void> _refreshAfterTrackAdded() async {
+    if (!mounted || _activePlaylist == null) return;
+    await _loadItems(reset: true);
+    await _reloadPlaylistSummariesWithoutClosing();
   }
 
   Future<void> _reloadPlaylistSummariesWithoutClosing() async {
@@ -636,40 +513,26 @@ class _PersonalMusicPlaylistsPanelState
     });
   }
 
-  void _applyFilter() {
-    final keyword = _itemFilterController.text.trim();
-    if (keyword == _appliedFilterKeyword) return;
-    setState(() {
-      _appliedFilterKeyword = keyword;
-      _managingItems = false;
-      _selectedItemIds = const {};
-    });
-    unawaited(_loadItems(reset: true));
-  }
-
-  void _setFilterSource(String source) {
-    if (_filterSource == source) return;
-    setState(() {
-      _filterSource = source;
-      _managingItems = false;
-      _selectedItemIds = const {};
-    });
-    unawaited(_loadItems(reset: true));
-  }
-
-  void _setSearchSource(String source) {
-    if (_searchSource == source) return;
-    _trackSearchDebounce?.cancel();
-    _searchGeneration += 1;
-    setState(() {
-      _searchSource = source;
-      _searchResults = const [];
-      _searching = false;
-      _error = null;
-    });
-    if (_trackSearchController.text.trim().isNotEmpty) {
-      _scheduleTrackSearch(immediate: true);
+  Future<void> _openItemFilterDialog() async {
+    if (_busy) return;
+    final draft = await showDialog<PersonalPlaylistItemFilterDraft>(
+      context: context,
+      builder: (context) => _MusicPlaylistItemFilterDialog(
+        keyword: _appliedFilterKeyword,
+        source: _filterSource,
+      ),
+    );
+    if (!mounted || draft == null) return;
+    if (draft.keyword == _appliedFilterKeyword &&
+        draft.source == _filterSource) {
+      return;
     }
+    setState(() {
+      _appliedFilterKeyword = draft.keyword;
+      _filterSource = draft.source;
+      _selectedItemIds = const {};
+    });
+    await _loadItems(reset: true);
   }
 
   void _toggleManagingItems() {
@@ -681,7 +544,7 @@ class _PersonalMusicPlaylistsPanelState
   }
 
   void _toggleItemSelection(String itemID) {
-    if (!_managingItems || _deletingItems) return;
+    if (!_managingItems || _deletingItems || _pinningItems) return;
     setState(() {
       _selectedItemIds = toggledPersonalPlaylistSelection(
         _selectedItemIds,
@@ -741,6 +604,27 @@ class _PersonalMusicPlaylistsPanelState
       if (mounted) setState(() => _error = error.toString());
     } finally {
       if (mounted) setState(() => _deletingItems = false);
+    }
+  }
+
+  Future<void> _pinSelectedItems() async {
+    final playlist = _activePlaylist;
+    if (playlist == null || _selectedItemIds.isEmpty || _pinningItems) return;
+    final selectedIds = List<String>.of(_selectedItemIds);
+    setState(() {
+      _pinningItems = true;
+      _error = null;
+    });
+    try {
+      await widget.controller.pinItems(
+        playlistId: playlist.id,
+        selectedItemIds: selectedIds,
+      );
+      await _loadItems(reset: true);
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _pinningItems = false);
     }
   }
 
@@ -992,6 +876,9 @@ class _PersonalMusicPlaylistsPanelState
 
   Widget _buildPlaylistManager() {
     final playlist = _activePlaylist!;
+    final itemSelectionNumbers = personalPlaylistSelectionNumbers(
+      _selectedItemIds.toList(),
+    );
     final allVisibleSelected =
         _items.isNotEmpty &&
         _items.every((item) => _selectedItemIds.contains(item.id));
@@ -999,70 +886,37 @@ class _PersonalMusicPlaylistsPanelState
       children: [
         _SettingsGroup(
           title: playlist.name,
-          spacing: 10,
-          trailing: Text(
-            '${playlist.itemCount} / $_maxPlaylistItems 首',
-            style: const TextStyle(
-              color: _textMuted,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          children: [
-            Button(
-              key: const ValueKey('back-to-personal-music-playlists'),
-              onPressed: _busy ? null : _closePlaylist,
-              icon: const Icon(Icons.arrow_back),
-              width: double.infinity,
-              child: const Text('返回歌单列表'),
-            ),
-            if (_error != null) _MusicPlaylistErrorText(_error!),
-          ],
-        ),
-        _SettingsGroup(
-          title: '搜索添加',
-          spacing: 10,
-          children: [
-            SegmentedControl<String>(
-              expanded: true,
-              value: _searchSource,
-              onChanged: _setSearchSource,
-              segments: [
-                for (final source in musicBoxSources)
-                  Segment(value: source.id, label: source.label),
-              ],
-            ),
-            _MusicPlaylistSearchRow(
-              controller: _trackSearchController,
-              hintText: '搜索歌曲添加到歌单',
-              buttonLabel: '搜索',
-              loading: _searching,
-              onSubmitted: (_) => _searchTracks(),
-              onPressed: _searchTracks,
-            ),
-            if (!_searching && _searchResults.isEmpty)
-              _SettingsEmptyState(
-                text: _trackSearchController.text.trim().isEmpty
-                    ? '输入歌名或歌手后自动搜索'
-                    : '没有找到相关歌曲',
-              )
-            else
-              for (final result in _searchResults)
-                _MusicPlaylistSearchResultTile(
-                  result: result,
-                  query: _trackSearchController.text,
-                  loading: _busyTrackKeys.contains(
-                    '${result.source}:${result.trackId}',
+          titleWidget: Row(
+            key: const ValueKey('personal-music-playlist-header'),
+            children: [
+              ButtonIconPlain(
+                key: const ValueKey('back-to-personal-music-playlists'),
+                tooltip: '返回歌单列表',
+                onPressed: _busy ? null : _closePlaylist,
+                icon: const Icon(Icons.arrow_back_rounded),
+              ),
+              const SizedBox(width: 10),
+              const Icon(Icons.queue_music_outlined, color: _cyan, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  playlist.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: _textPrimary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
                   ),
-                  onAdd: () => _addTrack(result),
                 ),
-          ],
-        ),
-        _SettingsGroup(
-          title: '管理歌曲',
+              ),
+            ],
+          ),
           spacing: 10,
           trailing: Text(
-            _filterActive ? '筛选 $_itemTotal 首' : '共 $_itemTotal 首',
+            _filterActive
+                ? '筛选 $_itemTotal / ${playlist.itemCount} 首'
+                : '${playlist.itemCount} / $_maxPlaylistItems 首',
             style: const TextStyle(
               color: _textMuted,
               fontSize: 12,
@@ -1070,29 +924,40 @@ class _PersonalMusicPlaylistsPanelState
             ),
           ),
           children: [
-            _MusicPlaylistSearchRow(
-              controller: _itemFilterController,
-              hintText: '筛选歌名或歌手',
-              buttonLabel: '筛选',
-              loading: _loadingItems,
-              onSubmitted: (_) => _applyFilter(),
-              onPressed: _applyFilter,
-            ),
-            SegmentedControl<String>(
-              expanded: true,
-              value: _filterSource,
-              onChanged: _setFilterSource,
-              segments: [
-                const Segment(value: '', label: '全部'),
-                for (final source in musicBoxSources)
-                  Segment(value: source.id, label: source.label),
-              ],
-            ),
             StickerActionGrid(
               actions: [
                 StickerActionGridEntry(
-                  label: _managingItems ? '取消管理' : '批量管理',
+                  label: _managingItems ? '删除' : '搜索添加',
                   button: Button(
+                    key: _managingItems
+                        ? const ValueKey(
+                            'delete-selected-personal-music-playlist-items',
+                          )
+                        : const ValueKey(
+                            'search-add-personal-music-playlist-item',
+                          ),
+                    onPressed: _managingItems
+                        ? (!_deletingItems && _selectedItemIds.isNotEmpty
+                              ? _deleteSelectedItems
+                              : null)
+                        : (_busy ? null : _openTrackSearchDialog),
+                    loading: _managingItems ? _deletingItems : false,
+                    tone: _managingItems
+                        ? ButtonTone.danger
+                        : ButtonTone.primary,
+                    icon: Icon(
+                      _managingItems
+                          ? Icons.delete_outline
+                          : Icons.playlist_add,
+                    ),
+                    width: double.infinity,
+                    child: Text(_managingItems ? '删除' : '搜索添加'),
+                  ),
+                ),
+                StickerActionGridEntry(
+                  label: _managingItems ? '取消管理' : '管理',
+                  button: Button(
+                    key: const ValueKey('manage-personal-music-playlist-items'),
                     onPressed: _busy ? null : _toggleManagingItems,
                     selected: _managingItems,
                     tone: _managingItems
@@ -1102,21 +967,45 @@ class _PersonalMusicPlaylistsPanelState
                       _managingItems ? Icons.close : Icons.checklist_rtl,
                     ),
                     width: double.infinity,
-                    child: Text(_managingItems ? '取消管理' : '批量管理'),
+                    child: Text(_managingItems ? '取消管理' : '管理'),
+                  ),
+                ),
+                StickerActionGridEntry(
+                  label: '筛选',
+                  button: Button(
+                    key: const ValueKey('filter-personal-music-playlist-items'),
+                    onPressed: _busy ? null : _openItemFilterDialog,
+                    selected: _filterActive,
+                    icon: const Icon(Icons.filter_alt_outlined),
+                    width: double.infinity,
+                    child: const Text('筛选'),
                   ),
                 ),
                 if (_managingItems)
                   StickerActionGridEntry(
-                    label: '删除',
-                    button: Button(
-                      onPressed: !_deletingItems && _selectedItemIds.isNotEmpty
-                          ? _deleteSelectedItems
-                          : null,
-                      loading: _deletingItems,
-                      tone: ButtonTone.danger,
-                      icon: const Icon(Icons.delete_outline),
+                    label: '分享',
+                    button: const Button(
+                      key: ValueKey('share-personal-music-playlist-items'),
+                      onPressed: null,
+                      icon: Icon(Icons.share_outlined),
                       width: double.infinity,
-                      child: const Text('删除'),
+                      child: Text('分享'),
+                    ),
+                  ),
+                if (_managingItems)
+                  StickerActionGridEntry(
+                    label: '置顶',
+                    button: Button(
+                      key: const ValueKey(
+                        'pin-selected-personal-music-playlist-items',
+                      ),
+                      onPressed: !_pinningItems && _selectedItemIds.isNotEmpty
+                          ? _pinSelectedItems
+                          : null,
+                      loading: _pinningItems,
+                      icon: const Icon(Icons.vertical_align_top),
+                      width: double.infinity,
+                      child: const Text('置顶'),
                     ),
                   ),
                 if (_managingItems)
@@ -1141,6 +1030,7 @@ class _PersonalMusicPlaylistsPanelState
                 '筛选状态下暂不提供排序，清除筛选后可调整顺序。',
                 style: TextStyle(color: _textMuted, fontSize: 12),
               ),
+            if (_error != null) _MusicPlaylistErrorText(_error!),
             if (_loadingItems && _items.isEmpty)
               const SizedBox(
                 height: 128,
@@ -1151,10 +1041,16 @@ class _PersonalMusicPlaylistsPanelState
             else
               for (var index = 0; index < _items.length; index++)
                 _MusicPlaylistItemTile(
+                  key: ValueKey(
+                    'personal-music-playlist-item-${_items[index].id}',
+                  ),
                   item: _items[index],
                   managing: _managingItems,
-                  selected: _selectedItemIds.contains(_items[index].id),
-                  busy: _busyItemIds.contains(_items[index].id),
+                  selectionNumber: itemSelectionNumbers[_items[index].id],
+                  busy:
+                      _pinningItems ||
+                      _deletingItems ||
+                      _busyItemIds.contains(_items[index].id),
                   canMoveUp: !_filterActive && index > 0,
                   canMoveDown:
                       !_filterActive &&
@@ -1355,50 +1251,44 @@ class _MusicPlaylistSummaryTile extends StatelessWidget {
         ],
       ),
     );
-    final information = managing
-        ? InkWell(
-            key: ValueKey('personal-music-playlist-information-${playlist.id}'),
-            onTap: busy ? null : onTap,
-            mouseCursor: cardMouseCursor,
-            borderRadius: BorderRadius.circular(UiRadii.md),
-            child: informationContent,
-          )
-        : KeyedSubtree(
-            key: ValueKey('personal-music-playlist-information-${playlist.id}'),
-            child: informationContent,
-          );
-    final controls = Wrap(
-      key: ValueKey('personal-music-playlist-controls-${playlist.id}'),
-      spacing: 8,
-      runSpacing: 8,
-      alignment: WrapAlignment.end,
-      children: [
-        ButtonIcon(
-          tooltip: '重命名',
-          onPressed: busy ? null : onRename,
-          icon: const Icon(Icons.edit_outlined),
-          size: 36,
-        ),
-        ButtonIcon(
-          tooltip: '上移',
-          onPressed: !busy && canMoveUp ? onMoveUp : null,
-          icon: const Icon(Icons.arrow_upward),
-          size: 36,
-        ),
-        ButtonIcon(
-          tooltip: '下移',
-          onPressed: !busy && canMoveDown ? onMoveDown : null,
-          icon: const Icon(Icons.arrow_downward),
-          size: 36,
-        ),
-        ButtonIcon(
-          tooltip: '删除',
-          onPressed: busy ? null : onDelete,
-          tone: ButtonTone.danger,
-          icon: const Icon(Icons.delete_outline),
-          size: 36,
-        ),
-      ],
+    final information = KeyedSubtree(
+      key: ValueKey('personal-music-playlist-information-${playlist.id}'),
+      child: informationContent,
+    );
+    final controls = _ManagementCardActionArea(
+      child: Wrap(
+        key: ValueKey('personal-music-playlist-controls-${playlist.id}'),
+        spacing: 8,
+        runSpacing: 8,
+        alignment: WrapAlignment.end,
+        children: [
+          ButtonIcon(
+            tooltip: '重命名',
+            onPressed: busy ? null : onRename,
+            icon: const Icon(Icons.edit_outlined),
+            size: 36,
+          ),
+          ButtonIcon(
+            tooltip: '上移',
+            onPressed: !busy && canMoveUp ? onMoveUp : null,
+            icon: const Icon(Icons.arrow_upward),
+            size: 36,
+          ),
+          ButtonIcon(
+            tooltip: '下移',
+            onPressed: !busy && canMoveDown ? onMoveDown : null,
+            icon: const Icon(Icons.arrow_downward),
+            size: 36,
+          ),
+          ButtonIcon(
+            tooltip: '删除',
+            onPressed: busy ? null : onDelete,
+            tone: ButtonTone.danger,
+            icon: const Icon(Icons.delete_outline),
+            size: 36,
+          ),
+        ],
+      ),
     );
     final panel = _SettingsSubPanel(
       key: ValueKey('personal-music-playlist-card-${playlist.id}'),
@@ -1421,7 +1311,9 @@ class _MusicPlaylistSummaryTile extends StatelessWidget {
               ],
             ),
     );
-    if (managing) return panel;
+    if (managing) {
+      return _ManagementCardTapTarget(onTap: busy ? null : onTap, child: panel);
+    }
     return UiPointerTapRegion(
       onTap: busy ? null : onTap,
       disableSelection: true,
@@ -1502,62 +1394,25 @@ double _playlistSummaryTruncationGuardWidth(BuildContext context) {
 class _MusicPlaylistSearchRow extends StatelessWidget {
   const _MusicPlaylistSearchRow({
     required this.controller,
+    this.focusNode,
     required this.hintText,
-    required this.buttonLabel,
-    required this.loading,
     required this.onSubmitted,
-    required this.onPressed,
   });
 
   final TextEditingController controller;
+  final FocusNode? focusNode;
   final String hintText;
-  final String buttonLabel;
-  final bool loading;
   final ValueChanged<String> onSubmitted;
-  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    final input = Input(
+    return Input(
       controller: controller,
+      focusNode: focusNode,
       hintText: hintText,
       prefixIcon: Icons.search,
       showClearButton: true,
       onSubmitted: onSubmitted,
-    );
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth < 360) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              input,
-              const SizedBox(height: 10),
-              Button(
-                onPressed: loading ? null : onPressed,
-                loading: loading,
-                tone: ButtonTone.primary,
-                icon: const Icon(Icons.search),
-                width: double.infinity,
-                child: Text(buttonLabel),
-              ),
-            ],
-          );
-        }
-        return Row(
-          children: [
-            Expanded(child: input),
-            const SizedBox(width: 10),
-            Button(
-              onPressed: loading ? null : onPressed,
-              loading: loading,
-              tone: ButtonTone.primary,
-              icon: const Icon(Icons.search),
-              child: Text(buttonLabel),
-            ),
-          ],
-        );
-      },
     );
   }
 }
@@ -1627,9 +1482,10 @@ class _MusicPlaylistSearchResultTile extends StatelessWidget {
 
 class _MusicPlaylistItemTile extends StatelessWidget {
   const _MusicPlaylistItemTile({
+    super.key,
     required this.item,
     required this.managing,
-    required this.selected,
+    required this.selectionNumber,
     required this.busy,
     required this.canMoveUp,
     required this.canMoveDown,
@@ -1641,7 +1497,7 @@ class _MusicPlaylistItemTile extends StatelessWidget {
 
   final PersonalMusicPlaylistItem item;
   final bool managing;
-  final bool selected;
+  final int? selectionNumber;
   final bool busy;
   final bool canMoveUp;
   final bool canMoveDown;
@@ -1652,80 +1508,103 @@ class _MusicPlaylistItemTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final information = InkWell(
-      onTap: managing ? onTap : null,
-      borderRadius: BorderRadius.circular(UiRadii.md),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(
-          children: [
-            if (managing) ...[
-              Icon(
-                selected ? Icons.check_box : Icons.check_box_outline_blank,
-                size: 20,
-                color: selected ? _cyan : _textMuted,
-              ),
-              const SizedBox(width: 10),
-            ],
-            const Icon(Icons.music_note, size: 19, color: _cyan),
+    final selected = selectionNumber != null;
+    final information = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          if (managing) ...[
+            Icon(
+              selected ? Icons.check_box : Icons.check_box_outline_blank,
+              size: 20,
+              color: selected ? _cyan : _textMuted,
+            ),
             const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: _textPrimary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
+          ],
+          const Icon(Icons.music_note, size: 19, color: _cyan),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: _textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    '${personalPlaylistArtistsLabel(item.artists)} · '
-                    '${personalPlaylistSourceLabel(item.source)}',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: _textMuted, fontSize: 12),
-                  ),
-                ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '${personalPlaylistArtistsLabel(item.artists)} · '
+                  '${personalPlaylistSourceLabel(item.source)}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: _textMuted, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          if (managing && selected) ...[
+            const SizedBox(width: 10),
+            Container(
+              key: ValueKey(
+                'personal-music-playlist-item-selection-number-${item.id}',
+              ),
+              width: 28,
+              height: 28,
+              decoration: const BoxDecoration(
+                color: _cyan,
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                '$selectionNumber',
+                style: const TextStyle(
+                  color: _primaryDark,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ],
-        ),
+        ],
       ),
     );
-    final controls = Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      alignment: WrapAlignment.end,
-      children: [
-        ButtonIcon(
-          tooltip: '上移',
-          onPressed: !busy && canMoveUp ? onMoveUp : null,
-          icon: const Icon(Icons.arrow_upward),
-          size: 36,
-        ),
-        ButtonIcon(
-          tooltip: '下移',
-          onPressed: !busy && canMoveDown ? onMoveDown : null,
-          icon: const Icon(Icons.arrow_downward),
-          size: 36,
-        ),
-        ButtonIcon(
-          tooltip: '删除',
-          onPressed: busy ? null : onDelete,
-          tone: ButtonTone.danger,
-          icon: const Icon(Icons.delete_outline),
-          size: 36,
-          loading: busy,
-        ),
-      ],
+    final controls = _ManagementCardActionArea(
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        alignment: WrapAlignment.end,
+        children: [
+          ButtonIcon(
+            tooltip: '上移',
+            onPressed: !busy && canMoveUp ? onMoveUp : null,
+            icon: const Icon(Icons.arrow_upward),
+            size: 36,
+          ),
+          ButtonIcon(
+            tooltip: '下移',
+            onPressed: !busy && canMoveDown ? onMoveDown : null,
+            icon: const Icon(Icons.arrow_downward),
+            size: 36,
+          ),
+          ButtonIcon(
+            tooltip: '删除',
+            onPressed: busy ? null : onDelete,
+            tone: ButtonTone.danger,
+            icon: const Icon(Icons.delete_outline),
+            size: 36,
+            loading: busy,
+          ),
+        ],
+      ),
     );
-    return _SettingsSubPanel(
+    final panel = _SettingsSubPanel(
+      highlighted: selected,
       child: LayoutBuilder(
         builder: (context, constraints) {
           if (constraints.maxWidth < 420) {
@@ -1733,7 +1612,7 @@ class _MusicPlaylistItemTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 information,
-                if (!managing) ...[
+                if (managing) ...[
                   const SizedBox(height: 10),
                   Align(alignment: Alignment.centerRight, child: controls),
                 ],
@@ -1743,11 +1622,57 @@ class _MusicPlaylistItemTile extends StatelessWidget {
           return Row(
             children: [
               Expanded(child: information),
-              if (!managing) ...[const SizedBox(width: 10), controls],
+              if (managing) ...[const SizedBox(width: 10), controls],
             ],
           );
         },
       ),
+    );
+    if (!managing) return panel;
+    return _ManagementCardTapTarget(onTap: busy ? null : onTap, child: panel);
+  }
+}
+
+/// Makes every non-action part of a management card select the card.
+///
+/// Action clusters use [_ManagementCardActionArea], whose nested recognizer
+/// wins Flutter's gesture arena. This keeps active and disabled action buttons
+/// from also toggling the card selection while preserving the full card's
+/// padding and layout gaps as useful selection targets.
+class _ManagementCardTapTarget extends StatelessWidget {
+  const _ManagementCardTapTarget({required this.child, required this.onTap});
+
+  final Widget child;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      enabled: onTap != null,
+      onTap: onTap,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        excludeFromSemantics: true,
+        onTap: onTap,
+        child: child,
+      ),
+    );
+  }
+}
+
+class _ManagementCardActionArea extends StatelessWidget {
+  const _ManagementCardActionArea({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      excludeFromSemantics: true,
+      onTap: () {},
+      child: child,
     );
   }
 }
@@ -1762,6 +1687,345 @@ class _MusicPlaylistErrorText extends StatelessWidget {
     return Text(
       message,
       style: const TextStyle(color: _danger, fontSize: 12, height: 1.4),
+    );
+  }
+}
+
+class _MusicPlaylistTrackSearchDialog extends StatefulWidget {
+  const _MusicPlaylistTrackSearchDialog({
+    required this.controller,
+    required this.playlistId,
+    required this.onTrackAdded,
+  });
+
+  final PersonalMusicPlaylistsController controller;
+  final String playlistId;
+  final Future<void> Function() onTrackAdded;
+
+  @override
+  State<_MusicPlaylistTrackSearchDialog> createState() =>
+      _MusicPlaylistTrackSearchDialogState();
+}
+
+class _MusicPlaylistTrackSearchDialogState
+    extends State<_MusicPlaylistTrackSearchDialog> {
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  final Set<String> _busyTrackKeys = {};
+  Timer? _debounce;
+  List<MusicBoxSearchResult> _results = const [];
+  String _source = musicBoxDefaultSource;
+  String? _error;
+  int _generation = 0;
+  bool _searching = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(_handleSearchChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _searchFocusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _generation += 1;
+    _debounce?.cancel();
+    _searchController.removeListener(_handleSearchChanged);
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _handleSearchChanged() => _scheduleSearch();
+
+  void _scheduleSearch({bool immediate = false}) {
+    _debounce?.cancel();
+    final keyword = _searchController.text.trim();
+    final source = _source;
+    final generation = ++_generation;
+    if (keyword.isEmpty) {
+      setState(() {
+        _results = const [];
+        _searching = false;
+        _error = null;
+      });
+      return;
+    }
+    setState(() {
+      _searching = true;
+      _results = const [];
+      _error = null;
+    });
+    if (immediate) {
+      unawaited(
+        _runSearch(keyword: keyword, source: source, generation: generation),
+      );
+      return;
+    }
+    _debounce = Timer(
+      const Duration(milliseconds: 350),
+      () => unawaited(
+        _runSearch(keyword: keyword, source: source, generation: generation),
+      ),
+    );
+  }
+
+  Future<void> _submitSearch() async {
+    _debounce?.cancel();
+    final keyword = _searchController.text.trim();
+    if (keyword.isEmpty) {
+      _scheduleSearch(immediate: true);
+      return;
+    }
+    final generation = ++_generation;
+    setState(() {
+      _searching = true;
+      _results = const [];
+      _error = null;
+    });
+    await _runSearch(keyword: keyword, source: _source, generation: generation);
+  }
+
+  Future<void> _runSearch({
+    required String keyword,
+    required String source,
+    required int generation,
+  }) async {
+    try {
+      final results = await widget.controller.searchTracks(
+        keyword: keyword,
+        source: source,
+      );
+      if (!mounted ||
+          generation != _generation ||
+          _searchController.text.trim() != keyword ||
+          _source != source ||
+          results == null) {
+        return;
+      }
+      setState(() => _results = results);
+    } catch (error) {
+      if (!mounted || generation != _generation) return;
+      setState(() {
+        _results = const [];
+        _error = error.toString();
+      });
+    } finally {
+      if (mounted && generation == _generation) {
+        setState(() => _searching = false);
+      }
+    }
+  }
+
+  void _setSource(String source) {
+    if (_source == source) return;
+    _debounce?.cancel();
+    _generation += 1;
+    setState(() {
+      _source = source;
+      _results = const [];
+      _searching = false;
+      _error = null;
+    });
+    if (_searchController.text.trim().isNotEmpty) {
+      _scheduleSearch(immediate: true);
+    }
+  }
+
+  Future<void> _addTrack(MusicBoxSearchResult track) async {
+    final key = '${track.source}:${track.trackId}';
+    if (_busyTrackKeys.contains(key)) return;
+    setState(() {
+      _busyTrackKeys.add(key);
+      _error = null;
+    });
+    try {
+      await widget.controller.addTrack(
+        playlistId: widget.playlistId,
+        track: track,
+      );
+      await widget.onTrackAdded();
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _busyTrackKeys.remove(key));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final contentHeight = (media.size.height - media.viewInsets.bottom - 220)
+        .clamp(180.0, 520.0)
+        .toDouble();
+    return DialogFrame(
+      title: '搜索添加',
+      icon: Icons.playlist_add,
+      maxWidth: 680,
+      adaptiveActions: [
+        ResponsiveDialogAction(
+          label: '完成',
+          icon: Icons.check,
+          tone: ButtonTone.primary,
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ],
+      child: SizedBox(
+        height: contentHeight,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SegmentedControl<String>(
+              expanded: true,
+              value: _source,
+              onChanged: _setSource,
+              segments: [
+                for (final source in musicBoxSources)
+                  Segment(value: source.id, label: source.label),
+              ],
+            ),
+            const SizedBox(height: 10),
+            _MusicPlaylistSearchRow(
+              controller: _searchController,
+              focusNode: _searchFocusNode,
+              hintText: '搜索歌曲添加到歌单',
+              onSubmitted: (_) => _submitSearch(),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 10),
+              _MusicPlaylistErrorText(_error!),
+            ],
+            const SizedBox(height: 10),
+            Expanded(
+              child: _searching && _results.isEmpty
+                  ? const Center(child: CircularProgressIndicator(color: _cyan))
+                  : _results.isEmpty
+                  ? _SettingsEmptyState(
+                      text: _searchController.text.trim().isEmpty
+                          ? '输入歌名或歌手后自动搜索'
+                          : '没有找到相关歌曲',
+                    )
+                  : ListView.separated(
+                      itemCount: _results.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 10),
+                      itemBuilder: (context, index) {
+                        final result = _results[index];
+                        return _MusicPlaylistSearchResultTile(
+                          result: result,
+                          query: _searchController.text,
+                          loading: _busyTrackKeys.contains(
+                            '${result.source}:${result.trackId}',
+                          ),
+                          onAdd: () => _addTrack(result),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MusicPlaylistItemFilterDialog extends StatefulWidget {
+  const _MusicPlaylistItemFilterDialog({
+    required this.keyword,
+    required this.source,
+  });
+
+  final String keyword;
+  final String source;
+
+  @override
+  State<_MusicPlaylistItemFilterDialog> createState() =>
+      _MusicPlaylistItemFilterDialogState();
+}
+
+class _MusicPlaylistItemFilterDialogState
+    extends State<_MusicPlaylistItemFilterDialog> {
+  late final TextEditingController _keywordController;
+  final FocusNode _keywordFocusNode = FocusNode();
+  late String _source;
+
+  @override
+  void initState() {
+    super.initState();
+    _keywordController = TextEditingController(text: widget.keyword);
+    _source = widget.source;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _keywordFocusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _keywordController.dispose();
+    _keywordFocusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DialogFrame(
+      title: '筛选歌曲',
+      icon: Icons.filter_alt_outlined,
+      adaptiveActions: [
+        ResponsiveDialogAction(
+          label: '重置',
+          icon: Icons.restart_alt,
+          onPressed: () {
+            _keywordController.clear();
+            setState(() => _source = '');
+          },
+        ),
+        ResponsiveDialogAction(
+          label: '取消',
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        ResponsiveDialogAction(
+          label: '确认',
+          icon: Icons.check,
+          tone: ButtonTone.primary,
+          onPressed: () => Navigator.of(context).pop(
+            PersonalPlaylistItemFilterDraft(
+              keyword: _keywordController.text.trim(),
+              source: _source,
+            ),
+          ),
+        ),
+      ],
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _MusicPlaylistFieldLabel('名称关键字'),
+          const SizedBox(height: 8),
+          Input(
+            controller: _keywordController,
+            focusNode: _keywordFocusNode,
+            hintText: '',
+            showClearButton: true,
+            minLines: 1,
+            maxLines: 1,
+          ),
+          const SizedBox(height: 16),
+          const _MusicPlaylistFieldLabel('歌曲来源'),
+          const SizedBox(height: 8),
+          SegmentedControl<String>(
+            expanded: true,
+            value: _source,
+            onChanged: (source) => setState(() => _source = source),
+            segments: [
+              const Segment(value: '', label: '全部'),
+              for (final source in musicBoxSources)
+                Segment(value: source.id, label: source.label),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
