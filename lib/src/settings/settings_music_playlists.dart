@@ -56,7 +56,8 @@ class _PersonalMusicPlaylistsPanelState
   final Set<String> _busyPlaylistIds = {};
   final Set<String> _busyTrackKeys = {};
   final Set<String> _busyItemIds = {};
-  int _loadGeneration = 0;
+  int _playlistLoadGeneration = 0;
+  int _itemLoadGeneration = 0;
   int _searchGeneration = 0;
 
   bool get _filterActive => personalPlaylistFilterActive(
@@ -106,7 +107,8 @@ class _PersonalMusicPlaylistsPanelState
   @override
   void dispose() {
     _trackSearchDebounce?.cancel();
-    _loadGeneration += 1;
+    _playlistLoadGeneration += 1;
+    _itemLoadGeneration += 1;
     _searchGeneration += 1;
     _trackSearchController.removeListener(_handleTrackSearchChanged);
     _trackSearchController.dispose();
@@ -122,12 +124,14 @@ class _PersonalMusicPlaylistsPanelState
 
   Future<void> _loadPlaylists() async {
     if (!widget.controller.available) return;
-    final generation = ++_loadGeneration;
+    final generation = ++_playlistLoadGeneration;
     _setLoading(true);
     if (mounted) setState(() => _error = null);
     try {
       final result = await widget.controller.loadPlaylists();
-      if (!mounted || generation != _loadGeneration || result == null) return;
+      if (!mounted || generation != _playlistLoadGeneration || result == null) {
+        return;
+      }
       final activeID = _activePlaylist?.id;
       PersonalMusicPlaylist? refreshedActive;
       if (activeID != null) {
@@ -137,6 +141,9 @@ class _PersonalMusicPlaylistsPanelState
             break;
           }
         }
+      }
+      if (activeID != null && refreshedActive == null) {
+        _itemLoadGeneration += 1;
       }
       setState(() {
         _playlists = result.playlists;
@@ -154,16 +161,20 @@ class _PersonalMusicPlaylistsPanelState
           _items = const [];
           _selectedItemIds = const {};
           _managingItems = false;
+          _loadingItems = false;
+          _loadingMore = false;
         }
       });
       if (refreshedActive != null) {
         scheduleMicrotask(() => _loadItems(reset: true));
       }
     } catch (error) {
-      if (!mounted || generation != _loadGeneration) return;
+      if (!mounted || generation != _playlistLoadGeneration) return;
       setState(() => _error = error.toString());
     } finally {
-      if (mounted && generation == _loadGeneration) _setLoading(false);
+      if (mounted && generation == _playlistLoadGeneration) {
+        _setLoading(false);
+      }
     }
   }
 
@@ -183,6 +194,7 @@ class _PersonalMusicPlaylistsPanelState
 
   void _closePlaylist() {
     _trackSearchDebounce?.cancel();
+    _itemLoadGeneration += 1;
     _searchGeneration += 1;
     _lastTrackSearchText = '';
     _trackSearchController.clear();
@@ -192,6 +204,8 @@ class _PersonalMusicPlaylistsPanelState
       _searchResults = const [];
       _selectedItemIds = const {};
       _managingItems = false;
+      _loadingItems = false;
+      _loadingMore = false;
       _error = null;
       _itemFilterController.clear();
       _appliedFilterKeyword = '';
@@ -202,13 +216,13 @@ class _PersonalMusicPlaylistsPanelState
   Future<void> _loadItems({required bool reset}) async {
     final playlist = _activePlaylist;
     if (playlist == null || !widget.controller.available) return;
-    if (reset && _loadingItems) return;
-    if (!reset && (_loadingMore || !_itemsHaveMore)) return;
-    final generation = reset ? ++_loadGeneration : _loadGeneration;
+    if (!reset && (_loadingItems || _loadingMore || !_itemsHaveMore)) return;
+    final generation = reset ? ++_itemLoadGeneration : _itemLoadGeneration;
     final page = reset ? 1 : _itemsPage + 1;
     setState(() {
       if (reset) {
         _loadingItems = true;
+        _loadingMore = false;
         _selectedItemIds = const {};
       } else {
         _loadingMore = true;
@@ -223,7 +237,7 @@ class _PersonalMusicPlaylistsPanelState
         source: _filterSource,
       );
       if (!mounted ||
-          generation != _loadGeneration ||
+          generation != _itemLoadGeneration ||
           result == null ||
           _activePlaylist?.id != playlist.id) {
         return;
@@ -238,10 +252,10 @@ class _PersonalMusicPlaylistsPanelState
         _itemsHaveMore = result.hasMore;
       });
     } catch (error) {
-      if (!mounted || generation != _loadGeneration) return;
+      if (!mounted || generation != _itemLoadGeneration) return;
       setState(() => _error = error.toString());
     } finally {
-      if (mounted && generation == _loadGeneration) {
+      if (mounted && generation == _itemLoadGeneration) {
         setState(() {
           _loadingItems = false;
           _loadingMore = false;
@@ -963,7 +977,7 @@ class _PersonalMusicPlaylistsPanelState
                 playlists: visiblePlaylists,
                 managing: _managingPlaylists,
                 selectionNumbers: selectionNumbers,
-                busy: _playlistManagementBusy,
+                busy: _managingPlaylists && _playlistManagementBusy,
                 filterActive: _playlistFilterActive,
                 onTap: _openOrSelectPlaylist,
                 onRename: _renamePlaylist,
@@ -1286,67 +1300,73 @@ class _MusicPlaylistSummaryTile extends StatelessWidget {
     final cardMouseCursor = managing
         ? SystemMouseCursors.basic
         : SystemMouseCursors.click;
-    final information = InkWell(
-      key: ValueKey('personal-music-playlist-information-${playlist.id}'),
-      onTap: busy ? null : onTap,
-      mouseCursor: cardMouseCursor,
-      borderRadius: BorderRadius.circular(UiRadii.md),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 5),
-        child: Row(
-          children: [
-            if (managing) ...[
-              Icon(
-                selected ? Icons.check_box : Icons.check_box_outline_blank,
-                color: selected ? _cyan : _textMuted,
-                size: 20,
-              ),
-              const SizedBox(width: 10),
-            ],
-            const Icon(Icons.queue_music, color: _cyan, size: 24),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    playlist.name,
-                    maxLines: nameMaxLines,
-                    overflow: TextOverflow.ellipsis,
-                    style: _playlistSummaryNameStyle,
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    '${playlist.itemCount} 首歌曲',
-                    style: const TextStyle(color: _textMuted, fontSize: 12),
-                  ),
-                ],
-              ),
+    final informationContent = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          if (managing) ...[
+            Icon(
+              selected ? Icons.check_box : Icons.check_box_outline_blank,
+              color: selected ? _cyan : _textMuted,
+              size: 20,
             ),
-            if (managing && selected)
-              Container(
-                width: 28,
-                height: 28,
-                decoration: const BoxDecoration(
-                  color: _cyan,
-                  shape: BoxShape.circle,
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  '$selectionNumber',
-                  style: const TextStyle(
-                    color: _primaryDark,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              )
-            else if (!managing)
-              const Icon(Icons.chevron_right, color: _textMuted, size: 22),
+            const SizedBox(width: 10),
           ],
-        ),
+          const Icon(Icons.queue_music, color: _cyan, size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  playlist.name,
+                  maxLines: nameMaxLines,
+                  overflow: TextOverflow.ellipsis,
+                  style: _playlistSummaryNameStyle,
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '${playlist.itemCount} 首歌曲',
+                  style: const TextStyle(color: _textMuted, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          if (managing && selected)
+            Container(
+              width: 28,
+              height: 28,
+              decoration: const BoxDecoration(
+                color: _cyan,
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                '$selectionNumber',
+                style: const TextStyle(
+                  color: _primaryDark,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            )
+          else if (!managing)
+            const Icon(Icons.chevron_right, color: _textMuted, size: 22),
+        ],
       ),
     );
+    final information = managing
+        ? InkWell(
+            key: ValueKey('personal-music-playlist-information-${playlist.id}'),
+            onTap: busy ? null : onTap,
+            mouseCursor: cardMouseCursor,
+            borderRadius: BorderRadius.circular(UiRadii.md),
+            child: informationContent,
+          )
+        : KeyedSubtree(
+            key: ValueKey('personal-music-playlist-information-${playlist.id}'),
+            child: informationContent,
+          );
     final controls = Wrap(
       key: ValueKey('personal-music-playlist-controls-${playlist.id}'),
       spacing: 8,
@@ -1380,7 +1400,7 @@ class _MusicPlaylistSummaryTile extends StatelessWidget {
         ),
       ],
     );
-    return _SettingsSubPanel(
+    final panel = _SettingsSubPanel(
       key: ValueKey('personal-music-playlist-card-${playlist.id}'),
       hoverable: true,
       highlighted: selected,
@@ -1400,6 +1420,12 @@ class _MusicPlaylistSummaryTile extends StatelessWidget {
                 if (managing) ...[const SizedBox(width: 10), controls],
               ],
             ),
+    );
+    if (managing) return panel;
+    return UiPointerTapRegion(
+      onTap: busy ? null : onTap,
+      disableSelection: true,
+      child: panel,
     );
   }
 }

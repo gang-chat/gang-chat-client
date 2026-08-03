@@ -69,6 +69,121 @@ void main() {
     );
   }
 
+  testWidgets('empty playlist opens on the first tap while summaries refresh', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(720, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final api = _FakePersonalPlaylistApi(
+      playlists: const [
+        _FakePersonalPlaylistApi.playlist,
+        _FakePersonalPlaylistApi.emptyPlaylist,
+      ],
+    );
+
+    await _pumpPlaylistSettings(tester, api);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('夜晚'));
+    await tester.pumpAndSettle();
+    expect(find.text('晴天'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('back-to-personal-music-playlists')),
+    );
+    await tester.pumpAndSettle();
+
+    final pendingRefresh = Completer<PersonalMusicPlaylistPage>();
+    api.nextPlaylistListResponse = pendingRefresh;
+    await tester.tap(find.byTooltip('刷新设置'));
+    await tester.pump();
+    await tester.pump();
+    expect(api.listRequestCount, 2);
+    expect(find.text('空歌单'), findsOneWidget);
+
+    await tester.tap(find.text('空歌单'));
+    await tester.pump();
+    expect(find.text('搜索添加'), findsOneWidget);
+    expect(find.text('歌单还是空的'), findsOneWidget);
+
+    pendingRefresh.complete(api.playlistPage());
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the whole playlist card opens on the first tap', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(720, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final api = _FakePersonalPlaylistApi(
+      playlists: const [_FakePersonalPlaylistApi.emptyPlaylist],
+    );
+
+    await _pumpPlaylistSettings(tester, api);
+    await tester.pumpAndSettle();
+
+    final card = find.byKey(
+      const ValueKey('personal-music-playlist-card-mbp_empty'),
+    );
+    final cardRect = tester.getRect(card);
+    await tester.tapAt(cardRect.topLeft + const Offset(3, 3));
+    await tester.pumpAndSettle();
+
+    expect(find.text('搜索添加'), findsOneWidget);
+    expect(find.text('歌单还是空的'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'desktop mouse opens an empty playlist after visiting another playlist',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(720, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final api = _FakePersonalPlaylistApi(
+        playlists: const [
+          _FakePersonalPlaylistApi.playlist,
+          _FakePersonalPlaylistApi.emptyPlaylist,
+        ],
+      );
+
+      await _pumpPlaylistSettings(tester, api, selectable: true);
+      await tester.pumpAndSettle();
+      final mouse = await tester.createGesture(
+        pointer: 91,
+        kind: PointerDeviceKind.mouse,
+      );
+      addTearDown(mouse.removePointer);
+      final firstNameRect = tester.getRect(find.text('夜晚'));
+      await mouse.addPointer(location: firstNameRect.centerLeft);
+      await mouse.down(firstNameRect.centerLeft);
+      await mouse.moveTo(firstNameRect.centerRight);
+      await mouse.up();
+      await tester.pump();
+      await mouse.down(firstNameRect.center);
+      await mouse.up();
+      await tester.pumpAndSettle();
+      expect(find.text('晴天'), findsOneWidget);
+
+      final back = find.byKey(
+        const ValueKey('back-to-personal-music-playlists'),
+      );
+      await mouse.moveTo(tester.getCenter(back));
+      await mouse.down(tester.getCenter(back));
+      await mouse.up();
+      await tester.pumpAndSettle();
+
+      final emptyCard = find.byKey(
+        const ValueKey('personal-music-playlist-card-mbp_empty'),
+      );
+      await mouse.moveTo(tester.getCenter(emptyCard));
+      await mouse.down(tester.getCenter(emptyCard));
+      await mouse.up();
+      await tester.pumpAndSettle();
+
+      expect(find.text('搜索添加'), findsOneWidget);
+      expect(find.text('歌单还是空的'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'track search follows typing, highlights matches, and ignores stale results',
     (tester) async {
@@ -483,21 +598,23 @@ void main() {
 
 Future<void> _pumpPlaylistSettings(
   WidgetTester tester,
-  _FakePersonalPlaylistApi api,
-) {
+  _FakePersonalPlaylistApi api, {
+  bool selectable = false,
+}) {
+  final settings = SettingsPage(
+    initialSection: SettingsSection.playlists,
+    api: api,
+    controller: const SettingsController(
+      api: null,
+      apiBaseUrl: '',
+      stickerPackStore: StickerPackStore(),
+    ),
+    onClose: () {},
+  );
   return tester.pumpWidget(
     MaterialApp(
       theme: ui.uiTheme(),
-      home: SettingsPage(
-        initialSection: SettingsSection.playlists,
-        api: api,
-        controller: const SettingsController(
-          api: null,
-          apiBaseUrl: '',
-          stickerPackStore: StickerPackStore(),
-        ),
-        onClose: () {},
-      ),
+      home: selectable ? SelectionArea(child: settings) : settings,
     ),
   );
 }
@@ -520,6 +637,16 @@ class _FakePersonalPlaylistApi implements GangApi, PersonalMusicPlaylistApi {
     updatedAt: null,
   );
 
+  static const emptyPlaylist = PersonalMusicPlaylist(
+    id: 'mbp_empty',
+    name: '空歌单',
+    description: '',
+    revision: 1,
+    itemCount: 0,
+    createdAt: null,
+    updatedAt: null,
+  );
+
   final Future<List<MusicBoxSearchResult>> Function(
     String keyword,
     String source,
@@ -530,12 +657,10 @@ class _FakePersonalPlaylistApi implements GangApi, PersonalMusicPlaylistApi {
   final List<List<String>> pinRequests = [];
   final List<String> moveRequests = [];
   final List<String> renameRequests = [];
+  int listRequestCount = 0;
+  Completer<PersonalMusicPlaylistPage>? nextPlaylistListResponse;
 
-  @override
-  Future<PersonalMusicPlaylistPage> listPersonalMusicPlaylists({
-    int page = 1,
-    int pageSize = 50,
-  }) async {
+  PersonalMusicPlaylistPage playlistPage() {
     return PersonalMusicPlaylistPage(
       playlists: List<PersonalMusicPlaylist>.of(playlists),
       page: 1,
@@ -548,6 +673,20 @@ class _FakePersonalPlaylistApi implements GangApi, PersonalMusicPlaylistApi {
   }
 
   @override
+  Future<PersonalMusicPlaylistPage> listPersonalMusicPlaylists({
+    int page = 1,
+    int pageSize = 50,
+  }) async {
+    listRequestCount += 1;
+    final pending = nextPlaylistListResponse;
+    if (pending != null) {
+      nextPlaylistListResponse = null;
+      return pending.future;
+    }
+    return playlistPage();
+  }
+
+  @override
   Future<PersonalMusicPlaylistItemsPage> getPersonalMusicPlaylist({
     required String playlistId,
     int page = 1,
@@ -555,6 +694,16 @@ class _FakePersonalPlaylistApi implements GangApi, PersonalMusicPlaylistApi {
     String? keyword,
     String? source,
   }) async {
+    if (playlistId == emptyPlaylist.id) {
+      return const PersonalMusicPlaylistItemsPage(
+        playlist: emptyPlaylist,
+        items: [],
+        page: 1,
+        pageSize: 50,
+        total: 0,
+        hasMore: false,
+      );
+    }
     return const PersonalMusicPlaylistItemsPage(
       playlist: playlist,
       items: [
