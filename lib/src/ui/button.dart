@@ -11,6 +11,7 @@ class Button extends StatelessWidget {
     required this.child,
     this.onPressed,
     this.icon,
+    this.showIcon = true,
     this.tooltip,
     this.tone = ButtonTone.neutral,
     this.selected = false,
@@ -27,6 +28,7 @@ class Button extends StatelessWidget {
   final ValueChanged<bool>? onToggleChanged;
   final Widget child;
   final Widget? icon;
+  final bool showIcon;
   final String? tooltip;
   final ButtonTone tone;
   final bool selected;
@@ -69,6 +71,32 @@ class Button extends StatelessWidget {
         _measurementSafety;
   }
 
+  /// Returns the same button state and behavior without its leading icon.
+  ///
+  /// Responsive action groups use this only after their multi-row layout can
+  /// no longer show every label in full. Keeping the copy here ensures newly
+  /// added button state is handled alongside the component that owns it.
+  Button withoutIcon() {
+    if (icon == null || !showIcon) return this;
+    return Button(
+      key: key,
+      onPressed: onPressed,
+      onToggleChanged: onToggleChanged,
+      icon: icon,
+      showIcon: false,
+      tooltip: tooltip,
+      tone: tone,
+      selected: selected,
+      toggleValue: toggleValue,
+      width: width,
+      height: height,
+      padding: padding,
+      mainAxisSize: mainAxisSize,
+      loading: loading,
+      child: child,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final toggleMode = toggleValue != null || onToggleChanged != null;
@@ -86,7 +114,9 @@ class Button extends StatelessWidget {
       colors: colors,
       icon: loading && icon != null
           ? const _ButtonLoadingIndicator(size: _iconSize)
-          : icon,
+          : showIcon
+          ? icon
+          : null,
       mainAxisSize: mainAxisSize,
       child: child,
     );

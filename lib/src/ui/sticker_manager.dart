@@ -1256,7 +1256,7 @@ class StickerActionGrid extends StatelessWidget {
     if (actions.isEmpty) return const SizedBox.shrink();
     return LayoutBuilder(
       builder: (context, constraints) {
-        final maximumButtonWidth = actions
+        final buttonWidthsWithIcons = actions
             .map(
               (action) => Button.minimumWidthForLabel(
                 context,
@@ -1265,7 +1265,8 @@ class StickerActionGrid extends StatelessWidget {
                 padding: action.button.padding,
               ),
             )
-            .reduce(math.max);
+            .toList(growable: false);
+        final maximumButtonWidth = buttonWidthsWithIcons.reduce(math.max);
         final threeColumnWidth = (maximumButtonWidth * 3) + (_gap * 2);
         final columns =
             actions.length > 2 &&
@@ -1277,13 +1278,21 @@ class StickerActionGrid extends StatelessWidget {
             ? constraints.maxWidth
             : threeColumnWidth;
         final itemWidth = (availableWidth - (_gap * (columns - 1))) / columns;
+        final hideIcons =
+            columns == 2 &&
+            buttonWidthsWithIcons.any(
+              (minimumWidth) => minimumWidth > itemWidth,
+            );
         return Wrap(
           key: const ValueKey('sticker-action-grid'),
           spacing: _gap,
           runSpacing: _gap,
           children: [
             for (final action in actions)
-              SizedBox(width: itemWidth, child: action.button),
+              SizedBox(
+                width: itemWidth,
+                child: hideIcons ? action.button.withoutIcon() : action.button,
+              ),
           ],
         );
       },
@@ -1912,6 +1921,7 @@ class _StickerPreviewImageState extends State<_StickerPreviewImage> {
   Widget build(BuildContext context) {
     final canOpen = widget.onOpenPreview != null;
     return SizedBox(
+      key: const ValueKey('sticker-preview-image'),
       height: 320,
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -2272,12 +2282,14 @@ class _StickerPreviewDialogState extends State<StickerPreviewDialog> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                _StickerPreviewImage(
-                  imageUrl: widget.imageUrl,
-                  asset: asset,
-                  onOpenPreview: widget.imagePreviewOpener == null
-                      ? null
-                      : () => unawaited(_openImagePreview()),
+                Flexible(
+                  child: _StickerPreviewImage(
+                    imageUrl: widget.imageUrl,
+                    asset: asset,
+                    onOpenPreview: widget.imagePreviewOpener == null
+                        ? null
+                        : () => unawaited(_openImagePreview()),
+                  ),
                 ),
                 const SizedBox(height: 14),
                 Input(

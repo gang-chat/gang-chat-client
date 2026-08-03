@@ -74,6 +74,132 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'narrow sticker preview keeps all labels across three action rows',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(432, 760));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final backend = _FakeStickerBackend(
+        capabilities: const sticker_management.StickerManagementCapabilities(),
+        packs: [
+          _pack('personal_pack', ['preview']),
+        ],
+        supportsAvatar: true,
+      );
+      await tester.pumpWidget(
+        _host(
+          ui.StickerManagerPanel(
+            backend: backend,
+            fileSelectionService: _FakeFileSelectionService(),
+            title: '表情包管理',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.image_not_supported_outlined).first);
+      await tester.pumpAndSettle();
+
+      final dialog = find.byType(Dialog);
+      final grid = find.descendant(
+        of: dialog,
+        matching: find.byKey(const ValueKey('sticker-action-grid')),
+      );
+      final buttons = find.descendant(
+        of: grid,
+        matching: find.byType(ui.Button),
+      );
+      expect(buttons, findsNWidgets(6));
+      final rects = [
+        for (final button in buttons.evaluate())
+          tester.getRect(find.byWidget(button.widget)),
+      ];
+      expect(rects[0].center.dy, closeTo(rects[1].center.dy, 0.01));
+      expect(rects[2].center.dy, closeTo(rects[3].center.dy, 0.01));
+      expect(rects[4].center.dy, closeTo(rects[5].center.dy, 0.01));
+      expect(rects[0].center.dy, lessThan(rects[2].center.dy));
+      expect(rects[2].center.dy, lessThan(rects[4].center.dy));
+      expect(
+        tester
+            .renderObjectList<RenderParagraph>(
+              find.descendant(of: grid, matching: find.byType(RichText)),
+            )
+            .every((paragraph) => !paragraph.didExceedMaxLines),
+        isTrue,
+      );
+      expect(
+        tester
+            .getSize(find.byKey(const ValueKey('sticker-preview-image')))
+            .height,
+        lessThan(320),
+      );
+      expect(find.widgetWithText(ui.Button, '删除'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'action grid hides every icon when two columns still cannot fit labels',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(720, 500));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      const labels = ['下载', '设为头像', '保存名称', '置顶', '上移一位', '下移一位'];
+      await tester.pumpWidget(
+        _host(
+          Center(
+            child: SizedBox(
+              width: 220,
+              child: ui.StickerActionGrid(
+                actions: [
+                  for (final label in labels)
+                    ui.StickerActionGridEntry(
+                      label: label,
+                      button: ui.Button(
+                        onPressed: () {},
+                        icon: const Icon(Icons.circle_outlined),
+                        width: double.infinity,
+                        child: Text(label),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final grid = find.byKey(const ValueKey('sticker-action-grid'));
+      final buttons = find.descendant(
+        of: grid,
+        matching: find.byType(ui.Button),
+      );
+      final rects = [
+        for (final button in buttons.evaluate())
+          tester.getRect(find.byWidget(button.widget)),
+      ];
+      expect(rects, hasLength(6));
+      expect(rects[0].center.dy, closeTo(rects[1].center.dy, 0.01));
+      expect(rects[2].center.dy, closeTo(rects[3].center.dy, 0.01));
+      expect(rects[4].center.dy, closeTo(rects[5].center.dy, 0.01));
+      expect(
+        find.descendant(of: grid, matching: find.byType(Icon)),
+        findsNothing,
+      );
+      expect(
+        tester
+            .renderObjectList<RenderParagraph>(
+              find.descendant(of: grid, matching: find.byType(RichText)),
+            )
+            .every((paragraph) => !paragraph.didExceedMaxLines),
+        isTrue,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('narrow sticker filter keeps action labels and hides icons', (
     tester,
   ) async {
@@ -255,6 +381,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('表情预览'), findsOneWidget);
+    expect(
+      tester
+          .getSize(find.byKey(const ValueKey('sticker-preview-image')))
+          .height,
+      320,
+    );
     expect(_buttonEnabled(tester, '下载'), isTrue);
     expect(_buttonEnabled(tester, '保存名称'), isFalse);
     expect(_buttonEnabled(tester, '置顶'), isFalse);
@@ -316,14 +448,23 @@ StickerPack _pack(String id, List<String> stickerIds) {
 }
 
 class _FakeStickerBackend extends ui.StickerManagerBackend {
-  _FakeStickerBackend({required this.capabilities, required this.packs});
+  _FakeStickerBackend({
+    required this.capabilities,
+    required this.packs,
+    this.supportsAvatar = false,
+  });
 
   @override
   final sticker_management.StickerManagementCapabilities capabilities;
 
   final List<StickerPack> packs;
+  final bool supportsAvatar;
   int downloads = 0;
   int mutations = 0;
+
+  @override
+  Future<void> Function(sticker_management.ManagedSticker item)?
+  get onSetAvatar => supportsAvatar ? (_) async {} : null;
 
   @override
   sticker_management.StickerManagementScope get scope =>
