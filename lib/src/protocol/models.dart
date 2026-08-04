@@ -2472,6 +2472,7 @@ class MusicBoxQueueItem {
     required this.error,
     required this.addedByUserId,
     required this.createdAt,
+    this.canPlayNow = false,
     this.requestedBy,
   });
 
@@ -2489,6 +2490,7 @@ class MusicBoxQueueItem {
   final String error;
   final String addedByUserId;
   final DateTime? createdAt;
+  final bool canPlayNow;
   final MusicBoxRequester? requestedBy;
 
   factory MusicBoxQueueItem.fromJson(Map<String, Object?> json) {
@@ -2504,6 +2506,7 @@ class MusicBoxQueueItem {
       error: _stringFromJson(json, const ['error']) ?? '',
       addedByUserId: _stringFromJson(json, const ['added_by_user_id']) ?? '',
       createdAt: _parseDateTime(json['created_at']),
+      canPlayNow: json['can_play_now'] == true,
       requestedBy: MusicBoxRequester.fromJson(
         _nullableMap(json['requested_by']),
       ),
@@ -2515,12 +2518,14 @@ class MusicBoxRequester {
   const MusicBoxRequester({
     required this.userId,
     required this.displayName,
+    String? avatarLabel,
     required this.avatarUrl,
     required this.defaultAvatarKey,
-  });
+  }) : avatarLabel = avatarLabel ?? displayName;
 
   final String userId;
   final String displayName;
+  final String avatarLabel;
   final String? avatarUrl;
   final String defaultAvatarKey;
 
@@ -2532,6 +2537,8 @@ class MusicBoxRequester {
       userId: userId,
       displayName:
           _stringFromJson(json, const ['display_name', 'username']) ?? userId,
+      avatarLabel:
+          _stringFromJson(json, const ['avatar_label', 'username']) ?? userId,
       avatarUrl: _stringFromJson(json, const ['avatar_url']),
       defaultAvatarKey:
           _stringFromJson(json, const ['default_avatar_key']) ?? 'blue-3',

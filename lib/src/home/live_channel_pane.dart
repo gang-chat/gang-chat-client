@@ -13,6 +13,7 @@ import '../live/live_video_track_view.dart';
 import '../protocol/models.dart';
 import '../shell/full_screen_system_ui_controller.dart';
 import '../ui/ui.dart';
+import 'hover_card_anchor.dart';
 import 'room_profile_card.dart';
 
 part 'live_channel_members.dart';

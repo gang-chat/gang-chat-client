@@ -66,6 +66,17 @@ String musicBoxActiveSourceLabel(MusicBoxActiveSource source) {
   return source.type == MusicBoxActiveSourceType.roomPlaylist ? '房间歌单' : '个人歌单';
 }
 
+/// Stable source ids stay on the wire; every song surface uses the same
+/// user-facing source label. Unknown sources remain visible for forward
+/// compatibility instead of being mislabeled as the default source.
+String musicBoxSourceLabel(String value) {
+  final source = value.trim();
+  for (final candidate in musicBoxSources) {
+    if (candidate.id == source) return candidate.label;
+  }
+  return source.isEmpty ? '未知来源' : source;
+}
+
 String musicBoxTransportApiAction(MusicBoxTransportAction action) {
   return switch (action) {
     MusicBoxTransportAction.play => 'play',

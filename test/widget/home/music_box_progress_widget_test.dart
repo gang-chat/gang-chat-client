@@ -149,7 +149,8 @@ void main() {
           createdAt: null,
           requestedBy: MusicBoxRequester(
             userId: 'requester',
-            displayName: '点歌用户',
+            displayName: '房间专属名',
+            avatarLabel: '点歌用户',
             avatarUrl: null,
             defaultAvatarKey: 'blue-3',
           ),
@@ -169,16 +170,34 @@ void main() {
           ),
         );
 
-        expect(find.text('当前：点歌队列'), findsOneWidget);
-        expect(find.text('当前队列'), findsOneWidget);
+        expect(find.textContaining('当前：'), findsNothing);
+        expect(find.text('点歌队列'), findsOneWidget);
         expect(find.text('点播歌曲'), findsOneWidget);
-        expect(find.textContaining('由 点歌用户 点歌'), findsOneWidget);
-        expect(find.byType(Avatar), findsWidgets);
+        expect(find.textContaining('由 '), findsNothing);
+        expect(find.textContaining('网易云'), findsOneWidget);
         expect(find.text('搜索添加'), findsNothing);
+
+        await tester.tap(find.text('点播歌曲'));
+        await tester.pump();
+        expect(
+          find.byKey(
+            const ValueKey<String>('music-box-song-card:requested-track'),
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('时长'), findsOneWidget);
+        expect(find.text('3:00'), findsWidgets);
+        expect(find.text('点歌人'), findsOneWidget);
+        expect(find.text('房间专属名'), findsOneWidget);
+        final requesterAvatar = tester.widget<Avatar>(find.byType(Avatar).last);
+        expect(requesterAvatar.label, '点歌用户');
+
+        await tester.tapAt(const Offset(355, 495));
+        await tester.pump();
 
         await _toggleAddSources(tester);
 
-        expect(find.text('当前队列'), findsNothing);
+        expect(find.text('点歌队列'), findsNothing);
         expect(find.text('点播歌曲'), findsNothing);
         expect(find.text('搜索添加'), findsOneWidget);
         expect(find.text('房间歌单'), findsOneWidget);
@@ -187,7 +206,7 @@ void main() {
 
         await _toggleAddSources(tester);
 
-        expect(find.text('当前队列'), findsOneWidget);
+        expect(find.text('点歌队列'), findsOneWidget);
         expect(find.text('点播歌曲'), findsOneWidget);
         expect(tester.takeException(), isNull);
       },
@@ -230,7 +249,8 @@ void main() {
       ),
     );
 
-    expect(find.text('当前：房间收藏'), findsOneWidget);
+    expect(find.textContaining('当前：'), findsNothing);
+    expect(find.text('房间收藏'), findsOneWidget);
     expect(find.text('Song'), findsWidgets);
     expect(find.text('待点歌曲'), findsNothing);
     expect(find.text('切回点歌队列（1）'), findsOneWidget);

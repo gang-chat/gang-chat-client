@@ -543,6 +543,7 @@ abstract interface class GangApi {
   Future<MusicBoxState> controlMusicBox({
     required String roomId,
     required String action,
+    String? itemId,
     String? mode,
     String? commandId,
     int? expectedRevision,
@@ -2809,12 +2810,16 @@ class GangApiClient
   Future<MusicBoxState> controlMusicBox({
     required String roomId,
     required String action,
+    String? itemId,
     String? mode,
     String? commandId,
     int? expectedRevision,
   }) async {
     final decoded = await _sendJson((token) {
       final body = <String, Object?>{'action': action};
+      if (itemId != null && itemId.trim().isNotEmpty) {
+        body['item_id'] = itemId.trim();
+      }
       if (mode != null && mode.trim().isNotEmpty) {
         body['mode'] = mode.trim();
       }

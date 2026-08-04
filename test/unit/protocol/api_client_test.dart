@@ -2852,7 +2852,7 @@ void main() {
     },
   );
 
-  test('controlMusicBox posts the action', () async {
+  test('controlMusicBox posts the action and optional queue item', () async {
     final api = GangApiClient(
       baseUrl: 'http://example.test/api/v1',
       accessTokenProvider: ({bool forceRefresh = false}) async => 'token',
@@ -2860,7 +2860,8 @@ void main() {
         expect(request.method, 'POST');
         expect(request.url.path, '/api/v1/rooms/room_1/music-box/control');
         expect(jsonDecode(request.body) as Map<String, Object?>, {
-          'action': 'skip',
+          'action': 'play_now',
+          'item_id': 'queue_1',
         });
         return http.Response(
           jsonEncode({'enabled': true, 'queue': [], 'usage': {}}),
@@ -2869,7 +2870,11 @@ void main() {
       }),
     );
 
-    final state = await api.controlMusicBox(roomId: 'room_1', action: 'skip');
+    final state = await api.controlMusicBox(
+      roomId: 'room_1',
+      action: 'play_now',
+      itemId: 'queue_1',
+    );
 
     expect(state.enabled, isTrue);
     api.close();

@@ -19,6 +19,13 @@ void main() {
       expect(normalizedMusicBoxSource('unknown'), musicBoxDefaultSource);
       expect(normalizedMusicBoxSource('bilibili'), 'bilibili');
     });
+
+    test('uses consistent labels without hiding future providers', () {
+      expect(musicBoxSourceLabel('netease'), '网易云');
+      expect(musicBoxSourceLabel('bilibili'), '哔哩哔哩');
+      expect(musicBoxSourceLabel('future-source'), 'future-source');
+      expect(musicBoxSourceLabel(''), '未知来源');
+    });
   });
 
   group('music box active source labels', () {
@@ -342,9 +349,11 @@ void main() {
               'id': 'saved-1',
               'title': 'Saved song',
               'status': 'ready',
+              'can_play_now': true,
               'requested_by': <String, Object?>{
                 'user_id': 'user-1',
-                'display_name': 'Alice',
+                'display_name': '房间专属名',
+                'avatar_label': 'Alice',
                 'avatar_url': '/avatar.png',
               },
             },
@@ -365,7 +374,9 @@ void main() {
         expect(state.activeSource.type, MusicBoxActiveSourceType.roomPlaylist);
         expect(state.activeSource.id, 'playlist-1');
         expect(state.playback.mode, MusicBoxPlaybackMode.repeatAll);
-        expect(state.currentItem?.requestedBy?.displayName, 'Alice');
+        expect(state.currentItem?.canPlayNow, isTrue);
+        expect(state.currentItem?.requestedBy?.displayName, '房间专属名');
+        expect(state.currentItem?.requestedBy?.avatarLabel, 'Alice');
         expect(state.temporaryQueue.single.id, 'temporary-1');
         expect(state.temporaryQueuedCount, 1);
       },

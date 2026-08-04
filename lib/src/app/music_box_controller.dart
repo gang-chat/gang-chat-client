@@ -62,16 +62,54 @@ class MusicBoxController {
     MusicBoxPlaybackMode? mode,
     MusicBoxState? currentState,
   }) {
-    final now = DateTime.now().microsecondsSinceEpoch;
-    final commandId = 'mbx-$now-${_commandSerial++}';
     return api.controlMusicBox(
       roomId: roomId,
       action: action,
       mode: mode == null ? null : musicBoxPlaybackModeValue(mode),
-      commandId: commandId,
+      commandId: _nextCommandId(),
       expectedRevision: currentState != null && currentState.hasRevision
           ? currentState.revision
           : null,
+    );
+  }
+
+  Future<MusicBoxState> playNow({
+    required String roomId,
+    required MusicBoxQueueItem item,
+    MusicBoxState? currentState,
+  }) {
+    return api.controlMusicBox(
+      roomId: roomId,
+      action: 'play_now',
+      itemId: item.id,
+      commandId: _nextCommandId(),
+      expectedRevision: currentState != null && currentState.hasRevision
+          ? currentState.revision
+          : null,
+    );
+  }
+
+  Future<PersonalMusicPlaylistItem> addQueueItemToRoomPlaylist({
+    required String roomId,
+    required String playlistId,
+    required MusicBoxQueueItem item,
+  }) {
+    return (api as RoomMusicPlaylistApi).addRoomMusicPlaylistItem(
+      roomId: roomId,
+      playlistId: playlistId,
+      track: _queueItemAsSearchResult(item),
+      durationMs: item.durationMs > 0 ? item.durationMs : null,
+    );
+  }
+
+  Future<PersonalMusicPlaylistItem> addQueueItemToMyPlaylist({
+    required String playlistId,
+    required MusicBoxQueueItem item,
+  }) {
+    return (api as PersonalMusicPlaylistApi).addPersonalMusicPlaylistItem(
+      playlistId: playlistId,
+      track: _queueItemAsSearchResult(item),
+      durationMs: item.durationMs > 0 ? item.durationMs : null,
     );
   }
 
@@ -134,6 +172,21 @@ class MusicBoxController {
       playlistId: playlistId,
       page: page,
       pageSize: pageSize,
+    );
+  }
+
+  static String _nextCommandId() {
+    final now = DateTime.now().microsecondsSinceEpoch;
+    return 'mbx-$now-${_commandSerial++}';
+  }
+
+  static MusicBoxSearchResult _queueItemAsSearchResult(MusicBoxQueueItem item) {
+    final artist = item.artist.trim();
+    return MusicBoxSearchResult(
+      trackId: item.trackId,
+      name: item.title,
+      artists: artist.isEmpty ? const [] : [artist],
+      source: item.source,
     );
   }
 }

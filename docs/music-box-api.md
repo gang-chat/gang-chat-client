@@ -94,8 +94,12 @@ Windows、macOS、Android 只负责搜索、控制、状态展示和本地监听
 - 临时歌单的 `allowed_modes` 仅包含 `sequential`、`repeat_one`。
 - 已保存房间/个人歌单支持全部四种模式。
 - `queue[].status`：`pending`、`downloading`、`ready` 或 `failed`。
-- `queue[].requested_by`：由服务端认证身份生成的点歌人展示摘要。
-- `usage`：当前房间音乐盒转码文件占用和上限。
+- `queue[].requested_by`：由服务端认证身份生成的点歌人展示摘要；其中
+  `display_name` 可使用房间名，`avatar_label` 必须使用全局昵称/用户名，避免
+  预设头像错误地显示房间专属名称。
+- `queue[].can_play_now`：服务端确认该条目可执行优先播放时为 `true`。
+- `usage`：当前房间音乐盒转码文件占用和上限，仅用于服务端容量策略和诊断，
+  当前客户端不再把它作为音乐盒标题信息展示。
 
 服务重启会保留队列和歌单，但统一恢复为 `stopped`，不会自动出声。
 
@@ -161,6 +165,21 @@ Content-Type: application/json
 - `next` 或兼容别名 `skip`
 - `stop`
 - `set_mode`
+- `play_now`（同时传入活动队列中的 `item_id`）
+
+优先播放示例：
+
+```json
+{
+  "action": "play_now",
+  "item_id": "mbx_1",
+  "command_id": "mbx-play-now-command",
+  "expected_revision": 42
+}
+```
+
+目标必须属于当前激活队列且已准备完成。命令仍使用相同的幂等 ID 和 revision
+冲突保护，服务端成功切换后返回完整权威快照。
 
 切换模式时增加 `mode`：
 
