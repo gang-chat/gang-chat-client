@@ -113,7 +113,7 @@ void main() {
     );
   });
 
-  testWidgets('compact desktop search centers both affix icons vertically', (
+  testWidgets('compact desktop search reuses regular optical offsets', (
     tester,
   ) async {
     final controller = TextEditingController(text: '132');
@@ -139,32 +139,27 @@ void main() {
       ),
     );
 
-    void expectContentsCentered() {
-      final surface = find
-          .ancestor(
-            of: find.byType(TextField),
-            matching: find.byType(ClipRRect),
-          )
-          .first;
-      final surfaceCenter = tester.getCenter(surface).dy;
+    void expectRegularOpticalOffsets() {
+      final field = tester.widget<TextField>(find.byType(TextField));
+      final padding = field.decoration!.contentPadding! as EdgeInsets;
+      expect(padding.top - padding.bottom, closeTo(8, 0.01));
       expect(
-        tester.getCenter(find.byType(EditableText)).dy,
-        closeTo(surfaceCenter, 0.01),
-      );
-      expect(
-        tester.getCenter(find.byIcon(Icons.search)).dy,
-        closeTo(surfaceCenter, 0.01),
-      );
-      expect(
-        tester.getCenter(find.byIcon(Icons.close)).dy,
-        closeTo(surfaceCenter, 0.01),
+        tester
+            .widgetList<Transform>(
+              find.ancestor(
+                of: find.byIcon(Icons.search),
+                matching: find.byType(Transform),
+              ),
+            )
+            .map((transform) => transform.transform.storage[13]),
+        contains(closeTo(5, 0.01)),
       );
     }
 
-    expectContentsCentered();
+    expectRegularOpticalOffsets();
     await tester.tap(find.byType(TextField));
     await tester.pumpAndSettle();
-    expectContentsCentered();
+    expectRegularOpticalOffsets();
   });
 
   testWidgets('android regular input centers text and icon vertically', (

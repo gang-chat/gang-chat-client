@@ -742,10 +742,7 @@ IconData _mediaIcon(_LiveMediaKind kind) {
 }
 
 IconData _screenShareVolumeIcon(double value) {
-  final normalized = normalizedAudioVolume(value);
-  if (normalized <= 0) return Icons.volume_off;
-  if (normalized < 0.5) return Icons.volume_down;
-  return Icons.volume_up;
+  return _volumeLevelIcon(normalizedAudioVolume(value));
 }
 
 String liveStageTrackLabel(LiveState? live, LiveVideoTrack track) {

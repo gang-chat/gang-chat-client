@@ -306,6 +306,12 @@ const _hoverVolumePercentWidth = 40.0;
 const _hoverVolumePercentHeight = 18.0;
 const _hoverVolumePercentGap = 6.0;
 
+IconData _volumeLevelIcon(double volume) {
+  if (volume <= 0) return Icons.volume_off;
+  if (volume < 0.5) return Icons.volume_down;
+  return Icons.volume_up;
+}
+
 class _HoverInfo extends StatelessWidget {
   const _HoverInfo({required this.message, required this.child});
 

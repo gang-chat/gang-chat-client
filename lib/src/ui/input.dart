@@ -12,7 +12,6 @@ const double _inputVisualLift = 3;
 const double _inputBaseDepth = 5;
 const double _inputTextVerticalOffset = 4;
 const double _inputIconVerticalOffset = 5;
-const double _inputCompactVerticalOffset = 2;
 const double _inputUnboundedBottomPadding = 8;
 const double _inputClearButtonSize = 26;
 const double _inputClearIconSize = 15;
@@ -413,17 +412,11 @@ class _InputState extends State<Input> {
   }
 
   double _verticalOffsetFor(BuildContext context, {bool icon = false}) {
-    // Compact fields do not have enough vertical room for the desktop input's
-    // ornamental downward lift. Keeping that lift would place both affix icons
-    // and text visibly below the field centre (the music-box search is the
-    // main compact consumer). The smaller compensation balances the compact
-    // InputDecoration's intrinsic content placement. Android inputs are
-    // centred at every height.
+    // Android text metrics are centred without the desktop face compensation.
+    // Desktop compact fields intentionally reuse the same optical offsets as
+    // every other desktop input so their icons and glyphs align consistently.
     if (Theme.of(context).platform == TargetPlatform.android) {
       return 0;
-    }
-    if (widget.height < Input.defaultHeight) {
-      return _inputCompactVerticalOffset;
     }
     return icon ? _inputIconVerticalOffset : _inputTextVerticalOffset;
   }

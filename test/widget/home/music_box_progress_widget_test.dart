@@ -135,12 +135,36 @@ void main() {
       find.descendant(of: volume, matching: find.byType(UiSlider)),
       findsOneWidget,
     );
+    expect(tester.widget<UiSlider>(find.byType(UiSlider)).hoverLabel, '100%');
 
     await tester.tap(
       find.descendant(of: volume, matching: find.byIcon(Icons.volume_up)),
     );
     await tester.pump();
     expect(volumeChanges, [0]);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('music box volume follows externally restored mute state', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    final state = _state(
+      playbackState: MusicBoxPlaybackState.stopped,
+      positionMs: 0,
+    );
+
+    await tester.pumpWidget(_host(state, controller, volume: 1));
+    expect(tester.widget<UiSlider>(find.byType(UiSlider)).value, 1);
+
+    await tester.pumpWidget(_host(state, controller, volume: 0));
+    await tester.pump();
+
+    final slider = tester.widget<UiSlider>(find.byType(UiSlider));
+    expect(slider.value, 0);
+    expect(slider.hoverLabel, '0%');
+    expect(find.byIcon(Icons.volume_off), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

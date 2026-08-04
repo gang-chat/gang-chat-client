@@ -726,10 +726,7 @@ class _LiveMemberStatusButton extends StatelessWidget {
 }
 
 IconData _memberVoiceVolumeIcon(double volume) {
-  final normalized = normalizedParticipantVoiceVolume(volume);
-  if (normalized <= 0) return Icons.volume_off;
-  if (normalized < defaultParticipantVoiceVolume) return Icons.volume_down;
-  return Icons.volume_up;
+  return _volumeLevelIcon(normalizedParticipantVoiceVolume(volume));
 }
 
 String _memberVoiceVolumeToggleLabel({

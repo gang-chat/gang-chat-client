@@ -279,6 +279,15 @@ class _MusicBoxVolumeState extends State<_MusicBoxVolume> {
 
   bool get _muted => _volume <= 0;
 
+  @override
+  void didUpdateWidget(_MusicBoxVolume oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialVolume == widget.initialVolume) return;
+    final nextVolume = widget.initialVolume.clamp(0.0, 1.0).toDouble();
+    _volume = nextVolume;
+    if (nextVolume > 0) _premute = nextVolume;
+  }
+
   void _setVolume(double value) {
     setState(() => _volume = value);
     widget.onChanged(value);
@@ -294,9 +303,7 @@ class _MusicBoxVolumeState extends State<_MusicBoxVolume> {
   }
 
   IconData get _icon {
-    if (_muted) return Icons.volume_off;
-    if (_volume < 0.5) return Icons.volume_down;
-    return Icons.volume_up;
+    return _volumeLevelIcon(_volume);
   }
 
   ({Color background, Color border, Color foreground}) get _palette {
@@ -320,6 +327,7 @@ class _MusicBoxVolumeState extends State<_MusicBoxVolume> {
   Widget _slider() {
     return UiSlider(
       value: _volume,
+      hoverLabel: audioVolumePercentText(_volume),
       onChangeStart: (_) => setState(() => _dragging = true),
       onChangeEnd: (_) => setState(() => _dragging = false),
       onChanged: _setVolume,

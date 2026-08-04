@@ -877,6 +877,46 @@ void main() {
     expect(find.byTooltip('取消静音Phabe音量'), findsNothing);
   });
 
+  testWidgets('remote member volume icon follows the shared 50% threshold', (
+    tester,
+  ) async {
+    final searchController = TextEditingController();
+    addTearDown(searchController.dispose);
+    final remoteUser = _user('phabe', 'Phabe', roomRole: 'member');
+    final live = _liveState([_participant(id: 'live_phabe', user: remoteUser)]);
+
+    Future<void> pumpVolume(double volume) {
+      return tester.pumpWidget(
+        _host(
+          searchController: searchController,
+          live: live,
+          height: 600,
+          participantVoiceVolume: (_) => volume,
+        ),
+      );
+    }
+
+    Finder volumeIcon(IconData icon) {
+      final button = find.byKey(
+        const ValueKey<String>('live-member-status:voice-volume:phabe'),
+      );
+      return find.descendant(of: button, matching: find.byIcon(icon));
+    }
+
+    await pumpVolume(0.49);
+    expect(volumeIcon(Icons.volume_down), findsOneWidget);
+
+    await pumpVolume(0.5);
+    expect(volumeIcon(Icons.volume_up), findsOneWidget);
+
+    await pumpVolume(1.5);
+    expect(volumeIcon(Icons.volume_up), findsOneWidget);
+
+    await pumpVolume(0);
+    expect(volumeIcon(Icons.volume_off), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'Android hold opens remote volume without toggling the mute button',
     (tester) async {
