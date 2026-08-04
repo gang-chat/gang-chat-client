@@ -20,6 +20,7 @@ export 'navigation.dart';
 export 'platform_gestures.dart';
 export 'read_only_text_box.dart';
 export 'role_badge.dart';
+export 'scroll_behavior.dart';
 export 'segmented_control.dart';
 export 'settings_scaffold.dart';
 export 'sidebar.dart';

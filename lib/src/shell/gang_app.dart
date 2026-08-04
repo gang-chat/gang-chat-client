@@ -48,6 +48,7 @@ class GangApp extends StatelessWidget {
       child: MaterialApp(
         title: 'Gang Chat',
         theme: uiTheme(),
+        scrollBehavior: const GangScrollBehavior(),
         builder: (context, child) {
           final content = AppNotificationHost(
             child: child ?? const SizedBox.shrink(),
