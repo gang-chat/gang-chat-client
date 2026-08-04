@@ -221,93 +221,113 @@ class _InputState extends State<Input> {
   @override
   Widget build(BuildContext context) {
     final focused = _effectiveFocusNode.hasFocus;
-    final suffix = _effectiveSuffix();
+    final overlaysClearButton =
+        widget.suffix == null &&
+        widget.showClearButton &&
+        widget.enabled &&
+        widget.height < Input.defaultHeight;
+    final canClear =
+        overlaysClearButton && _effectiveController.text.isNotEmpty;
+    final suffix = overlaysClearButton ? null : _effectiveSuffix();
+    final textField = TextField(
+      controller: _effectiveController,
+      focusNode: _effectiveFocusNode,
+      enabled: widget.enabled,
+      obscureText: widget.obscureText,
+      autofillHints: widget.autofillHints,
+      keyboardType: widget.keyboardType,
+      textInputAction: _effectiveTextInputAction,
+      minLines: _effectiveMinLines,
+      maxLines: _effectiveMaxLines,
+      inputFormatters: widget.inputFormatters,
+      undoController: _effectiveUndoController,
+      onSubmitted: widget.onSubmitted,
+      onChanged: widget.onChanged,
+      enableInteractiveSelection: widget.enableInteractiveSelection,
+      cursorColor: UiColors.accent,
+      mouseCursor: widget.enabled
+          ? SystemMouseCursors.text
+          : SystemMouseCursors.basic,
+      style: widget.style,
+      textAlign: widget.textAlign,
+      textAlignVertical: TextAlignVertical.center,
+      onTapOutside: widget.onTapOutside,
+      groupId: widget.tapRegionGroupId ?? EditableText,
+      contextMenuBuilder: widget.enableInteractiveSelection
+          ? _contextMenuBuilder
+          : null,
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: widget.hintText,
+        hintStyle: widget.hintStyle,
+        border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
+        disabledBorder: InputBorder.none,
+        contentPadding: _contentPaddingFor(
+          context,
+          reserveClearButton: overlaysClearButton,
+        ),
+        prefixIcon: widget.prefixIcon == null
+            ? null
+            : Padding(
+                padding: const EdgeInsets.only(
+                  left: _inputHorizontalPadding,
+                  right: UiSpacing.sm,
+                ),
+                child: Transform.translate(
+                  offset: Offset(0, _verticalOffsetFor(context, icon: true)),
+                  child: Icon(
+                    widget.prefixIcon,
+                    size: _inputIconSize,
+                    color: UiColors.textMuted,
+                  ),
+                ),
+              ),
+        prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+        suffixIcon: suffix == null
+            ? null
+            : Padding(
+                padding: const EdgeInsets.only(
+                  left: UiSpacing.sm,
+                  right: _inputHorizontalPadding,
+                ),
+                child: Transform.translate(
+                  offset: Offset(0, _verticalOffsetFor(context, icon: true)),
+                  child: suffix,
+                ),
+              ),
+        suffixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+      ),
+    );
     final content = ConstrainedBox(
       constraints: BoxConstraints(minHeight: widget.height),
       child: TextFieldEditingShortcuts(
         controller: _effectiveController,
         focusNode: _effectiveFocusNode,
         undoController: _effectiveUndoController,
-        child: TextField(
-          controller: _effectiveController,
-          focusNode: _effectiveFocusNode,
-          enabled: widget.enabled,
-          obscureText: widget.obscureText,
-          autofillHints: widget.autofillHints,
-          keyboardType: widget.keyboardType,
-          textInputAction: _effectiveTextInputAction,
-          minLines: _effectiveMinLines,
-          maxLines: _effectiveMaxLines,
-          inputFormatters: widget.inputFormatters,
-          undoController: _effectiveUndoController,
-          onSubmitted: widget.onSubmitted,
-          onChanged: widget.onChanged,
-          enableInteractiveSelection: widget.enableInteractiveSelection,
-          cursorColor: UiColors.accent,
-          mouseCursor: widget.enabled
-              ? SystemMouseCursors.text
-              : SystemMouseCursors.basic,
-          style: widget.style,
-          textAlign: widget.textAlign,
-          textAlignVertical: TextAlignVertical.center,
-          onTapOutside: widget.onTapOutside,
-          groupId: widget.tapRegionGroupId ?? EditableText,
-          contextMenuBuilder: widget.enableInteractiveSelection
-              ? _contextMenuBuilder
-              : null,
-          decoration: InputDecoration(
-            isDense: true,
-            hintText: widget.hintText,
-            hintStyle: widget.hintStyle,
-            border: InputBorder.none,
-            enabledBorder: InputBorder.none,
-            focusedBorder: InputBorder.none,
-            disabledBorder: InputBorder.none,
-            contentPadding: _contentPaddingFor(context),
-            prefixIcon: widget.prefixIcon == null
-                ? null
-                : Padding(
-                    padding: const EdgeInsets.only(
-                      left: _inputHorizontalPadding,
-                      right: UiSpacing.sm,
-                    ),
-                    child: Transform.translate(
-                      offset: Offset(
-                        0,
-                        _verticalOffsetFor(context, icon: true),
-                      ),
-                      child: Icon(
-                        widget.prefixIcon,
-                        size: _inputIconSize,
-                        color: UiColors.textMuted,
-                      ),
-                    ),
-                  ),
-            prefixIconConstraints: const BoxConstraints(
-              minWidth: 0,
-              minHeight: 0,
-            ),
-            suffixIcon: suffix == null
-                ? null
-                : Padding(
-                    padding: const EdgeInsets.only(
-                      left: UiSpacing.sm,
+        child: overlaysClearButton
+            ? Stack(
+                fit: StackFit.passthrough,
+                children: [
+                  textField,
+                  if (canClear)
+                    Positioned(
+                      top: 0,
                       right: _inputHorizontalPadding,
-                    ),
-                    child: Transform.translate(
-                      offset: Offset(
-                        0,
-                        _verticalOffsetFor(context, icon: true),
+                      bottom: 0,
+                      width: _inputClearButtonSize,
+                      child: _InputClearButton(
+                        tooltip: widget.clearTooltip,
+                        onPressed: _clearText,
+                        iconVerticalOffset:
+                            _verticalOffsetFor(context, icon: true) -
+                            _verticalOffsetFor(context),
                       ),
-                      child: suffix,
                     ),
-                  ),
-            suffixIconConstraints: const BoxConstraints(
-              minWidth: 0,
-              minHeight: 0,
-            ),
-          ),
-        ),
+                ],
+              )
+            : textField,
       ),
     );
 
@@ -389,7 +409,10 @@ class _InputState extends State<Input> {
     );
   }
 
-  EdgeInsets _contentPaddingFor(BuildContext context) {
+  EdgeInsets _contentPaddingFor(
+    BuildContext context, {
+    bool reserveClearButton = false,
+  }) {
     final painter = TextPainter(
       text: TextSpan(text: ' ', style: widget.style),
       textDirection: Directionality.of(context),
@@ -406,7 +429,8 @@ class _InputState extends State<Input> {
     return EdgeInsets.fromLTRB(
       _inputHorizontalPadding,
       verticalPadding + textOffset,
-      _inputHorizontalPadding,
+      _inputHorizontalPadding +
+          (reserveClearButton ? UiSpacing.sm + _inputClearButtonSize : 0),
       verticalPadding - textOffset + unboundedBottomPadding,
     );
   }
@@ -423,10 +447,15 @@ class _InputState extends State<Input> {
 }
 
 class _InputClearButton extends StatelessWidget {
-  const _InputClearButton({required this.tooltip, required this.onPressed});
+  const _InputClearButton({
+    required this.tooltip,
+    required this.onPressed,
+    this.iconVerticalOffset = 0,
+  });
 
   final String tooltip;
   final VoidCallback onPressed;
+  final double iconVerticalOffset;
 
   @override
   Widget build(BuildContext context) {
@@ -440,13 +469,16 @@ class _InputClearButton extends StatelessWidget {
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: onPressed,
-            child: const SizedBox.square(
+            child: SizedBox.square(
               dimension: _inputClearButtonSize,
               child: Center(
-                child: Icon(
-                  Icons.close,
-                  size: _inputClearIconSize,
-                  color: UiColors.textMuted,
+                child: Transform.translate(
+                  offset: Offset(0, iconVerticalOffset),
+                  child: const Icon(
+                    Icons.close,
+                    size: _inputClearIconSize,
+                    color: UiColors.textMuted,
+                  ),
                 ),
               ),
             ),

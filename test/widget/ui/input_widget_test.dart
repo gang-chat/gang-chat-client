@@ -162,6 +162,99 @@ void main() {
     expectRegularOpticalOffsets();
   });
 
+  testWidgets('compact search keeps hint and entered text geometry stable', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.windows),
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 260,
+              child: Input(
+                controller: controller,
+                hintText: '搜索歌曲点歌',
+                prefixIcon: Icons.search,
+                showClearButton: true,
+                height: 30,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final emptySize = tester.getSize(find.byType(TextField));
+    final emptyIconCenter = tester.getCenter(find.byIcon(Icons.search));
+
+    controller.text = '绝不认输';
+    await tester.pump();
+
+    expect(tester.getSize(find.byType(TextField)), emptySize);
+    expect(tester.getCenter(find.byIcon(Icons.search)), emptyIconCenter);
+    expect(find.byIcon(Icons.close), findsOneWidget);
+    expect(
+      tester.getCenter(find.byIcon(Icons.close)).dy,
+      closeTo(emptyIconCenter.dy, 0.01),
+      reason:
+          'field=${tester.getRect(find.byType(TextField))} '
+          'input=${tester.getRect(find.byType(Input))} '
+          'search=$emptyIconCenter '
+          'close=${tester.getCenter(find.byIcon(Icons.close))}',
+    );
+
+    controller.clear();
+    await tester.pump();
+    expect(tester.getSize(find.byType(TextField)), emptySize);
+    expect(tester.getCenter(find.byIcon(Icons.search)), emptyIconCenter);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('compact clear button does not shift the field vertically', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    Widget app({required bool showClearButton}) {
+      return MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.windows),
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 260,
+              child: Input(
+                controller: controller,
+                hintText: '搜索歌曲点歌',
+                prefixIcon: Icons.search,
+                showClearButton: showClearButton,
+                height: 30,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    double relativeSearchIconCenter() {
+      final fieldRect = tester.getRect(find.byType(TextField));
+      return tester.getCenter(find.byIcon(Icons.search)).dy - fieldRect.top;
+    }
+
+    await tester.pumpWidget(app(showClearButton: true));
+    final reservedClearButtonCenter = relativeSearchIconCenter();
+
+    await tester.pumpWidget(app(showClearButton: false));
+    expect(
+      reservedClearButtonCenter,
+      closeTo(relativeSearchIconCenter(), 0.01),
+    );
+  });
+
   testWidgets('android regular input centers text and icon vertically', (
     tester,
   ) async {
