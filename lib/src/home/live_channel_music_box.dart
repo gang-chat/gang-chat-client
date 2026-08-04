@@ -1409,6 +1409,10 @@ class _MusicBoxQueueTile extends StatelessWidget {
                 item.canPlayNow,
                 item.requestedBy?.avatarUrl,
                 item.requestedBy?.avatarLabel,
+                currentState.activeSource.type,
+                currentState.activeSource.name,
+                currentState.activeSource.owner?.avatarUrl,
+                currentState.activeSource.owner?.avatarLabel,
               ),
               cardWidth: 310,
               cardBuilder: (_) => _MusicBoxSongCard(
@@ -1540,17 +1544,13 @@ class _MusicBoxSongCardState extends State<_MusicBoxSongCard> {
   bool _showPlaylistPicker = false;
   bool _loadingPlaylists = false;
   String? _addingPlaylistId;
-  String? _message;
   List<_MusicBoxPlaylistTarget> _playlistTargets = const [];
 
   Future<void> _playNow() async {
     final controller = widget.controller;
     final roomId = widget.roomId;
     if (controller == null || roomId == null || _playingNow) return;
-    setState(() {
-      _playingNow = true;
-      _message = null;
-    });
+    setState(() => _playingNow = true);
     try {
       final state = await controller.playNow(
         roomId: roomId,
@@ -1558,9 +1558,9 @@ class _MusicBoxSongCardState extends State<_MusicBoxSongCard> {
         currentState: widget.currentState,
       );
       widget.onStateChanged?.call(state);
-      if (mounted) setState(() => _message = '已优先播放');
+      if (mounted) showFloatingSuccessNotice(context, '已优先播放');
     } catch (_) {
-      if (mounted) setState(() => _message = '优先播放失败，请重试');
+      if (mounted) showFloatingErrorNotice(context, '优先播放失败，请重试');
     } finally {
       if (mounted) setState(() => _playingNow = false);
     }
@@ -1572,7 +1572,6 @@ class _MusicBoxSongCardState extends State<_MusicBoxSongCard> {
     setState(() {
       _showPlaylistPicker = true;
       _loadingPlaylists = true;
-      _message = null;
       _playlistTargets = const [];
     });
     final targets = <_MusicBoxPlaylistTarget>[];
@@ -1606,17 +1605,16 @@ class _MusicBoxSongCardState extends State<_MusicBoxSongCard> {
     setState(() {
       _loadingPlaylists = false;
       _playlistTargets = targets;
-      if (targets.isEmpty && failed) _message = '加载歌单失败，请重试';
     });
+    if (targets.isEmpty && failed) {
+      showFloatingErrorNotice(context, '加载歌单失败，请重试');
+    }
   }
 
   Future<void> _addToPlaylist(_MusicBoxPlaylistTarget target) async {
     final controller = widget.controller;
     if (controller == null || _addingPlaylistId != null) return;
-    setState(() {
-      _addingPlaylistId = target.playlist.id;
-      _message = null;
-    });
+    setState(() => _addingPlaylistId = target.playlist.id);
     try {
       if (target.roomScoped) {
         final roomId = widget.roomId;
@@ -1633,12 +1631,12 @@ class _MusicBoxSongCardState extends State<_MusicBoxSongCard> {
         );
       }
       if (!mounted) return;
-      setState(() {
-        _showPlaylistPicker = false;
-        _message = '已添加到「${target.playlist.name}」';
-      });
+      setState(() => _showPlaylistPicker = false);
+      showFloatingSuccessNotice(context, '已添加到「${target.playlist.name}」');
     } catch (_) {
-      if (mounted) setState(() => _message = '添加失败，请检查歌单权限');
+      if (mounted) {
+        showFloatingErrorNotice(context, '添加失败，请检查歌单权限');
+      }
     } finally {
       if (mounted) setState(() => _addingPlaylistId = null);
     }
@@ -1647,7 +1645,6 @@ class _MusicBoxSongCardState extends State<_MusicBoxSongCard> {
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
-    final requester = item.requestedBy;
     final canPlayNow =
         item.canPlayNow &&
         item.status == MusicBoxQueueItemStatus.ready &&
@@ -1688,36 +1685,9 @@ class _MusicBoxSongCardState extends State<_MusicBoxSongCard> {
             value: music_box_display.musicBoxSourceLabel(item.source),
           ),
           const SizedBox(height: UiSpacing.sm),
-          Row(
-            children: [
-              Text(
-                '点歌人',
-                style: UiTypography.label.copyWith(color: UiColors.textMuted),
-              ),
-              const Spacer(),
-              if (requester != null) ...[
-                Avatar(
-                  label: requester.avatarLabel,
-                  imageUrl: requester.avatarUrl,
-                  defaultAvatarKey: requester.defaultAvatarKey,
-                  size: 26,
-                  showBorder: false,
-                ),
-                const SizedBox(width: 7),
-                Flexible(
-                  child: Text(
-                    requester.displayName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: UiTypography.label.copyWith(color: UiColors.text),
-                  ),
-                ),
-              ] else
-                Text(
-                  '歌单',
-                  style: UiTypography.label.copyWith(color: UiColors.text),
-                ),
-            ],
+          _MusicBoxSongAttribution(
+            source: widget.currentState.activeSource,
+            requester: item.requestedBy,
           ),
           const SizedBox(height: UiSpacing.md),
           if (!_showPlaylistPicker)
@@ -1815,22 +1785,72 @@ class _MusicBoxSongCardState extends State<_MusicBoxSongCard> {
                 ),
               ),
           ],
-          if (_message case final message?) ...[
-            const SizedBox(height: 8),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: message.contains('失败')
-                    ? UiColors.danger
-                    : UiColors.accent,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
         ],
       ),
+    );
+  }
+}
+
+class _MusicBoxSongAttribution extends StatelessWidget {
+  const _MusicBoxSongAttribution({
+    required this.source,
+    required this.requester,
+  });
+
+  final MusicBoxActiveSource source;
+  final MusicBoxRequester? requester;
+
+  @override
+  Widget build(BuildContext context) {
+    final isPlaylist = source.type != MusicBoxActiveSourceType.temporary;
+    final owner =
+        source.owner ??
+        (requester?.userId == source.ownerUserId ? requester : null);
+    final playlistName = source.name.trim().isEmpty ? '未命名歌单' : source.name;
+    final person = isPlaylist ? owner : requester;
+    final value = switch (source.type) {
+      MusicBoxActiveSourceType.temporary => person?.displayName ?? '未知用户',
+      MusicBoxActiveSourceType.roomPlaylist => '房间歌单 · $playlistName',
+      MusicBoxActiveSourceType.userPlaylist when person != null =>
+        '${person.displayName}的歌单 · $playlistName',
+      MusicBoxActiveSourceType.userPlaylist => '用户歌单 · $playlistName',
+    };
+
+    return Row(
+      children: [
+        Text(
+          isPlaylist ? '歌单' : '点歌人',
+          style: UiTypography.label.copyWith(color: UiColors.textMuted),
+        ),
+        const SizedBox(width: UiSpacing.sm),
+        Expanded(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              if (person != null &&
+                  source.type != MusicBoxActiveSourceType.roomPlaylist) ...[
+                Avatar(
+                  label: person.avatarLabel,
+                  imageUrl: person.avatarUrl,
+                  defaultAvatarKey: person.defaultAvatarKey,
+                  size: 26,
+                  showBorder: false,
+                ),
+                const SizedBox(width: 7),
+              ],
+              Flexible(
+                child: Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                  style: UiTypography.label.copyWith(color: UiColors.text),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

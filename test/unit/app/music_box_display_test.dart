@@ -62,6 +62,30 @@ void main() {
         '个人歌单',
       );
     });
+
+    test('parses the owner summary for a personal playlist', () {
+      final parsed = MusicBoxState.fromJson({
+        'enabled': true,
+        'active_source': {
+          'type': 'user_playlist',
+          'playlist_id': 'playlist-1',
+          'name': '通勤歌单',
+          'owner_user_id': 'owner-1',
+          'owner': {
+            'user_id': 'owner-1',
+            'display_name': '点歌用户',
+            'avatar_label': '全局用户',
+            'avatar_url': '/avatar.png',
+            'default_avatar_key': 'green-2',
+          },
+        },
+      });
+
+      expect(parsed.activeSource.ownerUserId, 'owner-1');
+      expect(parsed.activeSource.owner?.displayName, '点歌用户');
+      expect(parsed.activeSource.owner?.avatarLabel, '全局用户');
+      expect(parsed.activeSource.owner?.avatarUrl, '/avatar.png');
+    });
   });
 
   group('musicBoxProgress', () {

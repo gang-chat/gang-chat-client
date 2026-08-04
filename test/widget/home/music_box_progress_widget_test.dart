@@ -1,4 +1,6 @@
+import 'package:client/src/app/music_box_controller.dart';
 import 'package:client/src/home/live_channel_pane.dart';
+import 'package:client/src/protocol/api_client.dart';
 import 'package:client/src/protocol/models.dart';
 import 'package:client/src/ui/ui.dart';
 import 'package:flutter/material.dart';
@@ -18,6 +20,9 @@ Widget _host(
   String source = 'netease',
   double volume = 1,
   ValueChanged<double>? onVolumeChanged,
+  MusicBoxController? musicBoxController,
+  String? roomId,
+  ValueChanged<MusicBoxState>? onStateChanged,
 }) {
   return MaterialApp(
     theme: uiTheme().copyWith(platform: platform),
@@ -33,6 +38,9 @@ Widget _host(
           searching: false,
           searchError: null,
           source: source,
+          controller: musicBoxController,
+          roomId: roomId,
+          onStateChanged: onStateChanged,
           onTogglePlayback: () {},
           onSkip: () {},
           onQueueResult: (_) {},
@@ -45,6 +53,25 @@ Widget _host(
       ),
     ),
   );
+}
+
+class _MusicBoxApiFake implements GangApi {
+  const _MusicBoxApiFake(this.state);
+
+  final MusicBoxState state;
+
+  @override
+  Future<MusicBoxState> controlMusicBox({
+    required String roomId,
+    required String action,
+    String? itemId,
+    String? mode,
+    String? commandId,
+    int? expectedRevision,
+  }) async => state;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 MusicBoxState _state({
@@ -213,6 +240,51 @@ void main() {
     );
   }
 
+  testWidgets('priority play uses the shared floating success notice', (
+    tester,
+  ) async {
+    final searchController = TextEditingController();
+    addTearDown(searchController.dispose);
+    const item = MusicBoxQueueItem(
+      id: 'priority-track',
+      source: 'netease',
+      trackId: 'track-priority',
+      title: '优先歌曲',
+      artist: '歌手',
+      durationMs: 180000,
+      status: MusicBoxQueueItemStatus.ready,
+      fileSizeBytes: 1024,
+      error: '',
+      addedByUserId: 'requester',
+      createdAt: null,
+      canPlayNow: true,
+    );
+    final state = _state(
+      playbackState: MusicBoxPlaybackState.playing,
+      positionMs: 0,
+      currentItemId: 'another-track',
+      queue: const [item],
+    );
+
+    await tester.pumpWidget(
+      _host(
+        state,
+        searchController,
+        height: 500,
+        musicBoxController: MusicBoxController(api: _MusicBoxApiFake(state)),
+        roomId: 'room-1',
+      ),
+    );
+
+    await tester.tap(find.text('优先歌曲'));
+    await tester.pump();
+    await tester.tap(find.text('优先播放'));
+    await tester.pump();
+
+    expect(find.text('已优先播放'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('saved source shows its queue and a route back to 点歌队列', (
     tester,
   ) async {
@@ -254,6 +326,64 @@ void main() {
     expect(find.text('Song'), findsWidgets);
     expect(find.text('待点歌曲'), findsNothing);
     expect(find.text('切回点歌队列（1）'), findsOneWidget);
+
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('music-box-queue-list')),
+        matching: find.text('Song'),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('歌单'), findsOneWidget);
+    expect(find.text('房间歌单 · 房间收藏'), findsOneWidget);
+    expect(find.text('点歌人'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('personal playlist song card shows its owner and playlist name', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      _host(
+        _state(
+          playbackState: MusicBoxPlaybackState.stopped,
+          positionMs: 0,
+          activeSource: const MusicBoxActiveSource(
+            type: MusicBoxActiveSourceType.userPlaylist,
+            id: 'personal-list',
+            name: '通勤歌单',
+            ownerUserId: 'owner',
+            owner: MusicBoxRequester(
+              userId: 'owner',
+              displayName: '用户名称',
+              avatarLabel: '全局名称',
+              avatarUrl: '/avatar.png',
+              defaultAvatarKey: 'green-2',
+            ),
+          ),
+        ),
+        controller,
+        height: 500,
+      ),
+    );
+
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('music-box-queue-list')),
+        matching: find.text('Song'),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('歌单'), findsOneWidget);
+    expect(find.text('用户名称的歌单 · 通勤歌单'), findsOneWidget);
+    expect(find.text('点歌人'), findsNothing);
+    final ownerAvatar = tester.widget<Avatar>(find.byType(Avatar).last);
+    expect(ownerAvatar.label, '全局名称');
+    expect(ownerAvatar.imageUrl, '/avatar.png');
     expect(tester.takeException(), isNull);
   });
 

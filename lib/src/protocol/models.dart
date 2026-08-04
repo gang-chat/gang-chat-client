@@ -2354,12 +2354,14 @@ class MusicBoxActiveSource {
     this.id = '',
     this.name = '点歌队列',
     this.ownerUserId = '',
+    this.owner,
   });
 
   final MusicBoxActiveSourceType type;
   final String id;
   final String name;
   final String ownerUserId;
+  final MusicBoxRequester? owner;
 
   factory MusicBoxActiveSource.fromJson(Map<String, Object?>? json) {
     final type = _musicBoxActiveSourceTypeFrom(json?['type']?.toString());
@@ -2371,6 +2373,7 @@ class MusicBoxActiveSource {
           ? '点歌队列'
           : parsedName ?? '未命名歌单',
       ownerUserId: _stringFromJson(json, const ['owner_user_id']) ?? '',
+      owner: MusicBoxRequester.fromJson(_nullableMap(json?['owner'])),
     );
   }
 }
