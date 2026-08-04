@@ -162,7 +162,7 @@ class _MusicBoxHeader extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                '当前：${activeSource.name}',
+                '当前：${music_box_display.musicBoxActiveSourceLabel(activeSource)}',
                 style: const TextStyle(
                   color: UiColors.accent,
                   fontSize: 11,
@@ -702,7 +702,9 @@ class _MusicBoxProgressBar extends StatelessWidget {
   }
 }
 
-/// Tabbed lower body: the queue, plus a search field that adds hits to it.
+/// Lower body that defaults to the authoritative active queue. A single plus
+/// toggle reveals search and saved-playlist sources without making the queue a
+/// peer tab, so closing the picker always returns to what is actually playing.
 class _MusicBoxBody extends StatefulWidget {
   const _MusicBoxBody({
     super.key,
@@ -739,8 +741,19 @@ class _MusicBoxBody extends StatefulWidget {
 
 class _MusicBoxBodyState extends State<_MusicBoxBody> {
   _MusicBoxSection _section = _MusicBoxSection.search;
+  bool _showAddSources = false;
   bool _activatingTemporary = false;
   String? _temporaryActivationError;
+
+  void _setShowAddSources(bool value) {
+    if (!value) FocusManager.instance.primaryFocus?.unfocus();
+    setState(() => _showAddSources = value);
+  }
+
+  void _handleActivatedState(MusicBoxState state) {
+    widget.onStateChanged?.call(state);
+    if (mounted) setState(() => _showAddSources = false);
+  }
 
   Future<void> _activateTemporary() async {
     final controller = widget.controller;
@@ -755,22 +768,20 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
         roomId: roomId,
         sourceType: MusicBoxActiveSourceType.temporary,
       );
-      widget.onStateChanged?.call(state);
+      _handleActivatedState(state);
     } catch (_) {
-      if (mounted) setState(() => _temporaryActivationError = '切换临时歌单失败');
+      if (mounted) setState(() => _temporaryActivationError = '切换点歌队列失败');
     } finally {
       if (mounted) setState(() => _activatingTemporary = false);
     }
   }
 
-  Widget _temporaryView() {
+  Widget _currentQueueView() {
     final isActive =
         widget.state.activeSource.type == MusicBoxActiveSourceType.temporary;
-    final queue = widget.state.temporaryQueue;
     final list = _MusicBoxQueueList(
       state: widget.state,
-      queue: queue,
-      showCurrent: isActive,
+      queue: widget.state.queue,
       onRemoveItem: widget.onRemoveItem,
     );
     if (isActive) return list;
@@ -783,7 +794,7 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
           height: 32,
           loading: _activatingTemporary,
           onPressed: () => unawaited(_activateTemporary()),
-          child: const Text('切回临时歌单'),
+          child: Text('切回点歌队列（${widget.state.temporaryQueuedCount}）'),
         ),
         if (_temporaryActivationError case final message?) ...[
           const SizedBox(height: 6),
@@ -809,22 +820,81 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SegmentedControl<_MusicBoxSection>(
-          expanded: true,
-          height: _musicBoxSearchFieldHeight,
-          value: _section,
-          segments: [
-            const Segment(value: _MusicBoxSection.search, label: '搜索'),
-            Segment(
-              value: _MusicBoxSection.temporary,
-              label: '临时 ${widget.state.temporaryQueuedCount}',
+        Row(
+          children: [
+            Expanded(
+              child: _showAddSources
+                  ? SegmentedControl<_MusicBoxSection>(
+                      expanded: true,
+                      height: _musicBoxSearchFieldHeight,
+                      value: _section,
+                      segments: const [
+                        Segment(value: _MusicBoxSection.search, label: '搜索添加'),
+                        Segment(
+                          value: _MusicBoxSection.roomPlaylists,
+                          label: '房间歌单',
+                        ),
+                        Segment(
+                          value: _MusicBoxSection.myPlaylists,
+                          label: '我的歌单',
+                        ),
+                      ],
+                      onChanged: (value) => setState(() => _section = value),
+                    )
+                  : PressableSurface(
+                      key: const ValueKey<String>(
+                        'music-box-current-queue-header',
+                      ),
+                      height: _musicBoxSearchFieldHeight,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      backgroundColor: UiColors.surfaceLow,
+                      borderColor: UiColors.border,
+                      hoverEffect: false,
+                      pressEffect: false,
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.queue_music,
+                            size: 15,
+                            color: UiColors.accent,
+                          ),
+                          const SizedBox(width: 7),
+                          const Expanded(
+                            child: Text(
+                              '当前队列',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: UiColors.text,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            '${widget.state.queue.length}',
+                            style: const TextStyle(
+                              color: UiColors.textMuted,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
             ),
-            const Segment(value: _MusicBoxSection.roomPlaylists, label: '房间'),
-            const Segment(value: _MusicBoxSection.myPlaylists, label: '我的'),
+            const SizedBox(width: 8),
+            ButtonIcon(
+              key: const ValueKey<String>('music-box-add-toggle'),
+              icon: const Icon(Icons.add),
+              tooltip: _showAddSources ? '返回当前队列' : '搜索或选择歌单',
+              toggleValue: _showAddSources,
+              onToggleChanged: _setShowAddSources,
+              size: _musicBoxSearchFieldHeight,
+            ),
           ],
-          onChanged: (value) => setState(() => _section = value),
         ),
-        if (_section == _MusicBoxSection.search) ...[
+        if (_showAddSources && _section == _MusicBoxSection.search) ...[
           const SizedBox(height: 10),
           Input(
             controller: widget.searchController,
@@ -849,38 +919,39 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
         const SizedBox(height: 12),
         Expanded(
           key: const ValueKey<String>('music-box-results-viewport'),
-          child: switch (_section) {
-            _MusicBoxSection.temporary => _temporaryView(),
-            _MusicBoxSection.roomPlaylists => _MusicBoxPlaylistBrowser(
-              controller: widget.controller,
-              roomId: widget.roomId,
-              roomScoped: true,
-              onQueueResult: widget.onQueueResult,
-              onStateChanged: widget.onStateChanged,
-            ),
-            _MusicBoxSection.myPlaylists => _MusicBoxPlaylistBrowser(
-              controller: widget.controller,
-              roomId: widget.roomId,
-              roomScoped: false,
-              onQueueResult: widget.onQueueResult,
-              onStateChanged: widget.onStateChanged,
-            ),
-            _MusicBoxSection.search => _MusicBoxSearchList(
-              results: widget.searchResults,
-              query: widget.searchController.text,
-              searching: widget.searching,
-              error: widget.searchError,
-              hasQuery: hasQuery,
-              onQueueResult: widget.onQueueResult,
-            ),
-          },
+          child: !_showAddSources
+              ? _currentQueueView()
+              : switch (_section) {
+                  _MusicBoxSection.roomPlaylists => _MusicBoxPlaylistBrowser(
+                    controller: widget.controller,
+                    roomId: widget.roomId,
+                    roomScoped: true,
+                    onQueueResult: widget.onQueueResult,
+                    onStateChanged: _handleActivatedState,
+                  ),
+                  _MusicBoxSection.myPlaylists => _MusicBoxPlaylistBrowser(
+                    controller: widget.controller,
+                    roomId: widget.roomId,
+                    roomScoped: false,
+                    onQueueResult: widget.onQueueResult,
+                    onStateChanged: _handleActivatedState,
+                  ),
+                  _MusicBoxSection.search => _MusicBoxSearchList(
+                    results: widget.searchResults,
+                    query: widget.searchController.text,
+                    searching: widget.searching,
+                    error: widget.searchError,
+                    hasQuery: hasQuery,
+                    onQueueResult: widget.onQueueResult,
+                  ),
+                },
         ),
       ],
     );
   }
 }
 
-enum _MusicBoxSection { search, temporary, roomPlaylists, myPlaylists }
+enum _MusicBoxSection { search, roomPlaylists, myPlaylists }
 
 class _MusicBoxPlaylistBrowser extends StatefulWidget {
   const _MusicBoxPlaylistBrowser({
@@ -1278,20 +1349,18 @@ class _MusicBoxQueueList extends StatelessWidget {
     required this.state,
     required this.queue,
     required this.onRemoveItem,
-    this.showCurrent = true,
   });
 
   final MusicBoxState state;
   final List<MusicBoxQueueItem> queue;
   final ValueChanged<MusicBoxQueueItem> onRemoveItem;
-  final bool showCurrent;
 
   @override
   Widget build(BuildContext context) {
     if (queue.isEmpty) {
       return const _MusicBoxEmpty(
         icon: Icons.queue_music,
-        message: '队列空空如也，搜索点歌吧',
+        message: '当前队列为空，点击 + 添加歌曲',
       );
     }
     return ListView.separated(
@@ -1303,8 +1372,7 @@ class _MusicBoxQueueList extends StatelessWidget {
         final item = queue[index];
         return _MusicBoxQueueTile(
           item: item,
-          isCurrent:
-              showCurrent && music_box_display.musicBoxIsCurrent(state, item),
+          isCurrent: music_box_display.musicBoxIsCurrent(state, item),
           onRemove: () => onRemoveItem(item),
         );
       },

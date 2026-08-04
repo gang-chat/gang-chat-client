@@ -51,8 +51,27 @@ MusicBoxState _state({
   required MusicBoxPlaybackState playbackState,
   required int positionMs,
   String currentItemId = 'a',
+  List<MusicBoxQueueItem>? queue,
   List<MusicBoxQueueItem>? temporaryQueue,
+  MusicBoxActiveSource activeSource = const MusicBoxActiveSource(),
 }) {
+  final activeQueue =
+      queue ??
+      [
+        MusicBoxQueueItem(
+          id: currentItemId,
+          source: 'netease',
+          trackId: 'track-$currentItemId',
+          title: 'Song',
+          artist: '',
+          durationMs: 200000,
+          status: MusicBoxQueueItemStatus.ready,
+          fileSizeBytes: 0,
+          error: '',
+          addedByUserId: 'user',
+          createdAt: null,
+        ),
+      ];
   return MusicBoxState(
     enabled: true,
     playback: MusicBoxPlayback(
@@ -62,25 +81,17 @@ MusicBoxState _state({
       volume: 100,
       updatedAt: null,
     ),
-    queue: [
-      MusicBoxQueueItem(
-        id: currentItemId,
-        source: 'netease',
-        trackId: 'track-$currentItemId',
-        title: 'Song',
-        artist: '',
-        durationMs: 200000,
-        status: MusicBoxQueueItemStatus.ready,
-        fileSizeBytes: 0,
-        error: '',
-        addedByUserId: 'user',
-        createdAt: null,
-      ),
-    ],
+    queue: activeQueue,
     usage: const MusicBoxUsage(usedBytes: 0, limitBytes: 0),
+    activeSource: activeSource,
     temporaryQueuedCount: temporaryQueue?.length ?? 0,
     temporaryQueue: temporaryQueue ?? const <MusicBoxQueueItem>[],
   );
+}
+
+Future<void> _toggleAddSources(WidgetTester tester) async {
+  await tester.tap(find.byKey(const ValueKey<String>('music-box-add-toggle')));
+  await tester.pump();
 }
 
 void main() {
@@ -97,6 +108,7 @@ void main() {
           source: 'tencent',
         ),
       );
+      await _toggleAddSources(tester);
 
       expect(find.text('QQ音乐'), findsNothing);
       expect(find.text('网易云'), findsOneWidget);
@@ -113,29 +125,92 @@ void main() {
     },
   );
 
-  testWidgets('new compact navigation exposes all sources and temp requester', (
+  for (final platform in const [
+    TargetPlatform.windows,
+    TargetPlatform.macOS,
+    TargetPlatform.android,
+  ]) {
+    testWidgets(
+      '${platform.name} defaults to current queue and plus toggles add sources',
+      (tester) async {
+        final controller = TextEditingController();
+        addTearDown(controller.dispose);
+        const requestedItem = MusicBoxQueueItem(
+          id: 'requested-track',
+          source: 'netease',
+          trackId: 'track-requested',
+          title: '点播歌曲',
+          artist: '歌手',
+          durationMs: 180000,
+          status: MusicBoxQueueItemStatus.ready,
+          fileSizeBytes: 1024,
+          error: '',
+          addedByUserId: 'requester',
+          createdAt: null,
+          requestedBy: MusicBoxRequester(
+            userId: 'requester',
+            displayName: '点歌用户',
+            avatarUrl: null,
+            defaultAvatarKey: 'blue-3',
+          ),
+        );
+
+        await tester.pumpWidget(
+          _host(
+            _state(
+              playbackState: MusicBoxPlaybackState.stopped,
+              positionMs: 0,
+              queue: const [requestedItem],
+              temporaryQueue: const [requestedItem],
+            ),
+            controller,
+            platform: platform,
+            height: 500,
+          ),
+        );
+
+        expect(find.text('当前：点歌队列'), findsOneWidget);
+        expect(find.text('当前队列'), findsOneWidget);
+        expect(find.text('点播歌曲'), findsOneWidget);
+        expect(find.textContaining('由 点歌用户 点歌'), findsOneWidget);
+        expect(find.byType(Avatar), findsWidgets);
+        expect(find.text('搜索添加'), findsNothing);
+
+        await _toggleAddSources(tester);
+
+        expect(find.text('当前队列'), findsNothing);
+        expect(find.text('点播歌曲'), findsNothing);
+        expect(find.text('搜索添加'), findsOneWidget);
+        expect(find.text('房间歌单'), findsOneWidget);
+        expect(find.text('我的歌单'), findsOneWidget);
+        expect(find.byType(Input), findsOneWidget);
+
+        await _toggleAddSources(tester);
+
+        expect(find.text('当前队列'), findsOneWidget);
+        expect(find.text('点播歌曲'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('saved source shows its queue and a route back to 点歌队列', (
     tester,
   ) async {
     final controller = TextEditingController();
     addTearDown(controller.dispose);
     const requestedItem = MusicBoxQueueItem(
-      id: 'requested-track',
+      id: 'request',
       source: 'netease',
-      trackId: 'track-requested',
-      title: '点播歌曲',
-      artist: '歌手',
-      durationMs: 180000,
-      status: MusicBoxQueueItemStatus.ready,
-      fileSizeBytes: 1024,
+      trackId: 'request-track',
+      title: '待点歌曲',
+      artist: '',
+      durationMs: 0,
+      status: MusicBoxQueueItemStatus.pending,
+      fileSizeBytes: 0,
       error: '',
       addedByUserId: 'requester',
       createdAt: null,
-      requestedBy: MusicBoxRequester(
-        userId: 'requester',
-        displayName: '点歌用户',
-        avatarUrl: null,
-        defaultAvatarKey: 'blue-3',
-      ),
     );
 
     await tester.pumpWidget(
@@ -144,23 +219,21 @@ void main() {
           playbackState: MusicBoxPlaybackState.stopped,
           positionMs: 0,
           temporaryQueue: const [requestedItem],
+          activeSource: const MusicBoxActiveSource(
+            type: MusicBoxActiveSourceType.roomPlaylist,
+            id: 'room-list',
+            name: '房间收藏',
+          ),
         ),
         controller,
         height: 500,
       ),
     );
 
-    expect(find.text('搜索'), findsOneWidget);
-    expect(find.text('临时 1'), findsOneWidget);
-    expect(find.text('房间'), findsOneWidget);
-    expect(find.text('我的'), findsOneWidget);
-
-    await tester.tap(find.text('临时 1'));
-    await tester.pump();
-
-    expect(find.text('点播歌曲'), findsOneWidget);
-    expect(find.textContaining('由 点歌用户 点歌'), findsOneWidget);
-    expect(find.byType(Avatar), findsWidgets);
+    expect(find.text('当前：房间收藏'), findsOneWidget);
+    expect(find.text('Song'), findsWidgets);
+    expect(find.text('待点歌曲'), findsNothing);
+    expect(find.text('切回点歌队列（1）'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -233,6 +306,7 @@ void main() {
     );
 
     await tester.pumpWidget(_host(state, controller, height: 400));
+    await _toggleAddSources(tester);
     final searchField = find.byType(Input);
     final sourcePicker = find.byType(SegmentedControl<String>);
     final resultsViewport = find.byKey(
@@ -245,6 +319,7 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpWidget(_host(state, controller, height: 370));
+    await _toggleAddSources(tester);
 
     expect(tester.getSize(searchField), comfortableSearchSize);
     expect(tester.getSize(sourcePicker), comfortableSourceSize);
@@ -261,12 +336,17 @@ void main() {
 
     await tester.pumpWidget(
       _host(
-        _state(playbackState: MusicBoxPlaybackState.stopped, positionMs: 0),
+        _state(
+          playbackState: MusicBoxPlaybackState.stopped,
+          positionMs: 0,
+          queue: const [],
+        ),
         controller,
         platform: TargetPlatform.android,
         height: 400,
       ),
     );
+    expect(find.text('当前队列为空，点击 + 添加歌曲'), findsOneWidget);
 
     final verticalPanelScrollViews = tester
         .widgetList<SingleChildScrollView>(
@@ -308,6 +388,7 @@ void main() {
         searchResults: results,
       ),
     );
+    await _toggleAddSources(tester);
 
     final resultsList = find.byKey(
       const ValueKey<String>('music-box-search-results-list'),
@@ -348,6 +429,7 @@ void main() {
           resizeToAvoidBottomInset: false,
         ),
       );
+      await _toggleAddSources(tester);
       final search = find.byType(TextField);
       final beforeKeyboard = tester.getRect(search);
 
@@ -376,6 +458,7 @@ void main() {
       await tester.pumpWidget(
         _host(state, controller, platform: TargetPlatform.android, height: 460),
       );
+      await _toggleAddSources(tester);
       await tester.tap(find.byType(TextField));
       await tester.pump();
       expect(

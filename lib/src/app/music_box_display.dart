@@ -52,6 +52,20 @@ MusicBoxTransportAction musicBoxPrimaryTransport(MusicBoxState state) {
   };
 }
 
+/// User-facing label for the room's direct-request queue. The wire protocol
+/// intentionally keeps the stable `temporary` identifier for old clients and
+/// rolling server deployments, while every UI surface uses the product name.
+const String musicBoxRequestQueueLabel = '点歌队列';
+
+String musicBoxActiveSourceLabel(MusicBoxActiveSource source) {
+  if (source.type == MusicBoxActiveSourceType.temporary) {
+    return musicBoxRequestQueueLabel;
+  }
+  final name = source.name.trim();
+  if (name.isNotEmpty) return name;
+  return source.type == MusicBoxActiveSourceType.roomPlaylist ? '房间歌单' : '个人歌单';
+}
+
 String musicBoxTransportApiAction(MusicBoxTransportAction action) {
   return switch (action) {
     MusicBoxTransportAction.play => 'play',

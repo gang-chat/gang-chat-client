@@ -3,6 +3,9 @@
 本文档记录当前客户端与服务端共同支持的音乐盒协议。完整目标、后续阶段和验收矩阵见
 [`music-box-next-generation-design.md`](music-box-next-generation-design.md)。
 
+产品界面将 `temporary` 来源统一显示为“点歌队列”。为兼容旧版本，协议枚举和
+`temporary_playlist` / `temporary_queue` 字段名保持不变。
+
 音乐盒仍由服务端下载、转码并通过房间内的 `__musicbox__` LiveKit 参与者广播。
 Windows、macOS、Android 只负责搜索、控制、状态展示和本地监听音量，不自行播放音源。
 

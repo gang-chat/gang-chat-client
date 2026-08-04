@@ -21,6 +21,42 @@ void main() {
     });
   });
 
+  group('music box active source labels', () {
+    test('uses 点歌队列 for temporary sources from old servers', () {
+      final parsed = MusicBoxState.fromJson({
+        'enabled': true,
+        'active_source': {'type': 'temporary', 'name': '临时歌单'},
+      });
+
+      expect(parsed.activeSource.name, musicBoxRequestQueueLabel);
+      expect(
+        musicBoxActiveSourceLabel(parsed.activeSource),
+        musicBoxRequestQueueLabel,
+      );
+    });
+
+    test('keeps saved playlist names and has scoped fallbacks', () {
+      expect(
+        musicBoxActiveSourceLabel(
+          const MusicBoxActiveSource(
+            type: MusicBoxActiveSourceType.roomPlaylist,
+            name: '一起听',
+          ),
+        ),
+        '一起听',
+      );
+      expect(
+        musicBoxActiveSourceLabel(
+          const MusicBoxActiveSource(
+            type: MusicBoxActiveSourceType.userPlaylist,
+            name: '   ',
+          ),
+        ),
+        '个人歌单',
+      );
+    });
+  });
+
   group('musicBoxProgress', () {
     test('renders the server-reported position as-is', () {
       final state = _state(

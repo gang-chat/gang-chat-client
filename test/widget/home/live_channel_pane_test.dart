@@ -2588,6 +2588,11 @@ void main() {
     );
     await tester.pump();
 
+    await tester.tap(
+      find.byKey(const ValueKey<String>('music-box-add-toggle')),
+    );
+    await tester.pump();
+
     final search = find.byType(TextField);
     expect(search, findsOneWidget);
     await tester.tap(search);
