@@ -5,6 +5,7 @@ import 'package:flutter/services.dart' show KeyDownEvent, LogicalKeyboardKey;
 
 import '../app/audio_levels.dart';
 import '../app/live_display.dart' as live_display;
+import '../app/music_box_controller.dart';
 import '../app/music_box_display.dart' as music_box_display;
 import '../app/room_display.dart' as room_display;
 import '../live/live_session.dart';
@@ -113,6 +114,11 @@ class LiveChannelPane extends StatefulWidget {
     required this.onToggleMusicBox,
     required this.onMusicBoxTogglePlayback,
     required this.onMusicBoxSkip,
+    this.onMusicBoxPrevious,
+    this.onMusicBoxModeChanged,
+    this.musicBoxController,
+    this.musicBoxRoomId,
+    this.onMusicBoxStateChanged,
     required this.onMusicBoxQueueResult,
     required this.onMusicBoxRemoveItem,
     required this.onMusicBoxSourceChanged,
@@ -185,6 +191,11 @@ class LiveChannelPane extends StatefulWidget {
   final VoidCallback onToggleMusicBox;
   final VoidCallback onMusicBoxTogglePlayback;
   final VoidCallback onMusicBoxSkip;
+  final VoidCallback? onMusicBoxPrevious;
+  final ValueChanged<MusicBoxPlaybackMode>? onMusicBoxModeChanged;
+  final MusicBoxController? musicBoxController;
+  final String? musicBoxRoomId;
+  final ValueChanged<MusicBoxState>? onMusicBoxStateChanged;
   final ValueChanged<MusicBoxSearchResult> onMusicBoxQueueResult;
   final ValueChanged<MusicBoxQueueItem> onMusicBoxRemoveItem;
   final ValueChanged<String> onMusicBoxSourceChanged;
@@ -441,6 +452,11 @@ class _LiveChannelPaneState extends State<LiveChannelPane> {
                             source: widget.musicBoxSource,
                             onTogglePlayback: widget.onMusicBoxTogglePlayback,
                             onSkip: widget.onMusicBoxSkip,
+                            onPrevious: widget.onMusicBoxPrevious,
+                            onModeChanged: widget.onMusicBoxModeChanged,
+                            controller: widget.musicBoxController,
+                            roomId: widget.musicBoxRoomId,
+                            onStateChanged: widget.onMusicBoxStateChanged,
                             onQueueResult: widget.onMusicBoxQueueResult,
                             onRemoveItem: widget.onMusicBoxRemoveItem,
                             onSourceChanged: widget.onMusicBoxSourceChanged,

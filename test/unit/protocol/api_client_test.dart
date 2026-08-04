@@ -2875,6 +2875,50 @@ void main() {
     api.close();
   });
 
+  test(
+    'activateMusicBoxPlaylist posts saved source and playback intent',
+    () async {
+      final api = GangApiClient(
+        baseUrl: 'http://example.test/api/v1',
+        accessTokenProvider: ({bool forceRefresh = false}) async => 'token',
+        httpClient: MockClient((request) async {
+          expect(request.method, 'POST');
+          expect(request.url.path, '/api/v1/rooms/room_1/music-box/activate');
+          expect(jsonDecode(request.body) as Map<String, Object?>, {
+            'source_type': 'room_playlist',
+            'start_play': true,
+            'playlist_id': 'playlist_1',
+          });
+          return http.Response(
+            jsonEncode({
+              'enabled': true,
+              'revision': 2,
+              'active_source': {
+                'type': 'room_playlist',
+                'playlist_id': 'playlist_1',
+                'name': 'Room list',
+              },
+              'queue': [],
+              'temporary_queue': [],
+              'usage': {},
+            }),
+            200,
+          );
+        }),
+      );
+
+      final state = await api.activateMusicBoxPlaylist(
+        roomId: 'room_1',
+        sourceType: MusicBoxActiveSourceType.roomPlaylist,
+        playlistId: 'playlist_1',
+      );
+
+      expect(state.activeSource.type, MusicBoxActiveSourceType.roomPlaylist);
+      expect(state.revision, 2);
+      api.close();
+    },
+  );
+
   test('removeMusicBoxItem deletes the queue item', () async {
     final api = GangApiClient(
       baseUrl: 'http://example.test/api/v1',

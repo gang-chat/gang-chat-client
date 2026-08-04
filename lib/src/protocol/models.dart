@@ -2274,6 +2274,103 @@ const musicBoxBotIdentity = '__musicbox__';
 
 enum MusicBoxPlaybackState { stopped, playing, paused }
 
+enum MusicBoxPlaybackMode { sequential, repeatOne, repeatAll, shuffle }
+
+MusicBoxPlaybackMode _musicBoxPlaybackModeFrom(String? value) {
+  return switch (value?.trim().toLowerCase()) {
+    'repeat_one' => MusicBoxPlaybackMode.repeatOne,
+    'repeat_all' => MusicBoxPlaybackMode.repeatAll,
+    'shuffle' => MusicBoxPlaybackMode.shuffle,
+    _ => MusicBoxPlaybackMode.sequential,
+  };
+}
+
+String musicBoxPlaybackModeValue(MusicBoxPlaybackMode mode) {
+  return switch (mode) {
+    MusicBoxPlaybackMode.sequential => 'sequential',
+    MusicBoxPlaybackMode.repeatOne => 'repeat_one',
+    MusicBoxPlaybackMode.repeatAll => 'repeat_all',
+    MusicBoxPlaybackMode.shuffle => 'shuffle',
+  };
+}
+
+enum MusicBoxActiveSourceType { temporary, roomPlaylist, userPlaylist }
+
+MusicBoxActiveSourceType _musicBoxActiveSourceTypeFrom(String? value) {
+  return switch (value?.trim().toLowerCase()) {
+    'room_playlist' => MusicBoxActiveSourceType.roomPlaylist,
+    'user_playlist' => MusicBoxActiveSourceType.userPlaylist,
+    _ => MusicBoxActiveSourceType.temporary,
+  };
+}
+
+String musicBoxActiveSourceTypeValue(MusicBoxActiveSourceType type) {
+  return switch (type) {
+    MusicBoxActiveSourceType.temporary => 'temporary',
+    MusicBoxActiveSourceType.roomPlaylist => 'room_playlist',
+    MusicBoxActiveSourceType.userPlaylist => 'user_playlist',
+  };
+}
+
+class MusicBoxCapabilities {
+  const MusicBoxCapabilities({
+    this.canControl = true,
+    this.canChangeMode = true,
+    this.allowedModes = const <MusicBoxPlaybackMode>[
+      MusicBoxPlaybackMode.sequential,
+      MusicBoxPlaybackMode.repeatOne,
+      MusicBoxPlaybackMode.repeatAll,
+      MusicBoxPlaybackMode.shuffle,
+    ],
+  });
+
+  final bool canControl;
+  final bool canChangeMode;
+  final List<MusicBoxPlaybackMode> allowedModes;
+
+  factory MusicBoxCapabilities.fromJson(Map<String, Object?>? json) {
+    final values = (json?['allowed_modes'] as List<Object?>? ?? const [])
+        .map((value) => _musicBoxPlaybackModeFrom(value?.toString()))
+        .toSet()
+        .toList();
+    return MusicBoxCapabilities(
+      canControl: _boolFromJson(json, const ['can_control']) ?? true,
+      canChangeMode: _boolFromJson(json, const ['can_change_mode']) ?? true,
+      allowedModes: values.isEmpty
+          ? const <MusicBoxPlaybackMode>[
+              MusicBoxPlaybackMode.sequential,
+              MusicBoxPlaybackMode.repeatOne,
+              MusicBoxPlaybackMode.repeatAll,
+              MusicBoxPlaybackMode.shuffle,
+            ]
+          : values,
+    );
+  }
+}
+
+class MusicBoxActiveSource {
+  const MusicBoxActiveSource({
+    this.type = MusicBoxActiveSourceType.temporary,
+    this.id = '',
+    this.name = '临时歌单',
+    this.ownerUserId = '',
+  });
+
+  final MusicBoxActiveSourceType type;
+  final String id;
+  final String name;
+  final String ownerUserId;
+
+  factory MusicBoxActiveSource.fromJson(Map<String, Object?>? json) {
+    return MusicBoxActiveSource(
+      type: _musicBoxActiveSourceTypeFrom(json?['type']?.toString()),
+      id: _stringFromJson(json, const ['id', 'playlist_id']) ?? '',
+      name: _stringFromJson(json, const ['name']) ?? '临时歌单',
+      ownerUserId: _stringFromJson(json, const ['owner_user_id']) ?? '',
+    );
+  }
+}
+
 MusicBoxPlaybackState _musicBoxPlaybackStateFrom(String? value) {
   return switch (value?.trim().toLowerCase()) {
     'playing' => MusicBoxPlaybackState.playing,
@@ -2293,10 +2390,9 @@ MusicBoxQueueItemStatus _musicBoxQueueItemStatusFrom(String? value) {
   };
 }
 
-/// The room music box's current playback head. [positionMs] is the value the
-/// server recorded at the last state change — it is *not* pushed per second, so
-/// a live progress bar must advance it locally while [state] is playing and
-/// recalibrate from each fresh snapshot. See `music_box_display.dart`.
+/// The room music box's current playback head. [positionMs] comes from the
+/// server-authoritative snapshot stream; clients render it as reported instead
+/// of advancing a separate local clock. See `music_box_display.dart`.
 class MusicBoxPlayback {
   const MusicBoxPlayback({
     required this.state,
@@ -2304,6 +2400,10 @@ class MusicBoxPlayback {
     required this.positionMs,
     required this.volume,
     required this.updatedAt,
+    this.mode = MusicBoxPlaybackMode.sequential,
+    this.canPrevious = false,
+    this.canNext = false,
+    this.capabilities = const MusicBoxCapabilities(),
   });
 
   final MusicBoxPlaybackState state;
@@ -2314,6 +2414,10 @@ class MusicBoxPlayback {
   final int positionMs;
   final int volume;
   final DateTime? updatedAt;
+  final MusicBoxPlaybackMode mode;
+  final bool canPrevious;
+  final bool canNext;
+  final MusicBoxCapabilities capabilities;
 
   bool get hasCurrent => currentItemId.isNotEmpty;
 
@@ -2324,6 +2428,26 @@ class MusicBoxPlayback {
       positionMs: _intFromJson(json, const ['position_ms']) ?? 0,
       volume: _intFromJson(json, const ['volume']) ?? 100,
       updatedAt: _parseDateTime(json['updated_at']),
+      mode: _musicBoxPlaybackModeFrom(json['mode']?.toString()),
+      canPrevious: _boolFromJson(json, const ['can_previous']) ?? false,
+      canNext: _boolFromJson(json, const ['can_next']) ?? false,
+      capabilities: MusicBoxCapabilities.fromJson(
+        _nullableMap(json['capabilities']),
+      ),
+    );
+  }
+
+  MusicBoxPlayback copyWith({bool? canPrevious, bool? canNext}) {
+    return MusicBoxPlayback(
+      state: state,
+      currentItemId: currentItemId,
+      positionMs: positionMs,
+      volume: volume,
+      updatedAt: updatedAt,
+      mode: mode,
+      canPrevious: canPrevious ?? this.canPrevious,
+      canNext: canNext ?? this.canNext,
+      capabilities: capabilities,
     );
   }
 }
@@ -2344,6 +2468,7 @@ class MusicBoxQueueItem {
     required this.error,
     required this.addedByUserId,
     required this.createdAt,
+    this.requestedBy,
   });
 
   final String id;
@@ -2360,6 +2485,7 @@ class MusicBoxQueueItem {
   final String error;
   final String addedByUserId;
   final DateTime? createdAt;
+  final MusicBoxRequester? requestedBy;
 
   factory MusicBoxQueueItem.fromJson(Map<String, Object?> json) {
     return MusicBoxQueueItem(
@@ -2374,6 +2500,37 @@ class MusicBoxQueueItem {
       error: _stringFromJson(json, const ['error']) ?? '',
       addedByUserId: _stringFromJson(json, const ['added_by_user_id']) ?? '',
       createdAt: _parseDateTime(json['created_at']),
+      requestedBy: MusicBoxRequester.fromJson(
+        _nullableMap(json['requested_by']),
+      ),
+    );
+  }
+}
+
+class MusicBoxRequester {
+  const MusicBoxRequester({
+    required this.userId,
+    required this.displayName,
+    required this.avatarUrl,
+    required this.defaultAvatarKey,
+  });
+
+  final String userId;
+  final String displayName;
+  final String? avatarUrl;
+  final String defaultAvatarKey;
+
+  static MusicBoxRequester? fromJson(Map<String, Object?>? json) {
+    if (json == null) return null;
+    final userId = _stringFromJson(json, const ['user_id', 'id']) ?? '';
+    if (userId.isEmpty) return null;
+    return MusicBoxRequester(
+      userId: userId,
+      displayName:
+          _stringFromJson(json, const ['display_name', 'username']) ?? userId,
+      avatarUrl: _stringFromJson(json, const ['avatar_url']),
+      defaultAvatarKey:
+          _stringFromJson(json, const ['default_avatar_key']) ?? 'blue-3',
     );
   }
 }
@@ -2404,12 +2561,22 @@ class MusicBoxState {
     required this.playback,
     required this.queue,
     required this.usage,
+    this.revision = 0,
+    this.hasRevision = false,
+    this.activeSource = const MusicBoxActiveSource(),
+    this.temporaryQueuedCount = 0,
+    this.temporaryQueue = const <MusicBoxQueueItem>[],
   });
 
   final bool enabled;
   final MusicBoxPlayback playback;
   final List<MusicBoxQueueItem> queue;
   final MusicBoxUsage usage;
+  final int revision;
+  final bool hasRevision;
+  final MusicBoxActiveSource activeSource;
+  final int temporaryQueuedCount;
+  final List<MusicBoxQueueItem> temporaryQueue;
 
   /// The queue item currently playing, or null when nothing is current.
   MusicBoxQueueItem? get currentItem {
@@ -2422,21 +2589,53 @@ class MusicBoxState {
 
   factory MusicBoxState.fromJson(Map<String, Object?> json) {
     final playbackJson = _nullableMap(json['playback']);
+    final queue = _listOfMaps(
+      json['queue'],
+    ).map(MusicBoxQueueItem.fromJson).toList();
+    final activeSource = MusicBoxActiveSource.fromJson(
+      _nullableMap(json['active_source']),
+    );
+    final parsedTemporaryQueue = _listOfMaps(
+      json['temporary_queue'],
+    ).map(MusicBoxQueueItem.fromJson).toList();
+    final temporaryQueue = json.containsKey('temporary_queue')
+        ? parsedTemporaryQueue
+        : activeSource.type == MusicBoxActiveSourceType.temporary
+        ? queue
+        : const <MusicBoxQueueItem>[];
+    var playback = playbackJson == null
+        ? const MusicBoxPlayback(
+            state: MusicBoxPlaybackState.stopped,
+            currentItemId: '',
+            positionMs: 0,
+            volume: 100,
+            updatedAt: null,
+          )
+        : MusicBoxPlayback.fromJson(playbackJson);
+    if (playbackJson != null &&
+        (!playbackJson.containsKey('can_previous') ||
+            !playbackJson.containsKey('can_next'))) {
+      playback = playback.copyWith(
+        canPrevious: playbackJson.containsKey('can_previous')
+            ? null
+            : playback.hasCurrent && queue.isNotEmpty,
+        canNext: playbackJson.containsKey('can_next') ? null : queue.isNotEmpty,
+      );
+    }
     return MusicBoxState(
       enabled: _boolFromJson(json, const ['enabled']) ?? false,
-      playback: playbackJson == null
-          ? const MusicBoxPlayback(
-              state: MusicBoxPlaybackState.stopped,
-              currentItemId: '',
-              positionMs: 0,
-              volume: 100,
-              updatedAt: null,
-            )
-          : MusicBoxPlayback.fromJson(playbackJson),
-      queue: _listOfMaps(
-        json['queue'],
-      ).map(MusicBoxQueueItem.fromJson).toList(),
+      playback: playback,
+      queue: queue,
       usage: MusicBoxUsage.fromJson(_nullableMap(json['usage'])),
+      revision: _intFromJson(json, const ['revision']) ?? 0,
+      hasRevision: json.containsKey('revision'),
+      activeSource: activeSource,
+      temporaryQueuedCount:
+          _intFromJson(_nullableMap(json['temporary_playlist']), const [
+            'queued_count',
+          ]) ??
+          temporaryQueue.length,
+      temporaryQueue: temporaryQueue,
     );
   }
 }
@@ -2634,7 +2833,14 @@ List<Map<String, Object?>> _listOfMaps(Object? value) {
 }
 
 Map<String, Object?>? _nullableMap(Object? value) {
-  return value == null ? null : value as Map<String, Object?>;
+  if (value == null) return null;
+  if (value is Map<String, Object?>) return value;
+  if (value is Map) {
+    return value.map((key, nestedValue) {
+      return MapEntry(key.toString(), nestedValue);
+    });
+  }
+  return null;
 }
 
 String? _stringFromJson(Map<String, Object?>? json, List<String> keys) {

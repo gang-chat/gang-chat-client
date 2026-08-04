@@ -60,6 +60,7 @@ extension _HomeShellMusicBox on _HomeShellState {
   /// overwriting local state wholesale per the server contract.
   void _applyMusicBoxSnapshot(MusicBoxState state) {
     if (!mounted) return;
+    if (!shouldAcceptMusicBoxSnapshot(_musicBox, state)) return;
     _setHomeState(() => _musicBox = state);
   }
 
@@ -176,13 +177,18 @@ extension _HomeShellMusicBox on _HomeShellState {
     }
   }
 
-  Future<void> _controlMusicBox(String action) async {
+  Future<void> _controlMusicBox(
+    String action, {
+    MusicBoxPlaybackMode? mode,
+  }) async {
     final roomId = _selectedServerId;
     if (roomId == null) return;
     try {
       final state = await _musicBoxController.control(
         roomId: roomId,
         action: action,
+        mode: mode,
+        currentState: _musicBox,
       );
       _applyMusicBoxSnapshot(state);
     } catch (error) {
@@ -191,6 +197,10 @@ extension _HomeShellMusicBox on _HomeShellState {
         tone: FloatingNoticeTone.error,
       );
     }
+  }
+
+  Future<void> _changeMusicBoxPlaybackMode(MusicBoxPlaybackMode mode) {
+    return _controlMusicBox('set_mode', mode: mode);
   }
 
   void _toggleMusicBoxPlayback() {

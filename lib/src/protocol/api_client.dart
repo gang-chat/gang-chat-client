@@ -543,6 +543,16 @@ abstract interface class GangApi {
   Future<MusicBoxState> controlMusicBox({
     required String roomId,
     required String action,
+    String? mode,
+    String? commandId,
+    int? expectedRevision,
+  });
+
+  Future<MusicBoxState> activateMusicBoxPlaylist({
+    required String roomId,
+    required MusicBoxActiveSourceType sourceType,
+    String? playlistId,
+    bool startPlay = true,
   });
 
   void close();
@@ -2799,12 +2809,49 @@ class GangApiClient
   Future<MusicBoxState> controlMusicBox({
     required String roomId,
     required String action,
+    String? mode,
+    String? commandId,
+    int? expectedRevision,
   }) async {
     final decoded = await _sendJson((token) {
+      final body = <String, Object?>{'action': action};
+      if (mode != null && mode.trim().isNotEmpty) {
+        body['mode'] = mode.trim();
+      }
+      if (commandId != null && commandId.trim().isNotEmpty) {
+        body['command_id'] = commandId.trim();
+      }
+      if (expectedRevision != null) {
+        body['expected_revision'] = expectedRevision;
+      }
       return _httpClient.post(
         _uri('/rooms/$roomId/music-box/control'),
         headers: _headers(token),
-        body: encodeJsonBody({'action': action}),
+        body: encodeJsonBody(body),
+      );
+    });
+    return MusicBoxState.fromJson(decoded);
+  }
+
+  @override
+  Future<MusicBoxState> activateMusicBoxPlaylist({
+    required String roomId,
+    required MusicBoxActiveSourceType sourceType,
+    String? playlistId,
+    bool startPlay = true,
+  }) async {
+    final body = <String, Object?>{
+      'source_type': musicBoxActiveSourceTypeValue(sourceType),
+      'start_play': startPlay,
+    };
+    if (playlistId != null && playlistId.trim().isNotEmpty) {
+      body['playlist_id'] = playlistId.trim();
+    }
+    final decoded = await _sendJson((token) {
+      return _httpClient.post(
+        _uri('/rooms/$roomId/music-box/activate'),
+        headers: _headers(token),
+        body: encodeJsonBody(body),
       );
     });
     return MusicBoxState.fromJson(decoded);

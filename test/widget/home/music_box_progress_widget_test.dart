@@ -51,6 +51,7 @@ MusicBoxState _state({
   required MusicBoxPlaybackState playbackState,
   required int positionMs,
   String currentItemId = 'a',
+  List<MusicBoxQueueItem>? temporaryQueue,
 }) {
   return MusicBoxState(
     enabled: true,
@@ -77,6 +78,8 @@ MusicBoxState _state({
       ),
     ],
     usage: const MusicBoxUsage(usedBytes: 0, limitBytes: 0),
+    temporaryQueuedCount: temporaryQueue?.length ?? 0,
+    temporaryQueue: temporaryQueue ?? const <MusicBoxQueueItem>[],
   );
 }
 
@@ -109,6 +112,57 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('new compact navigation exposes all sources and temp requester', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    const requestedItem = MusicBoxQueueItem(
+      id: 'requested-track',
+      source: 'netease',
+      trackId: 'track-requested',
+      title: '点播歌曲',
+      artist: '歌手',
+      durationMs: 180000,
+      status: MusicBoxQueueItemStatus.ready,
+      fileSizeBytes: 1024,
+      error: '',
+      addedByUserId: 'requester',
+      createdAt: null,
+      requestedBy: MusicBoxRequester(
+        userId: 'requester',
+        displayName: '点歌用户',
+        avatarUrl: null,
+        defaultAvatarKey: 'blue-3',
+      ),
+    );
+
+    await tester.pumpWidget(
+      _host(
+        _state(
+          playbackState: MusicBoxPlaybackState.stopped,
+          positionMs: 0,
+          temporaryQueue: const [requestedItem],
+        ),
+        controller,
+        height: 500,
+      ),
+    );
+
+    expect(find.text('搜索'), findsOneWidget);
+    expect(find.text('临时 1'), findsOneWidget);
+    expect(find.text('房间'), findsOneWidget);
+    expect(find.text('我的'), findsOneWidget);
+
+    await tester.tap(find.text('临时 1'));
+    await tester.pump();
+
+    expect(find.text('点播歌曲'), findsOneWidget);
+    expect(find.textContaining('由 点歌用户 点歌'), findsOneWidget);
+    expect(find.byType(Avatar), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('music box volume uses a flat surface', (tester) async {
     final controller = TextEditingController();

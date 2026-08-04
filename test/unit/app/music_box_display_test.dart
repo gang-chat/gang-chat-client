@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:client/src/app/music_box_display.dart';
+import 'package:client/src/app/music_box_controller.dart';
 import 'package:client/src/protocol/models.dart';
 
 void main() {
@@ -277,6 +278,84 @@ void main() {
       expect(state.playback.state, MusicBoxPlaybackState.stopped);
       expect(state.currentItem, isNull);
       expect(state.queue, isEmpty);
+    });
+
+    test(
+      'parses revision, active saved source and independent temporary queue',
+      () {
+        final state = MusicBoxState.fromJson({
+          'enabled': true,
+          'revision': 12,
+          'active_source': {
+            'type': 'room_playlist',
+            'playlist_id': 'playlist-1',
+            'name': 'Shared favorites',
+          },
+          'playback': {
+            'state': 'playing',
+            'current_item_id': 'saved-1',
+            'mode': 'repeat_all',
+            'can_previous': true,
+            'can_next': true,
+            'capabilities': {
+              'allowed_modes': ['sequential', 'repeat_one', 'repeat_all'],
+            },
+          },
+          'queue': [
+            {
+              'id': 'saved-1',
+              'title': 'Saved song',
+              'status': 'ready',
+              'requested_by': <String, Object?>{
+                'user_id': 'user-1',
+                'display_name': 'Alice',
+                'avatar_url': '/avatar.png',
+              },
+            },
+          ],
+          'temporary_queue': [
+            {
+              'id': 'temporary-1',
+              'title': 'Requested song',
+              'status': 'pending',
+            },
+          ],
+          'temporary_playlist': {'queued_count': 1},
+          'usage': {},
+        });
+
+        expect(state.hasRevision, isTrue);
+        expect(state.revision, 12);
+        expect(state.activeSource.type, MusicBoxActiveSourceType.roomPlaylist);
+        expect(state.activeSource.id, 'playlist-1');
+        expect(state.playback.mode, MusicBoxPlaybackMode.repeatAll);
+        expect(state.currentItem?.requestedBy?.displayName, 'Alice');
+        expect(state.temporaryQueue.single.id, 'temporary-1');
+        expect(state.temporaryQueuedCount, 1);
+      },
+    );
+
+    test('rejects stale revision snapshots but keeps legacy compatibility', () {
+      final current = MusicBoxState.fromJson({
+        'enabled': true,
+        'revision': 5,
+        'playback': {'current_item_id': 'current'},
+      });
+      final stale = MusicBoxState.fromJson({
+        'enabled': true,
+        'revision': 4,
+        'playback': {'current_item_id': 'old'},
+      });
+      final newer = MusicBoxState.fromJson({
+        'enabled': true,
+        'revision': 6,
+        'playback': {'current_item_id': 'new'},
+      });
+      final legacy = MusicBoxState.fromJson({'enabled': true});
+
+      expect(shouldAcceptMusicBoxSnapshot(current, stale), isFalse);
+      expect(shouldAcceptMusicBoxSnapshot(current, newer), isTrue);
+      expect(shouldAcceptMusicBoxSnapshot(current, legacy), isTrue);
     });
   });
 }
