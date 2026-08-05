@@ -160,6 +160,120 @@ void main() {
     expect(openedRoom?.id, 'room_1');
   });
 
+  testWidgets(
+    'narrow room cards keep icons with complete multiline room and user names',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(190, 740);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      const longRoomName = '这是一个需要完整换行显示的很长房间名称';
+      const longCreatorName = '这是一个需要完整换行显示的创建者用户名';
+      const creator = UserSummary(
+        id: 'long-creator',
+        username: 'long_creator',
+        displayName: longCreatorName,
+        avatarUrl: null,
+        defaultAvatarKey: 'blue-3',
+      );
+      const room = PublicRoom(
+        id: 'long-room',
+        rid: 'LONG-ROOM',
+        name: longRoomName,
+        avatarUrl: null,
+        defaultAvatarKey: 'room-2',
+        visibility: 'private',
+        joinPolicy: 'closed',
+        memberCount: 12,
+        liveParticipantCount: 0,
+        joined: false,
+        joinState: 'none',
+        createdBy: creator,
+      );
+
+      await tester.pumpWidget(
+        _host(
+          const RoomHoverCardForTest(room: room, currentUser: _currentUser),
+        ),
+      );
+      await tester.tap(find.byType(Avatar).first);
+      await tester.pumpAndSettle();
+
+      final name = find.byWidgetPredicate(
+        (widget) =>
+            widget is ReadOnlySelectableText && widget.value == longRoomName,
+      );
+      final icon = find.byKey(const ValueKey('room-profile-card-icon-preview'));
+      final creatorName = find.text(longCreatorName);
+      expect(name, findsOneWidget);
+      expect(creatorName, findsOneWidget);
+      expect(tester.getSize(name).height, greaterThan(20));
+      expect(tester.getSize(creatorName).height, lessThan(20));
+      expect(
+        tester.getTopLeft(name).dx,
+        greaterThan(tester.getTopRight(icon).dx),
+      );
+      expect(
+        tester.widget<Text>(creatorName).overflow,
+        isNot(TextOverflow.ellipsis),
+      );
+      expect(
+        find.byWidgetPredicate(
+          (widget) => widget is Avatar && widget.size == 16,
+        ),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('room-card identity rows keep every final glyph on one line', (
+    tester,
+  ) async {
+    const creatorName = '潘gang';
+    const personalName = 'testxxx';
+    const creator = UserSummary(
+      id: 'mixed-creator',
+      username: 'mixed_creator',
+      displayName: creatorName,
+      avatarUrl: null,
+      defaultAvatarKey: 'blue-3',
+    );
+    final room = PublicRoom(
+      id: 'mixed-room',
+      rid: 'MIXED',
+      name: '666',
+      avatarUrl: null,
+      defaultAvatarKey: 'room-2',
+      visibility: 'public',
+      joinPolicy: 'open',
+      memberCount: 2,
+      liveParticipantCount: 0,
+      joined: true,
+      joinState: 'joined',
+      createdBy: creator,
+      personalProfile: RoomPersonalProfile(displayName: personalName),
+      myMembership: RoomMembership(
+        joinedAt: DateTime.utc(2026, 8, 5),
+        role: 'admin',
+      ),
+    );
+
+    await tester.pumpWidget(
+      _host(RoomHoverCardForTest(room: room, currentUser: _currentUser)),
+    );
+    await tester.tap(find.byType(Avatar).first);
+    await tester.pumpAndSettle();
+
+    expect(tester.getSize(find.text(creatorName)).height, lessThan(20));
+    expect(tester.getSize(find.text(personalName)).height, lessThan(20));
+    expect(
+      find.byWidgetPredicate((widget) => widget is Avatar && widget.size == 16),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('tap pins a room profile card until an outside tap', (
     tester,
   ) async {

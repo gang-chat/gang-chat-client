@@ -1,8 +1,11 @@
 import 'package:client/src/app/music_box_controller.dart';
+import 'package:client/src/home/hover_card_anchor.dart';
 import 'package:client/src/home/live_channel_pane.dart';
+import 'package:client/src/home/room_profile_card.dart';
 import 'package:client/src/protocol/api_client.dart';
 import 'package:client/src/protocol/models.dart';
 import 'package:client/src/ui/ui.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -23,6 +26,9 @@ Widget _host(
   MusicBoxController? musicBoxController,
   String? roomId,
   ValueChanged<MusicBoxState>? onStateChanged,
+  ValueChanged<MusicBoxSearchResult>? onQueueResult,
+  UserProfileResolver? onResolveUserProfile,
+  UserProfileActionBuilder? userProfileActionBuilder,
 }) {
   return MaterialApp(
     theme: uiTheme().copyWith(platform: platform),
@@ -41,9 +47,11 @@ Widget _host(
           controller: musicBoxController,
           roomId: roomId,
           onStateChanged: onStateChanged,
+          onResolveUserProfile: onResolveUserProfile,
+          userProfileActionBuilder: userProfileActionBuilder,
           onTogglePlayback: () {},
           onSkip: () {},
-          onQueueResult: (_) {},
+          onQueueResult: onQueueResult ?? (_) {},
           onRemoveItem: (_) {},
           onSourceChanged: (_) {},
           onClose: () {},
@@ -94,6 +102,72 @@ class _MusicBoxApiFake implements GangApi {
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _RoomPlaylistApiFake extends _MusicBoxApiFake
+    implements RoomMusicPlaylistApi, PersonalMusicPlaylistApi {
+  _RoomPlaylistApiFake(
+    super.state, {
+    required this.playlist,
+    required this.items,
+    this.personalPlaylists = const [],
+  });
+
+  final PersonalMusicPlaylist playlist;
+  final List<PersonalMusicPlaylistItem> items;
+  final List<PersonalMusicPlaylist> personalPlaylists;
+
+  @override
+  Future<PersonalMusicPlaylistPage> listRoomMusicPlaylists({
+    required String roomId,
+    int page = 1,
+    int pageSize = 50,
+  }) async {
+    return PersonalMusicPlaylistPage(
+      playlists: [playlist],
+      page: page,
+      pageSize: pageSize,
+      total: 1,
+      hasMore: false,
+      maxPlaylists: 50,
+      maxPlaylistItems: 500,
+    );
+  }
+
+  @override
+  Future<PersonalMusicPlaylistItemsPage> getRoomMusicPlaylist({
+    required String roomId,
+    required String playlistId,
+    int page = 1,
+    int pageSize = 50,
+    String? keyword,
+    String? source,
+  }) async {
+    return PersonalMusicPlaylistItemsPage(
+      playlist: playlist,
+      items: items,
+      page: page,
+      pageSize: pageSize,
+      total: items.length,
+      hasMore: false,
+    );
+  }
+
+  @override
+  Future<PersonalMusicPlaylistPage> listPersonalMusicPlaylists({
+    int page = 1,
+    int pageSize = 50,
+  }) async {
+    return PersonalMusicPlaylistPage(
+      playlists: personalPlaylists,
+      page: page,
+      pageSize: pageSize,
+      total: personalPlaylists.length,
+      hasMore: false,
+      maxPlaylists: 50,
+      maxPlaylistItems: 500,
+    );
+  }
 }
 
 MusicBoxState _state({
@@ -227,7 +301,17 @@ void main() {
         expect(find.text('点歌队列'), findsOneWidget);
         expect(find.text('点播歌曲'), findsOneWidget);
         expect(find.textContaining('由 '), findsNothing);
-        expect(find.textContaining('网易云'), findsOneWidget);
+        final queueTile = find.byKey(
+          const ValueKey<String>('music-box-queue-tile:requested-track'),
+        );
+        expect(
+          find.descendant(of: queueTile, matching: find.text('网易云')),
+          findsNothing,
+        );
+        expect(
+          find.descendant(of: queueTile, matching: find.text('3:00')),
+          findsNothing,
+        );
         expect(find.text('搜索添加'), findsNothing);
         final queueAction = tester.widget<ButtonIcon>(
           find.byKey(const ValueKey<String>('music-box-queue-context-action')),
@@ -244,6 +328,7 @@ void main() {
         );
         expect(find.text('时长'), findsOneWidget);
         expect(find.text('3:00'), findsWidgets);
+        expect(find.text('网易云'), findsOneWidget);
         expect(find.text('点歌人'), findsOneWidget);
         expect(find.text('房间专属名'), findsOneWidget);
         final requesterAvatar = tester.widget<Avatar>(find.byType(Avatar).last);
@@ -256,6 +341,10 @@ void main() {
 
         expect(find.text('点歌队列'), findsNothing);
         expect(find.text('点播歌曲'), findsNothing);
+        expect(
+          find.byKey(const ValueKey<String>('music-box-queue-context-action')),
+          findsNothing,
+        );
         expect(find.text('搜索添加'), findsOneWidget);
         expect(find.text('房间歌单'), findsOneWidget);
         expect(find.text('我的歌单'), findsOneWidget);
@@ -265,6 +354,10 @@ void main() {
 
         expect(find.text('点歌队列'), findsOneWidget);
         expect(find.text('点播歌曲'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey<String>('music-box-queue-context-action')),
+          findsOneWidget,
+        );
         expect(tester.takeException(), isNull);
       },
     );
@@ -475,6 +568,800 @@ void main() {
     expect(button.onPressed, isNull);
   });
 
+  testWidgets('downloading queue item replaces its leading music icon', (
+    tester,
+  ) async {
+    final searchController = TextEditingController();
+    addTearDown(searchController.dispose);
+    const item = MusicBoxQueueItem(
+      id: 'downloading-track',
+      source: 'netease',
+      trackId: 'track-downloading',
+      title: '正在下载的歌曲',
+      artist: '歌手',
+      durationMs: 180000,
+      status: MusicBoxQueueItemStatus.downloading,
+      fileSizeBytes: 0,
+      error: '',
+      addedByUserId: 'requester',
+      createdAt: null,
+    );
+
+    await tester.pumpWidget(
+      _host(
+        _state(
+          playbackState: MusicBoxPlaybackState.stopped,
+          positionMs: 0,
+          queue: const [item],
+          temporaryQueue: const [item],
+        ),
+        searchController,
+        height: 500,
+      ),
+    );
+
+    final loadingFinder = find.byKey(
+      const ValueKey<String>(
+        'music-box-queue-leading-loading:downloading-track',
+      ),
+    );
+    expect(loadingFinder, findsOneWidget);
+    expect(
+      find.byKey(
+        const ValueKey<String>(
+          'music-box-queue-leading-icon:downloading-track',
+        ),
+      ),
+      findsNothing,
+    );
+    expect(
+      tester.getCenter(loadingFinder).dx,
+      lessThan(tester.getTopLeft(find.text('正在下载的歌曲')).dx),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final platform in const [
+    TargetPlatform.windows,
+    TargetPlatform.macOS,
+    TargetPlatform.android,
+  ]) {
+    testWidgets(
+      '${platform.name} search result uses a song card and an explicit queue action',
+      (tester) async {
+        final controller = TextEditingController(text: '绝不认输');
+        final queued = <MusicBoxSearchResult>[];
+        addTearDown(controller.dispose);
+        const result = MusicBoxSearchResult(
+          trackId: 'BV1xx411c7mD',
+          name: '《Hi-Res无损音质》｜《绝不认输》完整歌曲标题',
+          artists: ['VV音乐局'],
+          source: 'bilibili',
+        );
+
+        await tester.pumpWidget(
+          _host(
+            _state(playbackState: MusicBoxPlaybackState.stopped, positionMs: 0),
+            controller,
+            platform: platform,
+            height: 500,
+            searchResults: const [result],
+            onQueueResult: queued.add,
+          ),
+        );
+        await _toggleAddSources(tester);
+        expect(tester.takeException(), isNull);
+
+        final tile = find.byKey(
+          const ValueKey<String>('music-box-search-tile:bilibili:BV1xx411c7mD'),
+        );
+        final addButton = find.byKey(
+          const ValueKey<String>('music-box-search-add:bilibili:BV1xx411c7mD'),
+        );
+        expect(tile, findsOneWidget);
+        expect(
+          find.descendant(of: tile, matching: find.byIcon(Icons.music_note)),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: tile, matching: find.text('哔哩哔哩')),
+          findsNothing,
+        );
+        expect(addButton, findsOneWidget);
+
+        await tester.tap(addButton);
+        await tester.pump();
+        expect(queued, const [result]);
+        expect(tester.takeException(), isNull);
+
+        await tester.tap(tile);
+        await tester.pump();
+        expect(tester.takeException(), isNull);
+
+        expect(
+          find.byKey(
+            const ValueKey<String>(
+              'music-box-song-card:search:bilibili:BV1xx411c7mD',
+            ),
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('点歌人'), findsNothing);
+        expect(find.text('歌单'), findsNothing);
+        expect(find.text('点歌队列'), findsOneWidget);
+        expect(find.text('添加到歌单'), findsOneWidget);
+        expect(find.text('详情'), findsOneWidget);
+        expect(find.text('BV1xx411c7mD'), findsOneWidget);
+
+        await tester.tap(find.text('点歌队列'));
+        await tester.pump();
+        expect(queued, const [result, result]);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  for (final platform in const [
+    TargetPlatform.windows,
+    TargetPlatform.macOS,
+    TargetPlatform.android,
+  ]) {
+    testWidgets(
+      '${platform.name} playlist song reuses the catalog row and song card',
+      (tester) async {
+        final searchController = TextEditingController();
+        final queued = <MusicBoxSearchResult>[];
+        addTearDown(searchController.dispose);
+        const playlist = PersonalMusicPlaylist(
+          id: 'playlist-1',
+          name: '666',
+          description: '',
+          revision: 1,
+          itemCount: 1,
+          createdAt: null,
+          updatedAt: null,
+        );
+        const playlistItem = PersonalMusicPlaylistItem(
+          id: 'playlist-item-1',
+          playlistId: 'playlist-1',
+          trackId: 'BV1ab411c7mD',
+          source: 'bilibili',
+          title: '你的微笑',
+          artists: ['F.I.R.'],
+          durationMs: 267000,
+          sortOrder: 0,
+          createdAt: null,
+        );
+        final state = _state(
+          playbackState: MusicBoxPlaybackState.stopped,
+          positionMs: 0,
+        );
+        final api = _RoomPlaylistApiFake(
+          state,
+          playlist: playlist,
+          items: const [playlistItem],
+        );
+
+        await tester.pumpWidget(
+          _host(
+            state,
+            searchController,
+            platform: platform,
+            height: 500,
+            musicBoxController: MusicBoxController(api: api),
+            roomId: 'room-1',
+            onQueueResult: queued.add,
+          ),
+        );
+        await _toggleAddSources(tester);
+        await tester.tap(find.text('房间歌单'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('666'));
+        await tester.pumpAndSettle();
+
+        final tile = find.byKey(
+          const ValueKey<String>(
+            'music-box-playlist-tile:bilibili:BV1ab411c7mD',
+          ),
+        );
+        final addButton = find.byKey(
+          const ValueKey<String>(
+            'music-box-playlist-add:bilibili:BV1ab411c7mD',
+          ),
+        );
+        expect(tile, findsOneWidget);
+        expect(
+          find.descendant(of: tile, matching: find.text('你的微笑')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: tile, matching: find.text('F.I.R.')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: tile, matching: find.text('哔哩哔哩')),
+          findsNothing,
+        );
+        expect(addButton, findsOneWidget);
+
+        await tester.tap(addButton);
+        await tester.pump();
+        expect(queued, hasLength(1));
+        expect(queued.single.trackId, 'BV1ab411c7mD');
+
+        await tester.tap(tile);
+        await tester.pump();
+        expect(
+          find.byKey(
+            const ValueKey<String>(
+              'music-box-song-card:search:bilibili:BV1ab411c7mD',
+            ),
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('点歌人'), findsNothing);
+        expect(find.text('歌单'), findsNothing);
+        expect(find.text('4:27'), findsOneWidget);
+        expect(find.text('详情'), findsOneWidget);
+        expect(find.text('BV1ab411c7mD'), findsOneWidget);
+        expect(find.text('点歌队列'), findsOneWidget);
+        expect(find.text('添加到歌单'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('Bilibili queue card shows its BV details after attribution', (
+    tester,
+  ) async {
+    final searchController = TextEditingController();
+    addTearDown(searchController.dispose);
+    const item = MusicBoxQueueItem(
+      id: 'bilibili-request',
+      source: 'bilibili',
+      trackId: 'BV17x411w7KC',
+      title: '点歌的哔哩哔哩歌曲',
+      artist: '歌手',
+      durationMs: 123000,
+      status: MusicBoxQueueItemStatus.ready,
+      fileSizeBytes: 1024,
+      error: '',
+      addedByUserId: 'requester',
+      createdAt: null,
+      requestedBy: MusicBoxRequester(
+        userId: 'requester',
+        displayName: '点歌用户',
+        avatarLabel: '点歌用户',
+        avatarUrl: null,
+        defaultAvatarKey: 'blue-3',
+      ),
+    );
+
+    await tester.pumpWidget(
+      _host(
+        _state(
+          playbackState: MusicBoxPlaybackState.stopped,
+          positionMs: 0,
+          queue: const [item],
+          temporaryQueue: const [item],
+        ),
+        searchController,
+        height: 500,
+      ),
+    );
+    await tester.tap(find.text('点歌的哔哩哔哩歌曲'));
+    await tester.pump();
+
+    final attribution = find.text('点歌人');
+    final details = find.text('详情');
+    expect(attribution, findsOneWidget);
+    expect(details, findsOneWidget);
+    expect(find.text('BV17x411w7KC'), findsOneWidget);
+    expect(
+      tester.getTopLeft(details).dy,
+      greaterThan(tester.getTopLeft(attribution).dy),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final platform in const [
+    TargetPlatform.windows,
+    TargetPlatform.macOS,
+    TargetPlatform.android,
+  ]) {
+    testWidgets('${platform.name} song card metadata supports text selection', (
+      tester,
+    ) async {
+      final searchController = TextEditingController();
+      addTearDown(searchController.dispose);
+
+      await tester.pumpWidget(
+        _host(
+          _state(playbackState: MusicBoxPlaybackState.stopped, positionMs: 0),
+          searchController,
+          platform: platform,
+          height: 500,
+        ),
+      );
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey<String>('music-box-queue-list')),
+          matching: find.text('Song'),
+        ),
+      );
+      await tester.pump();
+
+      final titleField = find.byWidgetPredicate(
+        (widget) => widget is EditableText && widget.controller.text == 'Song',
+      );
+      expect(titleField, findsOneWidget);
+      expect(find.byType(HoverCardSelectableText), findsWidgets);
+
+      if (platform == TargetPlatform.android) {
+        final editableTextState = tester.state<EditableTextState>(titleField);
+        editableTextState.userUpdateTextEditingValue(
+          editableTextState.textEditingValue.copyWith(
+            selection: const TextSelection(baseOffset: 0, extentOffset: 4),
+          ),
+          SelectionChangedCause.toolbar,
+        );
+        await tester.pump();
+        expect(editableTextState.showToolbar(), isTrue);
+      } else {
+        await tester.tap(titleField, buttons: kSecondaryMouseButton);
+      }
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(
+        find.byKey(const ValueKey('text-context-menu-panel')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('music-box-song-card:a')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final platform in const [
+    TargetPlatform.windows,
+    TargetPlatform.macOS,
+    TargetPlatform.android,
+  ]) {
+    testWidgets(
+      '${platform.name} playlist picker shows complete adaptive names without scope copy',
+      (tester) async {
+        final searchController = TextEditingController();
+        addTearDown(searchController.dispose);
+        const roomName = '一个需要自适应换行完整显示的非常长的房间歌单名称';
+        const personalName = '另一个同样需要完整显示而不能出现省略号的个人歌单名称';
+        const roomPlaylist = PersonalMusicPlaylist(
+          id: 'room-playlist-long',
+          name: roomName,
+          description: '',
+          revision: 1,
+          itemCount: 0,
+          createdAt: null,
+          updatedAt: null,
+        );
+        const personalPlaylist = PersonalMusicPlaylist(
+          id: 'personal-playlist-long',
+          name: personalName,
+          description: '',
+          revision: 1,
+          itemCount: 0,
+          createdAt: null,
+          updatedAt: null,
+        );
+        final state = _state(
+          playbackState: MusicBoxPlaybackState.stopped,
+          positionMs: 0,
+        );
+        final api = _RoomPlaylistApiFake(
+          state,
+          playlist: roomPlaylist,
+          items: const [],
+          personalPlaylists: const [personalPlaylist],
+        );
+
+        await tester.pumpWidget(
+          _host(
+            state,
+            searchController,
+            platform: platform,
+            height: 500,
+            musicBoxController: MusicBoxController(api: api),
+            roomId: 'room-1',
+          ),
+        );
+        await tester.tap(
+          find.descendant(
+            of: find.byKey(const ValueKey<String>('music-box-queue-list')),
+            matching: find.text('Song'),
+          ),
+        );
+        await tester.pump();
+        await tester.tap(find.text('添加到歌单'));
+        await tester.pumpAndSettle();
+
+        final roomTarget = find.byKey(
+          const ValueKey<String>(
+            'music-box-playlist-target:room:room-playlist-long',
+          ),
+        );
+        final personalTarget = find.byKey(
+          const ValueKey<String>(
+            'music-box-playlist-target:personal:personal-playlist-long',
+          ),
+        );
+        expect(roomTarget, findsOneWidget);
+        expect(personalTarget, findsOneWidget);
+        expect(find.text(roomName), findsOneWidget);
+        expect(find.text(personalName), findsOneWidget);
+        expect(find.textContaining('房间 ·'), findsNothing);
+        expect(find.textContaining('我的 ·'), findsNothing);
+        expect(tester.getSize(roomTarget).height, greaterThan(34));
+        expect(tester.getSize(personalTarget).height, greaterThan(34));
+        for (final name in [roomName, personalName]) {
+          final text = tester.widget<Text>(find.text(name));
+          expect(text.maxLines, isNull);
+          expect(text.overflow, isNull);
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('long queue rows grow and keep every title and artist line', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    const longTitle =
+        '[Hi-Res lossless] | A very long song title that must remain complete '
+        'across as many lines as the narrow queue needs';
+    const item = MusicBoxQueueItem(
+      id: 'long-queue-item',
+      source: 'netease',
+      trackId: 'long-queue-track',
+      title: longTitle,
+      artist: 'An equally long artist name that must wrap without truncation',
+      durationMs: 240000,
+      status: MusicBoxQueueItemStatus.ready,
+      fileSizeBytes: 0,
+      error: '',
+      addedByUserId: 'requester',
+      createdAt: null,
+    );
+
+    await tester.pumpWidget(
+      _host(
+        _state(
+          playbackState: MusicBoxPlaybackState.stopped,
+          positionMs: 0,
+          queue: const [item],
+          temporaryQueue: const [item],
+        ),
+        controller,
+        height: 500,
+      ),
+    );
+
+    final tile = find.byKey(
+      const ValueKey<String>('music-box-queue-tile:long-queue-item'),
+    );
+    final title = tester.widget<Text>(
+      find.descendant(of: tile, matching: find.text(longTitle)),
+    );
+    expect(tester.getSize(tile).height, greaterThan(82));
+    expect(title.maxLines, isNull);
+    expect(title.overflow, isNull);
+    expect(title.style?.fontSize, lessThan(13));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('playlist summaries grow to show their complete names', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    const longPlaylistName =
+        'A complete playlist name that needs several lines in the narrow music box';
+    const playlist = PersonalMusicPlaylist(
+      id: 'long-playlist-summary',
+      name: longPlaylistName,
+      description: '',
+      revision: 1,
+      itemCount: 27,
+      createdAt: null,
+      updatedAt: null,
+    );
+    final state = _state(
+      playbackState: MusicBoxPlaybackState.stopped,
+      positionMs: 0,
+    );
+    final api = _RoomPlaylistApiFake(
+      state,
+      playlist: playlist,
+      items: const [],
+    );
+
+    await tester.pumpWidget(
+      _host(
+        state,
+        controller,
+        height: 500,
+        musicBoxController: MusicBoxController(api: api),
+        roomId: 'room-1',
+      ),
+    );
+    await _toggleAddSources(tester);
+    await tester.tap(find.text('房间歌单'));
+    await tester.pumpAndSettle();
+
+    final tile = find.byKey(
+      const ValueKey<String>(
+        'music-box-playlist-summary:long-playlist-summary',
+      ),
+    );
+    final name = tester.widget<Text>(
+      find.descendant(of: tile, matching: find.text(longPlaylistName)),
+    );
+    expect(tester.getSize(tile).height, greaterThan(50));
+    expect(name.maxLines, isNull);
+    expect(name.overflow, isNull);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('song requester avatar stays next to the right-aligned name', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    const item = MusicBoxQueueItem(
+      id: 'requester-position',
+      source: 'netease',
+      trackId: 'requester-position-track',
+      title: 'Song',
+      artist: 'Artist',
+      durationMs: 180000,
+      status: MusicBoxQueueItemStatus.ready,
+      fileSizeBytes: 0,
+      error: '',
+      addedByUserId: 'requester',
+      createdAt: null,
+      requestedBy: MusicBoxRequester(
+        userId: 'requester',
+        displayName: 'testxxxx',
+        avatarLabel: 'testxxxx',
+        avatarUrl: null,
+        defaultAvatarKey: 'blue-3',
+      ),
+    );
+
+    await tester.pumpWidget(
+      _host(
+        _state(
+          playbackState: MusicBoxPlaybackState.stopped,
+          positionMs: 0,
+          queue: const [item],
+          temporaryQueue: const [item],
+        ),
+        controller,
+        height: 500,
+        onResolveUserProfile: (_) async => const UserSummary(
+          id: 'requester',
+          username: 'requester_handle',
+          displayName: 'testxxxx',
+          avatarUrl: null,
+          defaultAvatarKey: 'blue-3',
+          uid: '10001',
+          roomRole: 'admin',
+        ),
+        userProfileActionBuilder: (user) => UserProfileAction(
+          label: '管理成员',
+          icon: Icons.manage_accounts_outlined,
+          onPressed: () {},
+        ),
+      ),
+    );
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(
+          const ValueKey<String>('music-box-queue-tile:requester-position'),
+        ),
+        matching: find.text('Song'),
+      ),
+    );
+    await tester.pump();
+
+    final group = find.byKey(
+      const ValueKey<String>('music-box-song-attribution-value-group'),
+    );
+    final avatar = find.byKey(
+      const ValueKey<String>('music-box-song-attribution-avatar'),
+    );
+    final name = find.descendant(
+      of: group,
+      matching: find.byKey(
+        const ValueKey<String>('music-box-song-attribution-name'),
+      ),
+    );
+    final avatarRect = tester.getRect(avatar);
+    final nameRect = tester.getRect(name);
+    final groupRect = tester.getRect(group);
+    expect(nameRect.left, greaterThanOrEqualTo(avatarRect.right));
+    expect(nameRect.left - avatarRect.right, lessThanOrEqualTo(8));
+    expect(nameRect.right, closeTo(groupRect.right, 0.1));
+    expect(nameRect.height, lessThan(20));
+    expect(
+      find.descendant(of: name, matching: find.byType(EditableText)),
+      findsNothing,
+    );
+
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await gesture.addPointer(location: Offset.zero);
+    addTearDown(gesture.removePointer);
+    await gesture.moveTo(tester.getCenter(avatar));
+    await tester.pumpAndSettle();
+
+    expect(find.text('@requester_handle'), findsOneWidget);
+    expect(find.text('管理员'), findsOneWidget);
+    expect(find.text('管理成员'), findsOneWidget);
+    expect(
+      find.byKey(
+        const ValueKey<String>('music-box-song-card:requester-position'),
+      ),
+      findsOneWidget,
+    );
+    expect(group, findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'personal playlist attribution keeps a short owner and playlist on one line',
+    (tester) async {
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+      const item = MusicBoxQueueItem(
+        id: 'playlist-owner-width',
+        source: 'netease',
+        trackId: 'playlist-owner-width-track',
+        title: 'Song',
+        artist: 'Artist',
+        durationMs: 180000,
+        status: MusicBoxQueueItemStatus.ready,
+        fileSizeBytes: 0,
+        error: '',
+        addedByUserId: 'playlist-owner',
+        createdAt: null,
+      );
+
+      await tester.pumpWidget(
+        _host(
+          _state(
+            playbackState: MusicBoxPlaybackState.stopped,
+            positionMs: 0,
+            queue: const [item],
+            activeSource: const MusicBoxActiveSource(
+              type: MusicBoxActiveSourceType.userPlaylist,
+              id: 'playlist-123',
+              name: '123',
+              ownerUserId: 'playlist-owner',
+              owner: MusicBoxRequester(
+                userId: 'playlist-owner',
+                displayName: 'testxxx',
+                avatarLabel: 'TE',
+                avatarUrl: null,
+                defaultAvatarKey: 'blue-3',
+              ),
+            ),
+          ),
+          controller,
+          height: 500,
+        ),
+      );
+      await tester.tap(find.text('Song'));
+      await tester.pump();
+
+      final group = find.byKey(
+        const ValueKey<String>('music-box-song-attribution-value-group'),
+      );
+      final owner = find.descendant(
+        of: group,
+        matching: find.text('testxxx的歌单'),
+      );
+      final playlist = find.descendant(
+        of: group,
+        matching: find.text(' · 123'),
+      );
+      expect(owner, findsOneWidget);
+      expect(playlist, findsOneWidget);
+      final avatar = find.descendant(
+        of: group,
+        matching: find.byKey(
+          const ValueKey<String>('music-box-song-attribution-avatar'),
+        ),
+      );
+      expect(
+        tester.getSize(playlist).height,
+        lessThan(20),
+        reason:
+            'group=${tester.getSize(group)}, owner=${tester.getSize(owner)}, '
+            'playlist=${tester.getSize(playlist)}, avatar=${tester.getSize(avatar)}',
+      );
+      expect(
+        tester.getCenter(owner).dy,
+        closeTo(tester.getCenter(avatar).dy, 0.1),
+      );
+      expect(
+        tester.getCenter(playlist).dy,
+        closeTo(tester.getCenter(owner).dy, 0.1),
+      );
+      expect(
+        tester.getRect(playlist).right,
+        closeTo(tester.getRect(group).right, 0.1),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('long music titles wrap fully and shrink without ellipses', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '标题');
+    addTearDown(controller.dispose);
+    const longTitle =
+        '这是一个用于验证歌曲名片完整显示能力的非常非常长的歌曲标题'
+        '它需要自动缩小字体并显示为三行四行甚至更多行且不能出现省略号';
+    const result = MusicBoxSearchResult(
+      trackId: 'long-title',
+      name: longTitle,
+      artists: ['一位名字同样很长但必须完整显示的歌手'],
+      source: 'netease',
+    );
+
+    await tester.pumpWidget(
+      _host(
+        _state(playbackState: MusicBoxPlaybackState.stopped, positionMs: 0),
+        controller,
+        platform: TargetPlatform.windows,
+        height: 500,
+        searchResults: const [result],
+      ),
+    );
+    await _toggleAddSources(tester);
+    expect(tester.takeException(), isNull);
+    final tile = find.byKey(
+      const ValueKey<String>('music-box-search-tile:netease:long-title'),
+    );
+    expect(tester.getSize(tile).height, greaterThan(50));
+
+    await tester.tap(tile);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+
+    final adaptiveTitle = find.byKey(
+      const ValueKey<String>('music-box-song-card-title'),
+    );
+    final selectableTitle = find.descendant(
+      of: adaptiveTitle,
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is ReadOnlySelectableText && widget.value == longTitle,
+      ),
+    );
+    final titleText = tester.widget<ReadOnlySelectableText>(selectableTitle);
+    expect(titleText.value, longTitle);
+    expect(titleText.maxLines, greaterThan(2));
+    expect(titleText.style.fontSize, lessThan(16));
+    expect(tester.getSize(adaptiveTitle).height, greaterThan(38));
+    expect(find.textContaining('...'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('personal playlist song card shows its owner and playlist name', (
     tester,
   ) async {
@@ -514,7 +1401,8 @@ void main() {
     await tester.pump();
 
     expect(find.text('歌单'), findsOneWidget);
-    expect(find.text('用户名称的歌单 · 通勤歌单'), findsOneWidget);
+    expect(find.text('用户名称的歌单'), findsOneWidget);
+    expect(find.text(' · 通勤歌单'), findsOneWidget);
     expect(find.text('点歌人'), findsNothing);
     final ownerAvatar = tester.widget<Avatar>(find.byType(Avatar).last);
     expect(ownerAvatar.label, '全局名称');

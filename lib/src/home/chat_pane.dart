@@ -14,7 +14,12 @@ import 'package:flutter/gestures.dart'
         kTouchSlop;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart'
-    show RenderAbstractViewport, ScrollCacheExtent;
+    show
+        RenderAbstractViewport,
+        RenderEditable,
+        RenderObject,
+        RenderProxyBox,
+        ScrollCacheExtent;
 import 'package:flutter/services.dart' show TextInputFormatter;
 
 import '../app/file_display.dart' as file_display;

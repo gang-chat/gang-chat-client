@@ -29,6 +29,11 @@ class LiveMusicBoxPanel extends StatelessWidget {
     this.controller,
     this.roomId,
     this.onStateChanged,
+    this.currentUser,
+    this.onResolveUserProfile,
+    this.onResolveRoomProfile,
+    this.onEnterCommonRoom,
+    this.userProfileActionBuilder,
     required this.onQueueResult,
     required this.onRemoveItem,
     required this.onSourceChanged,
@@ -50,6 +55,11 @@ class LiveMusicBoxPanel extends StatelessWidget {
   final MusicBoxController? controller;
   final String? roomId;
   final ValueChanged<MusicBoxState>? onStateChanged;
+  final CurrentUser? currentUser;
+  final UserProfileResolver? onResolveUserProfile;
+  final RoomProfileResolver? onResolveRoomProfile;
+  final ValueChanged<PublicRoom>? onEnterCommonRoom;
+  final UserProfileActionBuilder? userProfileActionBuilder;
   final ValueChanged<MusicBoxSearchResult> onQueueResult;
   final ValueChanged<MusicBoxQueueItem> onRemoveItem;
   final ValueChanged<String> onSourceChanged;
@@ -79,6 +89,11 @@ class LiveMusicBoxPanel extends StatelessWidget {
       controller: controller,
       roomId: roomId,
       onStateChanged: onStateChanged,
+      currentUser: currentUser,
+      onResolveUserProfile: onResolveUserProfile,
+      onResolveRoomProfile: onResolveRoomProfile,
+      onEnterCommonRoom: onEnterCommonRoom,
+      userProfileActionBuilder: userProfileActionBuilder,
     );
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -682,6 +697,11 @@ class _MusicBoxBody extends StatefulWidget {
     required this.controller,
     required this.roomId,
     required this.onStateChanged,
+    required this.currentUser,
+    required this.onResolveUserProfile,
+    required this.onResolveRoomProfile,
+    required this.onEnterCommonRoom,
+    required this.userProfileActionBuilder,
   });
 
   final MusicBoxState state;
@@ -696,6 +716,11 @@ class _MusicBoxBody extends StatefulWidget {
   final MusicBoxController? controller;
   final String? roomId;
   final ValueChanged<MusicBoxState>? onStateChanged;
+  final CurrentUser? currentUser;
+  final UserProfileResolver? onResolveUserProfile;
+  final RoomProfileResolver? onResolveRoomProfile;
+  final ValueChanged<PublicRoom>? onEnterCommonRoom;
+  final UserProfileActionBuilder? userProfileActionBuilder;
 
   @override
   State<_MusicBoxBody> createState() => _MusicBoxBodyState();
@@ -783,6 +808,11 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
       controller: widget.controller,
       roomId: widget.roomId,
       onStateChanged: widget.onStateChanged,
+      currentUser: widget.currentUser,
+      onResolveUserProfile: widget.onResolveUserProfile,
+      onResolveRoomProfile: widget.onResolveRoomProfile,
+      onEnterCommonRoom: widget.onEnterCommonRoom,
+      userProfileActionBuilder: widget.userProfileActionBuilder,
     );
   }
 
@@ -861,26 +891,30 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
                     ),
             ),
             const SizedBox(width: 8),
-            ButtonIcon(
-              key: const ValueKey<String>('music-box-queue-context-action'),
-              icon: Icon(
-                isTemporaryActive
-                    ? Icons.delete_sweep_outlined
-                    : Icons.playlist_play,
+            if (!_showAddSources) ...[
+              ButtonIcon(
+                key: const ValueKey<String>('music-box-queue-context-action'),
+                icon: Icon(
+                  isTemporaryActive
+                      ? Icons.delete_sweep_outlined
+                      : Icons.playlist_play,
+                ),
+                tooltip: isTemporaryActive ? '清空点歌队列' : '切回点歌队列',
+                tone: isTemporaryActive
+                    ? ButtonTone.danger
+                    : ButtonTone.neutral,
+                loading: isTemporaryActive
+                    ? _clearingTemporary
+                    : _activatingTemporary,
+                onPressed: isTemporaryActive
+                    ? temporaryQueueEmpty
+                          ? null
+                          : () => unawaited(_confirmClearTemporary())
+                    : () => unawaited(_activateTemporary()),
+                size: _musicBoxSearchFieldHeight,
               ),
-              tooltip: isTemporaryActive ? '清空点歌队列' : '切回点歌队列',
-              tone: isTemporaryActive ? ButtonTone.danger : ButtonTone.neutral,
-              loading: isTemporaryActive
-                  ? _clearingTemporary
-                  : _activatingTemporary,
-              onPressed: isTemporaryActive
-                  ? temporaryQueueEmpty
-                        ? null
-                        : () => unawaited(_confirmClearTemporary())
-                  : () => unawaited(_activateTemporary()),
-              size: _musicBoxSearchFieldHeight,
-            ),
-            const SizedBox(width: 8),
+              const SizedBox(width: 8),
+            ],
             ButtonIcon(
               key: const ValueKey<String>('music-box-add-toggle'),
               icon: const Icon(Icons.add),
@@ -939,6 +973,8 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
                     searching: widget.searching,
                     error: widget.searchError,
                     hasQuery: hasQuery,
+                    controller: widget.controller,
+                    roomId: widget.roomId,
                     onQueueResult: widget.onQueueResult,
                   ),
                 },
@@ -1179,8 +1215,18 @@ class _MusicBoxPlaylistBrowserState extends State<_MusicBoxPlaylistBrowser> {
                     separatorBuilder: (_, _) => const SizedBox(height: 8),
                     itemBuilder: (context, index) {
                       final item = _items[index];
-                      return _MusicBoxSavedTrackTile(
-                        item: item,
+                      return _MusicBoxTrackTile(
+                        keyScope: 'playlist',
+                        result: MusicBoxSearchResult(
+                          trackId: item.trackId,
+                          name: item.title,
+                          artists: item.artists,
+                          source: item.source,
+                        ),
+                        query: '',
+                        durationMs: item.durationMs,
+                        controller: widget.controller,
+                        roomId: widget.roomId,
                         onQueue: () => widget.onQueueResult(
                           MusicBoxSearchResult(
                             trackId: item.trackId,
@@ -1208,62 +1254,97 @@ class _MusicBoxPlaylistBrowserState extends State<_MusicBoxPlaylistBrowser> {
       separatorBuilder: (_, _) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
         final playlist = _playlists[index];
-        return PressableSurface(
-          width: double.infinity,
-          height: 50,
-          hoverLift: 2,
-          baseDepth: 4,
-          backgroundColor: UiColors.surfaceLow,
-          pressedBackgroundColor: UiColors.surfacePressed,
-          borderColor: UiColors.border,
-          borderRadius: UiRadii.md,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          onPressed: () => unawaited(_openPlaylist(playlist)),
-          child: Row(
-            children: [
-              Icon(
-                widget.roomScoped ? Icons.meeting_room : Icons.person,
-                size: 17,
-                color: UiColors.accent,
+        final countLabel = '${playlist.itemCount} 首';
+        const nameBaseStyle = TextStyle(
+          color: UiColors.text,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        );
+        const countStyle = TextStyle(
+          color: UiColors.textMuted,
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+        );
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final countWidth = _musicBoxMeasureTextWidth(
+              context,
+              countLabel,
+              countStyle,
+            );
+            final textWidth =
+                (constraints.maxWidth -
+                        20 -
+                        17 -
+                        8 -
+                        countWidth -
+                        4 -
+                        28 -
+                        2 -
+                        18)
+                    .clamp(24.0, double.infinity);
+            final nameStyle = _musicBoxAdaptiveListTextStyle(
+              context,
+              text: playlist.name,
+              baseStyle: nameBaseStyle,
+              width: textWidth,
+            );
+            final nameHeight = _musicBoxMeasureTextHeight(
+              context,
+              playlist.name,
+              nameStyle,
+              textWidth,
+            );
+            final tileHeight = (nameHeight + 18).clamp(50.0, double.infinity);
+            return PressableSurface(
+              key: ValueKey<String>(
+                'music-box-playlist-summary:${playlist.id}',
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  playlist.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: UiColors.text,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+              width: double.infinity,
+              height: tileHeight,
+              hoverLift: 2,
+              baseDepth: 4,
+              backgroundColor: UiColors.surfaceLow,
+              pressedBackgroundColor: UiColors.surfacePressed,
+              borderColor: UiColors.border,
+              borderRadius: UiRadii.md,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              onPressed: () => unawaited(_openPlaylist(playlist)),
+              child: Row(
+                children: [
+                  Icon(
+                    widget.roomScoped ? Icons.meeting_room : Icons.person,
+                    size: 17,
+                    color: UiColors.accent,
                   ),
-                ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      playlist.name,
+                      style: nameStyle,
+                      softWrap: true,
+                    ),
+                  ),
+                  Text(countLabel, style: countStyle),
+                  const SizedBox(width: 4),
+                  ButtonIcon(
+                    icon: const Icon(Icons.play_arrow),
+                    tooltip: '播放整个歌单',
+                    tone: ButtonTone.primary,
+                    loading: _activatingPlaylistId == playlist.id,
+                    onPressed: () => unawaited(_activatePlaylist(playlist)),
+                    size: 28,
+                  ),
+                  const SizedBox(width: 2),
+                  const Icon(
+                    Icons.chevron_right,
+                    size: 18,
+                    color: UiColors.textMuted,
+                  ),
+                ],
               ),
-              Text(
-                '${playlist.itemCount} 首',
-                style: const TextStyle(
-                  color: UiColors.textMuted,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(width: 4),
-              ButtonIcon(
-                icon: const Icon(Icons.play_arrow),
-                tooltip: '播放整个歌单',
-                tone: ButtonTone.primary,
-                loading: _activatingPlaylistId == playlist.id,
-                onPressed: () => unawaited(_activatePlaylist(playlist)),
-                size: 28,
-              ),
-              const SizedBox(width: 2),
-              const Icon(
-                Icons.chevron_right,
-                size: 18,
-                color: UiColors.textMuted,
-              ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
@@ -1279,61 +1360,97 @@ class _MusicBoxPlaylistBrowserState extends State<_MusicBoxPlaylistBrowser> {
   }
 }
 
-class _MusicBoxSavedTrackTile extends StatelessWidget {
-  const _MusicBoxSavedTrackTile({required this.item, required this.onQueue});
+double _musicBoxMeasureTextHeight(
+  BuildContext context,
+  String text,
+  TextStyle style,
+  double width,
+) {
+  final painter = TextPainter(
+    text: TextSpan(text: text.isEmpty ? ' ' : text, style: style),
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+  )..layout(maxWidth: width);
+  return painter.height;
+}
 
-  final PersonalMusicPlaylistItem item;
-  final VoidCallback onQueue;
+double _musicBoxMeasureTextWidth(
+  BuildContext context,
+  String text,
+  TextStyle style,
+) {
+  final painter = TextPainter(
+    text: TextSpan(text: text.isEmpty ? ' ' : text, style: style),
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+    maxLines: 1,
+  )..layout();
+  return painter.width;
+}
 
-  @override
-  Widget build(BuildContext context) {
-    return PressableSurface(
-      width: double.infinity,
-      height: 50,
-      hoverLift: 2,
-      baseDepth: 4,
-      backgroundColor: UiColors.surfaceLow,
-      pressedBackgroundColor: UiColors.surfacePressed,
-      borderColor: UiColors.border,
-      borderRadius: UiRadii.md,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      onPressed: onQueue,
-      child: Row(
-        children: [
-          const Icon(Icons.add, size: 17, color: UiColors.accent),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: UiColors.text,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                Text(
-                  music_box_display.musicBoxArtistsLabel(item.artists),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: UiColors.textMuted,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+TextStyle _musicBoxAdaptiveListTextStyle(
+  BuildContext context, {
+  required String text,
+  required TextStyle baseStyle,
+  required double width,
+  int comfortableLines = 2,
+  double maximumReduction = 2,
+}) {
+  final painter = TextPainter(
+    text: TextSpan(text: text.isEmpty ? ' ' : text, style: baseStyle),
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+  )..layout(maxWidth: width);
+  final lineCount = painter.computeLineMetrics().length;
+  if (lineCount <= comfortableLines) return baseStyle;
+  final reduction = (lineCount - comfortableLines)
+      .clamp(1, maximumReduction.toInt())
+      .toDouble();
+  final baseSize = baseStyle.fontSize ?? 12;
+  return baseStyle.copyWith(
+    fontSize: (baseSize - reduction).clamp(10, baseSize),
+  );
+}
+
+double _musicBoxAdaptiveSongRowHeight(
+  BuildContext context, {
+  required double width,
+  required String title,
+  required String subtitle,
+  required TextStyle titleStyle,
+  required TextStyle subtitleStyle,
+  double contentScale = 1,
+}) {
+  final titlePainter = TextPainter(
+    text: TextSpan(text: title.isEmpty ? ' ' : title, style: titleStyle),
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+  )..layout(maxWidth: width);
+  final subtitlePainter = TextPainter(
+    text: TextSpan(
+      text: subtitle.isEmpty ? ' ' : subtitle,
+      style: subtitleStyle,
+    ),
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+  )..layout(maxWidth: width);
+  final measuredContentHeight =
+      titlePainter.height + 2 + subtitlePainter.height;
+  final lineCount =
+      titlePainter.computeLineMetrics().length +
+      subtitlePainter.computeLineMetrics().length;
+  // Multi-line rows need a little more breathing room than TextPainter's bare
+  // glyph bounds, especially when a fallback CJK font is selected. Keep the
+  // compact 50px row for two lines, and grow from measured content otherwise.
+  final adaptiveScale = lineCount > 2 && contentScale < 1.25
+      ? 1.25
+      : contentScale;
+  final fallbackFontLeading = lineCount > 2
+      ? ((titleStyle.fontSize ?? 12) + (subtitleStyle.fontSize ?? 11)) * 0.125
+      : 0.0;
+  final naturalHeight =
+      16 + measuredContentHeight * adaptiveScale + fallbackFontLeading;
+  return naturalHeight < 50 ? 50 : naturalHeight;
 }
 
 class _MusicBoxRetryState extends StatelessWidget {
@@ -1378,6 +1495,11 @@ class _MusicBoxQueueList extends StatelessWidget {
     required this.controller,
     required this.roomId,
     required this.onStateChanged,
+    required this.currentUser,
+    required this.onResolveUserProfile,
+    required this.onResolveRoomProfile,
+    required this.onEnterCommonRoom,
+    required this.userProfileActionBuilder,
   });
 
   final MusicBoxState state;
@@ -1386,6 +1508,11 @@ class _MusicBoxQueueList extends StatelessWidget {
   final MusicBoxController? controller;
   final String? roomId;
   final ValueChanged<MusicBoxState>? onStateChanged;
+  final CurrentUser? currentUser;
+  final UserProfileResolver? onResolveUserProfile;
+  final RoomProfileResolver? onResolveRoomProfile;
+  final ValueChanged<PublicRoom>? onEnterCommonRoom;
+  final UserProfileActionBuilder? userProfileActionBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -1410,6 +1537,11 @@ class _MusicBoxQueueList extends StatelessWidget {
           roomId: roomId,
           currentState: state,
           onStateChanged: onStateChanged,
+          currentUser: currentUser,
+          onResolveUserProfile: onResolveUserProfile,
+          onResolveRoomProfile: onResolveRoomProfile,
+          onEnterCommonRoom: onEnterCommonRoom,
+          userProfileActionBuilder: userProfileActionBuilder,
         );
       },
     );
@@ -1425,6 +1557,11 @@ class _MusicBoxQueueTile extends StatelessWidget {
     required this.roomId,
     required this.currentState,
     required this.onStateChanged,
+    required this.currentUser,
+    required this.onResolveUserProfile,
+    required this.onResolveRoomProfile,
+    required this.onEnterCommonRoom,
+    required this.userProfileActionBuilder,
   });
 
   final MusicBoxQueueItem item;
@@ -1434,6 +1571,11 @@ class _MusicBoxQueueTile extends StatelessWidget {
   final String? roomId;
   final MusicBoxState currentState;
   final ValueChanged<MusicBoxState>? onStateChanged;
+  final CurrentUser? currentUser;
+  final UserProfileResolver? onResolveUserProfile;
+  final RoomProfileResolver? onResolveRoomProfile;
+  final ValueChanged<PublicRoom>? onEnterCommonRoom;
+  final UserProfileActionBuilder? userProfileActionBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -1442,157 +1584,207 @@ class _MusicBoxQueueTile extends StatelessWidget {
     final loading =
         item.status == MusicBoxQueueItemStatus.pending ||
         item.status == MusicBoxQueueItemStatus.downloading;
-    final sourceLabel = music_box_display.musicBoxSourceLabel(item.source);
-    return PressableSurface(
-      width: double.infinity,
-      height: 50,
-      hoverLift: 2,
-      baseDepth: 4,
-      interactive: false,
-      hoverEffect: false,
-      pressEffect: false,
-      selected: isCurrent,
-      backgroundColor: UiColors.surfaceLow,
-      selectedBackgroundColor: UiColors.selected,
-      borderColor: UiColors.border,
-      selectedBorderColor: UiColors.selectedBorder,
-      borderRadius: UiRadii.md,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      child: Row(
-        children: [
-          Expanded(
-            child: HoverCardAnchor(
-              resetKey: Object.hash(
-                item.id,
-                item.status,
-                item.canPlayNow,
-                item.requestedBy?.avatarUrl,
-                item.requestedBy?.avatarLabel,
-                currentState.activeSource.type,
-                currentState.activeSource.name,
-                currentState.activeSource.owner?.avatarUrl,
-                currentState.activeSource.owner?.avatarLabel,
-              ),
-              cardWidth: 310,
-              cardBuilder: (_) => _MusicBoxSongCard(
-                item: item,
-                isCurrent: isCurrent,
-                controller: controller,
-                roomId: roomId,
-                currentState: currentState,
-                onStateChanged: onStateChanged,
-              ),
-              child: SizedBox(
-                height: 50,
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.music_note,
-                      size: 20,
-                      color: UiColors.accent,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            item.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: isCurrent
-                                  ? UiColors.accent
-                                  : UiColors.text,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Row(
+    final subtitle = [
+      if (item.artist.trim().isNotEmpty) item.artist.trim(),
+      ?statusLabel,
+    ].join(' · ');
+    final titleStyle = TextStyle(
+      color: isCurrent ? UiColors.accent : UiColors.text,
+      fontSize: 13,
+      fontWeight: FontWeight.w500,
+    );
+    final subtitleStyle = TextStyle(
+      color: failed ? UiColors.danger : UiColors.textSecondary,
+      fontSize: 11,
+      fontWeight: FontWeight.w600,
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final textWidth = (constraints.maxWidth - 20 - 20 - 8 - 4 - 28).clamp(
+          24.0,
+          double.infinity,
+        );
+        final adaptiveTitleStyle = _musicBoxAdaptiveListTextStyle(
+          context,
+          text: item.title,
+          baseStyle: titleStyle,
+          width: textWidth,
+        );
+        final adaptiveSubtitleStyle = _musicBoxAdaptiveListTextStyle(
+          context,
+          text: subtitle,
+          baseStyle: subtitleStyle,
+          width: textWidth,
+        );
+        final tileHeight = _musicBoxAdaptiveSongRowHeight(
+          context,
+          width: textWidth,
+          title: item.title,
+          subtitle: subtitle,
+          titleStyle: adaptiveTitleStyle,
+          subtitleStyle: adaptiveSubtitleStyle,
+        );
+        return PressableSurface(
+          key: ValueKey<String>('music-box-queue-tile:${item.id}'),
+          width: double.infinity,
+          height: tileHeight,
+          hoverLift: 2,
+          baseDepth: 4,
+          interactive: false,
+          hoverEffect: false,
+          pressEffect: false,
+          selected: isCurrent,
+          backgroundColor: UiColors.surfaceLow,
+          selectedBackgroundColor: UiColors.selected,
+          borderColor: UiColors.border,
+          selectedBorderColor: UiColors.selectedBorder,
+          borderRadius: UiRadii.md,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: HoverCardAnchor(
+                  resetKey: Object.hash(
+                    item.id,
+                    item.status,
+                    item.canPlayNow,
+                    item.requestedBy?.avatarUrl,
+                    item.requestedBy?.avatarLabel,
+                    currentState.activeSource.type,
+                    currentState.activeSource.name,
+                    currentState.activeSource.owner?.avatarUrl,
+                    currentState.activeSource.owner?.avatarLabel,
+                  ),
+                  cardWidth: 310,
+                  cardBuilder: (_) => _MusicBoxSongCard.queue(
+                    item: item,
+                    isCurrent: isCurrent,
+                    controller: controller,
+                    roomId: roomId,
+                    activeSource: currentState.activeSource,
+                    onStateChanged: onStateChanged,
+                    currentUser: currentUser,
+                    onResolveUserProfile: onResolveUserProfile,
+                    onResolveRoomProfile: onResolveRoomProfile,
+                    onEnterCommonRoom: onEnterCommonRoom,
+                    userProfileActionBuilder: userProfileActionBuilder,
+                  ),
+                  child: SizedBox(
+                    height: tileHeight,
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: loading
+                              ? Center(
+                                  child: SizedBox(
+                                    key: ValueKey<String>(
+                                      'music-box-queue-leading-loading:${item.id}',
+                                    ),
+                                    width: 14,
+                                    height: 14,
+                                    child: const CircularProgressIndicator(
+                                      strokeWidth: 1.8,
+                                    ),
+                                  ),
+                                )
+                              : Icon(
+                                  Icons.music_note,
+                                  key: ValueKey<String>(
+                                    'music-box-queue-leading-icon:${item.id}',
+                                  ),
+                                  size: 20,
+                                  color: UiColors.accent,
+                                ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              if (loading) ...[
-                                const SizedBox(
-                                  width: 10,
-                                  height: 10,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 1.6,
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                              ],
-                              Expanded(
-                                child: Text(
-                                  [
-                                    if (item.artist.trim().isNotEmpty)
-                                      item.artist.trim(),
-                                    sourceLabel,
-                                    ?statusLabel,
-                                  ].join(' · '),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: failed
-                                        ? UiColors.danger
-                                        : UiColors.textSecondary,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
+                              Text(
+                                item.title,
+                                style: adaptiveTitleStyle,
+                                softWrap: true,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                subtitle,
+                                style: adaptiveSubtitleStyle,
+                                softWrap: true,
                               ),
                             ],
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                    if (item.durationMs > 0) ...[
-                      const SizedBox(width: 8),
-                      Text(
-                        music_box_display.musicBoxFormatDuration(
-                          item.durationMs,
-                        ),
-                        style: const TextStyle(
-                          color: UiColors.textMuted,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ],
+                  ),
                 ),
               ),
-            ),
+              const SizedBox(width: 4),
+              ButtonIcon(
+                icon: const Icon(Icons.close),
+                tone: ButtonTone.danger,
+                onPressed: onRemove,
+                size: 28,
+              ),
+            ],
           ),
-          const SizedBox(width: 4),
-          ButtonIcon(
-            icon: const Icon(Icons.close),
-            tone: ButtonTone.danger,
-            onPressed: onRemove,
-            size: 28,
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
 
 class _MusicBoxSongCard extends StatefulWidget {
-  const _MusicBoxSongCard({
+  const _MusicBoxSongCard.queue({
     required this.item,
     required this.isCurrent,
     required this.controller,
     required this.roomId,
-    required this.currentState,
+    required this.activeSource,
     required this.onStateChanged,
-  });
+    required this.currentUser,
+    required this.onResolveUserProfile,
+    required this.onResolveRoomProfile,
+    required this.onEnterCommonRoom,
+    required this.userProfileActionBuilder,
+  }) : result = null,
+       catalogDurationMs = null,
+       onQueueResult = null;
 
-  final MusicBoxQueueItem item;
+  const _MusicBoxSongCard.search({
+    required this.result,
+    required this.controller,
+    required this.roomId,
+    required this.onQueueResult,
+    this.catalogDurationMs,
+  }) : item = null,
+       isCurrent = false,
+       activeSource = null,
+       onStateChanged = null,
+       currentUser = null,
+       onResolveUserProfile = null,
+       onResolveRoomProfile = null,
+       onEnterCommonRoom = null,
+       userProfileActionBuilder = null;
+
+  final MusicBoxQueueItem? item;
+  final MusicBoxSearchResult? result;
+  final int? catalogDurationMs;
   final bool isCurrent;
   final MusicBoxController? controller;
   final String? roomId;
-  final MusicBoxState currentState;
+  final MusicBoxActiveSource? activeSource;
   final ValueChanged<MusicBoxState>? onStateChanged;
+  final ValueChanged<MusicBoxSearchResult>? onQueueResult;
+  final CurrentUser? currentUser;
+  final UserProfileResolver? onResolveUserProfile;
+  final RoomProfileResolver? onResolveRoomProfile;
+  final ValueChanged<PublicRoom>? onEnterCommonRoom;
+  final UserProfileActionBuilder? userProfileActionBuilder;
 
   @override
   State<_MusicBoxSongCard> createState() => _MusicBoxSongCardState();
@@ -1608,10 +1800,13 @@ class _MusicBoxSongCardState extends State<_MusicBoxSongCard> {
   Future<void> _playNow() async {
     final controller = widget.controller;
     final roomId = widget.roomId;
-    if (controller == null || roomId == null || _playingNow) return;
+    final item = widget.item;
+    if (controller == null || roomId == null || item == null || _playingNow) {
+      return;
+    }
     setState(() => _playingNow = true);
     try {
-      final state = await controller.playNow(roomId: roomId, item: widget.item);
+      final state = await controller.playNow(roomId: roomId, item: item);
       widget.onStateChanged?.call(state);
       if (mounted) showFloatingSuccessNotice(context, '已优先播放');
     } catch (error) {
@@ -1679,16 +1874,33 @@ class _MusicBoxSongCardState extends State<_MusicBoxSongCard> {
       if (target.roomScoped) {
         final roomId = widget.roomId;
         if (roomId == null) return;
-        await controller.addQueueItemToRoomPlaylist(
-          roomId: roomId,
-          playlistId: target.playlist.id,
-          item: widget.item,
-        );
+        final item = widget.item;
+        if (item != null) {
+          await controller.addQueueItemToRoomPlaylist(
+            roomId: roomId,
+            playlistId: target.playlist.id,
+            item: item,
+          );
+        } else {
+          await controller.addSearchResultToRoomPlaylist(
+            roomId: roomId,
+            playlistId: target.playlist.id,
+            result: widget.result!,
+          );
+        }
       } else {
-        await controller.addQueueItemToMyPlaylist(
-          playlistId: target.playlist.id,
-          item: widget.item,
-        );
+        final item = widget.item;
+        if (item != null) {
+          await controller.addQueueItemToMyPlaylist(
+            playlistId: target.playlist.id,
+            item: item,
+          );
+        } else {
+          await controller.addSearchResultToMyPlaylist(
+            playlistId: target.playlist.id,
+            result: widget.result!,
+          );
+        }
       }
       if (!mounted) return;
       setState(() => _showPlaylistPicker = false);
@@ -1705,147 +1917,183 @@ class _MusicBoxSongCardState extends State<_MusicBoxSongCard> {
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
+    final result = widget.result;
+    final isSearchResult = result != null;
+    final title = item?.title ?? result!.name;
+    final artist =
+        item?.artist.trim() ??
+        music_box_display.musicBoxArtistsLabel(result!.artists).trim();
+    final source = item?.source ?? result!.source;
+    final trackId = item?.trackId ?? result!.trackId;
+    final durationMs = item?.durationMs ?? widget.catalogDurationMs ?? 0;
+    final isBilibili = source.trim().toLowerCase() == 'bilibili';
     final canPlayNow =
+        item != null &&
         item.canPlayNow &&
         item.status == MusicBoxQueueItemStatus.ready &&
         widget.controller != null &&
         widget.roomId != null;
-    return Padding(
-      key: ValueKey<String>('music-box-song-card:${item.id}'),
-      padding: const EdgeInsets.all(UiSpacing.lg),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.music_note, color: UiColors.accent, size: 28),
-              const SizedBox(width: UiSpacing.sm),
-              Expanded(
-                child: Text(
-                  item.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: UiTypography.title.copyWith(fontSize: 16),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: UiSpacing.md),
-          _MusicBoxSongDetailRow(
-            label: '时长',
-            value: music_box_display.musicBoxFormatDuration(item.durationMs),
-          ),
-          _MusicBoxSongDetailRow(
-            label: '歌手',
-            value: item.artist.trim().isEmpty ? '未知艺人' : item.artist.trim(),
-          ),
-          _MusicBoxSongDetailRow(
-            label: '来源',
-            value: music_box_display.musicBoxSourceLabel(item.source),
-          ),
-          const SizedBox(height: UiSpacing.sm),
-          _MusicBoxSongAttribution(
-            source: widget.currentState.activeSource,
-            requester: item.requestedBy,
-          ),
-          const SizedBox(height: UiSpacing.md),
-          if (!_showPlaylistPicker)
+    return SingleChildScrollView(
+      child: Padding(
+        key: ValueKey<String>(
+          isSearchResult
+              ? 'music-box-song-card:search:${result.source}:${result.trackId}'
+              : 'music-box-song-card:${item!.id}',
+        ),
+        padding: const EdgeInsets.all(UiSpacing.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
             Row(
               children: [
-                if (canPlayNow) ...[
-                  Expanded(
-                    child: Button(
-                      icon: const Icon(Icons.play_arrow),
-                      height: 34,
-                      loading: _playingNow,
-                      onPressed: widget.isCurrent
-                          ? null
-                          : () => unawaited(_playNow()),
-                      child: Text(widget.isCurrent ? '正在播放' : '优先播放'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                ],
+                const Icon(Icons.music_note, color: UiColors.accent, size: 28),
+                const SizedBox(width: UiSpacing.sm),
                 Expanded(
-                  child: Button(
-                    icon: const Icon(Icons.playlist_add),
-                    tone: ButtonTone.primary,
-                    height: 34,
-                    onPressed: widget.controller == null
-                        ? null
-                        : () => unawaited(_openPlaylistPicker()),
-                    child: const Text('添加到歌单'),
-                  ),
-                ),
-              ],
-            )
-          else ...[
-            Row(
-              children: [
-                ButtonIcon(
-                  icon: const Icon(Icons.arrow_back),
-                  size: 28,
-                  onPressed: () => setState(() => _showPlaylistPicker = false),
-                ),
-                const SizedBox(width: 8),
-                const Text(
-                  '选择歌单',
-                  style: TextStyle(
-                    color: UiColors.text,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
+                  child: _MusicBoxAdaptiveFullText(
+                    key: const ValueKey<String>('music-box-song-card-title'),
+                    text: title,
+                    style: UiTypography.title.copyWith(fontSize: 16),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            if (_loadingPlaylists)
-              const SizedBox(
-                height: 72,
-                child: Center(child: CircularProgressIndicator()),
+            const SizedBox(height: UiSpacing.md),
+            _MusicBoxSongDetailRow(
+              label: '时长',
+              value: durationMs > 0
+                  ? music_box_display.musicBoxFormatDuration(durationMs)
+                  : '未知',
+            ),
+            _MusicBoxSongDetailRow(
+              label: '歌手',
+              value: artist.isEmpty ? '未知艺人' : artist,
+            ),
+            _MusicBoxSongDetailRow(
+              label: '来源',
+              value: music_box_display.musicBoxSourceLabel(source),
+            ),
+            if (!isSearchResult) ...[
+              const SizedBox(height: UiSpacing.sm),
+              _MusicBoxSongAttribution(
+                source: widget.activeSource!,
+                requester: item!.requestedBy,
+                currentUser: widget.currentUser,
+                onResolveUserProfile: widget.onResolveUserProfile,
+                onResolveRoomProfile: widget.onResolveRoomProfile,
+                onEnterCommonRoom: widget.onEnterCommonRoom,
+                userProfileActionBuilder: widget.userProfileActionBuilder,
+              ),
+            ],
+            if (isBilibili) ...[
+              const SizedBox(height: UiSpacing.sm),
+              _MusicBoxSongDetailRow(
+                label: '详情',
+                value: _musicBoxBilibiliBvId(trackId),
+              ),
+            ],
+            const SizedBox(height: UiSpacing.md),
+            if (!_showPlaylistPicker)
+              Row(
+                children: [
+                  if (isSearchResult) ...[
+                    Expanded(
+                      child: Button(
+                        icon: const Icon(Icons.playlist_add),
+                        tone: ButtonTone.primary,
+                        height: 34,
+                        onPressed: () => widget.onQueueResult?.call(result),
+                        child: const Text('点歌队列'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  if (canPlayNow) ...[
+                    Expanded(
+                      child: Button(
+                        icon: const Icon(Icons.play_arrow),
+                        height: 34,
+                        loading: _playingNow,
+                        onPressed: widget.isCurrent
+                            ? null
+                            : () => unawaited(_playNow()),
+                        child: Text(widget.isCurrent ? '正在播放' : '优先播放'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Expanded(
+                    child: Button(
+                      icon: const Icon(Icons.playlist_add),
+                      tone: ButtonTone.primary,
+                      height: 34,
+                      onPressed: widget.controller == null
+                          ? null
+                          : () => unawaited(_openPlaylistPicker()),
+                      child: const Text('添加到歌单'),
+                    ),
+                  ),
+                ],
               )
-            else if (_playlistTargets.isEmpty)
-              const SizedBox(
-                height: 54,
-                child: Center(
-                  child: Text(
-                    '还没有可用歌单',
-                    style: TextStyle(color: UiColors.textMuted, fontSize: 11),
+            else ...[
+              Row(
+                children: [
+                  ButtonIcon(
+                    icon: const Icon(Icons.arrow_back),
+                    size: 28,
+                    onPressed: () =>
+                        setState(() => _showPlaylistPicker = false),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    '选择歌单',
+                    style: TextStyle(
+                      color: UiColors.text,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (_loadingPlaylists)
+                const SizedBox(
+                  height: 72,
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (_playlistTargets.isEmpty)
+                const SizedBox(
+                  height: 54,
+                  child: Center(
+                    child: Text(
+                      '还没有可用歌单',
+                      style: TextStyle(color: UiColors.textMuted, fontSize: 11),
+                    ),
+                  ),
+                )
+              else
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 160),
+                  child: ListView.separated(
+                    padding: EdgeInsets.zero,
+                    shrinkWrap: true,
+                    itemCount: _playlistTargets.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 6),
+                    itemBuilder: (context, index) {
+                      final target = _playlistTargets[index];
+                      return _MusicBoxPlaylistTargetButton(
+                        target: target,
+                        loading: _addingPlaylistId == target.playlist.id,
+                        onPressed: _addingPlaylistId == null
+                            ? () => unawaited(_addToPlaylist(target))
+                            : null,
+                      );
+                    },
                   ),
                 ),
-              )
-            else
-              SizedBox(
-                height: (_playlistTargets.length * 38.0).clamp(38.0, 160.0),
-                child: ListView.separated(
-                  padding: EdgeInsets.zero,
-                  itemCount: _playlistTargets.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 6),
-                  itemBuilder: (context, index) {
-                    final target = _playlistTargets[index];
-                    return Button(
-                      icon: Icon(
-                        target.roomScoped ? Icons.meeting_room : Icons.person,
-                      ),
-                      height: 32,
-                      loading: _addingPlaylistId == target.playlist.id,
-                      onPressed: _addingPlaylistId == null
-                          ? () => unawaited(_addToPlaylist(target))
-                          : null,
-                      mainAxisSize: MainAxisSize.max,
-                      child: Text(
-                        '${target.roomScoped ? '房间' : '我的'} · '
-                        '${target.playlist.name}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    );
-                  },
-                ),
-              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -1855,10 +2103,20 @@ class _MusicBoxSongAttribution extends StatelessWidget {
   const _MusicBoxSongAttribution({
     required this.source,
     required this.requester,
+    required this.currentUser,
+    required this.onResolveUserProfile,
+    required this.onResolveRoomProfile,
+    required this.onEnterCommonRoom,
+    required this.userProfileActionBuilder,
   });
 
   final MusicBoxActiveSource source;
   final MusicBoxRequester? requester;
+  final CurrentUser? currentUser;
+  final UserProfileResolver? onResolveUserProfile;
+  final RoomProfileResolver? onResolveRoomProfile;
+  final ValueChanged<PublicRoom>? onEnterCommonRoom;
+  final UserProfileActionBuilder? userProfileActionBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -1868,6 +2126,10 @@ class _MusicBoxSongAttribution extends StatelessWidget {
         (requester?.userId == source.ownerUserId ? requester : null);
     final playlistName = source.name.trim().isEmpty ? '未命名歌单' : source.name;
     final person = isPlaylist ? owner : requester;
+    final playlistOwnerLabel =
+        source.type == MusicBoxActiveSourceType.userPlaylist && person != null
+        ? '${person.displayName}的歌单'
+        : null;
     final value = switch (source.type) {
       MusicBoxActiveSourceType.temporary => person?.displayName ?? '未知用户',
       MusicBoxActiveSourceType.roomPlaylist => '房间歌单 · $playlistName',
@@ -1878,39 +2140,215 @@ class _MusicBoxSongAttribution extends StatelessWidget {
 
     return Row(
       children: [
-        Text(
-          isPlaylist ? '歌单' : '点歌人',
-          style: UiTypography.label.copyWith(color: UiColors.textMuted),
+        SizedBox(
+          width: 38,
+          child: HoverCardSelectableText(
+            value: isPlaylist ? '歌单' : '点歌人',
+            style: UiTypography.label.copyWith(color: UiColors.textMuted),
+          ),
         ),
-        const SizedBox(width: UiSpacing.sm),
         Expanded(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              if (person != null &&
-                  source.type != MusicBoxActiveSourceType.roomPlaylist) ...[
-                Avatar(
-                  label: person.avatarLabel,
-                  imageUrl: person.avatarUrl,
-                  defaultAvatarKey: person.defaultAvatarKey,
-                  size: 26,
-                  showBorder: false,
-                ),
-                const SizedBox(width: 7),
-              ],
-              Flexible(
-                child: Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.right,
-                  style: UiTypography.label.copyWith(color: UiColors.text),
-                ),
-              ),
-            ],
+          child: _MusicBoxSongAttributionValue(
+            value: value,
+            person: person,
+            showAvatar:
+                person != null &&
+                source.type != MusicBoxActiveSourceType.roomPlaylist,
+            currentUser: currentUser,
+            onResolveUserProfile: onResolveUserProfile,
+            onResolveRoomProfile: onResolveRoomProfile,
+            onEnterCommonRoom: onEnterCommonRoom,
+            userProfileActionBuilder: userProfileActionBuilder,
+            playlistOwnerLabel: playlistOwnerLabel,
+            playlistName: playlistOwnerLabel == null ? null : playlistName,
           ),
         ),
       ],
+    );
+  }
+}
+
+class _MusicBoxSongAttributionValue extends StatelessWidget {
+  const _MusicBoxSongAttributionValue({
+    required this.value,
+    required this.person,
+    required this.showAvatar,
+    required this.currentUser,
+    required this.onResolveUserProfile,
+    required this.onResolveRoomProfile,
+    required this.onEnterCommonRoom,
+    required this.userProfileActionBuilder,
+    required this.playlistOwnerLabel,
+    required this.playlistName,
+  });
+
+  final String value;
+  final MusicBoxRequester? person;
+  final bool showAvatar;
+  final CurrentUser? currentUser;
+  final UserProfileResolver? onResolveUserProfile;
+  final RoomProfileResolver? onResolveRoomProfile;
+  final ValueChanged<PublicRoom>? onEnterCommonRoom;
+  final UserProfileActionBuilder? userProfileActionBuilder;
+  final String? playlistOwnerLabel;
+  final String? playlistName;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = UiTypography.label.copyWith(color: UiColors.text);
+    final user = person == null
+        ? null
+        : UserSummary(
+            id: person!.userId,
+            username: person!.displayName,
+            displayName: person!.displayName,
+            avatarUrl: person!.avatarUrl,
+            defaultAvatarKey: person!.defaultAvatarKey,
+          );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const avatarSize = 26.0;
+        const avatarGap = 5.0;
+        // TextPainter and RenderParagraph can differ by a few physical pixels
+        // after font fallback and device-pixel rounding. Keep enough trailing
+        // room that a measured single line never loses its final glyph.
+        const textLayoutSlack = 8.0;
+        final avatarWidth = showAvatar ? avatarSize + avatarGap : 0.0;
+        final ownerLabel = playlistOwnerLabel;
+        final trailingPlaylistName = playlistName;
+        if (showAvatar &&
+            user != null &&
+            ownerLabel != null &&
+            trailingPlaylistName != null) {
+          final ownerPainter = TextPainter(
+            text: TextSpan(text: ownerLabel, style: style),
+            textDirection: Directionality.of(context),
+            textScaler: MediaQuery.textScalerOf(context),
+            maxLines: 1,
+          )..layout();
+          final ownerClusterWidth =
+              (avatarWidth + ownerPainter.width + textLayoutSlack)
+                  .clamp(avatarWidth + 1, constraints.maxWidth)
+                  .toDouble();
+          return Wrap(
+            key: const ValueKey<String>(
+              'music-box-song-attribution-value-group',
+            ),
+            alignment: WrapAlignment.end,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              SizedBox(
+                width: ownerClusterWidth,
+                child: Row(
+                  children: [
+                    UserHoverCard(
+                      user: user,
+                      currentUser: currentUser,
+                      onResolveProfile: onResolveUserProfile,
+                      onResolveRoomProfile: onResolveRoomProfile,
+                      onEnterCommonRoom: onEnterCommonRoom,
+                      profileActionBuilder: userProfileActionBuilder,
+                      showRoomRole: true,
+                      child: Avatar(
+                        key: const ValueKey<String>(
+                          'music-box-song-attribution-avatar',
+                        ),
+                        label: person!.avatarLabel,
+                        imageUrl: person!.avatarUrl,
+                        defaultAvatarKey: person!.defaultAvatarKey,
+                        size: avatarSize,
+                        showBorder: false,
+                      ),
+                    ),
+                    const SizedBox(width: avatarGap),
+                    Expanded(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          ownerLabel,
+                          key: const ValueKey<String>(
+                            'music-box-song-attribution-owner',
+                          ),
+                          maxLines: 1,
+                          style: style,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                ' · $trailingPlaylistName',
+                key: const ValueKey<String>('music-box-song-attribution-name'),
+                textAlign: TextAlign.right,
+                style: style,
+                softWrap: true,
+              ),
+            ],
+          );
+        }
+        final maxTextWidth = (constraints.maxWidth - avatarWidth).clamp(
+          1.0,
+          double.infinity,
+        );
+        final measurementWidth = (maxTextWidth - textLayoutSlack).clamp(
+          1.0,
+          maxTextWidth,
+        );
+        final painter = TextPainter(
+          text: TextSpan(text: value.isEmpty ? ' ' : value, style: style),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+        )..layout(maxWidth: measurementWidth);
+        final lines = painter.computeLineMetrics();
+        var longestLine = 0.0;
+        for (final line in lines) {
+          if (line.width > longestLine) longestLine = line.width;
+        }
+        final textWidth = lines.length > 1
+            ? maxTextWidth
+            : (longestLine + textLayoutSlack).clamp(1.0, maxTextWidth);
+        return Row(
+          key: const ValueKey<String>('music-box-song-attribution-value-group'),
+          mainAxisAlignment: MainAxisAlignment.end,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            if (showAvatar) ...[
+              UserHoverCard(
+                user: user!,
+                currentUser: currentUser,
+                onResolveProfile: onResolveUserProfile,
+                onResolveRoomProfile: onResolveRoomProfile,
+                onEnterCommonRoom: onEnterCommonRoom,
+                profileActionBuilder: userProfileActionBuilder,
+                showRoomRole: true,
+                child: Avatar(
+                  key: const ValueKey<String>(
+                    'music-box-song-attribution-avatar',
+                  ),
+                  label: person!.avatarLabel,
+                  imageUrl: person!.avatarUrl,
+                  defaultAvatarKey: person!.defaultAvatarKey,
+                  size: avatarSize,
+                  showBorder: false,
+                ),
+              ),
+              const SizedBox(width: avatarGap),
+            ],
+            SizedBox(
+              width: textWidth,
+              child: Text(
+                value,
+                key: const ValueKey<String>('music-box-song-attribution-name'),
+                textAlign: TextAlign.right,
+                style: style,
+                softWrap: true,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -1930,20 +2368,68 @@ class _MusicBoxSongDetailRow extends StatelessWidget {
         children: [
           SizedBox(
             width: 38,
-            child: Text(
-              label,
+            child: HoverCardSelectableText(
+              value: label,
               style: UiTypography.label.copyWith(color: UiColors.textMuted),
             ),
           ),
           Expanded(
-            child: Text(
-              value,
+            child: HoverCardSelectableText(
+              value: value,
               textAlign: TextAlign.right,
               style: UiTypography.label.copyWith(color: UiColors.text),
+              maxLines: 12,
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+final RegExp _musicBoxBvidPattern = RegExp(
+  r'BV[0-9A-Za-z]+',
+  caseSensitive: false,
+);
+
+String _musicBoxBilibiliBvId(String trackId) {
+  final raw = trackId.trim();
+  final match = _musicBoxBvidPattern.firstMatch(raw)?.group(0);
+  if (match == null || match.length <= 2) return raw.isEmpty ? '未知' : raw;
+  return 'BV${match.substring(2)}';
+}
+
+class _MusicBoxAdaptiveFullText extends StatelessWidget {
+  const _MusicBoxAdaptiveFullText({
+    super.key,
+    required this.text,
+    required this.style,
+  });
+
+  final String text;
+  final TextStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final baseSize = style.fontSize ?? 16;
+        final painter = TextPainter(
+          text: TextSpan(text: text, style: style),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+        )..layout(maxWidth: constraints.maxWidth);
+        final lineCount = painter.computeLineMetrics().length;
+        final reduction = lineCount <= 2
+            ? 0.0
+            : (lineCount - 2).clamp(1, 4).toDouble();
+        final fontSize = (baseSize - reduction).clamp(11.0, baseSize);
+        return HoverCardSelectableText(
+          value: text,
+          style: style.copyWith(fontSize: fontSize),
+          maxLines: lineCount < 1 ? 1 : lineCount,
+        );
+      },
     );
   }
 }
@@ -1958,6 +2444,93 @@ class _MusicBoxPlaylistTarget {
   final bool roomScoped;
 }
 
+class _MusicBoxPlaylistTargetButton extends StatelessWidget {
+  const _MusicBoxPlaylistTargetButton({
+    required this.target,
+    required this.loading,
+    required this.onPressed,
+  });
+
+  final _MusicBoxPlaylistTarget target;
+  final bool loading;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    const horizontalPadding = 10.0;
+    const iconSize = 18.0;
+    const iconGap = 8.0;
+    const baseStyle = TextStyle(
+      color: UiColors.accent,
+      fontSize: 13,
+      fontWeight: FontWeight.w600,
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final textWidth =
+            (constraints.maxWidth - horizontalPadding * 2 - iconSize - iconGap)
+                .clamp(24.0, double.infinity);
+        final basePainter = TextPainter(
+          text: TextSpan(text: target.playlist.name, style: baseStyle),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+        )..layout(maxWidth: textWidth);
+        final baseLineCount = basePainter.computeLineMetrics().length;
+        final reduction = baseLineCount <= 2
+            ? 0.0
+            : (baseLineCount - 2).clamp(1, 2).toDouble();
+        final style = baseStyle.copyWith(
+          fontSize: baseStyle.fontSize! - reduction,
+        );
+        final textHeight = _musicBoxMeasureTextHeight(
+          context,
+          target.playlist.name,
+          style,
+          textWidth,
+        );
+        final height = (textHeight + 16).clamp(34.0, double.infinity);
+        return PressableSurface(
+          key: ValueKey<String>(
+            'music-box-playlist-target:'
+            '${target.roomScoped ? 'room' : 'personal'}:'
+            '${target.playlist.id}',
+          ),
+          width: double.infinity,
+          height: height,
+          padding: const EdgeInsets.symmetric(horizontal: horizontalPadding),
+          onPressed: onPressed,
+          enabled: onPressed != null || loading,
+          loading: loading,
+          selected: true,
+          backgroundColor: UiColors.selected,
+          selectedBackgroundColor: UiColors.selected,
+          pressedBackgroundColor: const Color(0xFF14211B),
+          borderColor: UiColors.selectedBorder,
+          selectedBorderColor: UiColors.selectedBorder,
+          child: Row(
+            children: [
+              SizedBox.square(
+                dimension: iconSize,
+                child: loading
+                    ? const CircularProgressIndicator(strokeWidth: 2)
+                    : Icon(
+                        target.roomScoped ? Icons.meeting_room : Icons.person,
+                        size: iconSize,
+                        color: UiColors.accent,
+                      ),
+              ),
+              const SizedBox(width: iconGap),
+              Expanded(
+                child: Text(target.playlist.name, style: style, softWrap: true),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _MusicBoxSearchList extends StatelessWidget {
   const _MusicBoxSearchList({
     required this.results,
@@ -1965,6 +2538,8 @@ class _MusicBoxSearchList extends StatelessWidget {
     required this.searching,
     required this.error,
     required this.hasQuery,
+    required this.controller,
+    required this.roomId,
     required this.onQueueResult,
   });
 
@@ -1973,6 +2548,8 @@ class _MusicBoxSearchList extends StatelessWidget {
   final bool searching;
   final String? error;
   final bool hasQuery;
+  final MusicBoxController? controller;
+  final String? roomId;
   final ValueChanged<MusicBoxSearchResult> onQueueResult;
 
   @override
@@ -2012,9 +2589,12 @@ class _MusicBoxSearchList extends StatelessWidget {
       separatorBuilder: (_, _) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
         final result = results[index];
-        return _MusicBoxSearchTile(
+        return _MusicBoxTrackTile(
+          keyScope: 'search',
           result: result,
           query: query,
+          controller: controller,
+          roomId: roomId,
           onQueue: () => onQueueResult(result),
         );
       },
@@ -2022,66 +2602,131 @@ class _MusicBoxSearchList extends StatelessWidget {
   }
 }
 
-class _MusicBoxSearchTile extends StatelessWidget {
-  const _MusicBoxSearchTile({
+class _MusicBoxTrackTile extends StatelessWidget {
+  const _MusicBoxTrackTile({
+    required this.keyScope,
     required this.result,
     required this.query,
+    required this.controller,
+    required this.roomId,
     required this.onQueue,
+    this.durationMs,
   });
 
+  final String keyScope;
   final MusicBoxSearchResult result;
   final String query;
+  final MusicBoxController? controller;
+  final String? roomId;
   final VoidCallback onQueue;
+  final int? durationMs;
 
   @override
   Widget build(BuildContext context) {
     final artists = music_box_display.musicBoxArtistsLabel(result.artists);
-    return PressableSurface(
-      width: double.infinity,
-      height: 50,
-      hoverLift: 2,
-      baseDepth: 4,
-      backgroundColor: UiColors.surfaceLow,
-      pressedBackgroundColor: UiColors.surfacePressed,
-      borderColor: UiColors.border,
-      borderRadius: UiRadii.md,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      onPressed: onQueue,
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                HighlightedText(
-                  text: result.name,
-                  query: query,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: UiColors.text,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
+    final artistLabel = artists.isEmpty ? '未知艺人' : artists;
+    const titleStyle = TextStyle(
+      color: UiColors.text,
+      fontSize: 13,
+      fontWeight: FontWeight.w500,
+    );
+    const subtitleStyle = TextStyle(
+      color: UiColors.textSecondary,
+      fontSize: 11,
+      fontWeight: FontWeight.w600,
+    );
+    final identity = '${result.source}:${result.trackId}';
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final textWidth = (constraints.maxWidth - 20 - 20 - 8 - 4 - 28).clamp(
+          24.0,
+          double.infinity,
+        );
+        final tileHeight = _musicBoxAdaptiveSongRowHeight(
+          context,
+          width: textWidth,
+          title: result.name,
+          subtitle: artistLabel,
+          // Search highlights use a heavier span which can wrap one line sooner
+          // than the base style. Measure conservatively so the real rich text
+          // always receives enough height.
+          titleStyle: titleStyle.copyWith(fontWeight: FontWeight.w700),
+          subtitleStyle: subtitleStyle.copyWith(fontWeight: FontWeight.w700),
+          contentScale: 1.4,
+        );
+        return PressableSurface(
+          key: ValueKey<String>('music-box-$keyScope-tile:$identity'),
+          width: double.infinity,
+          height: tileHeight,
+          hoverLift: 2,
+          baseDepth: 4,
+          interactive: false,
+          hoverEffect: false,
+          pressEffect: false,
+          backgroundColor: UiColors.surfaceLow,
+          borderColor: UiColors.border,
+          borderRadius: UiRadii.md,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: HoverCardAnchor(
+                  resetKey: identity,
+                  cardWidth: 310,
+                  cardBuilder: (_) => _MusicBoxSongCard.search(
+                    result: result,
+                    controller: controller,
+                    roomId: roomId,
+                    onQueueResult: (_) => onQueue(),
+                    catalogDurationMs: durationMs,
+                  ),
+                  child: SizedBox(
+                    height: tileHeight,
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.music_note,
+                          size: 20,
+                          color: UiColors.accent,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              HighlightedText(
+                                text: result.name,
+                                query: query,
+                                style: titleStyle,
+                              ),
+                              const SizedBox(height: 2),
+                              HighlightedText(
+                                text: artistLabel,
+                                query: query,
+                                style: subtitleStyle,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                const SizedBox(height: 2),
-                HighlightedText(
-                  text: artists.isEmpty ? '未知艺人' : artists,
-                  query: query,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: UiColors.textSecondary,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 4),
+              ButtonIcon(
+                key: ValueKey<String>('music-box-$keyScope-add:$identity'),
+                icon: const Icon(Icons.add),
+                tooltip: '点歌队列',
+                tone: ButtonTone.primary,
+                onPressed: onQueue,
+                size: 28,
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

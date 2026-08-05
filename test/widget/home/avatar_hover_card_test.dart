@@ -102,6 +102,71 @@ void main() {
     expect(find.text('@logan'), findsNothing);
   });
 
+  testWidgets(
+    'narrow user cards wrap identity and common-room names without ellipses',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(190, 740);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      const longDisplayName = '这是一个需要完整换行显示的很长用户名';
+      const longCommonRoomName = '这是一个同样需要完整换行显示的共同房间名称';
+      const user = UserSummary(
+        id: 'long-user',
+        username: 'long_user_name_that_must_wrap',
+        displayName: longDisplayName,
+        avatarUrl: null,
+        defaultAvatarKey: 'blue-3',
+        commonRooms: [
+          UserCommonRoom(
+            id: 'long-room',
+            rid: 'LONG',
+            name: longCommonRoomName,
+          ),
+          UserCommonRoom(id: 'short-room', rid: 'SHORT', name: 'LOL'),
+        ],
+      );
+
+      await tester.pumpWidget(_host(const AvatarHoverCardForTest(user: user)));
+      await tester.tap(find.byType(Avatar).first);
+      await tester.pumpAndSettle();
+
+      final name = find.byWidgetPredicate(
+        (widget) =>
+            widget is ReadOnlySelectableText && widget.value == longDisplayName,
+      );
+      final avatar = find.byKey(
+        const ValueKey('user-profile-card-avatar-preview'),
+      );
+      final commonRoomName = find.text(longCommonRoomName);
+      final longRoomAvatar = find.byWidgetPredicate(
+        (widget) => widget is Avatar && widget.size == 16,
+      );
+      final shortRoomAvatar = find.byWidgetPredicate(
+        (widget) => widget is Avatar && widget.size == 20,
+      );
+      expect(name, findsOneWidget);
+      expect(commonRoomName, findsOneWidget);
+      expect(tester.getSize(name).height, greaterThan(20));
+      expect(tester.getSize(commonRoomName).height, lessThan(20));
+      expect(
+        tester.getTopLeft(name).dx,
+        greaterThan(tester.getTopRight(avatar).dx),
+      );
+      expect(
+        tester.widget<Text>(commonRoomName).overflow,
+        isNot(TextOverflow.ellipsis),
+      );
+      expect(longRoomAvatar, findsOneWidget);
+      expect(shortRoomAvatar, findsOneWidget);
+      expect(
+        tester.getTopLeft(longRoomAvatar).dx,
+        tester.getTopLeft(shortRoomAvatar).dx,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('hover card shows voice instead of online presence tag', (
     tester,
   ) async {

@@ -14,6 +14,7 @@ import 'package:client/src/ui/cached_asset_image.dart';
 import 'package:client/src/ui/ui.dart' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderEditable, RenderObject;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -725,6 +726,150 @@ void main() {
     expect(field.readOnly, isTrue);
     expect(field.enableInteractiveSelection, isTrue);
     expect(field.showCursor, isFalse);
+  });
+
+  testWidgets('text message bubble removes trailing blank width', (
+    tester,
+  ) async {
+    const body = '123';
+    const rawBody = '$body   \n ';
+    const cases = [
+      (TargetPlatform.windows, 1.0, 1.0),
+      (TargetPlatform.macOS, 2.0, 1.0),
+      (TargetPlatform.android, 3.0, 1.3),
+    ];
+
+    for (final (platform, devicePixelRatio, textScale) in cases) {
+      await tester.pumpWidget(
+        _host(
+          MediaQuery(
+            data: MediaQueryData(
+              size: const Size(600, 620),
+              devicePixelRatio: devicePixelRatio,
+              textScaler: TextScaler.linear(textScale),
+            ),
+            child: MessageBubbleForTest(
+              message: _message(type: 'text', body: rawBody),
+              downloadActions: _downloadActions(),
+            ),
+          ),
+          height: 620,
+          platform: platform,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final surface = find.byKey(
+        const ValueKey('message-bubble-surface-message_1'),
+      );
+      final fieldFinder = find.descendant(
+        of: surface,
+        matching: find.byType(TextField),
+      );
+      final field = tester.widget<TextField>(fieldFinder);
+      final textLayout = find.byKey(
+        const ValueKey('message-text-layout-message_1'),
+      );
+      final content = find.byKey(
+        const ValueKey('message-bubble-content-message_1'),
+      );
+
+      expect(field.cursorWidth, 2);
+      expect(field.style, ui.UiTypography.body);
+      expect(field.controller?.text, body);
+      RenderEditable? editable;
+
+      void findEditable(RenderObject object) {
+        if (object is RenderEditable) {
+          editable = object;
+          return;
+        }
+        object.visitChildren(findEditable);
+      }
+
+      findEditable(tester.renderObject(textLayout));
+      expect(editable, isNotNull);
+      final renderEditable = editable!;
+      final textPainter = TextPainter(
+        text: renderEditable.text,
+        textAlign: renderEditable.textAlign,
+        textDirection: renderEditable.textDirection,
+        textScaler: renderEditable.textScaler,
+        maxLines: renderEditable.maxLines,
+        locale: renderEditable.locale,
+        strutStyle: renderEditable.strutStyle,
+        textWidthBasis: renderEditable.textWidthBasis,
+        textHeightBehavior: renderEditable.textHeightBehavior,
+      )..layout();
+      expect(
+        tester.getSize(textLayout).width,
+        closeTo(textPainter.width, 0.01),
+        reason:
+            'Text width must follow the active platform font and text scale.',
+      );
+      textPainter.dispose();
+
+      final surfaceRect = tester.getRect(surface);
+      final contentRect = tester.getRect(content);
+      expect(
+        contentRect.left - surfaceRect.left,
+        13,
+        reason: '$platform at DPR $devicePixelRatio and scale $textScale',
+      );
+      expect(
+        surfaceRect.right - contentRect.right,
+        13,
+        reason: '$platform at DPR $devicePixelRatio and scale $textScale',
+      );
+    }
+  });
+
+  testWidgets('text message bubble wraps at compact widths on every platform', (
+    tester,
+  ) async {
+    const body =
+        'A long message that must wrap without reserving editor space.';
+    const cases = [
+      (TargetPlatform.windows, 220.0, 1.0),
+      (TargetPlatform.macOS, 180.0, 1.15),
+      (TargetPlatform.android, 140.0, 1.3),
+    ];
+
+    for (final (platform, width, textScale) in cases) {
+      await tester.pumpWidget(
+        _host(
+          MediaQuery(
+            data: MediaQueryData(
+              size: Size(width, 620),
+              textScaler: TextScaler.linear(textScale),
+            ),
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: width,
+                child: MessageBubbleForTest(
+                  message: _message(type: 'text', body: body),
+                  downloadActions: _downloadActions(),
+                ),
+              ),
+            ),
+          ),
+          height: 620,
+          platform: platform,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final surface = find.byKey(
+        const ValueKey('message-bubble-surface-message_1'),
+      );
+      final textLayout = find.byKey(
+        const ValueKey('message-text-layout-message_1'),
+      );
+      expect(tester.getSize(surface).width, width);
+      expect(tester.getSize(textLayout).height, greaterThan(19 * textScale));
+      expect(tester.takeException(), isNull);
+    }
   });
 
   testWidgets('text message body link is recognized as clickable', (

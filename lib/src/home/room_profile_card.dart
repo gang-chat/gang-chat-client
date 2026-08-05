@@ -551,11 +551,13 @@ class _UserProfileCard extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Flexible(
-                          child: _ProfileIdentityText(
+                          child: HoverCardSelectableText(
                             value: name,
                             style: UiTypography.title.copyWith(fontSize: 16),
+                            maxLines: 12,
                           ),
                         ),
                         if (gender != null) ...[
@@ -573,9 +575,10 @@ class _UserProfileCard extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 2),
-                    _ProfileIdentityText(
+                    HoverCardSelectableText(
                       value: '@${user.username}',
                       copyStartOffset: 1,
+                      maxLines: 12,
                       style: UiTypography.label.copyWith(
                         color: UiColors.textMuted,
                       ),
@@ -596,7 +599,7 @@ class _UserProfileCard extends StatelessWidget {
           ),
           if (bio != null && bio.isNotEmpty) ...[
             const SizedBox(height: UiSpacing.md),
-            _ProfileIdentityText(
+            HoverCardSelectableText(
               value: bio,
               maxLines: 4,
               style: UiTypography.body.copyWith(color: UiColors.textSecondary),
@@ -619,7 +622,7 @@ class _UserProfileCard extends StatelessWidget {
           ],
           if (uid != null && uid.isNotEmpty) ...[
             const SizedBox(height: UiSpacing.sm),
-            _ProfileIdentityText(
+            HoverCardSelectableText(
               value: 'UID: $uid',
               copyStartOffset: 'UID: '.length,
               style: UiTypography.label.copyWith(color: UiColors.textMuted),
@@ -718,38 +721,6 @@ class _ProfileImagePreview extends StatelessWidget {
   }
 }
 
-class _ProfileIdentityText extends StatelessWidget {
-  const _ProfileIdentityText({
-    required this.value,
-    required this.style,
-    this.copyStartOffset = 0,
-    this.maxLines = 1,
-  });
-
-  final String value;
-  final TextStyle style;
-  final int copyStartOffset;
-  final int maxLines;
-
-  @override
-  Widget build(BuildContext context) {
-    final hoverScope = HoverCardTapRegionScope.maybeOf(context);
-    final start = copyStartOffset.clamp(0, value.length);
-    return ReadOnlySelectableText(
-      value: value,
-      style: style,
-      maxLines: maxLines,
-      secondaryClickSelection: TextSelection(
-        baseOffset: start,
-        extentOffset: value.length,
-      ),
-      showSelectAllInContextMenu: false,
-      contextMenuTapRegionGroupId: hoverScope?.tapRegionGroup,
-      onContextMenuOpenChanged: hoverScope?.onOverlayActivityChanged,
-    );
-  }
-}
-
 class _UserCommonRoomList extends StatefulWidget {
   const _UserCommonRoomList({
     required this.rooms,
@@ -784,6 +755,7 @@ class _UserCommonRoomListState extends State<_UserCommonRoomList> {
   Widget build(BuildContext context) {
     final list = Column(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (final room in widget.rooms)
           Padding(
@@ -833,41 +805,103 @@ class _UserCommonRoomRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final avatar = Avatar(
-      label: room_display.commonRoomAvatarLabel(room),
-      imageUrl: AppConfigScope.of(context).resolveAssetUrl(room.avatarUrl),
-      defaultAvatarKey: room.defaultAvatarKey,
-      size: 20,
-      activeBorderWidth: 1,
-    );
     final publicRoom = _publicRoomFromCommonRoom(room);
-    final avatarTarget = currentUser == null
-        ? avatar
-        : RoomHoverCard(
-            room: publicRoom,
-            currentUser: currentUser!,
-            onResolveRoom: onResolveRoomProfile,
-            onResolveUserProfile: onResolveUserProfile,
-            onEnterRoom: onEnterRoom,
-            child: avatar,
-          );
+    return _CompactProfileIdentity(
+      name: room_display.commonRoomDisplayName(room),
+      style: UiTypography.body.copyWith(
+        color: UiColors.textSecondary,
+        fontSize: 13,
+      ),
+      avatarBuilder: (size) {
+        final avatar = Avatar(
+          label: room_display.commonRoomAvatarLabel(room),
+          imageUrl: AppConfigScope.of(context).resolveAssetUrl(room.avatarUrl),
+          defaultAvatarKey: room.defaultAvatarKey,
+          size: size,
+          activeBorderWidth: 1,
+        );
+        return currentUser == null
+            ? avatar
+            : RoomHoverCard(
+                room: publicRoom,
+                currentUser: currentUser!,
+                onResolveRoom: onResolveRoomProfile,
+                onResolveUserProfile: onResolveUserProfile,
+                onEnterRoom: onEnterRoom,
+                child: avatar,
+              );
+      },
+    );
+  }
+}
 
-    return Row(
-      children: [
-        avatarTarget,
-        const SizedBox(width: UiSpacing.sm),
-        Expanded(
-          child: Text(
-            room_display.commonRoomDisplayName(room),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: UiTypography.body.copyWith(
-              color: UiColors.textSecondary,
-              fontSize: 13,
-            ),
+class _CompactProfileIdentity extends StatelessWidget {
+  const _CompactProfileIdentity({
+    required this.name,
+    required this.style,
+    required this.avatarBuilder,
+  });
+
+  static const double _normalAvatarSize = 20;
+  static const double _compactAvatarSize = 16;
+  static const double _textLayoutSlack = 8;
+
+  final String name;
+  final TextStyle style;
+  final Widget Function(double size) avatarBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // This is the row's real width after the owning card has applied its
+        // width clamp and padding. Never derive the compact breakpoint from
+        // the screen or the default hover-card width.
+        final painter = TextPainter(
+          text: TextSpan(text: name, style: style),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+          maxLines: 1,
+        )..layout();
+        final normalWidth =
+            _normalAvatarSize + UiSpacing.sm + painter.width + _textLayoutSlack;
+        final compact = normalWidth > constraints.maxWidth;
+        final avatarSize = compact ? _compactAvatarSize : _normalAvatarSize;
+        final identityWidth =
+            (avatarSize + UiSpacing.sm + painter.width + _textLayoutSlack)
+                .clamp(avatarSize + UiSpacing.sm + 1, constraints.maxWidth)
+                .toDouble();
+        return SizedBox(
+          width: identityWidth,
+          child: Row(
+            children: [
+              avatarBuilder(avatarSize),
+              const SizedBox(width: UiSpacing.sm),
+              Expanded(
+                child: compact
+                    ? FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          name,
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.visible,
+                          style: style,
+                        ),
+                      )
+                    : Text(
+                        name,
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.visible,
+                        style: style,
+                      ),
+              ),
+            ],
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 }
@@ -931,15 +965,15 @@ class _RoomProfileCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _ProfileIdentityText(
+                    HoverCardSelectableText(
                       value: room.name,
                       style: UiTypography.title.copyWith(fontSize: 16),
+                      maxLines: 12,
                     ),
                     const SizedBox(height: 2),
                     Text(
                       '${room.memberCount} 名成员',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      maxLines: 2,
                       style: UiTypography.label.copyWith(
                         color: UiColors.textMuted,
                       ),
@@ -967,7 +1001,7 @@ class _RoomProfileCard extends StatelessWidget {
           ),
           if (description != null) ...[
             const SizedBox(height: UiSpacing.md),
-            _ProfileIdentityText(
+            HoverCardSelectableText(
               value: description,
               maxLines: 4,
               style: UiTypography.body.copyWith(color: UiColors.textSecondary),
@@ -1008,7 +1042,7 @@ class _RoomProfileCard extends StatelessWidget {
             ),
           ],
           const SizedBox(height: UiSpacing.sm),
-          _ProfileIdentityText(
+          HoverCardSelectableText(
             value: 'RID: $rid',
             copyStartOffset: 'RID: '.length,
             style: UiTypography.label.copyWith(color: UiColors.textMuted),
@@ -1089,44 +1123,45 @@ class _RoomCardPersonRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final avatar = Avatar(
-      label: avatarLabel,
-      imageUrl: AppConfigScope.of(context).resolveAssetUrl(avatarUrl),
-      defaultAvatarKey: defaultAvatarKey,
-      size: 20,
-      activeBorderWidth: 1,
+    final nameStyle = UiTypography.body.copyWith(
+      color: UiColors.textSecondary,
+      fontSize: 13,
     );
-    final avatarTarget = profileUser == null || currentUser == null
-        ? avatar
-        : UserHoverCard(
-            user: profileUser!,
-            currentUser: currentUser,
-            onResolveProfile: onResolveUserProfile,
-            onResolveRoomProfile: onResolveRoomProfile,
-            onEnterCommonRoom: onEnterCommonRoom,
-            child: avatar,
-          );
-
-    return Row(
-      children: [
-        avatarTarget,
-        const SizedBox(width: UiSpacing.sm),
-        Expanded(
-          child: Text(
-            name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: UiTypography.body.copyWith(
-              color: UiColors.textSecondary,
-              fontSize: 13,
-            ),
-          ),
-        ),
-        if (trailing != null) ...[
-          const SizedBox(width: UiSpacing.sm),
-          trailing!,
-        ],
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final identity = _CompactProfileIdentity(
+          name: name,
+          style: nameStyle,
+          avatarBuilder: (size) {
+            final avatar = Avatar(
+              label: avatarLabel,
+              imageUrl: AppConfigScope.of(context).resolveAssetUrl(avatarUrl),
+              defaultAvatarKey: defaultAvatarKey,
+              size: size,
+              activeBorderWidth: 1,
+            );
+            return profileUser == null || currentUser == null
+                ? avatar
+                : UserHoverCard(
+                    user: profileUser!,
+                    currentUser: currentUser,
+                    onResolveProfile: onResolveUserProfile,
+                    onResolveRoomProfile: onResolveRoomProfile,
+                    onEnterCommonRoom: onEnterCommonRoom,
+                    child: avatar,
+                  );
+          },
+        );
+        if (trailing == null) {
+          return Align(alignment: Alignment.centerLeft, child: identity);
+        }
+        return Wrap(
+          spacing: UiSpacing.sm,
+          runSpacing: UiSpacing.xs,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [identity, trailing!],
+        );
+      },
     );
   }
 }

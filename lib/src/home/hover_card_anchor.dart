@@ -69,6 +69,47 @@ class HoverCardTapRegionScope extends InheritedWidget {
   }
 }
 
+/// Selectable identity/detail text that keeps its owning hover card open while
+/// the shared text context menu or Android selection handles are active.
+///
+/// User, room, and song cards use the same wrapper so right-click selection,
+/// copy shortcuts, and touch selection cannot drift between card types.
+class HoverCardSelectableText extends StatelessWidget {
+  const HoverCardSelectableText({
+    super.key,
+    required this.value,
+    required this.style,
+    this.copyStartOffset = 0,
+    this.maxLines = 1,
+    this.textAlign = TextAlign.start,
+  });
+
+  final String value;
+  final TextStyle style;
+  final int copyStartOffset;
+  final int maxLines;
+  final TextAlign textAlign;
+
+  @override
+  Widget build(BuildContext context) {
+    final hoverScope = HoverCardTapRegionScope.maybeOf(context);
+    final start = copyStartOffset.clamp(0, value.length);
+    return ReadOnlySelectableText(
+      value: value,
+      style: style,
+      maxLines: maxLines,
+      textAlign: textAlign,
+      secondaryClickSelection: TextSelection(
+        baseOffset: start,
+        extentOffset: value.length,
+      ),
+      showSelectAllInContextMenu: false,
+      contextMenuTapRegionGroupId: hoverScope?.tapRegionGroup,
+      onContextMenuOpenChanged: hoverScope?.onOverlayActivityChanged,
+    );
+  }
+}
+
 /// Shared hover/tap shell for small profile cards anchored to an avatar.
 class HoverCardAnchor extends StatefulWidget {
   const HoverCardAnchor({

@@ -5,6 +5,10 @@ part of 'chat_pane.dart';
 const double _autoScrollFollowThreshold = 120;
 const double _chatMessageListTopPadding = 18;
 const _messageListCacheExtent = ScrollCacheExtent.pixels(1200);
+const _messageBubblePadding = EdgeInsets.symmetric(
+  horizontal: 12,
+  vertical: 10,
+);
 
 /// A remembered scroll position for one room's message list. The list widget is
 /// torn down and rebuilt whenever the pane swaps (e.g. opening the live
@@ -2615,7 +2619,7 @@ class _MessageBubbleState extends State<_MessageBubble> {
             border: Border.all(color: borderColor),
           ),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            padding: _messageBubblePadding,
             child: DecoratedBox(
               key: ValueKey('message-bubble-content-${widget.message.id}'),
               decoration: BoxDecoration(
@@ -3014,7 +3018,7 @@ class _TextBodyState extends State<_TextBody> {
   void initState() {
     super.initState();
     _controller = _MessageTextController(
-      text: widget.message.body,
+      text: _displayMessageBody(widget.message),
       currentUser: widget.currentUser,
       ownerUserId: widget.ownerUserId,
       mentions: widget.message.mentions,
@@ -3042,14 +3046,13 @@ class _TextBodyState extends State<_TextBody> {
       mentionHighlighted: widget.mentionHighlighted,
       onOpenMentionUser: _handleOpenMentionUser,
     );
-    if (oldWidget.message.body != widget.message.body) {
+    final oldBody = _displayMessageBody(oldWidget.message);
+    final nextBody = _displayMessageBody(widget.message);
+    if (oldBody != nextBody) {
       final selection = _controller.selection;
       _controller.value = TextEditingValue(
-        text: widget.message.body,
-        selection: _clampMessageTextSelection(
-          selection,
-          widget.message.body.length,
-        ),
+        text: nextBody,
+        selection: _clampMessageTextSelection(selection, nextBody.length),
       );
     }
   }
@@ -3080,26 +3083,29 @@ class _TextBodyState extends State<_TextBody> {
           onGlobalPrimaryPointerDownDuringSecondaryClickProtection:
               _handleGlobalPrimaryPointerDownDuringTextSelectionProtection,
           child: IntrinsicWidth(
-            child: TextField(
-              controller: _controller,
-              focusNode: _focusNode,
-              readOnly: true,
-              showCursor: false,
-              enableInteractiveSelection: true,
-              minLines: 1,
-              maxLines: null,
-              mouseCursor: SystemMouseCursors.text,
-              style: UiTypography.body,
-              cursorColor: UiColors.accent,
-              undoController: _undoController,
-              contextMenuBuilder: _contextMenuBuilder,
-              decoration: const InputDecoration(
-                isCollapsed: true,
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                disabledBorder: InputBorder.none,
-                contentPadding: EdgeInsets.zero,
+            child: _TightReadOnlyEditableLayout(
+              key: ValueKey('message-text-layout-${widget.message.id}'),
+              child: TextField(
+                controller: _controller,
+                focusNode: _focusNode,
+                readOnly: true,
+                showCursor: false,
+                enableInteractiveSelection: true,
+                minLines: 1,
+                maxLines: null,
+                mouseCursor: SystemMouseCursors.text,
+                style: UiTypography.body,
+                cursorColor: UiColors.accent,
+                undoController: _undoController,
+                contextMenuBuilder: _contextMenuBuilder,
+                decoration: const InputDecoration(
+                  isCollapsed: true,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  disabledBorder: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
+                ),
               ),
             ),
           ),
@@ -3310,6 +3316,125 @@ class _TextBodyState extends State<_TextBody> {
         tone: FloatingNoticeTone.error,
       );
     }
+  }
+}
+
+String _displayMessageBody(Message message) => message.body.trimRight();
+
+/// Sizes the read-only editor from its actual styled text instead of from
+/// platform-specific editor chrome (for example the hidden caret allowance).
+/// The editor keeps that allowance internally, so wrapping and selection
+/// geometry stay intact on every platform and display scale.
+class _TightReadOnlyEditableLayout extends SingleChildRenderObjectWidget {
+  const _TightReadOnlyEditableLayout({super.key, required super.child});
+
+  @override
+  RenderProxyBox createRenderObject(BuildContext context) {
+    return _RenderTightReadOnlyEditableLayout();
+  }
+}
+
+class _RenderTightReadOnlyEditableLayout extends RenderProxyBox {
+  @override
+  double computeMinIntrinsicWidth(double height) {
+    final child = this.child;
+    if (child == null) return 0;
+    return math.max(
+      0,
+      child.getMinIntrinsicWidth(height) - _editorTrailingAllowance(height),
+    );
+  }
+
+  @override
+  double computeMaxIntrinsicWidth(double height) {
+    final child = this.child;
+    if (child == null) return 0;
+    return math.max(
+      0,
+      child.getMaxIntrinsicWidth(height) - _editorTrailingAllowance(height),
+    );
+  }
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) {
+    final child = this.child;
+    if (child == null) return constraints.smallest;
+    final allowance = _editorTrailingAllowance(constraints.maxHeight);
+    final childSize = child.getDryLayout(
+      _childConstraints(constraints, allowance),
+    );
+    return constraints.constrain(
+      Size(math.max(0, childSize.width - allowance), childSize.height),
+    );
+  }
+
+  @override
+  void performLayout() {
+    final child = this.child;
+    if (child == null) {
+      size = constraints.smallest;
+      return;
+    }
+    final allowance = _editorTrailingAllowance(constraints.maxHeight);
+    child.layout(
+      _childConstraints(constraints, allowance),
+      parentUsesSize: true,
+    );
+    size = constraints.constrain(
+      Size(math.max(0, child.size.width - allowance), child.size.height),
+    );
+  }
+
+  double _editorTrailingAllowance(double height) {
+    final child = this.child;
+    final editable = _findEditable();
+    final text = editable?.text;
+    if (child == null || editable == null || text == null) return 0;
+
+    final painter = TextPainter(
+      text: text,
+      textAlign: editable.textAlign,
+      textDirection: editable.textDirection,
+      textScaler: editable.textScaler,
+      maxLines: editable.maxLines,
+      locale: editable.locale,
+      strutStyle: editable.strutStyle,
+      textWidthBasis: editable.textWidthBasis,
+      textHeightBehavior: editable.textHeightBehavior,
+    )..layout();
+    final textWidth = painter.maxIntrinsicWidth;
+    painter.dispose();
+    return math.max(0, child.getMaxIntrinsicWidth(height) - textWidth);
+  }
+
+  RenderEditable? _findEditable() {
+    RenderEditable? result;
+
+    void visit(RenderObject object) {
+      if (result != null) return;
+      if (object is RenderEditable) {
+        result = object;
+        return;
+      }
+      object.visitChildren(visit);
+    }
+
+    child?.visitChildren(visit);
+    return result;
+  }
+
+  BoxConstraints _childConstraints(
+    BoxConstraints constraints,
+    double allowance,
+  ) {
+    return BoxConstraints(
+      minWidth: constraints.minWidth + allowance,
+      maxWidth: constraints.maxWidth.isFinite
+          ? constraints.maxWidth + allowance
+          : double.infinity,
+      minHeight: constraints.minHeight,
+      maxHeight: constraints.maxHeight,
+    );
   }
 }
 

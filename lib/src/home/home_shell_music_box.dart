@@ -169,6 +169,10 @@ extension _HomeShellMusicBox on _HomeShellState {
         itemId: item.id,
       );
       _applyMusicBoxSnapshot(state);
+      _showMusicBoxNotice(
+        '已从队列删除：${item.title}',
+        tone: FloatingNoticeTone.success,
+      );
     } catch (error) {
       _showMusicBoxNotice(
         _musicBoxWriteErrorMessage(error),

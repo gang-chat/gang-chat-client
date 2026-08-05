@@ -104,11 +104,25 @@ class MusicBoxController {
     required String playlistId,
     required MusicBoxQueueItem item,
   }) {
+    return addSearchResultToRoomPlaylist(
+      roomId: roomId,
+      playlistId: playlistId,
+      result: _queueItemAsSearchResult(item),
+      durationMs: item.durationMs > 0 ? item.durationMs : null,
+    );
+  }
+
+  Future<PersonalMusicPlaylistItem> addSearchResultToRoomPlaylist({
+    required String roomId,
+    required String playlistId,
+    required MusicBoxSearchResult result,
+    int? durationMs,
+  }) {
     return (api as RoomMusicPlaylistApi).addRoomMusicPlaylistItem(
       roomId: roomId,
       playlistId: playlistId,
-      track: _queueItemAsSearchResult(item),
-      durationMs: item.durationMs > 0 ? item.durationMs : null,
+      track: result,
+      durationMs: durationMs,
     );
   }
 
@@ -116,10 +130,22 @@ class MusicBoxController {
     required String playlistId,
     required MusicBoxQueueItem item,
   }) {
+    return addSearchResultToMyPlaylist(
+      playlistId: playlistId,
+      result: _queueItemAsSearchResult(item),
+      durationMs: item.durationMs > 0 ? item.durationMs : null,
+    );
+  }
+
+  Future<PersonalMusicPlaylistItem> addSearchResultToMyPlaylist({
+    required String playlistId,
+    required MusicBoxSearchResult result,
+    int? durationMs,
+  }) {
     return (api as PersonalMusicPlaylistApi).addPersonalMusicPlaylistItem(
       playlistId: playlistId,
-      track: _queueItemAsSearchResult(item),
-      durationMs: item.durationMs > 0 ? item.durationMs : null,
+      track: result,
+      durationMs: durationMs,
     );
   }
 

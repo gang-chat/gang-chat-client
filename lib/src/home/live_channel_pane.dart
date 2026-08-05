@@ -458,6 +458,15 @@ class _LiveChannelPaneState extends State<LiveChannelPane> {
                             controller: widget.musicBoxController,
                             roomId: widget.musicBoxRoomId,
                             onStateChanged: widget.onMusicBoxStateChanged,
+                            currentUser: widget.currentUser,
+                            onResolveUserProfile:
+                                widget.onResolveParticipantProfile,
+                            onResolveRoomProfile:
+                                widget.onResolveParticipantRoomProfile,
+                            onEnterCommonRoom:
+                                widget.onEnterParticipantProfileRoom,
+                            userProfileActionBuilder:
+                                widget.participantProfileActionBuilder,
                             onQueueResult: widget.onMusicBoxQueueResult,
                             onRemoveItem: widget.onMusicBoxRemoveItem,
                             onSourceChanged: widget.onMusicBoxSourceChanged,
