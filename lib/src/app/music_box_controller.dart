@@ -76,12 +76,22 @@ class MusicBoxController {
   Future<MusicBoxState> playNow({
     required String roomId,
     required MusicBoxQueueItem item,
-    MusicBoxState? currentState,
   }) {
     return api.controlMusicBox(
       roomId: roomId,
       action: 'play_now',
       itemId: item.id,
+      commandId: _nextCommandId(),
+    );
+  }
+
+  Future<MusicBoxState> clearTemporaryQueue({
+    required String roomId,
+    MusicBoxState? currentState,
+  }) {
+    return api.controlMusicBox(
+      roomId: roomId,
+      action: 'clear_temporary_playlist',
       commandId: _nextCommandId(),
       expectedRevision: currentState != null && currentState.hasRevision
           ? currentState.revision
@@ -189,6 +199,15 @@ class MusicBoxController {
       source: item.source,
     );
   }
+}
+
+/// Keeps actionable server feedback when a music-box command fails while still
+/// providing stable copy for transport and unexpected failures.
+String musicBoxControlErrorMessage(Object error, String fallback) {
+  if (error case ApiException(:final message) when message.trim().isNotEmpty) {
+    return message;
+  }
+  return fallback;
 }
 
 /// New servers provide monotonically increasing revisions.  Legacy servers do

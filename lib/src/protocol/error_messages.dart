@@ -34,6 +34,8 @@ String localizedServerErrorMessage({
     'livekit_unavailable' => '语音服务暂时不可用',
     'screen_share_not_active' => '屏幕共享已结束',
     'music_box_unavailable' => '音乐盒服务暂时不可用',
+    'music_box_revision_conflict' => '音乐盒状态已变化，请重试',
+    'music_box_item_not_ready' => '歌曲尚未准备完成',
     'playlist_limit_reached' => '个人歌单数量已达到上限',
     'playlist_item_limit_reached' => '该歌单的歌曲数量已达到上限',
     'playlist_name_conflict' => '已存在同名歌单',

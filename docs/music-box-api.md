@@ -166,6 +166,7 @@ Content-Type: application/json
 - `stop`
 - `set_mode`
 - `play_now`（同时传入活动队列中的 `item_id`）
+- `clear_temporary_playlist`（清空点歌队列）
 
 优先播放示例：
 
@@ -173,13 +174,20 @@ Content-Type: application/json
 {
   "action": "play_now",
   "item_id": "mbx_1",
-  "command_id": "mbx-play-now-command",
-  "expected_revision": 42
+  "command_id": "mbx-play-now-command"
 }
 ```
 
-目标必须属于当前激活队列且已准备完成。命令仍使用相同的幂等 ID 和 revision
-冲突保护，服务端成功切换后返回完整权威快照。
+目标必须属于当前激活队列且已准备完成。`play_now` 是单条目命令：客户端应发送
+`command_id` 保证重试幂等，但不应携带从歌曲名片等临时 UI 快照取得的
+`expected_revision`。服务端会在执行时重新校验房间、活动队列、快照和条目状态，避免
+无关的进度或队列更新把一次仍然有效的优先播放拒绝为 revision 冲突。
+
+播放中或暂停中执行时，服务端复用现有 LiveKit 音乐机器人连接和已发布的 Opus
+track，只停止读取当前文件并从目标文件开头继续发送；不会为了切歌断开再重连。同一
+首歌再次执行会从头播放，暂停状态会转为播放。当前没有播放器时，只有 LiveKit 连接
+成功并且目标已成为当前歌曲后才返回成功；连接失败不会提前写入一个“已切换”的中间
+状态。成功响应和随后广播的完整权威快照均以目标歌曲为当前项、位置为 `0`。
 
 切换模式时增加 `mode`：
 
@@ -192,7 +200,8 @@ Content-Type: application/json
 }
 ```
 
-`command_id` 用于幂等去重。`expected_revision` 与当前状态不一致时返回：
+`command_id` 用于幂等去重。需要保护批量编辑或模式切换等易覆盖状态的命令可以携带
+`expected_revision`；它与当前状态不一致时返回：
 
 ```json
 {
@@ -205,6 +214,26 @@ Content-Type: application/json
 ```
 
 客户端应应用响应中的最新 `state`，再决定是否重试用户操作。
+
+`play_now` 的稳定业务错误包括：目标不在当前活动队列时返回 `not_found`，目标尚未
+准备完成时返回 `music_box_item_not_ready`。客户端应优先展示服务端本地化后的具体
+原因，而不是统一显示“操作失败”。
+
+清空点歌队列示例：
+
+```json
+{
+  "action": "clear_temporary_playlist",
+  "command_id": "mbx-clear-queue-command",
+  "expected_revision": 42
+}
+```
+
+这是批量破坏性操作。客户端只在点歌队列非空时启用按钮，执行前必须显示确认界面，
+并携带打开确认界面时的 `expected_revision`，避免确认期间其他成员新点的歌曲被意外
+清除。服务端只删除该房间的 `temporary_queue`，不删除房间歌单、个人歌单或正在使用的
+已保存歌单快照；点歌队列为当前来源时同时停止播放并清除当前项。相同
+`command_id` 的重试只应用一次。
 
 上一首规则：当前歌曲已播放超过 3 秒时从头播放；否则返回当前来源中的上一首。
 暂停状态下切换上一首/下一首后仍保持暂停。
@@ -235,6 +264,10 @@ Content-Type: application/json
 
 已保存歌单会复制为房间本轮独立播放快照。之后编辑原歌单不会改变正在播放的顺序；
 切换来源不会清空临时歌单。
+
+客户端队列标题行在加号按钮左侧保留一个上下文按钮：当前来源不是点歌队列时用于切回
+点歌队列，原列表中的独立“切回点歌队列”按钮不再显示；当前来源是点歌队列时用于清空
+队列，队列为空时禁用。
 
 ## 实时状态
 

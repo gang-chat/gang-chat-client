@@ -1,0 +1,97 @@
+import 'package:client/src/app/music_box_controller.dart';
+import 'package:client/src/protocol/api_client.dart';
+import 'package:client/src/protocol/models.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  test(
+    'playNow sends an idempotent item command without a stale revision',
+    () async {
+      final api = _RecordingMusicBoxApi(_state);
+    final controller = MusicBoxController(api: api);
+
+      await controller.playNow(roomId: 'room-1', item: _item);
+
+      expect(api.roomId, 'room-1');
+      expect(api.action, 'play_now');
+      expect(api.itemId, _item.id);
+      expect(api.commandId, isNotEmpty);
+      expect(api.expectedRevision, isNull);
+    },
+  );
+
+  test('music box command errors preserve localized API feedback', () {
+    final error = ApiException(
+      '歌曲尚未准备完成',
+      statusCode: 409,
+      code: 'music_box_item_not_ready',
+      requestId: 'request-1',
+    );
+
+    expect(musicBoxControlErrorMessage(error, '优先播放失败，请重试'), '歌曲尚未准备完成');
+    expect(
+      musicBoxControlErrorMessage(Exception('offline'), '优先播放失败，请重试'),
+      '优先播放失败，请重试',
+    );
+  });
+}
+
+const _item = MusicBoxQueueItem(
+  id: 'priority-track',
+  source: 'netease',
+  trackId: 'track-priority',
+  title: '优先歌曲',
+  artist: '歌手',
+  durationMs: 180000,
+  status: MusicBoxQueueItemStatus.ready,
+  fileSizeBytes: 1024,
+  error: '',
+  addedByUserId: 'requester',
+  createdAt: null,
+);
+
+const _state = MusicBoxState(
+  enabled: true,
+  playback: MusicBoxPlayback(
+    state: MusicBoxPlaybackState.playing,
+    currentItemId: 'priority-track',
+    positionMs: 0,
+    volume: 100,
+    updatedAt: null,
+  ),
+  queue: [_item],
+  usage: MusicBoxUsage(usedBytes: 1024, limitBytes: 200 * 1024 * 1024),
+  revision: 42,
+  hasRevision: true,
+);
+
+class _RecordingMusicBoxApi implements GangApi {
+  _RecordingMusicBoxApi(this.result);
+
+  final MusicBoxState result;
+  String? roomId;
+  String? action;
+  String? itemId;
+  String? commandId;
+  int? expectedRevision;
+
+  @override
+  Future<MusicBoxState> controlMusicBox({
+    required String roomId,
+    required String action,
+    String? itemId,
+    String? mode,
+    String? commandId,
+    int? expectedRevision,
+  }) async {
+    this.roomId = roomId;
+    this.action = action;
+    this.itemId = itemId;
+    this.commandId = commandId;
+    this.expectedRevision = expectedRevision;
+    return result;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}

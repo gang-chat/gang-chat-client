@@ -705,7 +705,7 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
   _MusicBoxSection _section = _MusicBoxSection.search;
   bool _showAddSources = false;
   bool _activatingTemporary = false;
-  String? _temporaryActivationError;
+  bool _clearingTemporary = false;
 
   void _setShowAddSources(bool value) {
     if (!value) FocusManager.instance.primaryFocus?.unfocus();
@@ -721,27 +721,62 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
     final controller = widget.controller;
     final roomId = widget.roomId;
     if (controller == null || roomId == null || _activatingTemporary) return;
-    setState(() {
-      _activatingTemporary = true;
-      _temporaryActivationError = null;
-    });
+    setState(() => _activatingTemporary = true);
     try {
       final state = await controller.activatePlaylist(
         roomId: roomId,
         sourceType: MusicBoxActiveSourceType.temporary,
       );
       _handleActivatedState(state);
-    } catch (_) {
-      if (mounted) setState(() => _temporaryActivationError = '切换点歌队列失败');
+    } catch (error) {
+      if (mounted) {
+        showFloatingErrorNotice(
+          context,
+          musicBoxControlErrorMessage(error, '切换点歌队列失败，请重试'),
+        );
+      }
     } finally {
       if (mounted) setState(() => _activatingTemporary = false);
     }
   }
 
+  Future<void> _confirmClearTemporary() async {
+    final controller = widget.controller;
+    final roomId = widget.roomId;
+    final count = widget.state.temporaryQueuedCount;
+    if (controller == null ||
+        roomId == null ||
+        count == 0 ||
+        _clearingTemporary) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => _MusicBoxClearQueueConfirmDialog(itemCount: count),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _clearingTemporary = true);
+    try {
+      final state = await controller.clearTemporaryQueue(
+        roomId: roomId,
+        currentState: widget.state,
+      );
+      widget.onStateChanged?.call(state);
+      if (mounted) showFloatingSuccessNotice(context, '已清空点歌队列');
+    } catch (error) {
+      if (mounted) {
+        showFloatingErrorNotice(
+          context,
+          musicBoxControlErrorMessage(error, '清空点歌队列失败，请重试'),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _clearingTemporary = false);
+    }
+  }
+
   Widget _currentQueueView() {
-    final isActive =
-        widget.state.activeSource.type == MusicBoxActiveSourceType.temporary;
-    final list = _MusicBoxQueueList(
+    return _MusicBoxQueueList(
       state: widget.state,
       queue: widget.state.queue,
       onRemoveItem: widget.onRemoveItem,
@@ -749,39 +784,14 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
       roomId: widget.roomId,
       onStateChanged: widget.onStateChanged,
     );
-    if (isActive) return list;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Button(
-          icon: const Icon(Icons.playlist_play),
-          tone: ButtonTone.primary,
-          height: 32,
-          loading: _activatingTemporary,
-          onPressed: () => unawaited(_activateTemporary()),
-          child: Text('切回点歌队列（${widget.state.temporaryQueuedCount}）'),
-        ),
-        if (_temporaryActivationError case final message?) ...[
-          const SizedBox(height: 6),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: UiColors.danger,
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-        const SizedBox(height: 10),
-        Expanded(child: list),
-      ],
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     final hasQuery = widget.searchController.text.trim().isNotEmpty;
+    final isTemporaryActive =
+        widget.state.activeSource.type == MusicBoxActiveSourceType.temporary;
+    final temporaryQueueEmpty = widget.state.temporaryQueuedCount == 0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -852,6 +862,26 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
             ),
             const SizedBox(width: 8),
             ButtonIcon(
+              key: const ValueKey<String>('music-box-queue-context-action'),
+              icon: Icon(
+                isTemporaryActive
+                    ? Icons.delete_sweep_outlined
+                    : Icons.playlist_play,
+              ),
+              tooltip: isTemporaryActive ? '清空点歌队列' : '切回点歌队列',
+              tone: isTemporaryActive ? ButtonTone.danger : ButtonTone.neutral,
+              loading: isTemporaryActive
+                  ? _clearingTemporary
+                  : _activatingTemporary,
+              onPressed: isTemporaryActive
+                  ? temporaryQueueEmpty
+                        ? null
+                        : () => unawaited(_confirmClearTemporary())
+                  : () => unawaited(_activateTemporary()),
+              size: _musicBoxSearchFieldHeight,
+            ),
+            const SizedBox(width: 8),
+            ButtonIcon(
               key: const ValueKey<String>('music-box-add-toggle'),
               icon: const Icon(Icons.add),
               tooltip: _showAddSources ? '返回当前队列' : '搜索或选择歌单',
@@ -914,6 +944,35 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
                 },
         ),
       ],
+    );
+  }
+}
+
+class _MusicBoxClearQueueConfirmDialog extends StatelessWidget {
+  const _MusicBoxClearQueueConfirmDialog({required this.itemCount});
+
+  final int itemCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return DialogFrame(
+      title: '清空点歌队列',
+      icon: Icons.delete_sweep_outlined,
+      adaptiveActions: [
+        ResponsiveDialogAction(
+          label: '取消',
+          onPressed: () => Navigator.of(context).pop(false),
+        ),
+        ResponsiveDialogAction(
+          label: '确认清空',
+          tone: ButtonTone.danger,
+          onPressed: () => Navigator.of(context).pop(true),
+        ),
+      ],
+      child: Text(
+        '确定清空点歌队列中的 $itemCount 首歌曲吗？如果正在播放点歌队列，播放也会停止。',
+        style: UiTypography.body,
+      ),
     );
   }
 }
@@ -1552,15 +1611,16 @@ class _MusicBoxSongCardState extends State<_MusicBoxSongCard> {
     if (controller == null || roomId == null || _playingNow) return;
     setState(() => _playingNow = true);
     try {
-      final state = await controller.playNow(
-        roomId: roomId,
-        item: widget.item,
-        currentState: widget.currentState,
-      );
+      final state = await controller.playNow(roomId: roomId, item: widget.item);
       widget.onStateChanged?.call(state);
       if (mounted) showFloatingSuccessNotice(context, '已优先播放');
-    } catch (_) {
-      if (mounted) showFloatingErrorNotice(context, '优先播放失败，请重试');
+    } catch (error) {
+      if (mounted) {
+        showFloatingErrorNotice(
+          context,
+          musicBoxControlErrorMessage(error, '优先播放失败，请重试'),
+        );
+      }
     } finally {
       if (mounted) setState(() => _playingNow = false);
     }
