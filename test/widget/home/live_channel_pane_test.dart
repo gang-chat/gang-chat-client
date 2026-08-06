@@ -2477,8 +2477,25 @@ void main() {
       final inlinePlayer = find.byKey(
         const ValueKey<String>('live-control:music-inline'),
       );
+      final musicPanelToggle = find.byKey(
+        const ValueKey<String>('live-control:music-queue'),
+      );
       expect(panel, findsOneWidget);
       expect(inlinePlayer, findsOneWidget);
+      expect(
+        find.descendant(
+          of: musicPanelToggle,
+          matching: find.byIcon(Icons.library_music),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: musicPanelToggle,
+          matching: find.byIcon(Icons.queue_music),
+        ),
+        findsNothing,
+      );
       final panelRect = tester.getRect(panel);
       stablePanelHeight ??= panelRect.height;
       expect(
@@ -2558,6 +2575,33 @@ void main() {
             )
             .top,
       ),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('collapsed music panel keeps the music box toggle icon', (
+    tester,
+  ) async {
+    final searchController = TextEditingController();
+    addTearDown(searchController.dispose);
+
+    await tester.pumpWidget(
+      _host(
+        searchController: searchController,
+        live: _liveState(const []),
+        musicBox: _emptyMusicBoxState,
+      ),
+    );
+
+    final musicPanelToggle = find.byKey(
+      const ValueKey<String>('live-control:music-queue'),
+    );
+    expect(
+      find.descendant(
+        of: musicPanelToggle,
+        matching: find.byIcon(Icons.library_music),
+      ),
+      findsOneWidget,
     );
     expect(tester.takeException(), isNull);
   });

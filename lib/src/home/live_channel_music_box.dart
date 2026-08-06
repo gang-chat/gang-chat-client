@@ -793,7 +793,7 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
           : source.id,
       name: music_box_display.musicBoxActiveSourceLabel(source),
       songCount: widget.state.queue.length,
-      createdAt: null,
+      createdAt: source.createdAt,
       creator: source.type == MusicBoxActiveSourceType.userPlaylist
           ? owner
           : null,
@@ -900,7 +900,7 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
         description: '',
         revision: 0,
         itemCount: widget.state.queue.length,
-        createdAt: null,
+        createdAt: source.createdAt,
         updatedAt: null,
       ),
       source.type == MusicBoxActiveSourceType.roomPlaylist,
@@ -1373,39 +1373,26 @@ class _ActiveMusicPlaylistTrackTile extends StatelessWidget {
           baseStyle: subtitleStyle,
           width: textWidth,
         );
-        final height = _musicBoxAdaptiveSongRowHeight(
-          context,
-          width: textWidth,
-          title: item.title,
-          subtitle: subtitle,
-          titleStyle: adaptiveTitle,
-          subtitleStyle: adaptiveSubtitle,
-        );
-        return PressableSurface(
+        return MusicPlaylistTrackSurface(
           key: ValueKey<String>('active-music-playlist-track:${item.id}'),
-          width: double.infinity,
-          height: height,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          backgroundColor: UiColors.surfaceLow,
-          pressedBackgroundColor: UiColors.surfacePressed,
-          borderColor: UiColors.border,
-          borderRadius: UiRadii.md,
-          child: Row(
-            children: [
-              const Icon(Icons.music_note, size: 20, color: UiColors.accent),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(item.title, style: adaptiveTitle, softWrap: true),
-                    const SizedBox(height: 3),
-                    Text(subtitle, style: adaptiveSubtitle, softWrap: true),
-                  ],
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                const Icon(Icons.music_note, size: 19, color: UiColors.accent),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(item.title, style: adaptiveTitle, softWrap: true),
+                      const SizedBox(height: 3),
+                      Text(subtitle, style: adaptiveSubtitle, softWrap: true),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -2795,7 +2782,7 @@ class _MusicBoxSongAttribution extends StatelessWidget {
               id: source.id,
               name: playlistName,
               songCount: songCount,
-              createdAt: null,
+              createdAt: source.createdAt,
               creator: source.type == MusicBoxActiveSourceType.userPlaylist
                   ? creator
                   : null,
@@ -2821,7 +2808,7 @@ class _MusicBoxSongAttribution extends StatelessWidget {
                       description: '',
                       revision: 0,
                       itemCount: songCount,
-                      createdAt: null,
+                      createdAt: source.createdAt,
                       updatedAt: null,
                     ),
                     source.type == MusicBoxActiveSourceType.roomPlaylist,
@@ -2866,16 +2853,13 @@ class _MusicBoxPlaylistAttributionValue extends StatelessWidget {
     return Row(
       key: const ValueKey<String>('music-box-song-playlist-attribution'),
       mainAxisAlignment: MainAxisAlignment.end,
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        const Padding(
-          padding: EdgeInsets.only(top: 1),
-          child: Icon(
-            Icons.queue_music,
-            key: ValueKey<String>('music-box-song-playlist-icon'),
-            size: 17,
-            color: UiColors.accent,
-          ),
+        const Icon(
+          Icons.queue_music,
+          key: ValueKey<String>('music-box-song-playlist-icon'),
+          size: 17,
+          color: UiColors.accent,
         ),
         const SizedBox(width: 5),
         Flexible(

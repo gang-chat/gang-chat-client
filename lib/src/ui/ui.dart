@@ -16,6 +16,7 @@ export 'input.dart';
 export 'latency_signal.dart';
 export 'member_presence_icons.dart';
 export 'media_cache_scope.dart';
+export 'music_playlist_track_surface.dart';
 export 'navigation.dart';
 export 'platform_gestures.dart';
 export 'read_only_text_box.dart';

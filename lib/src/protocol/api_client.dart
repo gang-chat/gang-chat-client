@@ -722,11 +722,24 @@ abstract interface class RoomMusicPlaylistApi {
   });
 }
 
+/// Optional room-playlist extension that atomically imports one of the
+/// authenticated user's personal playlists while creating the room playlist.
+/// Kept separate so existing room playlist fakes and older adapters remain
+/// source-compatible.
+abstract interface class RoomMusicPlaylistImportApi {
+  Future<PersonalMusicPlaylist> createRoomMusicPlaylistFromPersonal({
+    required String roomId,
+    required String name,
+    required String importPlaylistId,
+  });
+}
+
 class GangApiClient
     implements
         GangApi,
         PersonalMusicPlaylistApi,
         RoomMusicPlaylistApi,
+        RoomMusicPlaylistImportApi,
         MusicTrackPreviewApi,
         MusicBoxActivePlaylistCloneApi {
   GangApiClient({
@@ -2631,6 +2644,27 @@ class GangApiClient
         _uri('/rooms/$roomId/music-box/playlists'),
         headers: _headers(token),
         body: encodeJsonBody({'name': name}),
+      );
+    });
+    return PersonalMusicPlaylist.fromJson(
+      decoded['playlist']! as Map<String, Object?>,
+    );
+  }
+
+  @override
+  Future<PersonalMusicPlaylist> createRoomMusicPlaylistFromPersonal({
+    required String roomId,
+    required String name,
+    required String importPlaylistId,
+  }) async {
+    final decoded = await _sendJson((token) {
+      return _httpClient.post(
+        _uri('/rooms/$roomId/music-box/playlists'),
+        headers: _headers(token),
+        body: encodeJsonBody({
+          'name': name,
+          'import_playlist_id': importPlaylistId,
+        }),
       );
     });
     return PersonalMusicPlaylist.fromJson(

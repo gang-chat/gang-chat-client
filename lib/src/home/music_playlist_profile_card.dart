@@ -308,15 +308,14 @@ class _MusicPlaylistProfileCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            key: const ValueKey<String>('music-playlist-card-title'),
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const Padding(
-                padding: EdgeInsets.only(top: 2),
-                child: Icon(
-                  Icons.queue_music,
-                  size: 22,
-                  color: UiColors.accent,
-                ),
+              const Icon(
+                Icons.queue_music,
+                key: ValueKey<String>('music-playlist-card-title-icon'),
+                size: 22,
+                color: UiColors.accent,
               ),
               const SizedBox(width: UiSpacing.sm),
               Expanded(

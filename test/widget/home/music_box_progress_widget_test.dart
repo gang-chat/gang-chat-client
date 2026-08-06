@@ -692,12 +692,13 @@ void main() {
           positionMs: 1000,
           queue: tracks,
           currentItemId: 'snapshot-track-1',
-          activeSource: const MusicBoxActiveSource(
+          activeSource: MusicBoxActiveSource(
             type: MusicBoxActiveSourceType.userPlaylist,
             id: 'other-playlist',
             name: '夜晚精选',
             ownerUserId: 'other-user',
             snapshotId: 'snapshot-1',
+            createdAt: DateTime(2026, 8, 5, 14, 30),
             owner: MusicBoxRequester(
               userId: 'other-user',
               username: 'friend',
@@ -728,6 +729,7 @@ void main() {
         );
         await tester.tap(header);
         await tester.pumpAndSettle();
+        expect(find.text('2026-08-05 14:30'), findsOneWidget);
         await tester.tap(
           find.byKey(const ValueKey<String>('music-playlist-card-view')),
         );
@@ -747,6 +749,13 @@ void main() {
         expect(
           find.descendant(of: dialog, matching: find.text('第二首完整歌曲')),
           findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: dialog,
+            matching: find.byType(MusicPlaylistTrackSurface),
+          ),
+          findsNWidgets(2),
         );
 
         await tester.tap(
@@ -1406,6 +1415,22 @@ void main() {
           const ValueKey<String>('music-playlist-card:room-playlist-long'),
         );
         expect(playlistCard, findsOneWidget);
+        final titleRow = find.descendant(
+          of: playlistCard,
+          matching: find.byKey(
+            const ValueKey<String>('music-playlist-card-title'),
+          ),
+        );
+        final titleIcon = find.descendant(
+          of: titleRow,
+          matching: find.byKey(
+            const ValueKey<String>('music-playlist-card-title-icon'),
+          ),
+        );
+        expect(
+          tester.getCenter(titleIcon).dy,
+          closeTo(tester.getCenter(titleRow).dy, 0.1),
+        );
         expect(
           find.descendant(of: playlistCard, matching: find.text('创建日期')),
           findsOneWidget,
@@ -1868,6 +1893,16 @@ void main() {
       expect(
         find.descendant(of: attribution, matching: find.text('123')),
         findsOneWidget,
+      );
+      final attributionIcon = find.descendant(
+        of: attribution,
+        matching: find.byKey(
+          const ValueKey<String>('music-box-song-playlist-icon'),
+        ),
+      );
+      expect(
+        tester.getCenter(attributionIcon).dy,
+        closeTo(tester.getCenter(attribution).dy, 0.1),
       );
       expect(find.text('testxxx的歌单'), findsNothing);
       expect(find.text(' · 123'), findsNothing);

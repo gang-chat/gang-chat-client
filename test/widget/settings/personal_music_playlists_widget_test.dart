@@ -70,6 +70,7 @@ void main() {
         expect(find.text('筛选'), findsOneWidget);
         expect(find.text('晴天'), findsOneWidget);
         expect(find.textContaining('周杰伦'), findsWidgets);
+        expect(find.byType(ui.MusicPlaylistTrackSurface), findsOneWidget);
         expect(tester.takeException(), isNull);
       },
     );
@@ -1110,6 +1111,73 @@ void main() {
     expect(find.text('添加到歌单'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  for (final platform in [
+    TargetPlatform.windows,
+    TargetPlatform.macOS,
+    TargetPlatform.android,
+  ]) {
+    testWidgets(
+      'room playlist creation imports a personal playlist on ${platform.name}',
+      (tester) async {
+        final size = platform == TargetPlatform.android
+            ? const Size(360, 800)
+            : const Size(720, 800);
+        await tester.binding.setSurfaceSize(size);
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final roomApi = _FakeRoomPlaylistApi();
+        final personalApi = _FakePersonalPlaylistApi();
+        final controller = PersonalMusicPlaylistsController.room(
+          roomApi: roomApi,
+          personalApi: personalApi,
+          roomId: 'room_1',
+          canManage: true,
+          searchTracks: ({required keyword, required source}) async => const [],
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ui.uiTheme().copyWith(platform: platform),
+            home: Scaffold(
+              body: MusicPlaylistsPanel(
+                controller: controller,
+                title: '房间歌单',
+                unavailableMessage: '房间歌单暂不可用',
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('create-personal-music-playlist')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('导入我的歌单'), findsOneWidget);
+
+        await tester.tap(find.text('导入我的歌单'));
+        // The originating button intentionally stays in its loading state
+        // while the picker dialog is open, so waiting for every animation to
+        // settle would never complete here.
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.tap(find.text('夜晚'));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('selected-personal-music-playlist-import')),
+          findsOneWidget,
+        );
+
+        final nameInput = find.byKey(
+          const ValueKey('personal-music-playlist-name-input'),
+        );
+        await tester.enterText(nameInput, '导入精选');
+        await tester.tap(find.text('创建'));
+        await tester.pumpAndSettle();
+
+        expect(roomApi.importRequests, ['room_1:导入精选:mbp_1']);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 }
 
 Future<void> _pumpPlaylistSettings(
@@ -1453,7 +1521,9 @@ class _FakePreviewPlatform implements MusicTrackPreviewPlatform {
   }
 }
 
-class _FakeRoomPlaylistApi implements RoomMusicPlaylistApi {
+class _FakeRoomPlaylistApi
+    implements RoomMusicPlaylistApi, RoomMusicPlaylistImportApi {
+  final List<String> importRequests = [];
   static const playlist = PersonalMusicPlaylist(
     id: 'mbp_room_1',
     name: '房间精选',
@@ -1512,6 +1582,24 @@ class _FakeRoomPlaylistApi implements RoomMusicPlaylistApi {
       pageSize: 50,
       total: 1,
       hasMore: false,
+    );
+  }
+
+  @override
+  Future<PersonalMusicPlaylist> createRoomMusicPlaylistFromPersonal({
+    required String roomId,
+    required String name,
+    required String importPlaylistId,
+  }) async {
+    importRequests.add('$roomId:$name:$importPlaylistId');
+    return PersonalMusicPlaylist(
+      id: 'mbp_room_imported',
+      name: name,
+      description: '',
+      revision: 1,
+      itemCount: 1,
+      createdAt: null,
+      updatedAt: null,
     );
   }
 

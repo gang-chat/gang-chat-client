@@ -992,7 +992,7 @@ class _InlineMusicBox extends StatelessWidget {
                       message: expanded ? '收起音乐面板' : '打开音乐面板',
                       child: ButtonIcon(
                         key: const ValueKey<String>('live-control:music-queue'),
-                        icon: const Icon(Icons.queue_music),
+                        icon: const Icon(Icons.library_music),
                         selected: expanded,
                         onPressed: onToggleExpand,
                         size: 30,

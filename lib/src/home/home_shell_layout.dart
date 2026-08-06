@@ -347,6 +347,9 @@ extension _HomeShellLayout on _HomeShellState {
             roomApi: _services.api is RoomMusicPlaylistApi
                 ? _services.api as RoomMusicPlaylistApi
                 : null,
+            personalApi: _services.api is PersonalMusicPlaylistApi
+                ? _services.api as PersonalMusicPlaylistApi
+                : null,
             roomId: room.id,
             canManage: room_display
                 .roomAccessState(room: room, currentUser: _currentUser)

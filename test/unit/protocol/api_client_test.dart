@@ -2940,6 +2940,7 @@ void main() {
                 'playlist_id': 'playlist_1',
                 'snapshot_id': 'snapshot_1',
                 'name': 'Room list',
+                'created_at': '2026-08-06T03:04:05Z',
               },
               'queue': [],
               'temporary_queue': [],
@@ -2958,6 +2959,7 @@ void main() {
 
       expect(state.activeSource.type, MusicBoxActiveSourceType.roomPlaylist);
       expect(state.activeSource.snapshotId, 'snapshot_1');
+      expect(state.activeSource.createdAt, DateTime.utc(2026, 8, 6, 3, 4, 5));
       expect(state.revision, 2);
       api.close();
     },
@@ -3284,15 +3286,22 @@ void main() {
               headers: {'content-type': 'application/json; charset=utf-8'},
             );
           case ('POST', '/api/v1/rooms/room_1/music-box/playlists'):
-            expect(jsonDecode(request.body), {'name': '新歌单'});
+            final body = jsonDecode(request.body) as Map<String, dynamic>;
+            final imported = body.containsKey('import_playlist_id');
+            expect(
+              body,
+              imported
+                  ? {'name': '导入精选', 'import_playlist_id': 'mbp_personal_1'}
+                  : {'name': '新歌单'},
+            );
             return http.Response(
               jsonEncode({
                 'playlist': {
-                  'id': 'mbp_room_2',
-                  'name': '新歌单',
+                  'id': imported ? 'mbp_room_import' : 'mbp_room_2',
+                  'name': imported ? '导入精选' : '新歌单',
                   'description': '',
                   'revision': 1,
-                  'item_count': 0,
+                  'item_count': imported ? 1 : 0,
                 },
               }),
               201,
@@ -3352,6 +3361,11 @@ void main() {
       roomId: 'room_1',
       name: '新歌单',
     );
+    final imported = await api.createRoomMusicPlaylistFromPersonal(
+      roomId: 'room_1',
+      name: '导入精选',
+      importPlaylistId: 'mbp_personal_1',
+    );
     final item = await api.addRoomMusicPlaylistItem(
       roomId: 'room_1',
       playlistId: created.id,
@@ -3373,7 +3387,8 @@ void main() {
     );
     await api.deleteRoomMusicPlaylist(roomId: 'room_1', playlistId: created.id);
 
-    expect(seen, hasLength(6));
+    expect(imported.itemCount, 1);
+    expect(seen, hasLength(7));
     api.close();
   });
 }

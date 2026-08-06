@@ -327,22 +327,28 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
         _playlists.length >= _maxPlaylists) {
       return;
     }
-    final name = await showDialog<String>(
+    final draft = await showDialog<PersonalPlaylistCreateDraft>(
       context: context,
-      builder: (context) => const _MusicPlaylistNameDialog(
+      builder: (context) => _MusicPlaylistNameDialog(
         title: '新建歌单',
         icon: Icons.playlist_add,
         confirmLabel: '创建',
         confirmIcon: Icons.add,
+        loadImportPlaylists: widget.controller.canImportPersonalPlaylist
+            ? widget.controller.loadImportPlaylists
+            : null,
       ),
     );
-    if (!mounted || name == null) return;
+    if (!mounted || draft == null) return;
     setState(() {
       _creating = true;
       _error = null;
     });
     try {
-      await widget.controller.createPlaylist(name);
+      await widget.controller.createPlaylist(
+        draft.name,
+        importPlaylistId: draft.importPlaylistId,
+      );
       await _loadPlaylists();
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
@@ -353,7 +359,7 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
 
   Future<void> _renamePlaylist(PersonalMusicPlaylist playlist) async {
     if (!_capabilities.canRenamePlaylists || _playlistManagementBusy) return;
-    final name = await showDialog<String>(
+    final draft = await showDialog<PersonalPlaylistCreateDraft>(
       context: context,
       builder: (context) => _MusicPlaylistNameDialog(
         title: '重命名歌单',
@@ -363,7 +369,7 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
         initialName: playlist.name,
       ),
     );
-    if (!mounted || name == null || name == playlist.name) return;
+    if (!mounted || draft == null || draft.name == playlist.name) return;
     setState(() {
       _busyPlaylistIds.add(playlist.id);
       _error = null;
@@ -371,7 +377,7 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
     try {
       await widget.controller.renamePlaylist(
         playlistId: playlist.id,
-        name: name,
+        name: draft.name,
       );
       await _loadPlaylists();
     } catch (error) {
@@ -1789,7 +1795,7 @@ class _MusicPlaylistItemTile extends StatelessWidget {
         ],
       ),
     );
-    final panel = _SettingsSubPanel(
+    final panel = MusicPlaylistTrackSurface(
       highlighted: selected,
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -2426,6 +2432,7 @@ class _MusicPlaylistNameDialog extends StatefulWidget {
     required this.confirmLabel,
     required this.confirmIcon,
     this.initialName = '',
+    this.loadImportPlaylists,
   });
 
   final String title;
@@ -2433,6 +2440,7 @@ class _MusicPlaylistNameDialog extends StatefulWidget {
   final String confirmLabel;
   final IconData confirmIcon;
   final String initialName;
+  final Future<PersonalMusicPlaylistPage?> Function()? loadImportPlaylists;
 
   @override
   State<_MusicPlaylistNameDialog> createState() =>
@@ -2442,6 +2450,8 @@ class _MusicPlaylistNameDialog extends StatefulWidget {
 class _MusicPlaylistNameDialogState extends State<_MusicPlaylistNameDialog> {
   late final TextEditingController _controller;
   final FocusNode _focusNode = FocusNode();
+  PersonalMusicPlaylist? _importPlaylist;
+  bool _loadingImportPlaylists = false;
   String? _error;
 
   @override
@@ -2471,7 +2481,39 @@ class _MusicPlaylistNameDialogState extends State<_MusicPlaylistNameDialog> {
       setState(() => _error = '请输入 1～64 个字符的歌单名');
       return;
     }
-    Navigator.of(context).pop(name);
+    Navigator.of(context).pop(
+      PersonalPlaylistCreateDraft(
+        name: name,
+        importPlaylistId: _importPlaylist?.id,
+      ),
+    );
+  }
+
+  Future<void> _chooseImportPlaylist() async {
+    final load = widget.loadImportPlaylists;
+    if (load == null || _loadingImportPlaylists) return;
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _loadingImportPlaylists = true;
+      _error = null;
+    });
+    try {
+      final page = await load();
+      if (!mounted) return;
+      final selected = await showDialog<PersonalMusicPlaylist>(
+        context: context,
+        builder: (context) => _MusicPlaylistImportDialog(
+          playlists: page?.playlists ?? const [],
+          selectedPlaylistId: _importPlaylist?.id,
+        ),
+      );
+      if (!mounted || selected == null) return;
+      setState(() => _importPlaylist = selected);
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _loadingImportPlaylists = false);
+    }
   }
 
   @override
@@ -2503,12 +2545,195 @@ class _MusicPlaylistNameDialogState extends State<_MusicPlaylistNameDialog> {
             textInputAction: TextInputAction.done,
             onSubmitted: (_) => _submit(),
           ),
+          if (widget.loadImportPlaylists != null) ...[
+            const SizedBox(height: 10),
+            Button(
+              key: const ValueKey<String>(
+                'import-personal-music-playlist-button',
+              ),
+              width: double.infinity,
+              loading: _loadingImportPlaylists,
+              selected: _importPlaylist != null,
+              tone: _importPlaylist == null
+                  ? ButtonTone.neutral
+                  : ButtonTone.primary,
+              icon: const Icon(Icons.library_add_outlined),
+              onPressed: _chooseImportPlaylist,
+              child: const Text('导入我的歌单'),
+            ),
+            if (_importPlaylist != null) ...[
+              const SizedBox(height: 8),
+              Container(
+                key: const ValueKey<String>(
+                  'selected-personal-music-playlist-import',
+                ),
+                padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
+                decoration: BoxDecoration(
+                  color: _primaryDark,
+                  border: Border.all(color: UiColors.selectedBorder),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.queue_music, color: _cyan, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _importPlaylist!.name,
+                            style: const TextStyle(
+                              color: _textPrimary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${_importPlaylist!.itemCount} 首歌曲',
+                            style: const TextStyle(
+                              color: _textMuted,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ButtonIcon(
+                      key: const ValueKey<String>(
+                        'clear-personal-music-playlist-import',
+                      ),
+                      icon: const Icon(Icons.close),
+                      tooltip: '取消导入',
+                      onPressed: () => setState(() => _importPlaylist = null),
+                      size: 32,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
           if (_error != null) ...[
             const SizedBox(height: 8),
             _MusicPlaylistErrorText(_error!),
           ],
         ],
       ),
+    );
+  }
+}
+
+class _MusicPlaylistImportDialog extends StatelessWidget {
+  const _MusicPlaylistImportDialog({
+    required this.playlists,
+    required this.selectedPlaylistId,
+  });
+
+  final List<PersonalMusicPlaylist> playlists;
+  final String? selectedPlaylistId;
+
+  @override
+  Widget build(BuildContext context) {
+    final viewportHeight = (MediaQuery.sizeOf(context).height * 0.56).clamp(
+      180.0,
+      520.0,
+    );
+    return DialogFrame(
+      title: '选择歌单',
+      icon: Icons.library_music_outlined,
+      maxWidth: 560,
+      adaptiveActions: [
+        ResponsiveDialogAction(
+          label: '取消',
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ],
+      child: SizedBox(
+        key: const ValueKey<String>('personal-music-playlist-import-picker'),
+        height: viewportHeight,
+        child: playlists.isEmpty
+            ? const Center(child: _SettingsEmptyState(text: '我的歌单为空'))
+            : ListView.separated(
+                padding: EdgeInsets.zero,
+                itemCount: playlists.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                itemBuilder: (context, index) {
+                  final playlist = playlists[index];
+                  return _MusicPlaylistImportTile(
+                    playlist: playlist,
+                    selected: playlist.id == selectedPlaylistId,
+                    onPressed: () => Navigator.of(context).pop(playlist),
+                  );
+                },
+              ),
+      ),
+    );
+  }
+}
+
+class _MusicPlaylistImportTile extends StatelessWidget {
+  const _MusicPlaylistImportTile({
+    required this.playlist,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final PersonalMusicPlaylist playlist;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const nameStyle = TextStyle(
+          color: _textPrimary,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          height: 1.25,
+        );
+        final namePainter =
+            TextPainter(
+              text: TextSpan(text: playlist.name, style: nameStyle),
+              textDirection: Directionality.of(context),
+              textScaler: MediaQuery.textScalerOf(context),
+            )..layout(
+              maxWidth: (constraints.maxWidth - 118).clamp(
+                40.0,
+                double.infinity,
+              ),
+            );
+        final measuredHeight = namePainter.height + 39;
+        final height = measuredHeight < 58 ? 58.0 : measuredHeight;
+        return PressableSurface(
+          key: ValueKey<String>(
+            'personal-music-playlist-import-option-${playlist.id}',
+          ),
+          height: height,
+          selected: selected,
+          onPressed: onPressed,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          child: Row(
+            children: [
+              const Icon(Icons.queue_music, color: _cyan, size: 22),
+              const SizedBox(width: 12),
+              Expanded(child: Text(playlist.name, style: nameStyle)),
+              const SizedBox(width: 10),
+              Text(
+                '${playlist.itemCount} 首',
+                style: const TextStyle(color: _textMuted, fontSize: 12),
+              ),
+              const SizedBox(width: 6),
+              Icon(
+                selected ? Icons.check : Icons.chevron_right,
+                color: selected ? _cyan : _textMuted,
+                size: 20,
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

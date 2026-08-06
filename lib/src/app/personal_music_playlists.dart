@@ -25,6 +25,16 @@ class PersonalPlaylistFilterDraft {
   final String countFilter;
 }
 
+class PersonalPlaylistCreateDraft {
+  const PersonalPlaylistCreateDraft({
+    required this.name,
+    this.importPlaylistId,
+  });
+
+  final String name;
+  final String? importPlaylistId;
+}
+
 class PersonalPlaylistItemFilterDraft {
   const PersonalPlaylistItemFilterDraft({
     required this.keyword,
@@ -76,7 +86,14 @@ abstract interface class _MusicPlaylistsBackend {
 
   Future<PersonalMusicPlaylistPage> loadPlaylists();
 
-  Future<PersonalMusicPlaylist> createPlaylist({required String name});
+  bool get canImportPersonalPlaylist;
+
+  Future<PersonalMusicPlaylistPage?> loadImportPlaylists();
+
+  Future<PersonalMusicPlaylist> createPlaylist({
+    required String name,
+    String? importPlaylistId,
+  });
 
   Future<PersonalMusicPlaylist> renamePlaylist({
     required String playlistId,
@@ -133,6 +150,7 @@ class PersonalMusicPlaylistsController {
 
   PersonalMusicPlaylistsController.room({
     required RoomMusicPlaylistApi? roomApi,
+    PersonalMusicPlaylistApi? personalApi,
     required String roomId,
     required bool canManage,
     required MusicPlaylistTrackSearch searchTracks,
@@ -140,6 +158,7 @@ class PersonalMusicPlaylistsController {
            ? null
            : _RoomMusicPlaylistsBackend(
                roomApi: roomApi,
+               personalApi: personalApi,
                roomId: roomId,
                canManage: canManage,
                searchTracksCallback: searchTracks,
@@ -157,18 +176,31 @@ class PersonalMusicPlaylistsController {
 
   bool get roomScoped => _backend is _RoomMusicPlaylistsBackend;
 
+  bool get canImportPersonalPlaylist =>
+      _backend?.canImportPersonalPlaylist ?? false;
+
   Future<PersonalMusicPlaylistPage?> loadPlaylists() {
     final client = _backend;
     if (client == null) return Future.value();
     return client.loadPlaylists();
   }
 
-  Future<PersonalMusicPlaylist?> createPlaylist(String name) {
+  Future<PersonalMusicPlaylistPage?> loadImportPlaylists() {
+    return _backend?.loadImportPlaylists() ?? Future.value();
+  }
+
+  Future<PersonalMusicPlaylist?> createPlaylist(
+    String name, {
+    String? importPlaylistId,
+  }) {
     final normalized = normalizedPersonalPlaylistName(name);
     if (normalized == null) return Future.value();
     final client = _backend;
     if (client == null) return Future.value();
-    return client.createPlaylist(name: normalized);
+    return client.createPlaylist(
+      name: normalized,
+      importPlaylistId: importPlaylistId?.trim(),
+    );
   }
 
   Future<PersonalMusicPlaylist?> renamePlaylist({
@@ -319,12 +351,26 @@ class _PersonalMusicPlaylistsBackend implements _MusicPlaylistsBackend {
       const MusicPlaylistManagementCapabilities();
 
   @override
+  bool get canImportPersonalPlaylist => false;
+
+  @override
+  Future<PersonalMusicPlaylistPage?> loadImportPlaylists() {
+    return Future.value();
+  }
+
+  @override
   Future<PersonalMusicPlaylistPage> loadPlaylists() {
     return api.listPersonalMusicPlaylists();
   }
 
   @override
-  Future<PersonalMusicPlaylist> createPlaylist({required String name}) {
+  Future<PersonalMusicPlaylist> createPlaylist({
+    required String name,
+    String? importPlaylistId,
+  }) {
+    if (importPlaylistId != null && importPlaylistId.isNotEmpty) {
+      return Future.error(StateError('个人歌单不能从另一个个人歌单导入创建'));
+    }
     return api.createPersonalMusicPlaylist(name: name);
   }
 
@@ -435,12 +481,14 @@ class _PersonalMusicPlaylistsBackend implements _MusicPlaylistsBackend {
 class _RoomMusicPlaylistsBackend implements _MusicPlaylistsBackend {
   const _RoomMusicPlaylistsBackend({
     required this.roomApi,
+    required this.personalApi,
     required this.roomId,
     required this.canManage,
     required this.searchTracksCallback,
   });
 
   final RoomMusicPlaylistApi roomApi;
+  final PersonalMusicPlaylistApi? personalApi;
   final String roomId;
   final bool canManage;
   final MusicPlaylistTrackSearch searchTracksCallback;
@@ -452,7 +500,7 @@ class _RoomMusicPlaylistsBackend implements _MusicPlaylistsBackend {
   }
 
   @override
-  Object get identity => (roomApi, roomId, canManage);
+  Object get identity => (roomApi, personalApi, roomId, canManage);
 
   @override
   MusicPlaylistManagementCapabilities get capabilities => canManage
@@ -460,13 +508,44 @@ class _RoomMusicPlaylistsBackend implements _MusicPlaylistsBackend {
       : const MusicPlaylistManagementCapabilities.readOnly();
 
   @override
+  bool get canImportPersonalPlaylist =>
+      canManage && personalApi != null && roomApi is RoomMusicPlaylistImportApi;
+
+  @override
+  Future<PersonalMusicPlaylistPage?> loadImportPlaylists() {
+    _requireManagePermission();
+    final api = personalApi;
+    if (api == null) return Future.value();
+    return api.listPersonalMusicPlaylists(
+      page: 1,
+      pageSize: personalMusicPlaylistPageSize,
+    );
+  }
+
+  @override
   Future<PersonalMusicPlaylistPage> loadPlaylists() {
     return roomApi.listRoomMusicPlaylists(roomId: roomId);
   }
 
   @override
-  Future<PersonalMusicPlaylist> createPlaylist({required String name}) {
+  Future<PersonalMusicPlaylist> createPlaylist({
+    required String name,
+    String? importPlaylistId,
+  }) {
     _requireManagePermission();
+    final normalizedImportID = importPlaylistId?.trim() ?? '';
+    if (normalizedImportID.isNotEmpty) {
+      final importApi = roomApi;
+      if (importApi is! RoomMusicPlaylistImportApi) {
+        return Future.error(StateError('当前服务端不支持导入我的歌单'));
+      }
+      return (importApi as RoomMusicPlaylistImportApi)
+          .createRoomMusicPlaylistFromPersonal(
+            roomId: roomId,
+            name: name,
+            importPlaylistId: normalizedImportID,
+          );
+    }
     return roomApi.createRoomMusicPlaylist(roomId: roomId, name: name);
   }
 
