@@ -348,6 +348,137 @@ Future<void> _toggleAddSources(WidgetTester tester) async {
 
 void main() {
   testWidgets(
+    'opening the music panel centers the currently playing queue item once',
+    (tester) async {
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+      final queue = List<MusicBoxQueueItem>.generate(20, (index) {
+        return MusicBoxQueueItem(
+          id: 'queue-$index',
+          source: 'netease',
+          trackId: 'track-$index',
+          title: index.isEven
+              ? '第 $index 首歌'
+              : '第 $index 首需要多行显示以验证自适应高度定位的很长歌曲名称',
+          artist: '歌手 $index',
+          durationMs: 200000,
+          status: MusicBoxQueueItemStatus.ready,
+          fileSizeBytes: 0,
+          error: '',
+          addedByUserId: 'user',
+          createdAt: null,
+        );
+      });
+      final state = _state(
+        playbackState: MusicBoxPlaybackState.playing,
+        positionMs: 30000,
+        currentItemId: 'queue-10',
+        queue: queue,
+      );
+
+      await tester.pumpWidget(_host(state, controller, height: 500));
+      await tester.pump();
+      await tester.pump();
+
+      final viewport = find.byKey(
+        const ValueKey<String>('music-box-results-viewport'),
+      );
+      final currentTile = find.byKey(
+        const ValueKey<String>('music-box-queue-tile:queue-10'),
+      );
+      expect(currentTile, findsOneWidget);
+      expect(
+        (tester.getCenter(currentTile).dy - tester.getCenter(viewport).dy)
+            .abs(),
+        lessThan(1.0),
+      );
+
+      final queueList = find.byKey(
+        const ValueKey<String>('music-box-queue-list'),
+      );
+      await tester.drag(queueList, const Offset(0, -60));
+      await tester.pump(const Duration(milliseconds: 300));
+      final manuallyShiftedCenter = tester.getCenter(currentTile).dy;
+      await tester.pumpWidget(
+        _host(
+          _state(
+            playbackState: MusicBoxPlaybackState.playing,
+            positionMs: 31000,
+            currentItemId: 'queue-10',
+            queue: queue,
+            revision: 1,
+            hasRevision: true,
+          ),
+          controller,
+          height: 500,
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(
+        tester.getCenter(currentTile).dy,
+        closeTo(manuallyShiftedCenter, 1),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final boundary in const [('top', 0), ('bottom', 11)]) {
+    testWidgets(
+      'opening the music panel keeps the ${boundary.$1} current item at its boundary',
+      (tester) async {
+        final controller = TextEditingController();
+        addTearDown(controller.dispose);
+        final queue = List<MusicBoxQueueItem>.generate(12, (index) {
+          return MusicBoxQueueItem(
+            id: 'boundary-$index',
+            source: 'netease',
+            trackId: 'track-$index',
+            title: '第 $index 首歌',
+            artist: '歌手',
+            durationMs: 200000,
+            status: MusicBoxQueueItemStatus.ready,
+            fileSizeBytes: 0,
+            error: '',
+            addedByUserId: 'user',
+            createdAt: null,
+          );
+        });
+        final currentIndex = boundary.$2;
+        await tester.pumpWidget(
+          _host(
+            _state(
+              playbackState: MusicBoxPlaybackState.playing,
+              positionMs: 30000,
+              currentItemId: 'boundary-$currentIndex',
+              queue: queue,
+            ),
+            controller,
+            height: 500,
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+
+        final viewportRect = tester.getRect(
+          find.byKey(const ValueKey<String>('music-box-results-viewport')),
+        );
+        final tileRect = tester.getRect(
+          find.byKey(
+            ValueKey<String>('music-box-queue-tile:boundary-$currentIndex'),
+          ),
+        );
+        if (currentIndex == 0) {
+          expect(tileRect.top, closeTo(viewportRect.top, 1));
+        } else {
+          expect(tileRect.bottom, closeTo(viewportRect.bottom, 1));
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets(
     'source picker hides QQ Music and normalizes a legacy selection',
     (tester) async {
       final controller = TextEditingController();

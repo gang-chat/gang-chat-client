@@ -666,7 +666,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('取消管理'), findsOneWidget);
       expect(find.text('删除'), findsOneWidget);
-      expect(find.text('分享'), findsOneWidget);
+      expect(find.text('合并'), findsOneWidget);
       expect(find.text('置顶'), findsOneWidget);
       expect(find.text('全选'), findsOneWidget);
       expect(find.byTooltip('重命名'), findsOneWidget);
@@ -676,7 +676,7 @@ void main() {
       expect(
         tester
             .widget<ui.Button>(
-              find.byKey(const ValueKey('share-personal-music-playlists')),
+              find.byKey(const ValueKey('merge-selected-music-playlists')),
             )
             .onPressed,
         isNull,
@@ -747,6 +747,193 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  for (final platform in [
+    TargetPlatform.windows,
+    TargetPlatform.macOS,
+    TargetPlatform.android,
+  ]) {
+    testWidgets(
+      'merges personal playlists in selection order on ${platform.name}',
+      (tester) async {
+        final size = platform == TargetPlatform.android
+            ? const Size(360, 800)
+            : const Size(720, 800);
+        await tester.binding.setSurfaceSize(size);
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final api = _FakePersonalPlaylistApi(
+          playlists: const [
+            _FakePersonalPlaylistApi.playlist,
+            _FakePersonalPlaylistApi.emptyPlaylist,
+          ],
+        );
+
+        await _pumpPlaylistSettings(tester, api, platform: platform);
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('manage-personal-music-playlists')),
+        );
+        await tester.pumpAndSettle();
+
+        final emptyCard = find.byKey(
+          const ValueKey('personal-music-playlist-card-mbp_empty'),
+        );
+        final playlistCard = find.byKey(
+          const ValueKey('personal-music-playlist-card-mbp_1'),
+        );
+        await tester.tapAt(tester.getTopLeft(emptyCard) + const Offset(2, 2));
+        await tester.tapAt(
+          tester.getTopLeft(playlistCard) + const Offset(2, 2),
+        );
+        await tester.pumpAndSettle();
+
+        final mergeButton = find.byKey(
+          const ValueKey('merge-selected-music-playlists'),
+        );
+        expect(tester.widget<ui.Button>(mergeButton).onPressed, isNotNull);
+        await tester.tap(mergeButton);
+        await tester.pumpAndSettle();
+        expect(find.text('合并歌单'), findsOneWidget);
+        expect(find.textContaining('未合并的剩余歌曲仍保留'), findsOneWidget);
+        await tester.enterText(
+          find.byKey(const ValueKey('personal-music-playlist-name-input')),
+          '合并结果',
+        );
+        await tester.tap(find.text('合并').last);
+        await tester.pumpAndSettle();
+        expect(find.text('确认合并歌单'), findsOneWidget);
+        expect(find.textContaining('此操作无法撤销'), findsOneWidget);
+        expect(api.mergeRequests, isEmpty);
+        await tester.tap(find.text('确认合并'));
+        await tester.pumpAndSettle();
+
+        expect(api.mergeRequests, ['合并结果:mbp_empty,mbp_1']);
+        expect(find.text('合并结果'), findsOneWidget);
+        expect(find.textContaining('已合并为“合并结果”'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('merges room playlists on ${platform.name}', (tester) async {
+      final size = platform == TargetPlatform.android
+          ? const Size(360, 800)
+          : const Size(720, 800);
+      await tester.binding.setSurfaceSize(size);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final roomApi = _FakeRoomPlaylistApi(
+        playlists: const [
+          _FakeRoomPlaylistApi.playlist,
+          _FakeRoomPlaylistApi.secondPlaylist,
+        ],
+      );
+      final controller = PersonalMusicPlaylistsController.room(
+        roomApi: roomApi,
+        roomId: 'room_1',
+        canManage: true,
+        searchTracks: ({required keyword, required source}) async => const [],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ui.uiTheme().copyWith(platform: platform),
+          home: Scaffold(
+            body: MusicPlaylistsPanel(
+              controller: controller,
+              title: '房间歌单',
+              unavailableMessage: '房间歌单暂不可用',
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('manage-personal-music-playlists')),
+      );
+      await tester.pumpAndSettle();
+      for (final id in ['mbp_room_2', 'mbp_room_1']) {
+        final card = find.byKey(ValueKey('personal-music-playlist-card-$id'));
+        await tester.tapAt(tester.getTopLeft(card) + const Offset(2, 2));
+      }
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('merge-selected-music-playlists')),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('personal-music-playlist-name-input')),
+        '房间合并结果',
+      );
+      await tester.tap(find.text('合并').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('确认合并'));
+      await tester.pumpAndSettle();
+
+      expect(roomApi.mergeRequests, ['房间合并结果:mbp_room_2,mbp_room_1']);
+      expect(find.text('房间合并结果'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('warns before merging more than 500 playlist items', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(720, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final api = _FakePersonalPlaylistApi(
+      playlists: const [
+        PersonalMusicPlaylist(
+          id: 'mbp_many_1',
+          name: '很多歌曲一',
+          description: '',
+          revision: 1,
+          itemCount: 400,
+          createdAt: null,
+          updatedAt: null,
+        ),
+        PersonalMusicPlaylist(
+          id: 'mbp_many_2',
+          name: '很多歌曲二',
+          description: '',
+          revision: 1,
+          itemCount: 300,
+          createdAt: null,
+          updatedAt: null,
+        ),
+      ],
+    );
+
+    await _pumpPlaylistSettings(tester, api);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('manage-personal-music-playlists')),
+    );
+    await tester.pumpAndSettle();
+    for (final id in ['mbp_many_1', 'mbp_many_2']) {
+      final card = find.byKey(ValueKey('personal-music-playlist-card-$id'));
+      await tester.tapAt(tester.getTopLeft(card) + const Offset(2, 2));
+    }
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('merge-selected-music-playlists')),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('personal-music-playlist-name-input')),
+      '超长合并',
+    );
+    await tester.tap(find.text('合并').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('歌曲不能全部保留'), findsOneWidget);
+    expect(find.textContaining('共有 700 首歌曲'), findsOneWidget);
+    expect(find.textContaining('最多保留前 500 首'), findsOneWidget);
+    expect(find.text('继续合并'), findsOneWidget);
+    expect(api.mergeRequests, isEmpty);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(api.mergeRequests, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('batch pin follows card selection order', (tester) async {
     await tester.binding.setSurfaceSize(const Size(720, 900));
@@ -1156,8 +1343,8 @@ void main() {
         findsNothing,
       );
       expect(
-        find.byKey(const ValueKey('share-personal-music-playlists')),
-        findsNothing,
+        find.byKey(const ValueKey('merge-selected-music-playlists')),
+        findsOneWidget,
       );
 
       final card = find.byKey(
@@ -1306,6 +1493,7 @@ Future<void> _pumpPlaylistSettings(
   WidgetTester tester,
   _FakePersonalPlaylistApi api, {
   bool selectable = false,
+  TargetPlatform? platform,
   MusicTrackPreviewPlatformFactory? previewPlatformFactory,
 }) {
   final settings = SettingsPage(
@@ -1323,13 +1511,19 @@ Future<void> _pumpPlaylistSettings(
   );
   return tester.pumpWidget(
     MaterialApp(
-      theme: ui.uiTheme(),
+      theme: platform == null
+          ? ui.uiTheme()
+          : ui.uiTheme().copyWith(platform: platform),
       home: selectable ? SelectionArea(child: settings) : settings,
     ),
   );
 }
 
-class _FakePersonalPlaylistApi implements GangApi, PersonalMusicPlaylistApi {
+class _FakePersonalPlaylistApi
+    implements
+        GangApi,
+        PersonalMusicPlaylistApi,
+        PersonalMusicPlaylistMergeApi {
   _FakePersonalPlaylistApi({
     this.onSearch,
     List<PersonalMusicPlaylist>? playlists,
@@ -1385,6 +1579,7 @@ class _FakePersonalPlaylistApi implements GangApi, PersonalMusicPlaylistApi {
   final List<String> moveRequests = [];
   final List<String> renameRequests = [];
   final List<String> addRequests = [];
+  final List<String> mergeRequests = [];
   int listRequestCount = 0;
   Completer<PersonalMusicPlaylistPage>? nextPlaylistListResponse;
 
@@ -1456,6 +1651,40 @@ class _FakePersonalPlaylistApi implements GangApi, PersonalMusicPlaylistApi {
     required String name,
   }) async {
     return playlist;
+  }
+
+  @override
+  Future<PersonalMusicPlaylistMergeResult> mergePersonalMusicPlaylists({
+    required String name,
+    required List<String> playlistIds,
+  }) async {
+    mergeRequests.add('$name:${playlistIds.join(',')}');
+    final sourceItemCount = playlists
+        .where((playlist) => playlistIds.contains(playlist.id))
+        .fold<int>(0, (total, playlist) => total + playlist.itemCount);
+    playlists.removeWhere((playlist) => playlistIds.contains(playlist.id));
+    final merged = PersonalMusicPlaylist(
+      id: 'mbp_merged_${mergeRequests.length}',
+      name: name,
+      description: '',
+      revision: 1,
+      itemCount: sourceItemCount,
+      createdAt: null,
+      updatedAt: null,
+    );
+    playlists.add(merged);
+    return PersonalMusicPlaylistMergeResult(
+      playlist: merged,
+      sourceItemCount: sourceItemCount,
+      uniqueItemCount: sourceItemCount,
+      duplicateCount: 0,
+      itemCount: sourceItemCount,
+      omittedCount: 0,
+      deletedPlaylistCount: playlistIds.length,
+      retainedPlaylistCount: 0,
+      consumedSourceItemCount: sourceItemCount,
+      truncated: false,
+    );
   }
 
   @override
@@ -1646,12 +1875,20 @@ class _FakePreviewPlatform implements MusicTrackPreviewPlatform {
 class _FakeRoomPlaylistApi
     implements
         RoomMusicPlaylistApi,
+        RoomMusicPlaylistMergeApi,
         RoomMusicPlaylistImportApi,
         RoomMusicPlaylistCloneApi {
-  _FakeRoomPlaylistApi({this.cloneError});
+  _FakeRoomPlaylistApi({
+    this.cloneError,
+    List<PersonalMusicPlaylist>? playlists,
+  }) : playlists = List<PersonalMusicPlaylist>.of(
+         playlists ?? const [playlist],
+       );
 
   final List<String> importRequests = [];
   final List<String> cloneRequests = [];
+  final List<String> mergeRequests = [];
+  final List<PersonalMusicPlaylist> playlists;
   final Object? cloneError;
   static const playlist = PersonalMusicPlaylist(
     id: 'mbp_room_1',
@@ -1668,6 +1905,15 @@ class _FakeRoomPlaylistApi
     description: '',
     revision: 1,
     itemCount: 1,
+    createdAt: null,
+    updatedAt: null,
+  );
+  static const secondPlaylist = PersonalMusicPlaylist(
+    id: 'mbp_room_2',
+    name: '房间第二歌单',
+    description: '',
+    revision: 1,
+    itemCount: 2,
     createdAt: null,
     updatedAt: null,
   );
@@ -1690,11 +1936,11 @@ class _FakeRoomPlaylistApi
     int pageSize = 50,
   }) async {
     expect(roomId, 'room_1');
-    return const PersonalMusicPlaylistPage(
-      playlists: [playlist],
+    return PersonalMusicPlaylistPage(
+      playlists: List<PersonalMusicPlaylist>.of(playlists),
       page: 1,
       pageSize: 50,
-      total: 1,
+      total: playlists.length,
       hasMore: false,
       maxPlaylists: 50,
       maxPlaylistItems: 500,
@@ -1749,6 +1995,42 @@ class _FakeRoomPlaylistApi
     cloneRequests.add(playlistId);
     if (cloneError case final error?) throw error;
     return cloneResult;
+  }
+
+  @override
+  Future<PersonalMusicPlaylistMergeResult> mergeRoomMusicPlaylists({
+    required String roomId,
+    required String name,
+    required List<String> playlistIds,
+  }) async {
+    expect(roomId, 'room_1');
+    mergeRequests.add('$name:${playlistIds.join(',')}');
+    final sourceItemCount = playlists
+        .where((playlist) => playlistIds.contains(playlist.id))
+        .fold<int>(0, (total, playlist) => total + playlist.itemCount);
+    playlists.removeWhere((playlist) => playlistIds.contains(playlist.id));
+    final merged = PersonalMusicPlaylist(
+      id: 'mbp_room_merged_${mergeRequests.length}',
+      name: name,
+      description: '',
+      revision: 1,
+      itemCount: sourceItemCount,
+      createdAt: null,
+      updatedAt: null,
+    );
+    playlists.add(merged);
+    return PersonalMusicPlaylistMergeResult(
+      playlist: merged,
+      sourceItemCount: sourceItemCount,
+      uniqueItemCount: sourceItemCount,
+      duplicateCount: 0,
+      itemCount: sourceItemCount,
+      omittedCount: 0,
+      deletedPlaylistCount: playlistIds.length,
+      retainedPlaylistCount: 0,
+      consumedSourceItemCount: sourceItemCount,
+      truncated: false,
+    );
   }
 
   @override

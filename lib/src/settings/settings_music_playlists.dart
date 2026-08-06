@@ -46,6 +46,7 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
   bool _creating = false;
   bool _deletingPlaylists = false;
   bool _pinningPlaylists = false;
+  bool _mergingPlaylists = false;
   String? _cloningPlaylistId;
   bool _deletingItems = false;
   bool _pinningItems = false;
@@ -76,6 +77,7 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
       _creating ||
       _deletingPlaylists ||
       _pinningPlaylists ||
+      _mergingPlaylists ||
       _cloningPlaylistId != null ||
       _busyPlaylistIds.isNotEmpty;
 
@@ -86,6 +88,7 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
       _creating ||
       _deletingPlaylists ||
       _pinningPlaylists ||
+      _mergingPlaylists ||
       _cloningPlaylistId != null ||
       _busyPlaylistIds.isNotEmpty ||
       _deletingItems ||
@@ -516,6 +519,94 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
     } finally {
       if (mounted) setState(() => _pinningPlaylists = false);
     }
+  }
+
+  Future<void> _mergeSelectedPlaylists() async {
+    if (!widget.controller.canMergePlaylists ||
+        _playlistManagementBusy ||
+        _selectedPlaylistIds.length < 2) {
+      return;
+    }
+    final selectedIDs = List<String>.of(_selectedPlaylistIds);
+    final draft = await showDialog<PersonalPlaylistCreateDraft>(
+      context: context,
+      builder: (context) => const _MusicPlaylistNameDialog(
+        title: '合并歌单',
+        icon: Icons.merge_type,
+        confirmLabel: '合并',
+        confirmIcon: Icons.merge_type,
+        description:
+            '歌曲会按选择顺序合并并按具体链接去重。已完整合并的来源歌单会删除；'
+            '超过 500 首时，未合并的剩余歌曲仍保留在原歌单中。',
+      ),
+    );
+    if (!mounted || draft == null) return;
+    final sourceItemCount = _playlists
+        .where((playlist) => selectedIDs.contains(playlist.id))
+        .fold<int>(0, (total, playlist) => total + playlist.itemCount);
+    final exceedsItemLimit = sourceItemCount > _maxPlaylistItems;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => StickerConfirmDialog(
+        title: exceedsItemLimit ? '歌曲不能全部保留' : '确认合并歌单',
+        body: exceedsItemLimit
+            ? '所选歌单共有 $sourceItemCount 首歌曲，超过单个歌单 $_maxPlaylistItems 首上限，'
+                  '无法全部原样保留。系统会按选择顺序、按具体链接去重，'
+                  '合并后的歌单最多保留前 $_maxPlaylistItems 首；未能合并的剩余歌曲会保留在原歌单中，'
+                  '已完整合并的来源歌单会删除。是否继续？'
+            : '确定将 ${selectedIDs.length} 个歌单按选择顺序合并为“${draft.name}”吗？'
+                  '已完整合并的来源歌单会删除，此操作无法撤销。',
+        confirmLabel: exceedsItemLimit ? '继续合并' : '确认合并',
+        confirmIcon: Icons.merge_type,
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+    setState(() {
+      _mergingPlaylists = true;
+      _error = null;
+    });
+    try {
+      final result = await widget.controller.mergePlaylists(
+        name: draft.name,
+        playlistIds: selectedIDs,
+      );
+      if (!mounted || result == null) return;
+      await _loadPlaylists();
+      if (!mounted) return;
+      setState(() {
+        _managingPlaylists = false;
+        _selectedPlaylistIds = const [];
+      });
+      _showPlaylistMergeResultNotice(result);
+    } catch (error) {
+      if (mounted) {
+        showFloatingErrorNotice(context, '合并歌单失败：$error');
+      }
+    } finally {
+      if (mounted) setState(() => _mergingPlaylists = false);
+    }
+  }
+
+  void _showPlaylistMergeResultNotice(PersonalMusicPlaylistMergeResult result) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (result.truncated) {
+        showFloatingSuccessNotice(
+          context,
+          '已合并为“${result.playlist.name}”，按顺序保留前 '
+          '${result.itemCount} 首；其余歌曲已保留在原歌单中',
+        );
+        return;
+      }
+      final duplicateLabel = result.duplicateCount == 0
+          ? ''
+          : '，已去重 ${result.duplicateCount} 首';
+      showFloatingSuccessNotice(
+        context,
+        '已合并为“${result.playlist.name}”，共 ${result.itemCount} 首'
+        '$duplicateLabel',
+      );
+    });
   }
 
   Future<void> _cloneRoomPlaylist(PersonalMusicPlaylist playlist) async {
@@ -1012,15 +1103,20 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
                 child: const Text('筛选'),
               ),
             ),
-            if (_managingPlaylists && !widget.controller.roomScoped)
+            if (_managingPlaylists && widget.controller.canMergePlaylists)
               StickerActionGridEntry(
-                label: '分享',
-                button: const Button(
-                  key: ValueKey('share-personal-music-playlists'),
-                  onPressed: null,
-                  icon: Icon(Icons.share_outlined),
+                label: '合并',
+                button: Button(
+                  key: const ValueKey('merge-selected-music-playlists'),
+                  onPressed:
+                      !_playlistManagementBusy &&
+                          _selectedPlaylistIds.length >= 2
+                      ? _mergeSelectedPlaylists
+                      : null,
+                  loading: _mergingPlaylists,
+                  icon: const Icon(Icons.merge_type),
                   width: double.infinity,
-                  child: Text('分享'),
+                  child: const Text('合并'),
                 ),
               ),
             if (_managingPlaylists)
@@ -2526,6 +2622,7 @@ class _MusicPlaylistNameDialog extends StatefulWidget {
     required this.confirmIcon,
     this.initialName = '',
     this.loadImportPlaylists,
+    this.description,
   });
 
   final String title;
@@ -2534,6 +2631,7 @@ class _MusicPlaylistNameDialog extends StatefulWidget {
   final IconData confirmIcon;
   final String initialName;
   final Future<PersonalMusicPlaylistPage?> Function()? loadImportPlaylists;
+  final String? description;
 
   @override
   State<_MusicPlaylistNameDialog> createState() =>
@@ -2630,6 +2728,17 @@ class _MusicPlaylistNameDialogState extends State<_MusicPlaylistNameDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (widget.description != null) ...[
+            Text(
+              widget.description!,
+              style: const TextStyle(
+                color: _textMuted,
+                fontSize: 12,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
           Input(
             key: const ValueKey('personal-music-playlist-name-input'),
             controller: _controller,

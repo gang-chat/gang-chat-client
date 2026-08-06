@@ -2022,6 +2022,45 @@ double _musicBoxAdaptiveSongRowHeight(
   return naturalHeight < 50 ? 50 : naturalHeight;
 }
 
+double _musicBoxQueueTileHeight(
+  BuildContext context, {
+  required double width,
+  required MusicBoxQueueItem item,
+}) {
+  final subtitle = _musicBoxQueueSubtitle(item);
+  final textWidth = (width - 20 - 20 - 8 - 4 - 28).clamp(24.0, double.infinity);
+  const titleStyle = TextStyle(fontSize: 13, fontWeight: FontWeight.w500);
+  const subtitleStyle = TextStyle(fontSize: 11, fontWeight: FontWeight.w600);
+  final adaptiveTitleStyle = _musicBoxAdaptiveListTextStyle(
+    context,
+    text: item.title,
+    baseStyle: titleStyle,
+    width: textWidth,
+  );
+  final adaptiveSubtitleStyle = _musicBoxAdaptiveListTextStyle(
+    context,
+    text: subtitle,
+    baseStyle: subtitleStyle,
+    width: textWidth,
+  );
+  return _musicBoxAdaptiveSongRowHeight(
+    context,
+    width: textWidth,
+    title: item.title,
+    subtitle: subtitle,
+    titleStyle: adaptiveTitleStyle,
+    subtitleStyle: adaptiveSubtitleStyle,
+  );
+}
+
+String _musicBoxQueueSubtitle(MusicBoxQueueItem item) {
+  final statusLabel = music_box_display.musicBoxQueueStatusLabel(item);
+  return [
+    if (item.artist.trim().isNotEmpty) item.artist.trim(),
+    ?statusLabel,
+  ].join(' · ');
+}
+
 class _MusicBoxRetryState extends StatelessWidget {
   const _MusicBoxRetryState({required this.message, required this.onRetry});
 
@@ -2056,7 +2095,7 @@ class _MusicBoxRetryState extends StatelessWidget {
   }
 }
 
-class _MusicBoxQueueList extends StatelessWidget {
+class _MusicBoxQueueList extends StatefulWidget {
   const _MusicBoxQueueList({
     required this.state,
     required this.queue,
@@ -2084,33 +2123,133 @@ class _MusicBoxQueueList extends StatelessWidget {
   final UserProfileActionBuilder? userProfileActionBuilder;
 
   @override
+  State<_MusicBoxQueueList> createState() => _MusicBoxQueueListState();
+}
+
+class _MusicBoxQueueListState extends State<_MusicBoxQueueList> {
+  static const double _separatorHeight = 8;
+
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _currentTileKey = GlobalKey();
+  String? _scheduledCurrentItemId;
+  bool _centeredInitialCurrentItem = false;
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scheduleInitialCurrentItemCenter({
+    required BoxConstraints constraints,
+    required int currentIndex,
+    required List<double> itemHeights,
+  }) {
+    if (_centeredInitialCurrentItem ||
+        currentIndex < 0 ||
+        !constraints.hasBoundedHeight ||
+        constraints.maxHeight <= 0) {
+      return;
+    }
+    final currentItemId = widget.state.playback.currentItemId;
+    if (currentItemId.isEmpty || _scheduledCurrentItemId == currentItemId) {
+      return;
+    }
+    var currentCenter = itemHeights[currentIndex] / 2;
+    for (var index = 0; index < currentIndex; index += 1) {
+      currentCenter += itemHeights[index] + _separatorHeight;
+    }
+    final targetOffset = currentCenter - constraints.maxHeight / 2;
+    _scheduledCurrentItemId = currentItemId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          widget.state.playback.currentItemId != currentItemId ||
+          !_scrollController.hasClients) {
+        _scheduledCurrentItemId = null;
+        return;
+      }
+      final position = _scrollController.position;
+      _scrollController.jumpTo(
+        targetOffset.clamp(position.minScrollExtent, position.maxScrollExtent),
+      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || widget.state.playback.currentItemId != currentItemId) {
+          _scheduledCurrentItemId = null;
+          return;
+        }
+        final currentContext = _currentTileKey.currentContext;
+        if (currentContext != null) {
+          unawaited(
+            Scrollable.ensureVisible(
+              currentContext,
+              alignment: 0.5,
+              duration: Duration.zero,
+            ),
+          );
+        }
+        _centeredInitialCurrentItem = true;
+        _scheduledCurrentItemId = null;
+      });
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (queue.isEmpty) {
+    if (widget.queue.isEmpty) {
       return const _MusicBoxEmpty(
         icon: Icons.queue_music,
         message: '当前队列为空，点击 + 添加歌曲',
       );
     }
-    return ListView.separated(
-      key: const ValueKey<String>('music-box-queue-list'),
-      padding: EdgeInsets.zero,
-      itemCount: queue.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 8),
-      itemBuilder: (context, index) {
-        final item = queue[index];
-        return _MusicBoxQueueTile(
-          item: item,
-          isCurrent: music_box_display.musicBoxIsCurrent(state, item),
-          onRemove: () => onRemoveItem(item),
-          controller: controller,
-          roomId: roomId,
-          currentState: state,
-          onStateChanged: onStateChanged,
-          currentUser: currentUser,
-          onResolveUserProfile: onResolveUserProfile,
-          onResolveRoomProfile: onResolveRoomProfile,
-          onEnterCommonRoom: onEnterCommonRoom,
-          userProfileActionBuilder: userProfileActionBuilder,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final currentIndex = widget.queue.indexWhere(
+          (item) => music_box_display.musicBoxIsCurrent(widget.state, item),
+        );
+        if (!_centeredInitialCurrentItem && currentIndex >= 0) {
+          final itemHeights = [
+            for (final item in widget.queue)
+              _musicBoxQueueTileHeight(
+                context,
+                width: constraints.maxWidth,
+                item: item,
+              ),
+          ];
+          _scheduleInitialCurrentItemCenter(
+            constraints: constraints,
+            currentIndex: currentIndex,
+            itemHeights: itemHeights,
+          );
+        }
+        return ListView.separated(
+          key: const ValueKey<String>('music-box-queue-list'),
+          controller: _scrollController,
+          padding: EdgeInsets.zero,
+          itemCount: widget.queue.length,
+          separatorBuilder: (_, _) => const SizedBox(height: _separatorHeight),
+          itemBuilder: (context, index) {
+            final item = widget.queue[index];
+            final isCurrent = music_box_display.musicBoxIsCurrent(
+              widget.state,
+              item,
+            );
+            final tile = _MusicBoxQueueTile(
+              item: item,
+              isCurrent: isCurrent,
+              onRemove: () => widget.onRemoveItem(item),
+              controller: widget.controller,
+              roomId: widget.roomId,
+              currentState: widget.state,
+              onStateChanged: widget.onStateChanged,
+              currentUser: widget.currentUser,
+              onResolveUserProfile: widget.onResolveUserProfile,
+              onResolveRoomProfile: widget.onResolveRoomProfile,
+              onEnterCommonRoom: widget.onEnterCommonRoom,
+              userProfileActionBuilder: widget.userProfileActionBuilder,
+            );
+            if (!isCurrent) return tile;
+            return KeyedSubtree(key: _currentTileKey, child: tile);
+          },
         );
       },
     );
@@ -2148,15 +2287,11 @@ class _MusicBoxQueueTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final statusLabel = music_box_display.musicBoxQueueStatusLabel(item);
     final failed = item.status == MusicBoxQueueItemStatus.failed;
     final loading =
         item.status == MusicBoxQueueItemStatus.pending ||
         item.status == MusicBoxQueueItemStatus.downloading;
-    final subtitle = [
-      if (item.artist.trim().isNotEmpty) item.artist.trim(),
-      ?statusLabel,
-    ].join(' · ');
+    final subtitle = _musicBoxQueueSubtitle(item);
     final titleStyle = TextStyle(
       color: isCurrent ? UiColors.accent : UiColors.text,
       fontSize: 13,

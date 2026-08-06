@@ -96,6 +96,13 @@ abstract interface class _MusicPlaylistsBackend {
     required String playlistId,
   });
 
+  bool get canMergePlaylists;
+
+  Future<PersonalMusicPlaylistMergeResult> mergePlaylists({
+    required String name,
+    required List<String> playlistIds,
+  });
+
   Future<PersonalMusicPlaylist> createPlaylist({
     required String name,
     String? importPlaylistId,
@@ -188,6 +195,8 @@ class PersonalMusicPlaylistsController {
   bool get canCloneRoomPlaylistsToPersonal =>
       _backend?.canCloneRoomPlaylistsToPersonal ?? false;
 
+  bool get canMergePlaylists => _backend?.canMergePlaylists ?? false;
+
   Future<PersonalMusicPlaylistPage?> loadPlaylists() {
     final client = _backend;
     if (client == null) return Future.value();
@@ -204,6 +213,24 @@ class PersonalMusicPlaylistsController {
     final normalized = playlistId.trim();
     if (normalized.isEmpty) return Future.value();
     return _backend?.cloneRoomPlaylistToPersonal(playlistId: normalized) ??
+        Future.value();
+  }
+
+  Future<PersonalMusicPlaylistMergeResult?> mergePlaylists({
+    required String name,
+    required List<String> playlistIds,
+  }) {
+    final normalizedName = normalizedPersonalPlaylistName(name);
+    final normalizedIDs = uniquePersonalPlaylistIds(playlistIds);
+    if (normalizedName == null ||
+        normalizedIDs.length < 2 ||
+        normalizedIDs.length != playlistIds.length) {
+      return Future.value();
+    }
+    return _backend?.mergePlaylists(
+          name: normalizedName,
+          playlistIds: normalizedIDs,
+        ) ??
         Future.value();
   }
 
@@ -375,10 +402,26 @@ class _PersonalMusicPlaylistsBackend implements _MusicPlaylistsBackend {
   bool get canCloneRoomPlaylistsToPersonal => false;
 
   @override
+  bool get canMergePlaylists => api is PersonalMusicPlaylistMergeApi;
+
+  @override
   Future<PersonalMusicPlaylist> cloneRoomPlaylistToPersonal({
     required String playlistId,
   }) {
     return Future.error(StateError('个人歌单不能作为房间歌单的克隆来源'));
+  }
+
+  @override
+  Future<PersonalMusicPlaylistMergeResult> mergePlaylists({
+    required String name,
+    required List<String> playlistIds,
+  }) {
+    final mergeApi = api;
+    if (mergeApi is! PersonalMusicPlaylistMergeApi) {
+      return Future.error(StateError('当前服务端不支持合并个人歌单'));
+    }
+    return (mergeApi as PersonalMusicPlaylistMergeApi)
+        .mergePersonalMusicPlaylists(name: name, playlistIds: playlistIds);
   }
 
   @override
@@ -544,6 +587,10 @@ class _RoomMusicPlaylistsBackend implements _MusicPlaylistsBackend {
       canManage && roomApi is RoomMusicPlaylistCloneApi;
 
   @override
+  bool get canMergePlaylists =>
+      canManage && roomApi is RoomMusicPlaylistMergeApi;
+
+  @override
   Future<PersonalMusicPlaylist> cloneRoomPlaylistToPersonal({
     required String playlistId,
   }) {
@@ -556,6 +603,23 @@ class _RoomMusicPlaylistsBackend implements _MusicPlaylistsBackend {
           roomId: roomId,
           playlistId: playlistId,
         );
+  }
+
+  @override
+  Future<PersonalMusicPlaylistMergeResult> mergePlaylists({
+    required String name,
+    required List<String> playlistIds,
+  }) {
+    _requireManagePermission();
+    final mergeApi = roomApi;
+    if (mergeApi is! RoomMusicPlaylistMergeApi) {
+      return Future.error(StateError('当前服务端不支持合并房间歌单'));
+    }
+    return (mergeApi as RoomMusicPlaylistMergeApi).mergeRoomMusicPlaylists(
+      roomId: roomId,
+      name: name,
+      playlistIds: playlistIds,
+    );
   }
 
   @override

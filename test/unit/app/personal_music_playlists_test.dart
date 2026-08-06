@@ -259,6 +259,77 @@ void main() {
       expect(api.reorderedItemIds, ['third', 'second', 'first']);
     },
   );
+
+  test(
+    'playlist merge validates input and preserves selection order',
+    () async {
+      final api = _MergePlaylistApi();
+      final controller = PersonalMusicPlaylistsController(api);
+
+      expect(controller.canMergePlaylists, isTrue);
+      expect(
+        await controller.mergePlaylists(
+          name: '  合并结果  ',
+          playlistIds: const [' second ', 'first'],
+        ),
+        isNotNull,
+      );
+      expect(api.mergeName, '合并结果');
+      expect(api.mergePlaylistIds, ['second', 'first']);
+
+      api.mergeName = null;
+      expect(
+        await controller.mergePlaylists(
+          name: '无效',
+          playlistIds: const ['first', 'first'],
+        ),
+        isNull,
+      );
+      expect(api.mergeName, isNull);
+      expect(
+        PersonalMusicPlaylistsController(
+          _PagingPlaylistApi(),
+        ).canMergePlaylists,
+        isFalse,
+      );
+    },
+  );
+}
+
+class _MergePlaylistApi extends _PagingPlaylistApi
+    implements PersonalMusicPlaylistMergeApi {
+  String? mergeName;
+  List<String>? mergePlaylistIds;
+
+  @override
+  Future<PersonalMusicPlaylistMergeResult> mergePersonalMusicPlaylists({
+    required String name,
+    required List<String> playlistIds,
+  }) async {
+    mergeName = name;
+    mergePlaylistIds = List<String>.of(playlistIds);
+    const playlist = PersonalMusicPlaylist(
+      id: 'merged',
+      name: '合并结果',
+      description: '',
+      revision: 1,
+      itemCount: 2,
+      createdAt: null,
+      updatedAt: null,
+    );
+    return const PersonalMusicPlaylistMergeResult(
+      playlist: playlist,
+      sourceItemCount: 2,
+      uniqueItemCount: 2,
+      duplicateCount: 0,
+      itemCount: 2,
+      omittedCount: 0,
+      deletedPlaylistCount: 2,
+      retainedPlaylistCount: 0,
+      consumedSourceItemCount: 2,
+      truncated: false,
+    );
+  }
 }
 
 class _PagingPlaylistApi implements PersonalMusicPlaylistApi {

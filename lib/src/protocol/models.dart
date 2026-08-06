@@ -2738,6 +2738,53 @@ class PersonalMusicPlaylist {
   }
 }
 
+class PersonalMusicPlaylistMergeResult {
+  const PersonalMusicPlaylistMergeResult({
+    required this.playlist,
+    required this.sourceItemCount,
+    required this.uniqueItemCount,
+    required this.duplicateCount,
+    required this.itemCount,
+    required this.omittedCount,
+    required this.deletedPlaylistCount,
+    required this.retainedPlaylistCount,
+    required this.consumedSourceItemCount,
+    required this.truncated,
+  });
+
+  final PersonalMusicPlaylist playlist;
+  final int sourceItemCount;
+  final int uniqueItemCount;
+  final int duplicateCount;
+  final int itemCount;
+  final int omittedCount;
+  final int deletedPlaylistCount;
+  final int retainedPlaylistCount;
+  final int consumedSourceItemCount;
+  final bool truncated;
+
+  factory PersonalMusicPlaylistMergeResult.fromJson(Map<String, Object?> json) {
+    final merge = _nullableMap(json['merge']);
+    return PersonalMusicPlaylistMergeResult(
+      playlist: PersonalMusicPlaylist.fromJson(
+        json['playlist']! as Map<String, Object?>,
+      ),
+      sourceItemCount: _intFromJson(merge, const ['source_item_count']) ?? 0,
+      uniqueItemCount: _intFromJson(merge, const ['unique_item_count']) ?? 0,
+      duplicateCount: _intFromJson(merge, const ['duplicate_count']) ?? 0,
+      itemCount: _intFromJson(merge, const ['item_count']) ?? 0,
+      omittedCount: _intFromJson(merge, const ['omitted_count']) ?? 0,
+      deletedPlaylistCount:
+          _intFromJson(merge, const ['deleted_playlist_count']) ?? 0,
+      retainedPlaylistCount:
+          _intFromJson(merge, const ['retained_playlist_count']) ?? 0,
+      consumedSourceItemCount:
+          _intFromJson(merge, const ['consumed_source_item_count']) ?? 0,
+      truncated: _boolFromJson(merge, const ['truncated']) ?? false,
+    );
+  }
+}
+
 class PersonalMusicPlaylistItem {
   const PersonalMusicPlaylistItem({
     required this.id,

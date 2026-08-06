@@ -3147,6 +3147,35 @@ void main() {
                 201,
                 headers: {'content-type': 'application/json; charset=utf-8'},
               );
+            case ('POST', '/api/v1/me/music-box/playlists/merge'):
+              expect(jsonDecode(request.body), {
+                'name': '合并结果',
+                'playlist_ids': ['mbp_2', 'mbp_1'],
+              });
+              return http.Response(
+                jsonEncode({
+                  'playlist': {
+                    'id': 'mbp_merged',
+                    'name': '合并结果',
+                    'description': '',
+                    'revision': 1,
+                    'item_count': 2,
+                  },
+                  'merge': {
+                    'source_item_count': 3,
+                    'unique_item_count': 2,
+                    'duplicate_count': 1,
+                    'item_count': 2,
+                    'omitted_count': 0,
+                    'deleted_playlist_count': 2,
+                    'retained_playlist_count': 0,
+                    'consumed_source_item_count': 3,
+                    'truncated': false,
+                  },
+                }),
+                201,
+                headers: {'content-type': 'application/json; charset=utf-8'},
+              );
             case ('POST', '/api/v1/me/music-box/playlists/mbp_1/items'):
               expect(jsonDecode(request.body), {
                 'track_id': 'track_1',
@@ -3214,6 +3243,10 @@ void main() {
       );
 
       final playlist = await api.createPersonalMusicPlaylist(name: '夜晚');
+      final merged = await api.mergePersonalMusicPlaylists(
+        name: '合并结果',
+        playlistIds: const ['mbp_2', 'mbp_1'],
+      );
       final item = await api.addPersonalMusicPlaylistItem(
         playlistId: playlist.id,
         track: const MusicBoxSearchResult(
@@ -3244,7 +3277,10 @@ void main() {
       await api.deletePersonalMusicPlaylist(playlist.id);
 
       expect(renamed.name, '夜间精选');
-      expect(seen, hasLength(8));
+      expect(merged.playlist.name, '合并结果');
+      expect(merged.duplicateCount, 1);
+      expect(merged.truncated, isFalse);
+      expect(seen, hasLength(9));
       api.close();
     },
   );
@@ -3302,6 +3338,35 @@ void main() {
                   'description': '',
                   'revision': 1,
                   'item_count': imported ? 1 : 0,
+                },
+              }),
+              201,
+              headers: {'content-type': 'application/json; charset=utf-8'},
+            );
+          case ('POST', '/api/v1/rooms/room_1/music-box/playlists/merge'):
+            expect(jsonDecode(request.body), {
+              'name': '房间合并',
+              'playlist_ids': ['mbp_room_2', 'mbp_room_1'],
+            });
+            return http.Response(
+              jsonEncode({
+                'playlist': {
+                  'id': 'mbp_room_merged',
+                  'name': '房间合并',
+                  'description': '',
+                  'revision': 1,
+                  'item_count': 1,
+                },
+                'merge': {
+                  'source_item_count': 1,
+                  'unique_item_count': 1,
+                  'duplicate_count': 0,
+                  'item_count': 1,
+                  'omitted_count': 0,
+                  'deleted_playlist_count': 2,
+                  'retained_playlist_count': 0,
+                  'consumed_source_item_count': 1,
+                  'truncated': false,
                 },
               }),
               201,
@@ -3384,6 +3449,11 @@ void main() {
       name: '导入精选',
       importPlaylistId: 'mbp_personal_1',
     );
+    final merged = await api.mergeRoomMusicPlaylists(
+      roomId: 'room_1',
+      name: '房间合并',
+      playlistIds: const ['mbp_room_2', 'mbp_room_1'],
+    );
     final item = await api.addRoomMusicPlaylistItem(
       roomId: 'room_1',
       playlistId: created.id,
@@ -3411,7 +3481,8 @@ void main() {
 
     expect(imported.itemCount, 1);
     expect(cloned.name, '房间备注名 · 新歌单');
-    expect(seen, hasLength(8));
+    expect(merged.playlist.name, '房间合并');
+    expect(seen, hasLength(9));
     api.close();
   });
 }

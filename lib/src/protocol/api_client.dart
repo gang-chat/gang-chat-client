@@ -626,6 +626,15 @@ abstract interface class PersonalMusicPlaylistApi {
   });
 }
 
+/// Optional extension for atomically merging selected personal playlists into
+/// a new playlist while consuming the merged source prefixes.
+abstract interface class PersonalMusicPlaylistMergeApi {
+  Future<PersonalMusicPlaylistMergeResult> mergePersonalMusicPlaylists({
+    required String name,
+    required List<String> playlistIds,
+  });
+}
+
 /// Authenticated transport for an explicitly initiated local song preview.
 /// This is separate from [GangApi] so older fakes and read-only playlist
 /// adapters do not gain a required method when preview support is unavailable.
@@ -722,6 +731,15 @@ abstract interface class RoomMusicPlaylistApi {
   });
 }
 
+/// Optional room-scoped counterpart of [PersonalMusicPlaylistMergeApi].
+abstract interface class RoomMusicPlaylistMergeApi {
+  Future<PersonalMusicPlaylistMergeResult> mergeRoomMusicPlaylists({
+    required String roomId,
+    required String name,
+    required List<String> playlistIds,
+  });
+}
+
 /// Optional room-playlist extension that atomically imports one of the
 /// authenticated user's personal playlists while creating the room playlist.
 /// Kept separate so existing room playlist fakes and older adapters remain
@@ -747,7 +765,9 @@ class GangApiClient
     implements
         GangApi,
         PersonalMusicPlaylistApi,
+        PersonalMusicPlaylistMergeApi,
         RoomMusicPlaylistApi,
+        RoomMusicPlaylistMergeApi,
         RoomMusicPlaylistImportApi,
         RoomMusicPlaylistCloneApi,
         MusicTrackPreviewApi,
@@ -2418,6 +2438,21 @@ class GangApiClient
   }
 
   @override
+  Future<PersonalMusicPlaylistMergeResult> mergePersonalMusicPlaylists({
+    required String name,
+    required List<String> playlistIds,
+  }) async {
+    final decoded = await _sendJson((token) {
+      return _httpClient.post(
+        _uri('/me/music-box/playlists/merge'),
+        headers: _headers(token),
+        body: encodeJsonBody({'name': name, 'playlist_ids': playlistIds}),
+      );
+    });
+    return PersonalMusicPlaylistMergeResult.fromJson(decoded);
+  }
+
+  @override
   Future<PersonalMusicPlaylist> renamePersonalMusicPlaylist({
     required String playlistId,
     required String name,
@@ -2659,6 +2694,22 @@ class GangApiClient
     return PersonalMusicPlaylist.fromJson(
       decoded['playlist']! as Map<String, Object?>,
     );
+  }
+
+  @override
+  Future<PersonalMusicPlaylistMergeResult> mergeRoomMusicPlaylists({
+    required String roomId,
+    required String name,
+    required List<String> playlistIds,
+  }) async {
+    final decoded = await _sendJson((token) {
+      return _httpClient.post(
+        _uri('/rooms/$roomId/music-box/playlists/merge'),
+        headers: _headers(token),
+        body: encodeJsonBody({'name': name, 'playlist_ids': playlistIds}),
+      );
+    });
+    return PersonalMusicPlaylistMergeResult.fromJson(decoded);
   }
 
   @override
