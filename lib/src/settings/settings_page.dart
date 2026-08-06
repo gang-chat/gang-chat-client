@@ -30,6 +30,7 @@ import '../app/sticker_management.dart';
 import '../app/sticker_ordering.dart' as sticker_ordering;
 import '../app/sticker_uploads.dart';
 import '../app/music_box_display.dart';
+import '../app/music_track_preview.dart';
 import '../live/audio_device_restorer.dart';
 import '../live/audio_device_service.dart';
 import '../live/audio_test_service.dart';
@@ -50,11 +51,13 @@ import '../shell/local_auto_update_prompt_store.dart';
 import '../shell/local_close_behavior_store.dart';
 import '../shell/local_audio_device_store.dart';
 import '../shell/local_language_preference_store.dart';
+import '../shell/music_track_preview_service.dart';
 import '../shell/release_update_service.dart';
 import '../shell/password_reset_flow.dart';
 import '../ui/avatar_crop_dialog.dart';
 import '../ui/sticker_upload_adapter.dart';
 import '../ui/ui.dart';
+import '../home/music_track_profile_card.dart';
 
 part 'settings_components.dart';
 part 'settings_profile_widgets.dart';
@@ -107,6 +110,8 @@ class SettingsPage extends StatefulWidget {
     this.onScreenShareFrameRateChanged,
     this.onAccountDeleted,
     this.onClose,
+    this.musicTrackPreviewPlatformFactory =
+        const DefaultMusicTrackPreviewPlatformFactory(),
   });
 
   final bool isSubWindow;
@@ -148,6 +153,7 @@ class SettingsPage extends StatefulWidget {
   final ValueChanged<int>? onScreenShareFrameRateChanged;
   final Future<void> Function()? onAccountDeleted;
   final VoidCallback? onClose;
+  final MusicTrackPreviewPlatformFactory musicTrackPreviewPlatformFactory;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -3639,6 +3645,7 @@ class _SettingsPageState extends State<SettingsPage>
   Widget _buildMusicPlaylistsContent() {
     return MusicPlaylistsPanel(
       controller: _musicPlaylistsController,
+      previewPlatformFactory: widget.musicTrackPreviewPlatformFactory,
       reloadToken: _playlistReloadToken,
       unavailableMessage: _isManagingUser
           ? '管理其他账号时不能编辑个人歌单'

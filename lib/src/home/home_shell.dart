@@ -36,6 +36,7 @@ import '../app/message_display.dart' as message_display;
 import '../app/messages_controller.dart';
 import '../app/music_box_controller.dart';
 import '../app/music_box_display.dart' as music_box_display;
+import '../app/music_track_preview.dart';
 import '../app/personal_music_playlists.dart';
 import '../app/realtime_controller.dart';
 import '../app/realtime_live_events.dart';
@@ -73,6 +74,7 @@ import '../shell/file_drop_service.dart';
 import '../shell/file_selection_service.dart';
 import '../shell/full_screen_media_orientation.dart';
 import '../shell/message_notification_sound_service.dart';
+import '../shell/music_track_preview_service.dart';
 import '../shell/release_update_service.dart';
 import '../shell/system_live_presence_speech_player.dart';
 import '../shell/voice_playback_service.dart';
@@ -156,6 +158,8 @@ class HomeShell extends StatefulWidget {
     this.androidSystemService = const AndroidSystemService(),
     this.detectedAppUpdate,
     this.onDetectedAppUpdateShown,
+    this.musicTrackPreviewPlatformFactory =
+        const DefaultMusicTrackPreviewPlatformFactory(),
   });
 
   final AuthenticatedAppContext app;
@@ -171,6 +175,7 @@ class HomeShell extends StatefulWidget {
   final AndroidSystemService androidSystemService;
   final AvailableAppUpdate? detectedAppUpdate;
   final VoidCallback? onDetectedAppUpdateShown;
+  final MusicTrackPreviewPlatformFactory musicTrackPreviewPlatformFactory;
 
   @override
   State<HomeShell> createState() => _HomeShellState();

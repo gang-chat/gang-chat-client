@@ -8,6 +8,7 @@ class MusicPlaylistsPanel extends StatefulWidget {
     required this.unavailableMessage,
     this.onLoadingChanged,
     this.title = '歌单管理',
+    this.previewPlatformFactory,
   });
 
   final PersonalMusicPlaylistsController controller;
@@ -15,6 +16,7 @@ class MusicPlaylistsPanel extends StatefulWidget {
   final String unavailableMessage;
   final ValueChanged<bool>? onLoadingChanged;
   final String title;
+  final MusicTrackPreviewPlatformFactory? previewPlatformFactory;
 
   @override
   State<MusicPlaylistsPanel> createState() => _MusicPlaylistsPanelState();
@@ -51,6 +53,7 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
   final Set<String> _busyItemIds = {};
   int _playlistLoadGeneration = 0;
   int _itemLoadGeneration = 0;
+  MusicTrackPreviewController? _previewController;
 
   MusicPlaylistManagementCapabilities get _capabilities =>
       widget.controller.capabilities;
@@ -86,12 +89,19 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
   @override
   void initState() {
     super.initState();
+    _previewController = _createPreviewController();
     scheduleMicrotask(_loadPlaylists);
   }
 
   @override
   void didUpdateWidget(covariant MusicPlaylistsPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller.api != widget.controller.api ||
+        oldWidget.previewPlatformFactory != widget.previewPlatformFactory) {
+      final previous = _previewController;
+      _previewController = _createPreviewController();
+      if (previous != null) unawaited(previous.dispose());
+    }
     if (oldWidget.reloadToken != widget.reloadToken ||
         oldWidget.controller.api != widget.controller.api) {
       _managingPlaylists = false;
@@ -106,7 +116,16 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
   void dispose() {
     _playlistLoadGeneration += 1;
     _itemLoadGeneration += 1;
+    final preview = _previewController;
+    if (preview != null) unawaited(preview.dispose());
     super.dispose();
+  }
+
+  MusicTrackPreviewController? _createPreviewController() {
+    final api = widget.controller.api;
+    final factory = widget.previewPlatformFactory;
+    if (api is! MusicTrackPreviewApi || factory == null) return null;
+    return MusicTrackPreviewController(api: api, platform: factory.create());
   }
 
   void _setLoading(bool loading) {
@@ -186,6 +205,8 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
 
   void _closePlaylist() {
     _itemLoadGeneration += 1;
+    final preview = _previewController;
+    if (preview != null) unawaited(preview.stop());
     setState(() {
       _activePlaylist = null;
       _items = const [];
@@ -970,6 +991,7 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
           onDelete: () => _deleteSingleItem(item),
           onMoveUp: () => _moveItem(item, -1),
           onMoveDown: () => _moveItem(item, 1),
+          previewController: _previewController,
         );
       },
     );
@@ -1555,6 +1577,7 @@ class _MusicPlaylistItemTile extends StatelessWidget {
     required this.onDelete,
     required this.onMoveUp,
     required this.onMoveDown,
+    required this.previewController,
   });
 
   final PersonalMusicPlaylistItem item;
@@ -1567,6 +1590,7 @@ class _MusicPlaylistItemTile extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback onMoveUp;
   final VoidCallback onMoveDown;
+  final MusicTrackPreviewController? previewController;
 
   @override
   Widget build(BuildContext context) {
@@ -1690,7 +1714,22 @@ class _MusicPlaylistItemTile extends StatelessWidget {
         },
       ),
     );
-    if (!managing) return panel;
+    if (!managing) {
+      final preview = previewController;
+      if (preview == null) return panel;
+      return MusicTrackHoverCard(
+        data: MusicTrackCardData(
+          id: item.id,
+          source: item.source,
+          trackId: item.trackId,
+          title: item.title,
+          artists: item.artists,
+          durationMs: item.durationMs,
+        ),
+        previewController: preview,
+        child: panel,
+      );
+    }
     return _ManagementCardTapTarget(onTap: busy ? null : onTap, child: panel);
   }
 }

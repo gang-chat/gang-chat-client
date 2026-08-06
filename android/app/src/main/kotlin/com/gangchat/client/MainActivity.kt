@@ -10,6 +10,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private var updateInstaller: AndroidUpdateInstaller? = null
     private var systemBridge: AndroidSystemBridge? = null
+    private var musicPreviewPlayer: AndroidMusicPreviewPlayer? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -27,6 +28,13 @@ class MainActivity : FlutterActivity() {
                 flutterEngine.dartExecutor.binaryMessenger,
                 AndroidUpdateInstaller.channelName,
             ).setMethodCallHandler(installer::handleMethodCall)
+        }
+        val musicPreviewChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "gang_chat/music_preview",
+        )
+        musicPreviewPlayer = AndroidMusicPreviewPlayer(musicPreviewChannel).also { preview ->
+            musicPreviewChannel.setMethodCallHandler(preview::handleMethodCall)
         }
         systemBridge = AndroidSystemBridge(this).also { bridge ->
             bridge.attach(
@@ -68,6 +76,12 @@ class MainActivity : FlutterActivity() {
     override fun onStart() {
         super.onStart()
         GangChatAppVisibility.isForeground = true
+    }
+
+    override fun onDestroy() {
+        musicPreviewPlayer?.dispose()
+        musicPreviewPlayer = null
+        super.onDestroy()
     }
 
     override fun onStop() {

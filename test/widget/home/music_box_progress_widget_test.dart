@@ -883,10 +883,8 @@ void main() {
         await tester.pump();
         expect(
           find.byKey(const ValueKey<String>('music-playlist-card:playlist-1')),
-          findsOneWidget,
+          findsNothing,
         );
-        await tester.tap(playlistHeader);
-        await tester.pumpAndSettle();
 
         final tile = find.byKey(
           const ValueKey<String>(

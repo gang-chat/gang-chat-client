@@ -1439,53 +1439,46 @@ class _MusicBoxPlaylistBrowserState extends State<_MusicBoxPlaylistBrowser> {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: _playlistCardAnchor(
-                  context: context,
-                  playlist: selected,
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      const baseStyle = TextStyle(
-                        color: UiColors.text,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      );
-                      final nameStyle = _musicBoxAdaptiveListTextStyle(
-                        context,
-                        text: selected.name,
-                        baseStyle: baseStyle,
-                        width: (constraints.maxWidth - 24).clamp(
-                          24.0,
-                          double.infinity,
-                        ),
-                      );
-                      return MouseRegion(
-                        cursor: SystemMouseCursors.click,
-                        child: Row(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    const baseStyle = TextStyle(
+                      color: UiColors.text,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    );
+                    final nameStyle = _musicBoxAdaptiveListTextStyle(
+                      context,
+                      text: selected.name,
+                      baseStyle: baseStyle,
+                      width: (constraints.maxWidth - 24).clamp(
+                        24.0,
+                        double.infinity,
+                      ),
+                    );
+                    return Row(
+                      key: ValueKey<String>(
+                        'music-box-playlist-header:${selected.id}',
+                      ),
+                      children: [
+                        const Icon(
+                          Icons.queue_music,
                           key: ValueKey<String>(
-                            'music-box-playlist-header:${selected.id}',
+                            'music-box-playlist-header-icon',
                           ),
-                          children: [
-                            const Icon(
-                              Icons.queue_music,
-                              key: ValueKey<String>(
-                                'music-box-playlist-header-icon',
-                              ),
-                              size: 17,
-                              color: UiColors.accent,
-                            ),
-                            const SizedBox(width: 7),
-                            Expanded(
-                              child: Text(
-                                selected.name,
-                                style: nameStyle,
-                                softWrap: true,
-                              ),
-                            ),
-                          ],
+                          size: 17,
+                          color: UiColors.accent,
                         ),
-                      );
-                    },
-                  ),
+                        const SizedBox(width: 7),
+                        Expanded(
+                          child: Text(
+                            selected.name,
+                            style: nameStyle,
+                            softWrap: true,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ),
               const SizedBox(width: 8),

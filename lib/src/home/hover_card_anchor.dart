@@ -117,6 +117,7 @@ class HoverCardAnchor extends StatefulWidget {
     required this.child,
     required this.cardBuilder,
     this.onBeforeOpen,
+    this.onVisibilityChanged,
     this.resetKey,
     this.cardWidth = hoverCardDefaultWidth,
     this.gap = hoverCardDefaultGap,
@@ -126,6 +127,7 @@ class HoverCardAnchor extends StatefulWidget {
   final Widget child;
   final HoverCardBuilder cardBuilder;
   final Future<void> Function()? onBeforeOpen;
+  final ValueChanged<bool>? onVisibilityChanged;
   final Object? resetKey;
   final double cardWidth;
   final double gap;
@@ -207,6 +209,7 @@ class _HoverCardAnchorState extends State<HoverCardAnchor> {
     _parentCoordinator?.releaseOpenChild(this);
     _clearDeferredOutsidePointerRoute();
     _closeTimer?.cancel();
+    if (_portalVisible) widget.onVisibilityChanged?.call(false);
     super.dispose();
   }
 
@@ -260,7 +263,7 @@ class _HoverCardAnchorState extends State<HoverCardAnchor> {
   void _showPortal() {
     _parentCoordinator?.showOnlyChild(this);
     if (_portalVisible && _portal.isShowing) return;
-    _portalVisible = true;
+    _setPortalVisible(true);
     _showPortalController();
     _syncParentActivity();
   }
@@ -283,7 +286,7 @@ class _HoverCardAnchorState extends State<HoverCardAnchor> {
 
   void _hidePortal() {
     _coordinator.dismissOpenChild();
-    _portalVisible = false;
+    _setPortalVisible(false);
     _parentCoordinator?.releaseOpenChild(this);
     _hidePortalController();
     _syncParentActivity();
@@ -333,10 +336,16 @@ class _HoverCardAnchorState extends State<HoverCardAnchor> {
     _closeTimer?.cancel();
     _closeTimer = Timer(widget.closeDelay, () {
       if (!mounted || _wantsOpen) return;
-      _portalVisible = false;
+      _setPortalVisible(false);
       _hidePortalController();
       _syncParentActivity();
     });
+  }
+
+  void _setPortalVisible(bool visible) {
+    if (_portalVisible == visible) return;
+    _portalVisible = visible;
+    widget.onVisibilityChanged?.call(visible);
   }
 
   void _handleDescendantActivityChanged() {

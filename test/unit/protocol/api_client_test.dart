@@ -2132,6 +2132,43 @@ void main() {
   });
 
   test(
+    'downloadMusicTrackPreview posts identity and returns Ogg bytes',
+    () async {
+      final api = GangApiClient(
+        baseUrl: 'http://example.test/api/v1',
+        accessTokenProvider: ({bool forceRefresh = false}) async => 'token',
+        httpClient: MockClient((request) async {
+          expect(request.method, 'POST');
+          expect(request.url.path, '/api/v1/me/music-box/preview');
+          expect(request.headers['authorization'], 'Bearer token');
+          expect(jsonDecode(request.body), {
+            'source': 'netease',
+            'track_id': 'track-1',
+          });
+          return http.Response.bytes(
+            Uint8List.fromList([79, 103, 103, 83]),
+            200,
+            headers: {
+              'content-type': 'audio/ogg',
+              'content-disposition': 'inline; filename="music-preview.ogg"',
+            },
+          );
+        }),
+      );
+
+      final downloaded = await api.downloadMusicTrackPreview(
+        source: 'netease',
+        trackId: 'track-1',
+      );
+
+      expect(downloaded.bytes, [79, 103, 103, 83]);
+      expect(downloaded.mimeType, 'audio/ogg');
+      expect(downloaded.filename, 'music-preview.ogg');
+      api.close();
+    },
+  );
+
+  test(
     'deleteSticker treats transient close as success when sticker is gone',
     () async {
       var requestIndex = 0;

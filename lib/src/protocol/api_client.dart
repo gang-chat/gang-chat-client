@@ -626,6 +626,16 @@ abstract interface class PersonalMusicPlaylistApi {
   });
 }
 
+/// Authenticated transport for an explicitly initiated local song preview.
+/// This is separate from [GangApi] so older fakes and read-only playlist
+/// adapters do not gain a required method when preview support is unavailable.
+abstract interface class MusicTrackPreviewApi {
+  Future<DownloadedFile> downloadMusicTrackPreview({
+    required String source,
+    required String trackId,
+  });
+}
+
 abstract interface class RoomMusicPlaylistApi {
   Future<PersonalMusicPlaylistPage> listRoomMusicPlaylists({
     required String roomId,
@@ -703,7 +713,11 @@ abstract interface class RoomMusicPlaylistApi {
 }
 
 class GangApiClient
-    implements GangApi, PersonalMusicPlaylistApi, RoomMusicPlaylistApi {
+    implements
+        GangApi,
+        PersonalMusicPlaylistApi,
+        RoomMusicPlaylistApi,
+        MusicTrackPreviewApi {
   GangApiClient({
     required this.baseUrl,
     required this.accessTokenProvider,
@@ -2475,6 +2489,26 @@ class GangApiClient
         .cast<Map<String, Object?>>()
         .map(MusicBoxSearchResult.fromJson)
         .toList();
+  }
+
+  @override
+  Future<DownloadedFile> downloadMusicTrackPreview({
+    required String source,
+    required String trackId,
+  }) async {
+    final response = await _sendWithAuth((token) {
+      return _httpClient.post(
+        _uri('/me/music-box/preview'),
+        headers: _headers(token),
+        body: encodeJsonBody({'source': source, 'track_id': trackId}),
+      );
+    });
+    _throwIfFailed(response);
+    return DownloadedFile(
+      bytes: response.bodyBytes,
+      filename: _downloadFilename(response),
+      mimeType: response.headers['content-type'] ?? 'audio/ogg',
+    );
   }
 
   @override

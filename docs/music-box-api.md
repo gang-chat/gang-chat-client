@@ -33,6 +33,27 @@ Windows、macOS、Android 只负责搜索、控制、状态展示和本地监听
 个人歌单和房间歌单的 CRUD、分页、重排接口仍使用既有
 `/me/music-box/playlists` 和 `/rooms/:room_id/music-box/playlists` 路径。
 
+### 本地试听
+
+设置和房间设置中的歌曲名片使用独立的本地试听接口，不加入房间队列，也不改变
+LiveKit 音乐盒参与者的权威播放状态：
+
+```http
+POST /api/v1/me/music-box/preview
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+{
+  "source": "netease",
+  "track_id": "t1"
+}
+```
+
+成功时返回 `audio/ogg` 二进制内容。服务端复用解析和转码流程，并在独立的试听缓存中
+按来源和歌曲 ID 去重；客户端再写入应用缓存，后续试听优先命中本地文件。试听播放器
+必须与房间 WebRTC 音频隔离，不能请求独占音频焦点、切换通话模式或修改输出路由。
+关闭歌曲名片、点击“取消试听”或开始试听另一首歌时，只停止本地试听。
+
 ## 权威状态
 
 ```json

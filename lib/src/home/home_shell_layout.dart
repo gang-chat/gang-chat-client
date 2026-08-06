@@ -172,6 +172,8 @@ extension _HomeShellLayout on _HomeShellState {
           }
         },
         onClose: _closeSettings,
+        musicTrackPreviewPlatformFactory:
+            widget.musicTrackPreviewPlatformFactory,
       );
     }
 
@@ -360,6 +362,7 @@ extension _HomeShellLayout on _HomeShellState {
           ),
           title: '房间歌单',
           unavailableMessage: '房间歌单需要登录后从服务端读取',
+          previewPlatformFactory: widget.musicTrackPreviewPlatformFactory,
         ),
       );
     }
