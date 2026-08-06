@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -34,20 +33,22 @@ class MusicPlaylistCardData {
   final PublicRoom? room;
 
   /// True only when the card was opened from the authoritative current-source
-  /// header. A playlist being listed elsewhere does not gain this badge.
+  /// header. It replaces the play-all action with a disabled playing action;
+  /// the same playlist listed elsewhere keeps its normal play-all action.
   final bool showPlayingStatus;
 
   MusicPlaylistCardData copyWith({
     String? name,
     int? songCount,
     DateTime? createdAt,
+    UserSummary? creator,
   }) {
     return MusicPlaylistCardData(
       id: id,
       name: name ?? this.name,
       songCount: songCount ?? this.songCount,
       createdAt: createdAt ?? this.createdAt,
-      creator: creator,
+      creator: creator ?? this.creator,
       room: room,
       showPlayingStatus: showPlayingStatus,
     );
@@ -153,6 +154,11 @@ class _MusicPlaylistHoverCardState extends State<MusicPlaylistHoverCard> {
         oldWidget.data.songCount == widget.data.songCount &&
         oldWidget.data.createdAt == widget.data.createdAt &&
         oldWidget.data.creator?.id == widget.data.creator?.id &&
+        oldWidget.data.creator?.roomDisplayName ==
+            widget.data.creator?.roomDisplayName &&
+        oldWidget.data.creator?.displayName ==
+            widget.data.creator?.displayName &&
+        oldWidget.data.creator?.avatarUrl == widget.data.creator?.avatarUrl &&
         oldWidget.data.room?.id == widget.data.room?.id &&
         oldWidget.data.showPlayingStatus == widget.data.showPlayingStatus) {
       return;
@@ -162,21 +168,39 @@ class _MusicPlaylistHoverCardState extends State<MusicPlaylistHoverCard> {
   }
 
   Future<void> _resolve() {
-    final resolver = widget.resolveData;
-    if (resolver == null) return Future<void>.value();
+    final playlistResolver = widget.resolveData;
+    final creatorResolver = widget.onResolveUserProfile;
+    if (playlistResolver == null &&
+        (creatorResolver == null || widget.data.creator == null)) {
+      return Future<void>.value();
+    }
     final existing = _resolveFuture;
     if (existing != null) return existing;
     final requested = widget.data;
     final future = () async {
       try {
-        final resolved = await resolver(requested);
-        if (!mounted || widget.data.id != requested.id) return;
-        setState(() => _resolved = resolved);
-      } catch (_) {
-        if (!mounted || widget.data.id != requested.id) return;
-        // Keep the snapshot metadata visible when richer playlist metadata is
-        // unavailable (for example another user's active private playlist).
-        setState(() => _resolved = null);
+        var resolved = requested;
+        if (playlistResolver != null) {
+          try {
+            resolved = await playlistResolver(requested);
+          } catch (_) {
+            // Keep the snapshot metadata visible when richer playlist metadata
+            // is unavailable (for example another user's private playlist).
+          }
+        }
+        final creator = resolved.creator;
+        if (creatorResolver != null && creator != null) {
+          try {
+            final profile = await creatorResolver(creator);
+            resolved = resolved.copyWith(creator: profile);
+          } catch (_) {
+            // The lightweight identity remains usable when its room-member
+            // profile cannot be refreshed.
+          }
+        }
+        if (mounted && widget.data.id == requested.id) {
+          setState(() => _resolved = resolved);
+        }
       } finally {
         if (mounted && widget.data.id == requested.id) _resolveFuture = null;
       }
@@ -225,7 +249,12 @@ class _MusicPlaylistHoverCardState extends State<MusicPlaylistHoverCard> {
         widget.data.showPlayingStatus,
         _dismissEpoch,
       ),
-      onBeforeOpen: widget.resolveData == null ? null : _resolve,
+      onBeforeOpen:
+          widget.resolveData == null &&
+              (widget.onResolveUserProfile == null ||
+                  widget.data.creator == null)
+          ? null
+          : _resolve,
       cardBuilder: (context) => _MusicPlaylistProfileCard(
         data: data,
         currentUser: widget.currentUser,
@@ -299,24 +328,13 @@ class _MusicPlaylistProfileCard extends StatelessWidget {
               ),
             ],
           ),
-          if (data.showPlayingStatus) ...[
-            const SizedBox(height: UiSpacing.sm),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: StatusBadge(
-                label: '正在播放',
-                icon: Icons.graphic_eq,
-                active: true,
-              ),
-            ),
-          ],
           const SizedBox(height: UiSpacing.md),
           _MusicPlaylistDetailRow(
             label: '歌曲数量',
             child: Text(
               '${data.songCount} 首',
               textAlign: TextAlign.right,
-              style: UiTypography.body,
+              style: UiTypography.label,
             ),
           ),
           const SizedBox(height: UiSpacing.sm),
@@ -339,7 +357,7 @@ class _MusicPlaylistProfileCard extends StatelessWidget {
               value: account_display.formatDateTime(data.createdAt),
               textAlign: TextAlign.right,
               maxLines: 2,
-              style: UiTypography.body,
+              style: UiTypography.label,
             ),
           ),
           const SizedBox(height: UiSpacing.lg),
@@ -350,11 +368,11 @@ class _MusicPlaylistProfileCard extends StatelessWidget {
                 buttonKey: const ValueKey<String>(
                   'music-playlist-card-play-all',
                 ),
-                label: '播放全部',
+                label: data.showPlayingStatus ? '正在播放' : '播放全部',
                 icon: Icons.play_arrow,
                 tone: ButtonTone.primary,
-                loading: playing,
-                onPressed: onPlayAll,
+                loading: !data.showPlayingStatus && playing,
+                onPressed: data.showPlayingStatus ? null : onPlayAll,
               ),
               ResponsiveDialogAction(
                 buttonKey: const ValueKey<String>('music-playlist-card-view'),
@@ -465,7 +483,7 @@ class _MusicPlaylistIdentity extends StatelessWidget {
     return Text(
       '未知',
       textAlign: TextAlign.right,
-      style: UiTypography.body.copyWith(color: UiColors.textMuted),
+      style: UiTypography.label.copyWith(color: UiColors.textMuted),
     );
   }
 }
@@ -487,22 +505,16 @@ class _MusicPlaylistIdentityValue extends StatelessWidget {
   Widget build(BuildContext context) {
     const avatarSize = 24.0;
     const gap = 6.0;
-    final style = UiTypography.body.copyWith(color: UiColors.text);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final painter = TextPainter(
-          text: TextSpan(text: name, style: style),
-          textDirection: Directionality.of(context),
-          textScaler: MediaQuery.textScalerOf(context),
-          maxLines: 1,
-        )..layout();
-        final available = constraints.hasBoundedWidth
-            ? constraints.maxWidth
-            : painter.width + avatarSize + gap;
-        final width = math.min(available, painter.width + avatarSize + gap + 4);
-        return SizedBox(
-          width: width,
+    final style = UiTypography.label.copyWith(color: UiColors.text);
+    return SizedBox(
+      width: double.infinity,
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: FittedBox(
+          alignment: Alignment.centerRight,
+          fit: BoxFit.scaleDown,
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Avatar(
                 label: label,
@@ -512,19 +524,18 @@ class _MusicPlaylistIdentityValue extends StatelessWidget {
                 showBorder: false,
               ),
               const SizedBox(width: gap),
-              Expanded(
-                child: Text(
-                  name,
-                  maxLines: 3,
-                  softWrap: true,
-                  textAlign: TextAlign.right,
-                  style: style,
-                ),
+              Text(
+                name,
+                key: const ValueKey<String>('music-playlist-identity-name'),
+                maxLines: 1,
+                softWrap: false,
+                textAlign: TextAlign.right,
+                style: style,
               ),
             ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

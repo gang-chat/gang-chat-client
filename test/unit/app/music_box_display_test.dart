@@ -73,6 +73,7 @@ void main() {
           'owner_user_id': 'owner-1',
           'owner': {
             'user_id': 'owner-1',
+            'username': 'owner_handle',
             'display_name': '点歌用户',
             'avatar_label': '全局用户',
             'avatar_url': '/avatar.png',
@@ -82,6 +83,7 @@ void main() {
       });
 
       expect(parsed.activeSource.ownerUserId, 'owner-1');
+      expect(parsed.activeSource.owner?.username, 'owner_handle');
       expect(parsed.activeSource.owner?.displayName, '点歌用户');
       expect(parsed.activeSource.owner?.avatarLabel, '全局用户');
       expect(parsed.activeSource.owner?.avatarUrl, '/avatar.png');

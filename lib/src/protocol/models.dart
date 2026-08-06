@@ -2521,12 +2521,15 @@ class MusicBoxRequester {
   const MusicBoxRequester({
     required this.userId,
     required this.displayName,
+    String? username,
     String? avatarLabel,
     required this.avatarUrl,
     required this.defaultAvatarKey,
-  }) : avatarLabel = avatarLabel ?? displayName;
+  }) : username = username ?? avatarLabel ?? displayName,
+       avatarLabel = avatarLabel ?? displayName;
 
   final String userId;
+  final String username;
   final String displayName;
   final String avatarLabel;
   final String? avatarUrl;
@@ -2538,6 +2541,7 @@ class MusicBoxRequester {
     if (userId.isEmpty) return null;
     return MusicBoxRequester(
       userId: userId,
+      username: _stringFromJson(json, const ['username']),
       displayName:
           _stringFromJson(json, const ['display_name', 'username']) ?? userId,
       avatarLabel:

@@ -9,6 +9,10 @@ const double _musicBoxMinComfortableHeight = 400;
 /// [Input.defaultHeight] to keep the docked panel dense.
 const double _musicBoxSearchFieldHeight = 30;
 
+/// Shared geometry for saved-playlist rows and playlist-picker targets.
+const double _musicBoxPlaylistRowMinHeight = 50;
+const double _musicBoxPlaylistRowVerticalPadding = 18;
+
 /// The in-pane music box console: a spinning vinyl for the current track, a
 /// progress bar with transport controls, the queue, and a search-to-queue
 /// field. Audio is delivered separately via the LiveKit session; this is purely
@@ -1198,8 +1202,9 @@ UserSummary? _musicBoxActiveSourceOwner(
   if (owner != null) {
     return UserSummary(
       id: owner.userId,
-      username: owner.displayName,
-      displayName: owner.displayName,
+      username: owner.username,
+      displayName: owner.avatarLabel,
+      roomDisplayName: owner.displayName,
       avatarUrl: owner.avatarUrl,
       defaultAvatarKey: owner.defaultAvatarKey,
     );
@@ -1375,6 +1380,32 @@ class _MusicBoxPlaylistBrowserState extends State<_MusicBoxPlaylistBrowser> {
     }
   }
 
+  Widget _playlistCardAnchor({
+    required BuildContext context,
+    required PersonalMusicPlaylist playlist,
+    required Widget child,
+  }) {
+    final host = MusicPlaylistCardHostScope.maybeOf(context);
+    return MusicPlaylistHoverCard(
+      data: MusicPlaylistCardData(
+        id: playlist.id,
+        name: playlist.name,
+        songCount: playlist.itemCount,
+        createdAt: playlist.createdAt,
+        creator: widget.roomScoped ? null : host?.currentUser?.toSummary(),
+        room: widget.roomScoped ? host?.room : null,
+      ),
+      currentUser: host?.currentUser,
+      onResolveUserProfile: host?.onResolveUserProfile,
+      onResolveRoomProfile: host?.onResolveRoomProfile,
+      onEnterCommonRoom: host?.onEnterCommonRoom,
+      userProfileActionBuilder: host?.userProfileActionBuilder,
+      onPlayAll: () => _activatePlaylist(playlist),
+      onViewPlaylist: () => _openPlaylist(playlist),
+      child: child,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -1408,14 +1439,52 @@ class _MusicBoxPlaylistBrowserState extends State<_MusicBoxPlaylistBrowser> {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(
-                  selected.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: UiColors.text,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+                child: _playlistCardAnchor(
+                  context: context,
+                  playlist: selected,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      const baseStyle = TextStyle(
+                        color: UiColors.text,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      );
+                      final nameStyle = _musicBoxAdaptiveListTextStyle(
+                        context,
+                        text: selected.name,
+                        baseStyle: baseStyle,
+                        width: (constraints.maxWidth - 24).clamp(
+                          24.0,
+                          double.infinity,
+                        ),
+                      );
+                      return MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: Row(
+                          key: ValueKey<String>(
+                            'music-box-playlist-header:${selected.id}',
+                          ),
+                          children: [
+                            const Icon(
+                              Icons.queue_music,
+                              key: ValueKey<String>(
+                                'music-box-playlist-header-icon',
+                              ),
+                              size: 17,
+                              color: UiColors.accent,
+                            ),
+                            const SizedBox(width: 7),
+                            Expanded(
+                              child: Text(
+                                selected.name,
+                                style: nameStyle,
+                                softWrap: true,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
@@ -1482,36 +1551,15 @@ class _MusicBoxPlaylistBrowserState extends State<_MusicBoxPlaylistBrowser> {
       separatorBuilder: (_, _) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
         final playlist = _playlists[index];
-        final countLabel = '${playlist.itemCount} 首';
         const nameBaseStyle = TextStyle(
           color: UiColors.text,
           fontSize: 12,
           fontWeight: FontWeight.w600,
         );
-        const countStyle = TextStyle(
-          color: UiColors.textMuted,
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-        );
         return LayoutBuilder(
           builder: (context, constraints) {
-            final host = MusicPlaylistCardHostScope.maybeOf(context);
-            final countWidth = _musicBoxMeasureTextWidth(
-              context,
-              countLabel,
-              countStyle,
-            );
-            final textWidth =
-                (constraints.maxWidth -
-                        20 -
-                        17 -
-                        8 -
-                        countWidth -
-                        4 -
-                        28 -
-                        2 -
-                        18)
-                    .clamp(24.0, double.infinity);
+            final textWidth = (constraints.maxWidth - 20 - 17 - 8 - 28 - 2 - 34)
+                .clamp(24.0, double.infinity);
             final nameStyle = _musicBoxAdaptiveListTextStyle(
               context,
               text: playlist.name,
@@ -1524,25 +1572,14 @@ class _MusicBoxPlaylistBrowserState extends State<_MusicBoxPlaylistBrowser> {
               nameStyle,
               textWidth,
             );
-            final tileHeight = (nameHeight + 18).clamp(50.0, double.infinity);
-            return MusicPlaylistHoverCard(
-              data: MusicPlaylistCardData(
-                id: playlist.id,
-                name: playlist.name,
-                songCount: playlist.itemCount,
-                createdAt: playlist.createdAt,
-                creator: widget.roomScoped
-                    ? null
-                    : host?.currentUser?.toSummary(),
-                room: widget.roomScoped ? host?.room : null,
-              ),
-              currentUser: host?.currentUser,
-              onResolveUserProfile: host?.onResolveUserProfile,
-              onResolveRoomProfile: host?.onResolveRoomProfile,
-              onEnterCommonRoom: host?.onEnterCommonRoom,
-              userProfileActionBuilder: host?.userProfileActionBuilder,
-              onPlayAll: () => _activatePlaylist(playlist),
-              onViewPlaylist: () => _openPlaylist(playlist),
+            final tileHeight =
+                (nameHeight + _musicBoxPlaylistRowVerticalPadding).clamp(
+                  _musicBoxPlaylistRowMinHeight,
+                  double.infinity,
+                );
+            return _playlistCardAnchor(
+              context: context,
+              playlist: playlist,
               child: PressableSurface(
                 key: ValueKey<String>(
                   'music-box-playlist-summary:${playlist.id}',
@@ -1571,8 +1608,6 @@ class _MusicBoxPlaylistBrowserState extends State<_MusicBoxPlaylistBrowser> {
                         softWrap: true,
                       ),
                     ),
-                    Text(countLabel, style: countStyle),
-                    const SizedBox(width: 4),
                     _MusicBoxHoverCardActionGuard(
                       child: ButtonIcon(
                         icon: const Icon(Icons.play_arrow),
@@ -1586,10 +1621,13 @@ class _MusicBoxPlaylistBrowserState extends State<_MusicBoxPlaylistBrowser> {
                     const SizedBox(width: 2),
                     _MusicBoxHoverCardActionGuard(
                       child: ButtonIconPlain(
+                        key: ValueKey<String>(
+                          'music-box-playlist-open:${playlist.id}',
+                        ),
                         icon: const Icon(Icons.chevron_right),
                         tooltip: '查看歌单',
-                        width: 18,
-                        height: 28,
+                        width: 34,
+                        height: tileHeight,
                         iconSize: 18,
                         onPressed: () => unawaited(_openPlaylist(playlist)),
                       ),
@@ -1626,20 +1664,6 @@ double _musicBoxMeasureTextHeight(
     textScaler: MediaQuery.textScalerOf(context),
   )..layout(maxWidth: width);
   return painter.height;
-}
-
-double _musicBoxMeasureTextWidth(
-  BuildContext context,
-  String text,
-  TextStyle style,
-) {
-  final painter = TextPainter(
-    text: TextSpan(text: text.isEmpty ? ' ' : text, style: style),
-    textDirection: Directionality.of(context),
-    textScaler: MediaQuery.textScalerOf(context),
-    maxLines: 1,
-  )..layout();
-  return painter.width;
 }
 
 TextStyle _musicBoxAdaptiveListTextStyle(
@@ -1913,6 +1937,7 @@ class _MusicBoxQueueTile extends StatelessWidget {
                   cardBuilder: (_) => _MusicBoxSongCard.queue(
                     item: item,
                     isCurrent: isCurrent,
+                    queueSongCount: currentState.queue.length,
                     controller: controller,
                     roomId: roomId,
                     activeSource: currentState.activeSource,
@@ -1996,6 +2021,7 @@ class _MusicBoxSongCard extends StatefulWidget {
   const _MusicBoxSongCard.queue({
     required this.item,
     required this.isCurrent,
+    required this.queueSongCount,
     required this.controller,
     required this.roomId,
     required this.activeSource,
@@ -2017,6 +2043,7 @@ class _MusicBoxSongCard extends StatefulWidget {
     this.catalogDurationMs,
   }) : item = null,
        isCurrent = false,
+       queueSongCount = 0,
        activeSource = null,
        onStateChanged = null,
        currentUser = null,
@@ -2029,6 +2056,7 @@ class _MusicBoxSongCard extends StatefulWidget {
   final MusicBoxSearchResult? result;
   final int? catalogDurationMs;
   final bool isCurrent;
+  final int queueSongCount;
   final MusicBoxController? controller;
   final String? roomId;
   final MusicBoxActiveSource? activeSource;
@@ -2232,6 +2260,10 @@ class _MusicBoxSongCardState extends State<_MusicBoxSongCard> {
               _MusicBoxSongAttribution(
                 source: widget.activeSource!,
                 requester: item!.requestedBy,
+                songCount: widget.queueSongCount,
+                controller: widget.controller,
+                roomId: widget.roomId,
+                onStateChanged: widget.onStateChanged,
                 currentUser: widget.currentUser,
                 onResolveUserProfile: widget.onResolveUserProfile,
                 onResolveRoomProfile: widget.onResolveRoomProfile,
@@ -2359,6 +2391,10 @@ class _MusicBoxSongAttribution extends StatelessWidget {
   const _MusicBoxSongAttribution({
     required this.source,
     required this.requester,
+    required this.songCount,
+    required this.controller,
+    required this.roomId,
+    required this.onStateChanged,
     required this.currentUser,
     required this.onResolveUserProfile,
     required this.onResolveRoomProfile,
@@ -2368,31 +2404,138 @@ class _MusicBoxSongAttribution extends StatelessWidget {
 
   final MusicBoxActiveSource source;
   final MusicBoxRequester? requester;
+  final int songCount;
+  final MusicBoxController? controller;
+  final String? roomId;
+  final ValueChanged<MusicBoxState>? onStateChanged;
   final CurrentUser? currentUser;
   final UserProfileResolver? onResolveUserProfile;
   final RoomProfileResolver? onResolveRoomProfile;
   final ValueChanged<PublicRoom>? onEnterCommonRoom;
   final UserProfileActionBuilder? userProfileActionBuilder;
 
+  MusicPlaylistCardResolver? _playlistResolver() {
+    final musicController = controller;
+    if (musicController == null || source.id.isEmpty) return null;
+    if (source.type == MusicBoxActiveSourceType.roomPlaylist) {
+      final currentRoomId = roomId;
+      if (currentRoomId == null) return null;
+      return (current) async {
+        final page = await musicController.loadRoomPlaylists(
+          roomId: currentRoomId,
+        );
+        final playlist = _musicBoxPlaylistById(page.playlists, source.id);
+        if (playlist == null) return current;
+        return current.copyWith(
+          name: playlist.name,
+          songCount: playlist.itemCount,
+          createdAt: playlist.createdAt,
+        );
+      };
+    }
+    final ownerId = source.ownerUserId.isNotEmpty
+        ? source.ownerUserId
+        : source.owner?.userId ?? '';
+    if (source.type != MusicBoxActiveSourceType.userPlaylist ||
+        currentUser == null ||
+        (ownerId.isNotEmpty && ownerId != currentUser!.id)) {
+      return null;
+    }
+    return (current) async {
+      final page = await musicController.loadMyPlaylists();
+      final playlist = _musicBoxPlaylistById(page.playlists, source.id);
+      if (playlist == null) return current;
+      return current.copyWith(
+        name: playlist.name,
+        songCount: playlist.itemCount,
+        createdAt: playlist.createdAt,
+      );
+    };
+  }
+
+  Future<void> _playPlaylist(BuildContext context) async {
+    final musicController = controller;
+    final currentRoomId = roomId;
+    if (musicController == null || currentRoomId == null || source.id.isEmpty) {
+      return;
+    }
+    try {
+      final state = await musicController.activatePlaylist(
+        roomId: currentRoomId,
+        sourceType: source.type,
+        playlistId: source.id,
+      );
+      onStateChanged?.call(state);
+    } catch (error) {
+      if (context.mounted) {
+        showFloatingErrorNotice(
+          context,
+          musicBoxControlErrorMessage(error, '播放歌单失败，请重试'),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isPlaylist = source.type != MusicBoxActiveSourceType.temporary;
-    final owner =
-        source.owner ??
-        (requester?.userId == source.ownerUserId ? requester : null);
     final playlistName = source.name.trim().isEmpty ? '未命名歌单' : source.name;
-    final person = isPlaylist ? owner : requester;
-    final playlistOwnerLabel =
-        source.type == MusicBoxActiveSourceType.userPlaylist && person != null
-        ? '${person.displayName}的歌单'
+    final host = MusicPlaylistCardHostScope.maybeOf(context);
+    final creator = isPlaylist
+        ? _musicBoxActiveSourceOwner(source, currentUser)
         : null;
-    final value = switch (source.type) {
-      MusicBoxActiveSourceType.temporary => person?.displayName ?? '未知用户',
-      MusicBoxActiveSourceType.roomPlaylist => '房间歌单 · $playlistName',
-      MusicBoxActiveSourceType.userPlaylist when person != null =>
-        '${person.displayName}的歌单 · $playlistName',
-      MusicBoxActiveSourceType.userPlaylist => '用户歌单 · $playlistName',
-    };
+    final playlistValue = _MusicBoxPlaylistAttributionValue(name: playlistName);
+    final value = isPlaylist && source.id.isNotEmpty
+        ? MusicPlaylistHoverCard(
+            data: MusicPlaylistCardData(
+              id: source.id,
+              name: playlistName,
+              songCount: songCount,
+              createdAt: null,
+              creator: source.type == MusicBoxActiveSourceType.userPlaylist
+                  ? creator
+                  : null,
+              room: source.type == MusicBoxActiveSourceType.roomPlaylist
+                  ? host?.room
+                  : null,
+            ),
+            resolveData: _playlistResolver(),
+            currentUser: currentUser,
+            onResolveUserProfile: onResolveUserProfile,
+            onResolveRoomProfile: onResolveRoomProfile,
+            onEnterCommonRoom: onEnterCommonRoom,
+            userProfileActionBuilder: userProfileActionBuilder,
+            onPlayAll: controller == null || roomId == null
+                ? null
+                : () => _playPlaylist(context),
+            onViewPlaylist: host == null
+                ? null
+                : () => host.onViewPlaylist(
+                    PersonalMusicPlaylist(
+                      id: source.id,
+                      name: playlistName,
+                      description: '',
+                      revision: 0,
+                      itemCount: songCount,
+                      createdAt: null,
+                      updatedAt: null,
+                    ),
+                    source.type == MusicBoxActiveSourceType.roomPlaylist,
+                  ),
+            child: playlistValue,
+          )
+        : isPlaylist
+        ? playlistValue
+        : _MusicBoxSongAttributionValue(
+            value: requester?.displayName ?? '未知用户',
+            person: requester,
+            showAvatar: requester != null,
+            currentUser: currentUser,
+            onResolveUserProfile: onResolveUserProfile,
+            onResolveRoomProfile: onResolveRoomProfile,
+            onEnterCommonRoom: onEnterCommonRoom,
+            userProfileActionBuilder: userProfileActionBuilder,
+          );
 
     return Row(
       children: [
@@ -2403,20 +2546,41 @@ class _MusicBoxSongAttribution extends StatelessWidget {
             style: UiTypography.label.copyWith(color: UiColors.textMuted),
           ),
         ),
-        Expanded(
-          child: _MusicBoxSongAttributionValue(
-            value: value,
-            person: person,
-            showAvatar:
-                person != null &&
-                source.type != MusicBoxActiveSourceType.roomPlaylist,
-            currentUser: currentUser,
-            onResolveUserProfile: onResolveUserProfile,
-            onResolveRoomProfile: onResolveRoomProfile,
-            onEnterCommonRoom: onEnterCommonRoom,
-            userProfileActionBuilder: userProfileActionBuilder,
-            playlistOwnerLabel: playlistOwnerLabel,
-            playlistName: playlistOwnerLabel == null ? null : playlistName,
+        Expanded(child: value),
+      ],
+    );
+  }
+}
+
+class _MusicBoxPlaylistAttributionValue extends StatelessWidget {
+  const _MusicBoxPlaylistAttributionValue({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      key: const ValueKey<String>('music-box-song-playlist-attribution'),
+      mainAxisAlignment: MainAxisAlignment.end,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(top: 1),
+          child: Icon(
+            Icons.queue_music,
+            key: ValueKey<String>('music-box-song-playlist-icon'),
+            size: 17,
+            color: UiColors.accent,
+          ),
+        ),
+        const SizedBox(width: 5),
+        Flexible(
+          child: Text(
+            name,
+            key: const ValueKey<String>('music-box-song-attribution-name'),
+            textAlign: TextAlign.right,
+            softWrap: true,
+            style: UiTypography.label.copyWith(color: UiColors.text),
           ),
         ),
       ],
@@ -2434,8 +2598,6 @@ class _MusicBoxSongAttributionValue extends StatelessWidget {
     required this.onResolveRoomProfile,
     required this.onEnterCommonRoom,
     required this.userProfileActionBuilder,
-    required this.playlistOwnerLabel,
-    required this.playlistName,
   });
 
   final String value;
@@ -2446,8 +2608,6 @@ class _MusicBoxSongAttributionValue extends StatelessWidget {
   final RoomProfileResolver? onResolveRoomProfile;
   final ValueChanged<PublicRoom>? onEnterCommonRoom;
   final UserProfileActionBuilder? userProfileActionBuilder;
-  final String? playlistOwnerLabel;
-  final String? playlistName;
 
   @override
   Widget build(BuildContext context) {
@@ -2470,80 +2630,6 @@ class _MusicBoxSongAttributionValue extends StatelessWidget {
         // room that a measured single line never loses its final glyph.
         const textLayoutSlack = 8.0;
         final avatarWidth = showAvatar ? avatarSize + avatarGap : 0.0;
-        final ownerLabel = playlistOwnerLabel;
-        final trailingPlaylistName = playlistName;
-        if (showAvatar &&
-            user != null &&
-            ownerLabel != null &&
-            trailingPlaylistName != null) {
-          final ownerPainter = TextPainter(
-            text: TextSpan(text: ownerLabel, style: style),
-            textDirection: Directionality.of(context),
-            textScaler: MediaQuery.textScalerOf(context),
-            maxLines: 1,
-          )..layout();
-          final ownerClusterWidth =
-              (avatarWidth + ownerPainter.width + textLayoutSlack)
-                  .clamp(avatarWidth + 1, constraints.maxWidth)
-                  .toDouble();
-          return Wrap(
-            key: const ValueKey<String>(
-              'music-box-song-attribution-value-group',
-            ),
-            alignment: WrapAlignment.end,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              SizedBox(
-                width: ownerClusterWidth,
-                child: Row(
-                  children: [
-                    UserHoverCard(
-                      user: user,
-                      currentUser: currentUser,
-                      onResolveProfile: onResolveUserProfile,
-                      onResolveRoomProfile: onResolveRoomProfile,
-                      onEnterCommonRoom: onEnterCommonRoom,
-                      profileActionBuilder: userProfileActionBuilder,
-                      showRoomRole: true,
-                      child: Avatar(
-                        key: const ValueKey<String>(
-                          'music-box-song-attribution-avatar',
-                        ),
-                        label: person!.avatarLabel,
-                        imageUrl: person!.avatarUrl,
-                        defaultAvatarKey: person!.defaultAvatarKey,
-                        size: avatarSize,
-                        showBorder: false,
-                      ),
-                    ),
-                    const SizedBox(width: avatarGap),
-                    Expanded(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerRight,
-                        child: Text(
-                          ownerLabel,
-                          key: const ValueKey<String>(
-                            'music-box-song-attribution-owner',
-                          ),
-                          maxLines: 1,
-                          style: style,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Text(
-                ' · $trailingPlaylistName',
-                key: const ValueKey<String>('music-box-song-attribution-name'),
-                textAlign: TextAlign.right,
-                style: style,
-                softWrap: true,
-              ),
-            ],
-          );
-        }
         final maxTextWidth = (constraints.maxWidth - avatarWidth).clamp(
           1.0,
           double.infinity,
@@ -2744,11 +2830,11 @@ class _MusicBoxPlaylistTargetButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const horizontalPadding = 10.0;
-    const iconSize = 18.0;
+    const iconSize = 17.0;
     const iconGap = 8.0;
     const baseStyle = TextStyle(
-      color: UiColors.accent,
-      fontSize: 13,
+      color: UiColors.text,
+      fontSize: 12,
       fontWeight: FontWeight.w600,
     );
     return LayoutBuilder(
@@ -2782,7 +2868,10 @@ class _MusicBoxPlaylistTargetButton extends StatelessWidget {
           style,
           textWidth,
         );
-        final height = (textHeight + 16).clamp(34.0, double.infinity);
+        final height = (textHeight + _musicBoxPlaylistRowVerticalPadding).clamp(
+          _musicBoxPlaylistRowMinHeight,
+          double.infinity,
+        );
         return MusicPlaylistHoverCard(
           data: MusicPlaylistCardData(
             id: target.playlist.id,
@@ -2812,12 +2901,12 @@ class _MusicBoxPlaylistTargetButton extends StatelessWidget {
             width: double.infinity,
             height: height,
             padding: const EdgeInsets.symmetric(horizontal: horizontalPadding),
-            selected: true,
-            backgroundColor: UiColors.selected,
-            selectedBackgroundColor: UiColors.selected,
-            pressedBackgroundColor: const Color(0xFF14211B),
-            borderColor: UiColors.selectedBorder,
-            selectedBorderColor: UiColors.selectedBorder,
+            hoverLift: 2,
+            baseDepth: 4,
+            backgroundColor: UiColors.surfaceLow,
+            pressedBackgroundColor: UiColors.surfacePressed,
+            borderColor: UiColors.border,
+            borderRadius: UiRadii.md,
             child: Row(
               children: [
                 Icon(
