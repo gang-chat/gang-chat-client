@@ -448,6 +448,16 @@ class _LiveChannelPaneState extends State<LiveChannelPane> {
                       onToggleMusicBox: widget.onToggleMusicBox,
                       onMusicBoxTogglePlayback: widget.onMusicBoxTogglePlayback,
                       onMusicBoxSkip: widget.onMusicBoxSkip,
+                      musicBoxController: widget.musicBoxController,
+                      musicBoxRoomId: widget.musicBoxRoomId,
+                      onMusicBoxStateChanged: widget.onMusicBoxStateChanged,
+                      currentUser: widget.currentUser,
+                      onResolveUserProfile: widget.onResolveParticipantProfile,
+                      onResolveRoomProfile:
+                          widget.onResolveParticipantRoomProfile,
+                      onEnterCommonRoom: widget.onEnterParticipantProfileRoom,
+                      userProfileActionBuilder:
+                          widget.participantProfileActionBuilder,
                       onCollapse: widget.onBackToChat,
                     ),
                     musicBox: musicBoxOpen && musicBox != null

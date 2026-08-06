@@ -2606,6 +2606,73 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'inline music title moves when constrained and opens the existing song card',
+    (tester) async {
+      const longTitle = '一首需要在迷你播放模块中左右往返显示完整内容的特别长歌曲名称';
+      final searchController = TextEditingController();
+      addTearDown(searchController.dispose);
+      const item = MusicBoxQueueItem(
+        id: 'inline-current',
+        source: 'netease',
+        trackId: 'inline-track',
+        title: longTitle,
+        artist: '测试歌手',
+        durationMs: 200000,
+        status: MusicBoxQueueItemStatus.ready,
+        fileSizeBytes: 0,
+        error: '',
+        addedByUserId: 'current_user',
+        createdAt: null,
+      );
+      const musicBox = MusicBoxState(
+        enabled: true,
+        playback: MusicBoxPlayback(
+          state: MusicBoxPlaybackState.playing,
+          currentItemId: 'inline-current',
+          positionMs: 30000,
+          volume: 100,
+          updatedAt: null,
+        ),
+        queue: [item],
+        usage: MusicBoxUsage(usedBytes: 0, limitBytes: 200 * 1024 * 1024),
+      );
+
+      await tester.pumpWidget(
+        _host(
+          searchController: searchController,
+          live: _liveState(const []),
+          width: 960,
+          musicBox: musicBox,
+        ),
+      );
+      await tester.pump();
+
+      final track = find.byKey(
+        const ValueKey<String>('live-control:music-title-marquee-track'),
+      );
+      expect(track, findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 900));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(tester.widget<Transform>(track).transform[12], lessThan(0));
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('live-control:music-current-card')),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(
+        find.byKey(
+          const ValueKey<String>('music-box-song-card:inline-current'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text(longTitle), findsWidgets);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   testWidgets('Android docked music box search keeps focus when IME opens', (
     tester,
   ) async {

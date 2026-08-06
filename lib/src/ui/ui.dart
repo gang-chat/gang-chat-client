@@ -18,6 +18,7 @@ export 'member_presence_icons.dart';
 export 'media_cache_scope.dart';
 export 'music_playlist_track_surface.dart';
 export 'navigation.dart';
+export 'overflow_marquee_text.dart';
 export 'platform_gestures.dart';
 export 'read_only_text_box.dart';
 export 'role_badge.dart';

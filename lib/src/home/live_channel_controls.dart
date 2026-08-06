@@ -25,6 +25,14 @@ class _LiveControlBar extends StatelessWidget {
     required this.onToggleMusicBox,
     required this.onMusicBoxTogglePlayback,
     required this.onMusicBoxSkip,
+    required this.musicBoxController,
+    required this.musicBoxRoomId,
+    required this.onMusicBoxStateChanged,
+    required this.currentUser,
+    required this.onResolveUserProfile,
+    required this.onResolveRoomProfile,
+    required this.onEnterCommonRoom,
+    required this.userProfileActionBuilder,
     required this.onCollapse,
   });
 
@@ -51,6 +59,14 @@ class _LiveControlBar extends StatelessWidget {
   final VoidCallback onToggleMusicBox;
   final VoidCallback onMusicBoxTogglePlayback;
   final VoidCallback onMusicBoxSkip;
+  final MusicBoxController? musicBoxController;
+  final String? musicBoxRoomId;
+  final ValueChanged<MusicBoxState>? onMusicBoxStateChanged;
+  final CurrentUser currentUser;
+  final UserProfileResolver? onResolveUserProfile;
+  final RoomProfileResolver? onResolveRoomProfile;
+  final ValueChanged<PublicRoom>? onEnterCommonRoom;
+  final UserProfileActionBuilder? userProfileActionBuilder;
   final VoidCallback onCollapse;
 
   @override
@@ -137,6 +153,14 @@ class _LiveControlBar extends StatelessWidget {
                 onTogglePlayback: onMusicBoxTogglePlayback,
                 onSkip: onMusicBoxSkip,
                 onToggleExpand: onToggleMusicBox,
+                controller: musicBoxController,
+                roomId: musicBoxRoomId,
+                onStateChanged: onMusicBoxStateChanged,
+                currentUser: currentUser,
+                onResolveUserProfile: onResolveUserProfile,
+                onResolveRoomProfile: onResolveRoomProfile,
+                onEnterCommonRoom: onEnterCommonRoom,
+                userProfileActionBuilder: userProfileActionBuilder,
               )
             : null;
 
@@ -889,6 +913,14 @@ class _InlineMusicBox extends StatelessWidget {
     required this.onTogglePlayback,
     required this.onSkip,
     required this.onToggleExpand,
+    required this.controller,
+    required this.roomId,
+    required this.onStateChanged,
+    required this.currentUser,
+    required this.onResolveUserProfile,
+    required this.onResolveRoomProfile,
+    required this.onEnterCommonRoom,
+    required this.userProfileActionBuilder,
   });
 
   final MusicBoxState state;
@@ -896,6 +928,14 @@ class _InlineMusicBox extends StatelessWidget {
   final VoidCallback onTogglePlayback;
   final VoidCallback onSkip;
   final VoidCallback onToggleExpand;
+  final MusicBoxController? controller;
+  final String? roomId;
+  final ValueChanged<MusicBoxState>? onStateChanged;
+  final CurrentUser currentUser;
+  final UserProfileResolver? onResolveUserProfile;
+  final RoomProfileResolver? onResolveRoomProfile;
+  final ValueChanged<PublicRoom>? onEnterCommonRoom;
+  final UserProfileActionBuilder? userProfileActionBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -928,37 +968,39 @@ class _InlineMusicBox extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            current?.title ?? '未在播放',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: current == null
-                                  ? UiColors.textMuted
-                                  : UiColors.text,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
+                      child: current == null
+                          ? _InlineMusicBoxIdentity(current: current)
+                          : HoverCardAnchor(
+                              key: const ValueKey<String>(
+                                'live-control:music-current-card',
+                              ),
+                              resetKey: Object.hash(
+                                current.id,
+                                current.status,
+                                current.requestedBy?.avatarUrl,
+                                current.requestedBy?.avatarLabel,
+                                state.activeSource.type,
+                                state.activeSource.id,
+                                state.activeSource.name,
+                              ),
+                              cardWidth: 310,
+                              cardBuilder: (_) => _MusicBoxSongCard.queue(
+                                item: current,
+                                isCurrent: true,
+                                queueSongCount: state.queue.length,
+                                controller: controller,
+                                roomId: roomId,
+                                activeSource: state.activeSource,
+                                onStateChanged: onStateChanged,
+                                currentUser: currentUser,
+                                onResolveUserProfile: onResolveUserProfile,
+                                onResolveRoomProfile: onResolveRoomProfile,
+                                onEnterCommonRoom: onEnterCommonRoom,
+                                userProfileActionBuilder:
+                                    userProfileActionBuilder,
+                              ),
+                              child: _InlineMusicBoxIdentity(current: current),
                             ),
-                          ),
-                          Text(
-                            current?.artist.isNotEmpty == true
-                                ? current!.artist
-                                : '点一首歌开始播放',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: UiColors.textSecondary,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
                     ),
                     const SizedBox(width: 6),
                     _HoverInfo(
@@ -1014,6 +1056,45 @@ class _InlineMusicBox extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _InlineMusicBoxIdentity extends StatelessWidget {
+  const _InlineMusicBoxIdentity({required this.current});
+
+  final MusicBoxQueueItem? current;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        OverflowMarqueeText(
+          key: const ValueKey<String>('live-control:music-title'),
+          trackKey: const ValueKey<String>(
+            'live-control:music-title-marquee-track',
+          ),
+          text: current?.title ?? '未在播放',
+          style: TextStyle(
+            color: current == null ? UiColors.textMuted : UiColors.text,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        Text(
+          current?.artist.isNotEmpty == true ? current!.artist : '点一首歌开始播放',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: UiColors.textSecondary,
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 }

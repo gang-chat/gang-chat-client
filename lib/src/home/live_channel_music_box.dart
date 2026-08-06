@@ -211,10 +211,12 @@ class _MusicBoxNowPlaying extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                current?.title ?? '未在播放',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              OverflowMarqueeText(
+                key: const ValueKey<String>('music-box-now-playing:title'),
+                trackKey: const ValueKey<String>(
+                  'music-box-now-playing:title-marquee-track',
+                ),
+                text: current?.title ?? '未在播放',
                 style: TextStyle(
                   color: current == null ? UiColors.textMuted : UiColors.text,
                   fontSize: 13,

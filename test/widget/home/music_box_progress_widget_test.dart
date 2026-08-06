@@ -347,6 +347,81 @@ Future<void> _toggleAddSources(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('now playing title moves only when it overflows', (tester) async {
+    const longTitle = '一首需要在音乐盒顶部左右往返显示完整内容的特别长歌曲名称';
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    final item = MusicBoxQueueItem(
+      id: 'marquee-current',
+      source: 'netease',
+      trackId: 'marquee-track',
+      title: longTitle,
+      artist: '测试歌手',
+      durationMs: 200000,
+      status: MusicBoxQueueItemStatus.ready,
+      fileSizeBytes: 0,
+      error: '',
+      addedByUserId: 'user',
+      createdAt: null,
+    );
+
+    await tester.pumpWidget(
+      _host(
+        _state(
+          playbackState: MusicBoxPlaybackState.playing,
+          positionMs: 30000,
+          currentItemId: item.id,
+          queue: [item],
+        ),
+        controller,
+      ),
+    );
+    await tester.pump();
+
+    final track = find.byKey(
+      const ValueKey<String>('music-box-now-playing:title-marquee-track'),
+    );
+    expect(track, findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 900));
+    await tester.pump(const Duration(milliseconds: 400));
+    final firstOffset = tester.widget<Transform>(track).transform[12];
+    await tester.pump(const Duration(milliseconds: 400));
+    final secondOffset = tester.widget<Transform>(track).transform[12];
+    expect(firstOffset, lessThan(0));
+    expect(secondOffset, lessThan(firstOffset));
+    expect(find.text(longTitle), findsWidgets);
+
+    const shortItem = MusicBoxQueueItem(
+      id: 'short-current',
+      source: 'netease',
+      trackId: 'short-track',
+      title: '短歌名',
+      artist: '测试歌手',
+      durationMs: 200000,
+      status: MusicBoxQueueItemStatus.ready,
+      fileSizeBytes: 0,
+      error: '',
+      addedByUserId: 'user',
+      createdAt: null,
+    );
+    await tester.pumpWidget(
+      _host(
+        _state(
+          playbackState: MusicBoxPlaybackState.playing,
+          positionMs: 31000,
+          currentItemId: shortItem.id,
+          queue: const [shortItem],
+        ),
+        controller,
+      ),
+    );
+    await tester.pump();
+    expect(track, findsNothing);
+    expect(find.text('短歌名'), findsWidgets);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets(
     'opening the music panel centers the currently playing queue item once',
     (tester) async {

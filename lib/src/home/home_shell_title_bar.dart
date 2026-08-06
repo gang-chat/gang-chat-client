@@ -341,148 +341,6 @@ double _titleLiveRoomTextWidth({
   return painter.width.ceilToDouble() + _homeTitleBarLiveRoomTextSafetyWidth;
 }
 
-class _OverflowMarqueeText extends StatefulWidget {
-  const _OverflowMarqueeText({
-    super.key,
-    required this.text,
-    required this.style,
-  });
-
-  final String text;
-  final TextStyle style;
-
-  @override
-  State<_OverflowMarqueeText> createState() => _OverflowMarqueeTextState();
-}
-
-class _OverflowMarqueeTextState extends State<_OverflowMarqueeText>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  Timer? _pauseTimer;
-  double _configuredViewportWidth = -1;
-  double _scrollDistance = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(vsync: this)
-      ..addStatusListener(_handleAnimationStatus);
-  }
-
-  @override
-  void didUpdateWidget(_OverflowMarqueeText oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.text != widget.text || oldWidget.style != widget.style) {
-      _configuredViewportWidth = -1;
-    }
-  }
-
-  void _handleAnimationStatus(AnimationStatus status) {
-    if (_scrollDistance <= 0) return;
-    if (status == AnimationStatus.completed) {
-      _scheduleAnimation(forward: false);
-    } else if (status == AnimationStatus.dismissed) {
-      _scheduleAnimation(forward: true);
-    }
-  }
-
-  void _scheduleAnimation({required bool forward}) {
-    _pauseTimer?.cancel();
-    _pauseTimer = Timer(const Duration(milliseconds: 850), () {
-      if (!mounted || _scrollDistance <= 0) return;
-      if (forward) {
-        unawaited(_controller.forward());
-      } else {
-        unawaited(_controller.reverse());
-      }
-    });
-  }
-
-  void _configure(double viewportWidth, double scrollDistance) {
-    if ((_configuredViewportWidth - viewportWidth).abs() < 0.1 &&
-        (_scrollDistance - scrollDistance).abs() < 0.1) {
-      return;
-    }
-    _configuredViewportWidth = viewportWidth;
-    _scrollDistance = scrollDistance;
-    _pauseTimer?.cancel();
-    _controller.stop();
-    _controller.reset();
-    if (scrollDistance <= 0) return;
-    final milliseconds = (scrollDistance / 28 * 1000)
-        .clamp(1200.0, 10000.0)
-        .round();
-    _controller.duration = Duration(milliseconds: milliseconds);
-    _scheduleAnimation(forward: true);
-  }
-
-  @override
-  void dispose() {
-    _pauseTimer?.cancel();
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final textDirection = Directionality.of(context);
-    final textScaler = MediaQuery.textScalerOf(context);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final painter = TextPainter(
-          text: TextSpan(text: widget.text, style: widget.style),
-          maxLines: 1,
-          textDirection: textDirection,
-          textScaler: textScaler,
-        )..layout();
-        final viewportWidth = constraints.maxWidth;
-        final scrollDistance = (painter.width - viewportWidth)
-            .clamp(0.0, double.infinity)
-            .toDouble();
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _configure(viewportWidth, scrollDistance);
-        });
-        if (scrollDistance <= 0) {
-          return Text(
-            widget.text,
-            maxLines: 1,
-            softWrap: false,
-            overflow: TextOverflow.clip,
-            style: widget.style,
-          );
-        }
-        return SizedBox(
-          height: painter.height,
-          child: ClipRect(
-            child: AnimatedBuilder(
-              animation: _controller,
-              child: OverflowBox(
-                alignment: Alignment.centerLeft,
-                minWidth: painter.width,
-                maxWidth: painter.width,
-                child: Text(
-                  widget.text,
-                  maxLines: 1,
-                  softWrap: false,
-                  overflow: TextOverflow.visible,
-                  style: widget.style,
-                ),
-              ),
-              builder: (context, child) => Transform.translate(
-                key: const ValueKey<String>(
-                  'home-title-live-room:marquee-track',
-                ),
-                offset: Offset(-scrollDistance * _controller.value, 0),
-                child: child,
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
 class _TitleLiveRoomDock extends StatelessWidget {
   const _TitleLiveRoomDock({
     required this.maxWidth,
@@ -634,9 +492,12 @@ class _TitleLiveRoomDock extends StatelessWidget {
                     if (showRoomName) ...[
                       if (joined) const SizedBox(width: identityGap),
                       Expanded(
-                        child: _OverflowMarqueeText(
+                        child: OverflowMarqueeText(
                           key: const ValueKey<String>(
                             'home-title-live-room:name',
+                          ),
+                          trackKey: const ValueKey<String>(
+                            'home-title-live-room:marquee-track',
                           ),
                           text: label,
                           style: roomNameStyle,
