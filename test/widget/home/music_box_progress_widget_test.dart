@@ -1,6 +1,7 @@
 import 'package:client/src/app/music_box_controller.dart';
 import 'package:client/src/home/hover_card_anchor.dart';
 import 'package:client/src/home/live_channel_pane.dart';
+import 'package:client/src/home/music_playlist_profile_card.dart';
 import 'package:client/src/home/room_profile_card.dart';
 import 'package:client/src/protocol/api_client.dart';
 import 'package:client/src/protocol/models.dart';
@@ -12,6 +13,37 @@ import 'package:flutter_test/flutter_test.dart';
 /// Widget-level coverage for the server-authoritative progress bar: it renders
 /// the snapshot's reported position verbatim and updates only when a fresh
 /// snapshot arrives — no local stepping, no client clock.
+
+const _playlistCurrentUser = CurrentUser(
+  id: 'playlist-current-user',
+  uid: '100001',
+  username: 'playlist_owner',
+  displayName: '歌单创建人',
+  bio: '',
+  gender: 'secret',
+  email: null,
+  emailPublic: false,
+  phoneNumber: null,
+  phoneNumberPublic: false,
+  avatarUrl: null,
+  defaultAvatarKey: 'green-2',
+  isSuperuser: false,
+  createdAt: null,
+);
+
+const _playlistRoom = PublicRoom(
+  id: 'room-1',
+  rid: 'R10001',
+  name: '音乐房间',
+  avatarUrl: null,
+  defaultAvatarKey: 'room-2',
+  visibility: 'public',
+  joinPolicy: 'open',
+  memberCount: 8,
+  liveParticipantCount: 2,
+  joined: true,
+  joinState: 'joined',
+);
 
 Widget _host(
   MusicBoxState state,
@@ -27,7 +59,10 @@ Widget _host(
   String? roomId,
   ValueChanged<MusicBoxState>? onStateChanged,
   ValueChanged<MusicBoxSearchResult>? onQueueResult,
+  CurrentUser? currentUser,
+  PublicRoom? room,
   UserProfileResolver? onResolveUserProfile,
+  RoomProfileResolver? onResolveRoomProfile,
   UserProfileActionBuilder? userProfileActionBuilder,
 }) {
   return MaterialApp(
@@ -46,8 +81,11 @@ Widget _host(
           source: source,
           controller: musicBoxController,
           roomId: roomId,
+          room: room,
           onStateChanged: onStateChanged,
+          currentUser: currentUser,
           onResolveUserProfile: onResolveUserProfile,
+          onResolveRoomProfile: onResolveRoomProfile,
           userProfileActionBuilder: userProfileActionBuilder,
           onTogglePlayback: () {},
           onSkip: () {},
@@ -313,6 +351,12 @@ void main() {
           findsNothing,
         );
         expect(find.text('搜索添加'), findsNothing);
+        await tester.tap(
+          find.byKey(const ValueKey<String>('music-box-current-queue-header')),
+        );
+        await tester.pump();
+        expect(find.byType(MusicPlaylistHoverCard), findsNothing);
+        expect(find.text('创建日期'), findsNothing);
         final queueAction = tester.widget<ButtonIcon>(
           find.byKey(const ValueKey<String>('music-box-queue-context-action')),
         );
@@ -437,7 +481,19 @@ void main() {
         name: '房间收藏',
       ),
     );
-    final api = _MusicBoxApiFake(state);
+    final api = _RoomPlaylistApiFake(
+      state,
+      playlist: PersonalMusicPlaylist(
+        id: 'room-list',
+        name: '房间收藏',
+        description: '',
+        revision: 2,
+        itemCount: 1,
+        createdAt: DateTime(2026, 7, 28, 9, 15),
+        updatedAt: null,
+      ),
+      items: const [],
+    );
 
     await tester.pumpWidget(
       _host(
@@ -446,6 +502,8 @@ void main() {
         height: 500,
         musicBoxController: MusicBoxController(api: api),
         roomId: 'room-1',
+        currentUser: _playlistCurrentUser,
+        room: _playlistRoom,
       ),
     );
 
@@ -454,6 +512,25 @@ void main() {
     expect(find.text('Song'), findsWidgets);
     expect(find.text('待点歌曲'), findsNothing);
     expect(find.textContaining('切回点歌队列'), findsNothing);
+    final currentHeader = find.byKey(
+      const ValueKey<String>('music-box-current-queue-header'),
+    );
+    await tester.tap(currentHeader);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey<String>('music-playlist-card:room-list')),
+      findsOneWidget,
+    );
+    expect(find.text('正在播放'), findsOneWidget);
+    expect(find.text('2026-07-28 09:15'), findsOneWidget);
+    expect(find.text('音乐房间'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey<String>('music-playlist-card-play-all')),
+    );
+    await tester.pump();
+    expect(api.activatedSourceType, MusicBoxActiveSourceType.roomPlaylist);
+    await tester.tap(currentHeader);
+    await tester.pump();
     final queueAction = tester.widget<ButtonIcon>(
       find.byKey(const ValueKey<String>('music-box-queue-context-action')),
     );
@@ -712,13 +789,13 @@ void main() {
         final searchController = TextEditingController();
         final queued = <MusicBoxSearchResult>[];
         addTearDown(searchController.dispose);
-        const playlist = PersonalMusicPlaylist(
+        final playlist = PersonalMusicPlaylist(
           id: 'playlist-1',
           name: '666',
           description: '',
           revision: 1,
           itemCount: 1,
-          createdAt: null,
+          createdAt: DateTime(2026, 7, 30, 20, 34),
           updatedAt: null,
         );
         const playlistItem = PersonalMusicPlaylistItem(
@@ -750,6 +827,8 @@ void main() {
             height: 500,
             musicBoxController: MusicBoxController(api: api),
             roomId: 'room-1',
+            currentUser: _playlistCurrentUser,
+            room: _playlistRoom,
             onQueueResult: queued.add,
           ),
         );
@@ -757,6 +836,23 @@ void main() {
         await tester.tap(find.text('房间歌单'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('666'));
+        await tester.pump();
+        final playlistCard = find.byKey(
+          const ValueKey<String>('music-playlist-card:playlist-1'),
+        );
+        expect(playlistCard, findsOneWidget);
+        expect(find.text('歌曲数量'), findsOneWidget);
+        expect(
+          find.descendant(of: playlistCard, matching: find.text('1 首')),
+          findsOneWidget,
+        );
+        expect(find.text('房间'), findsOneWidget);
+        expect(find.text('音乐房间'), findsOneWidget);
+        expect(find.text('创建日期'), findsOneWidget);
+        expect(find.text('2026-07-30 20:34'), findsOneWidget);
+        await tester.tap(
+          find.byKey(const ValueKey<String>('music-playlist-card-view')),
+        );
         await tester.pumpAndSettle();
 
         final tile = find.byKey(
@@ -937,22 +1033,22 @@ void main() {
         addTearDown(searchController.dispose);
         const roomName = '一个需要自适应换行完整显示的非常长的房间歌单名称';
         const personalName = '另一个同样需要完整显示而不能出现省略号的个人歌单名称';
-        const roomPlaylist = PersonalMusicPlaylist(
+        final roomPlaylist = PersonalMusicPlaylist(
           id: 'room-playlist-long',
           name: roomName,
           description: '',
           revision: 1,
           itemCount: 0,
-          createdAt: null,
+          createdAt: DateTime(2026, 7, 30, 20, 34),
           updatedAt: null,
         );
-        const personalPlaylist = PersonalMusicPlaylist(
+        final personalPlaylist = PersonalMusicPlaylist(
           id: 'personal-playlist-long',
           name: personalName,
           description: '',
           revision: 1,
           itemCount: 0,
-          createdAt: null,
+          createdAt: DateTime(2026, 7, 29, 16, 0),
           updatedAt: null,
         );
         final state = _state(
@@ -963,7 +1059,7 @@ void main() {
           state,
           playlist: roomPlaylist,
           items: const [],
-          personalPlaylists: const [personalPlaylist],
+          personalPlaylists: [personalPlaylist],
         );
 
         await tester.pumpWidget(
@@ -974,6 +1070,8 @@ void main() {
             height: 500,
             musicBoxController: MusicBoxController(api: api),
             roomId: 'room-1',
+            currentUser: _playlistCurrentUser,
+            room: _playlistRoom,
           ),
         );
         await tester.tap(
@@ -1009,6 +1107,132 @@ void main() {
           expect(text.maxLines, isNull);
           expect(text.overflow, isNull);
         }
+        final roomAddButton = find.byKey(
+          const ValueKey<String>(
+            'music-box-playlist-target-add:room-playlist-long',
+          ),
+        );
+        await tester.tap(roomAddButton);
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(
+            const ValueKey<String>('music-playlist-card:room-playlist-long'),
+          ),
+          findsNothing,
+        );
+        await tester.tap(
+          find.descendant(of: roomTarget, matching: find.text(roomName)),
+        );
+        await tester.pump();
+        final playlistCard = find.byKey(
+          const ValueKey<String>('music-playlist-card:room-playlist-long'),
+        );
+        expect(playlistCard, findsOneWidget);
+        expect(
+          find.descendant(of: playlistCard, matching: find.text('创建日期')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: playlistCard,
+            matching: find.text('2026-07-30 20:34'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(
+            const ValueKey<String>(
+              'music-box-playlist-target-add:room-playlist-long',
+            ),
+          ),
+          findsOneWidget,
+        );
+        await tester.tap(
+          find.descendant(of: playlistCard, matching: find.text('音乐房间')),
+        );
+        await tester.pump();
+        expect(find.text('RID: R10001'), findsOneWidget);
+        expect(playlistCard, findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  for (final platform in const [
+    TargetPlatform.windows,
+    TargetPlatform.macOS,
+    TargetPlatform.android,
+  ]) {
+    testWidgets(
+      '${platform.name} personal playlist card nests its creator profile',
+      (tester) async {
+        final searchController = TextEditingController();
+        addTearDown(searchController.dispose);
+        final playlist = PersonalMusicPlaylist(
+          id: 'personal-card',
+          name: '完整个人歌单',
+          description: '',
+          revision: 1,
+          itemCount: 27,
+          createdAt: DateTime(2026, 7, 29, 16),
+          updatedAt: null,
+        );
+        final state = _state(
+          playbackState: MusicBoxPlaybackState.stopped,
+          positionMs: 0,
+        );
+        final api = _RoomPlaylistApiFake(
+          state,
+          playlist: playlist,
+          items: const [],
+          personalPlaylists: [playlist],
+        );
+
+        await tester.pumpWidget(
+          _host(
+            state,
+            searchController,
+            platform: platform,
+            height: 500,
+            musicBoxController: MusicBoxController(api: api),
+            roomId: 'room-1',
+            currentUser: _playlistCurrentUser,
+            room: _playlistRoom,
+          ),
+        );
+        await _toggleAddSources(tester);
+        await tester.tap(find.text('我的歌单'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('完整个人歌单'));
+        await tester.pump();
+
+        final playlistCard = find.byKey(
+          const ValueKey<String>('music-playlist-card:personal-card'),
+        );
+        expect(playlistCard, findsOneWidget);
+        expect(
+          find.descendant(of: playlistCard, matching: find.text('创建人')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: playlistCard, matching: find.text('27 首')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: playlistCard,
+            matching: find.text('2026-07-29 16:00'),
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('正在播放'), findsNothing);
+
+        await tester.tap(
+          find.descendant(of: playlistCard, matching: find.text('歌单创建人')),
+        );
+        await tester.pump();
+        expect(find.text('@playlist_owner'), findsOneWidget);
+        expect(playlistCard, findsOneWidget);
         expect(tester.takeException(), isNull);
       },
     );

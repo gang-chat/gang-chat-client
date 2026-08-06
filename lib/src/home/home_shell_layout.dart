@@ -422,6 +422,9 @@ extension _HomeShellLayout on _HomeShellState {
             unawaited(_changeMusicBoxPlaybackMode(mode)),
         musicBoxController: _musicBoxController,
         musicBoxRoomId: _selectedServerId,
+        musicBoxRoom: _selectedRoom == null
+            ? null
+            : room_display.publicRoomFromRoomDetail(_selectedRoom!),
         onMusicBoxStateChanged: _applyMusicBoxSnapshot,
         onMusicBoxQueueResult: (result) =>
             unawaited(_queueMusicBoxTrack(result)),
