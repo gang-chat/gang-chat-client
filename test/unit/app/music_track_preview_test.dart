@@ -22,8 +22,8 @@ void main() {
     api.download.complete(
       DownloadedFile(
         bytes: Uint8List.fromList([1, 2, 3]),
-        filename: 'preview.ogg',
-        mimeType: 'audio/ogg',
+        filename: 'preview.m4a',
+        mimeType: 'audio/mp4',
       ),
     );
     await future;
@@ -59,8 +59,8 @@ void main() {
       api.download.complete(
         DownloadedFile(
           bytes: Uint8List.fromList([4, 5, 6]),
-          filename: 'preview.ogg',
-          mimeType: 'audio/ogg',
+          filename: 'preview.m4a',
+          mimeType: 'audio/mp4',
         ),
       );
       await future;

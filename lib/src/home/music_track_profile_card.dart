@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../app/error_display.dart';
 import '../app/music_box_display.dart' as music_box_display;
 import '../app/music_track_preview.dart';
+import '../protocol/models.dart';
 import '../ui/ui.dart';
 import 'hover_card_anchor.dart';
 
@@ -37,17 +38,26 @@ class MusicTrackHoverCard extends StatefulWidget {
     required this.data,
     required this.previewController,
     required this.child,
+    this.playlists = const [],
+    this.playlistsRoomScoped = false,
+    this.onAddToPlaylist,
   });
 
   final MusicTrackCardData data;
   final MusicTrackPreviewController previewController;
   final Widget child;
+  final List<PersonalMusicPlaylist> playlists;
+  final bool playlistsRoomScoped;
+  final Future<void> Function(PersonalMusicPlaylist playlist)? onAddToPlaylist;
 
   @override
   State<MusicTrackHoverCard> createState() => _MusicTrackHoverCardState();
 }
 
 class _MusicTrackHoverCardState extends State<MusicTrackHoverCard> {
+  bool _showPlaylistPicker = false;
+  String? _addingPlaylistId;
+
   @override
   void didUpdateWidget(covariant MusicTrackHoverCard oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -56,6 +66,8 @@ class _MusicTrackHoverCardState extends State<MusicTrackHoverCard> {
       unawaited(
         oldWidget.previewController.stopIf(oldWidget.data.previewTrack.key),
       );
+      _showPlaylistPicker = false;
+      _addingPlaylistId = null;
     }
   }
 
@@ -78,6 +90,27 @@ class _MusicTrackHoverCardState extends State<MusicTrackHoverCard> {
     }
   }
 
+  Future<void> _addToPlaylist(PersonalMusicPlaylist playlist) async {
+    final add = widget.onAddToPlaylist;
+    if (add == null || _addingPlaylistId != null) return;
+    setState(() => _addingPlaylistId = playlist.id);
+    try {
+      await add(playlist);
+      if (!mounted) return;
+      setState(() => _showPlaylistPicker = false);
+      showFloatingSuccessNotice(context, '已添加到「${playlist.name}」');
+    } catch (error) {
+      if (mounted) {
+        showFloatingErrorNotice(
+          context,
+          userFacingErrorMessage(error, fallback: '添加失败，请检查歌单权限'),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _addingPlaylistId = null);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final trackKey = widget.data.previewTrack.key;
@@ -87,6 +120,9 @@ class _MusicTrackHoverCardState extends State<MusicTrackHoverCard> {
       onVisibilityChanged: (visible) {
         if (!visible) {
           unawaited(widget.previewController.stopIf(trackKey));
+          if (_showPlaylistPicker && mounted) {
+            setState(() => _showPlaylistPicker = false);
+          }
         }
       },
       cardBuilder: (context) => StreamBuilder<MusicTrackPreviewSnapshot>(
@@ -99,6 +135,16 @@ class _MusicTrackHoverCardState extends State<MusicTrackHoverCard> {
             loading: preview.isLoading(trackKey),
             playing: preview.isPlaying(trackKey),
             onTogglePreview: _togglePreview,
+            playlists: widget.playlists,
+            playlistsRoomScoped: widget.playlistsRoomScoped,
+            showPlaylistPicker: _showPlaylistPicker,
+            addingPlaylistId: _addingPlaylistId,
+            onOpenPlaylistPicker: widget.onAddToPlaylist == null
+                ? null
+                : () => setState(() => _showPlaylistPicker = true),
+            onClosePlaylistPicker: () =>
+                setState(() => _showPlaylistPicker = false),
+            onAddToPlaylist: _addToPlaylist,
           );
         },
       ),
@@ -113,12 +159,26 @@ class _MusicTrackProfileCard extends StatelessWidget {
     required this.loading,
     required this.playing,
     required this.onTogglePreview,
+    required this.playlists,
+    required this.playlistsRoomScoped,
+    required this.showPlaylistPicker,
+    required this.addingPlaylistId,
+    required this.onOpenPlaylistPicker,
+    required this.onClosePlaylistPicker,
+    required this.onAddToPlaylist,
   });
 
   final MusicTrackCardData data;
   final bool loading;
   final bool playing;
   final VoidCallback onTogglePreview;
+  final List<PersonalMusicPlaylist> playlists;
+  final bool playlistsRoomScoped;
+  final bool showPlaylistPicker;
+  final String? addingPlaylistId;
+  final VoidCallback? onOpenPlaylistPicker;
+  final VoidCallback onClosePlaylistPicker;
+  final ValueChanged<PersonalMusicPlaylist> onAddToPlaylist;
 
   @override
   Widget build(BuildContext context) {
@@ -171,17 +231,158 @@ class _MusicTrackProfileCard extends StatelessWidget {
               value: _bilibiliTrackID(data.trackId),
             ),
           const SizedBox(height: UiSpacing.md),
-          Button(
-            key: const ValueKey<String>('music-track-card-preview'),
-            tone: playing ? ButtonTone.danger : ButtonTone.primary,
-            loading: loading,
-            icon: Icon(playing ? Icons.stop_rounded : Icons.play_arrow),
-            onPressed: loading ? null : onTogglePreview,
-            width: double.infinity,
-            child: Text(playing ? '取消试听' : '试听'),
-          ),
+          if (!showPlaylistPicker)
+            ResponsiveDialogActionBar(
+              expanded: true,
+              actions: [
+                ResponsiveDialogAction(
+                  label: playing ? '取消试听' : '试听',
+                  buttonKey: const ValueKey<String>('music-track-card-preview'),
+                  icon: playing ? Icons.stop_rounded : Icons.play_arrow,
+                  tone: playing ? ButtonTone.danger : ButtonTone.primary,
+                  loading: loading,
+                  onPressed: loading ? null : onTogglePreview,
+                ),
+                if (onOpenPlaylistPicker != null)
+                  ResponsiveDialogAction(
+                    label: '添加到歌单',
+                    buttonKey: const ValueKey<String>(
+                      'music-track-card-add-to-playlist',
+                    ),
+                    icon: Icons.playlist_add,
+                    tone: ButtonTone.primary,
+                    onPressed: onOpenPlaylistPicker,
+                  ),
+              ],
+            )
+          else ...[
+            Row(
+              children: [
+                ButtonIcon(
+                  key: const ValueKey<String>(
+                    'music-track-card-playlist-picker-back',
+                  ),
+                  icon: const Icon(Icons.arrow_back),
+                  tooltip: '返回歌曲信息',
+                  size: 30,
+                  onPressed: addingPlaylistId == null
+                      ? onClosePlaylistPicker
+                      : null,
+                ),
+                const SizedBox(width: UiSpacing.sm),
+                const Text('选择歌单', style: UiTypography.label),
+              ],
+            ),
+            const SizedBox(height: UiSpacing.sm),
+            if (playlists.isEmpty)
+              const SizedBox(
+                height: 54,
+                child: Center(
+                  child: Text(
+                    '还没有可用歌单',
+                    style: TextStyle(color: UiColors.textMuted, fontSize: 11),
+                  ),
+                ),
+              )
+            else
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 180),
+                child: ListView.separated(
+                  padding: EdgeInsets.zero,
+                  shrinkWrap: true,
+                  itemCount: playlists.length,
+                  separatorBuilder: (_, _) =>
+                      const SizedBox(height: UiSpacing.sm),
+                  itemBuilder: (context, index) {
+                    final playlist = playlists[index];
+                    return _MusicTrackPlaylistTargetButton(
+                      playlist: playlist,
+                      roomScoped: playlistsRoomScoped,
+                      loading: addingPlaylistId == playlist.id,
+                      enabled: addingPlaylistId == null,
+                      onAdd: () => onAddToPlaylist(playlist),
+                    );
+                  },
+                ),
+              ),
+          ],
         ],
       ),
+    );
+  }
+}
+
+class _MusicTrackPlaylistTargetButton extends StatelessWidget {
+  const _MusicTrackPlaylistTargetButton({
+    required this.playlist,
+    required this.roomScoped,
+    required this.loading,
+    required this.enabled,
+    required this.onAdd,
+  });
+
+  final PersonalMusicPlaylist playlist;
+  final bool roomScoped;
+  final bool loading;
+  final bool enabled;
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const style = TextStyle(
+          color: UiColors.text,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          height: 1.25,
+        );
+        final textWidth = (constraints.maxWidth - 76).clamp(
+          48.0,
+          double.infinity,
+        );
+        final painter = TextPainter(
+          text: TextSpan(text: playlist.name, style: style),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+        )..layout(maxWidth: textWidth);
+        final height = (painter.height + 20).clamp(46.0, double.infinity);
+        return PressableSurface(
+          key: ValueKey<String>('music-track-playlist-target:${playlist.id}'),
+          width: double.infinity,
+          height: height,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          backgroundColor: UiColors.surfaceLow,
+          pressedBackgroundColor: UiColors.surfacePressed,
+          borderColor: UiColors.border,
+          borderRadius: UiRadii.md,
+          child: Row(
+            children: [
+              Icon(
+                roomScoped ? Icons.meeting_room : Icons.person,
+                color: UiColors.accent,
+                size: 17,
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(playlist.name, style: style, softWrap: true),
+              ),
+              const SizedBox(width: 8),
+              ButtonIcon(
+                key: ValueKey<String>(
+                  'music-track-playlist-target-add:${playlist.id}',
+                ),
+                icon: const Icon(Icons.add),
+                tooltip: '添加到歌单',
+                tone: ButtonTone.primary,
+                loading: loading,
+                onPressed: enabled ? onAdd : null,
+                size: 32,
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

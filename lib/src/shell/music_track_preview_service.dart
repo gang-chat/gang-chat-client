@@ -76,13 +76,27 @@ class LocalMusicTrackPreviewPlatform implements MusicTrackPreviewPlatform {
         '${root.path}${Platform.pathSeparator}music-track-previews${Platform.pathSeparator}v1',
       );
       await directory.create(recursive: true);
+      await _removeLegacyPreviews(directory);
       return directory;
     }();
   }
 
+  Future<void> _removeLegacyPreviews(Directory directory) async {
+    try {
+      await for (final entity in directory.list(followLinks: false)) {
+        if (entity is File &&
+            (entity.path.endsWith('.ogg') || entity.path.endsWith('.mp3'))) {
+          await entity.delete();
+        }
+      }
+    } catch (_) {
+      // A locked legacy file can be retried on the next application start.
+    }
+  }
+
   Future<File> _cacheFile(String cacheKey) async {
     final directory = await _previewDirectory();
-    return File('${directory.path}${Platform.pathSeparator}$cacheKey.ogg');
+    return File('${directory.path}${Platform.pathSeparator}$cacheKey.m4a');
   }
 
   @override
@@ -127,7 +141,7 @@ class LocalMusicTrackPreviewPlatform implements MusicTrackPreviewPlatform {
       final entries = <({File file, int bytes, DateTime modified})>[];
       var totalBytes = 0;
       await for (final entity in directory.list(followLinks: false)) {
-        if (entity is! File || !entity.path.endsWith('.ogg')) continue;
+        if (entity is! File || !entity.path.endsWith('.m4a')) continue;
         final stat = await entity.stat();
         totalBytes += stat.size;
         entries.add((file: entity, bytes: stat.size, modified: stat.modified));

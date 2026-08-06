@@ -2507,7 +2507,7 @@ class GangApiClient
     return DownloadedFile(
       bytes: response.bodyBytes,
       filename: _downloadFilename(response),
-      mimeType: response.headers['content-type'] ?? 'audio/ogg',
+      mimeType: response.headers['content-type'] ?? 'audio/mp4',
     );
   }
 

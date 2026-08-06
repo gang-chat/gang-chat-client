@@ -155,6 +155,8 @@ class PersonalMusicPlaylistsController {
 
   bool get available => _backend != null;
 
+  bool get roomScoped => _backend is _RoomMusicPlaylistsBackend;
+
   Future<PersonalMusicPlaylistPage?> loadPlaylists() {
     final client = _backend;
     if (client == null) return Future.value();

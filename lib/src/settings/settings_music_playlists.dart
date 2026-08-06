@@ -220,6 +220,53 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
     });
   }
 
+  Future<void> _addPlaylistItemToPlaylist(
+    PersonalMusicPlaylistItem item,
+    PersonalMusicPlaylist target,
+  ) => _addSearchResultToPlaylist(
+    MusicBoxSearchResult(
+      trackId: item.trackId,
+      name: item.title,
+      artists: item.artists,
+      source: item.source,
+    ),
+    target,
+  );
+
+  Future<void> _addSearchResultToPlaylist(
+    MusicBoxSearchResult track,
+    PersonalMusicPlaylist target,
+  ) async {
+    final added = await widget.controller.addTrack(
+      playlistId: target.id,
+      track: track,
+    );
+    if (added == null) throw StateError('当前歌单不可写');
+    if (!mounted) return;
+
+    final activeTarget = _activePlaylist?.id == target.id;
+    setState(() {
+      _playlists = [
+        for (final playlist in _playlists)
+          if (playlist.id == target.id)
+            playlist.copyWith(itemCount: playlist.itemCount + 1)
+          else
+            playlist,
+      ];
+      if (activeTarget) {
+        _activePlaylist = _activePlaylist!.copyWith(
+          itemCount: _activePlaylist!.itemCount + 1,
+        );
+        _itemTotal += 1;
+        if (!_filterActive && !_itemsHaveMore) {
+          _items = [..._items, added];
+        } else {
+          scheduleMicrotask(() => _loadItems(reset: true));
+        }
+      }
+    });
+  }
+
   Future<void> _loadItems({required bool reset}) async {
     final playlist = _activePlaylist;
     if (playlist == null || !widget.controller.available) return;
@@ -525,6 +572,10 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
       builder: (context) => _MusicPlaylistTrackSearchDialog(
         controller: widget.controller,
         playlistId: playlist.id,
+        previewController: _previewController,
+        playlists: _playlists,
+        playlistsRoomScoped: widget.controller.roomScoped,
+        onAddToPlaylist: _addSearchResultToPlaylist,
         onTrackAdded: _refreshAfterTrackAdded,
       ),
     );
@@ -992,6 +1043,11 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
           onMoveUp: () => _moveItem(item, -1),
           onMoveDown: () => _moveItem(item, 1),
           previewController: _previewController,
+          playlists: _playlists,
+          playlistsRoomScoped: widget.controller.roomScoped,
+          onAddToPlaylist: _capabilities.canAddItems
+              ? (playlist) => _addPlaylistItemToPlaylist(item, playlist)
+              : null,
         );
       },
     );
@@ -1507,16 +1563,31 @@ class _MusicPlaylistSearchResultTile extends StatelessWidget {
     required this.query,
     required this.loading,
     required this.onAdd,
+    required this.previewController,
+    required this.playlists,
+    required this.playlistsRoomScoped,
+    required this.onAddToPlaylist,
   });
 
   final MusicBoxSearchResult result;
   final String query;
   final bool loading;
   final VoidCallback onAdd;
+  final MusicTrackPreviewController? previewController;
+  final List<PersonalMusicPlaylist> playlists;
+  final bool playlistsRoomScoped;
+  final Future<void> Function(
+    MusicBoxSearchResult track,
+    PersonalMusicPlaylist playlist,
+  )
+  onAddToPlaylist;
 
   @override
   Widget build(BuildContext context) {
-    return _SettingsSubPanel(
+    final panel = _SettingsSubPanel(
+      key: ValueKey<String>(
+        'music-playlist-search-result:${result.source}:${result.trackId}',
+      ),
       child: Row(
         children: [
           const Icon(Icons.music_note, color: _cyan, size: 20),
@@ -1538,9 +1609,7 @@ class _MusicPlaylistSearchResultTile extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 HighlightedText(
-                  text:
-                      '${personalPlaylistArtistsLabel(result.artists)} · '
-                      '${personalPlaylistSourceLabel(result.source)}',
+                  text: personalPlaylistArtistsLabel(result.artists),
                   query: query,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -1550,16 +1619,38 @@ class _MusicPlaylistSearchResultTile extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          Button(
-            onPressed: loading ? null : onAdd,
-            loading: loading,
-            tone: ButtonTone.primary,
-            icon: const Icon(Icons.add),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: const Text('添加'),
+          _ManagementCardActionArea(
+            child: ButtonIcon(
+              key: ValueKey<String>(
+                'music-playlist-search-result-add:${result.source}:${result.trackId}',
+              ),
+              tooltip: '添加到当前歌单',
+              onPressed: loading ? null : onAdd,
+              loading: loading,
+              tone: ButtonTone.primary,
+              icon: const Icon(Icons.add),
+              size: 40,
+            ),
           ),
         ],
       ),
+    );
+    final preview = previewController;
+    if (preview == null) return panel;
+    return MusicTrackHoverCard(
+      data: MusicTrackCardData(
+        id: '${result.source}:${result.trackId}',
+        source: result.source,
+        trackId: result.trackId,
+        title: result.name,
+        artists: result.artists,
+        durationMs: 0,
+      ),
+      previewController: preview,
+      playlists: playlists,
+      playlistsRoomScoped: playlistsRoomScoped,
+      onAddToPlaylist: (playlist) => onAddToPlaylist(result, playlist),
+      child: panel,
     );
   }
 }
@@ -1578,6 +1669,9 @@ class _MusicPlaylistItemTile extends StatelessWidget {
     required this.onMoveUp,
     required this.onMoveDown,
     required this.previewController,
+    required this.playlists,
+    required this.playlistsRoomScoped,
+    required this.onAddToPlaylist,
   });
 
   final PersonalMusicPlaylistItem item;
@@ -1591,6 +1685,9 @@ class _MusicPlaylistItemTile extends StatelessWidget {
   final VoidCallback onMoveUp;
   final VoidCallback onMoveDown;
   final MusicTrackPreviewController? previewController;
+  final List<PersonalMusicPlaylist> playlists;
+  final bool playlistsRoomScoped;
+  final Future<void> Function(PersonalMusicPlaylist playlist)? onAddToPlaylist;
 
   @override
   Widget build(BuildContext context) {
@@ -1727,6 +1824,9 @@ class _MusicPlaylistItemTile extends StatelessWidget {
           durationMs: item.durationMs,
         ),
         previewController: preview,
+        playlists: playlists,
+        playlistsRoomScoped: playlistsRoomScoped,
+        onAddToPlaylist: onAddToPlaylist,
         child: panel,
       );
     }
@@ -1796,11 +1896,23 @@ class _MusicPlaylistTrackSearchDialog extends StatefulWidget {
   const _MusicPlaylistTrackSearchDialog({
     required this.controller,
     required this.playlistId,
+    required this.previewController,
+    required this.playlists,
+    required this.playlistsRoomScoped,
+    required this.onAddToPlaylist,
     required this.onTrackAdded,
   });
 
   final PersonalMusicPlaylistsController controller;
   final String playlistId;
+  final MusicTrackPreviewController? previewController;
+  final List<PersonalMusicPlaylist> playlists;
+  final bool playlistsRoomScoped;
+  final Future<void> Function(
+    MusicBoxSearchResult track,
+    PersonalMusicPlaylist playlist,
+  )
+  onAddToPlaylist;
   final Future<void> Function() onTrackAdded;
 
   @override
@@ -2020,6 +2132,10 @@ class _MusicPlaylistTrackSearchDialogState
                             '${result.source}:${result.trackId}',
                           ),
                           onAdd: () => _addTrack(result),
+                          previewController: widget.previewController,
+                          playlists: widget.playlists,
+                          playlistsRoomScoped: widget.playlistsRoomScoped,
+                          onAddToPlaylist: widget.onAddToPlaylist,
                         );
                       },
                     ),

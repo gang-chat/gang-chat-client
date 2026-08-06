@@ -2132,7 +2132,7 @@ void main() {
   });
 
   test(
-    'downloadMusicTrackPreview posts identity and returns Ogg bytes',
+    'downloadMusicTrackPreview posts identity and returns M4A bytes',
     () async {
       final api = GangApiClient(
         baseUrl: 'http://example.test/api/v1',
@@ -2146,11 +2146,11 @@ void main() {
             'track_id': 'track-1',
           });
           return http.Response.bytes(
-            Uint8List.fromList([79, 103, 103, 83]),
+            Uint8List.fromList([0, 0, 0, 24, 102, 116, 121, 112]),
             200,
             headers: {
-              'content-type': 'audio/ogg',
-              'content-disposition': 'inline; filename="music-preview.ogg"',
+              'content-type': 'audio/mp4',
+              'content-disposition': 'inline; filename="music-preview.m4a"',
             },
           );
         }),
@@ -2161,9 +2161,9 @@ void main() {
         trackId: 'track-1',
       );
 
-      expect(downloaded.bytes, [79, 103, 103, 83]);
-      expect(downloaded.mimeType, 'audio/ogg');
-      expect(downloaded.filename, 'music-preview.ogg');
+      expect(downloaded.bytes, [0, 0, 0, 24, 102, 116, 121, 112]);
+      expect(downloaded.mimeType, 'audio/mp4');
+      expect(downloaded.filename, 'music-preview.m4a');
       api.close();
     },
   );

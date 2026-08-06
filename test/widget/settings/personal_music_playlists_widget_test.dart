@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
@@ -9,8 +10,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:client/src/app/settings_controller.dart';
 import 'package:client/src/app/settings_shell_state.dart';
 import 'package:client/src/app/personal_music_playlists.dart';
+import 'package:client/src/app/music_track_preview.dart';
 import 'package:client/src/protocol/api_client.dart';
 import 'package:client/src/protocol/models.dart';
+import 'package:client/src/shell/music_track_preview_service.dart';
 import 'package:client/src/protocol/sticker_pack_store.dart';
 import 'package:client/src/settings/settings_page.dart';
 import 'package:client/src/ui/ui.dart' as ui;
@@ -425,6 +428,103 @@ void main() {
     expect(api.searchRequests.last, 'bilibili:晴天');
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'search result uses icon-only add and opens the shared preview card',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(360, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      const result = MusicBoxSearchResult(
+        trackId: 'search_track',
+        name: '搜索结果歌曲',
+        artists: ['搜索结果歌手'],
+        source: 'netease',
+      );
+      final api = _PreviewPersonalPlaylistApi(
+        onSearch: (_, _) async => const [result],
+      );
+      final previewFactory = _FakePreviewPlatformFactory();
+
+      await _pumpPlaylistSettings(
+        tester,
+        api,
+        previewPlatformFactory: previewFactory,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('夜晚'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('search-add-personal-music-playlist-item')),
+      );
+      await tester.pumpAndSettle();
+
+      final searchField = find.byWidgetPredicate(
+        (widget) => widget is ui.Input && widget.hintText == '搜索歌曲添加到歌单',
+      );
+      await tester.enterText(searchField, '搜索');
+      await tester.pump(const Duration(milliseconds: 360));
+      await tester.pumpAndSettle();
+
+      final resultTile = find.byKey(
+        const ValueKey('music-playlist-search-result:netease:search_track'),
+      );
+      final directAdd = find.byKey(
+        const ValueKey('music-playlist-search-result-add:netease:search_track'),
+      );
+      expect(resultTile, findsOneWidget);
+      expect(
+        find.descendant(of: resultTile, matching: find.text('搜索结果歌手')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: resultTile, matching: find.text('网易云')),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: resultTile, matching: find.text('添加')),
+        findsNothing,
+      );
+      expect(directAdd, findsOneWidget);
+
+      await tester.tap(directAdd);
+      await tester.pumpAndSettle();
+      expect(api.addRequests, ['mbp_1:netease:search_track']);
+      expect(find.text('试听'), findsNothing);
+
+      await tester.tap(
+        find.descendant(of: resultTile, matching: find.text('搜索结果歌曲')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('试听'), findsOneWidget);
+      expect(find.text('添加到歌单'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('music-track-card-preview')),
+      );
+      await tester.pump();
+      api.completePreview();
+      await tester.pumpAndSettle();
+      expect(find.text('取消试听'), findsOneWidget);
+      expect(previewFactory.platform.playCalls, 1);
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('music-track-card-add-to-playlist')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(
+          const ValueKey<String>('music-track-playlist-target-add:mbp_1'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(api.addRequests, [
+        'mbp_1:netease:search_track',
+        'mbp_1:netease:search_track',
+      ]);
+      expect(find.text('取消试听'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'playlist item actions use dialogs and management-only card controls',
@@ -967,6 +1067,7 @@ Future<void> _pumpPlaylistSettings(
   WidgetTester tester,
   _FakePersonalPlaylistApi api, {
   bool selectable = false,
+  MusicTrackPreviewPlatformFactory? previewPlatformFactory,
 }) {
   final settings = SettingsPage(
     initialSection: SettingsSection.playlists,
@@ -977,6 +1078,9 @@ Future<void> _pumpPlaylistSettings(
       stickerPackStore: StickerPackStore(),
     ),
     onClose: () {},
+    musicTrackPreviewPlatformFactory:
+        previewPlatformFactory ??
+        const DefaultMusicTrackPreviewPlatformFactory(),
   );
   return tester.pumpWidget(
     MaterialApp(
@@ -1041,6 +1145,7 @@ class _FakePersonalPlaylistApi implements GangApi, PersonalMusicPlaylistApi {
   final List<List<String>> pinRequests = [];
   final List<String> moveRequests = [];
   final List<String> renameRequests = [];
+  final List<String> addRequests = [];
   int listRequestCount = 0;
   Completer<PersonalMusicPlaylistPage>? nextPlaylistListResponse;
 
@@ -1192,8 +1297,21 @@ class _FakePersonalPlaylistApi implements GangApi, PersonalMusicPlaylistApi {
     required String playlistId,
     required MusicBoxSearchResult track,
     int? durationMs,
-  }) {
-    throw UnimplementedError();
+  }) async {
+    addRequests.add('$playlistId:${track.source}:${track.trackId}');
+    final item = PersonalMusicPlaylistItem(
+      id: 'added_${addRequests.length}',
+      playlistId: playlistId,
+      trackId: track.trackId,
+      source: track.source,
+      title: track.name,
+      artists: track.artists,
+      durationMs: durationMs ?? 0,
+      sortOrder: (playlistItems.length + 1) * 10,
+      createdAt: null,
+    );
+    playlistItems.add(item);
+    return item;
   }
 
   @override
@@ -1223,6 +1341,67 @@ class _FakePersonalPlaylistApi implements GangApi, PersonalMusicPlaylistApi {
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _PreviewPersonalPlaylistApi extends _FakePersonalPlaylistApi
+    implements MusicTrackPreviewApi {
+  _PreviewPersonalPlaylistApi({super.onSearch});
+
+  final Completer<DownloadedFile> _preview = Completer<DownloadedFile>();
+
+  void completePreview() {
+    if (_preview.isCompleted) return;
+    _preview.complete(
+      DownloadedFile(
+        bytes: Uint8List.fromList([0, 0, 0, 24, 102, 116, 121, 112]),
+        filename: 'preview.m4a',
+        mimeType: 'audio/mp4',
+      ),
+    );
+  }
+
+  @override
+  Future<DownloadedFile> downloadMusicTrackPreview({
+    required String source,
+    required String trackId,
+  }) => _preview.future;
+}
+
+class _FakePreviewPlatformFactory implements MusicTrackPreviewPlatformFactory {
+  final _FakePreviewPlatform platform = _FakePreviewPlatform();
+
+  @override
+  MusicTrackPreviewPlatform create() => platform;
+}
+
+class _FakePreviewPlatform implements MusicTrackPreviewPlatform {
+  final StreamController<void> _completed = StreamController<void>.broadcast();
+  int playCalls = 0;
+
+  @override
+  Stream<void> get onCompleted => _completed.stream;
+
+  @override
+  Future<MusicTrackPreviewAsset?> findCached(String cacheKey) async => null;
+
+  @override
+  Future<MusicTrackPreviewAsset> store(
+    String cacheKey,
+    Uint8List bytes,
+  ) async => MusicTrackPreviewAsset(cacheKey);
+
+  @override
+  Future<void> play(MusicTrackPreviewAsset asset) async {
+    playCalls += 1;
+  }
+
+  @override
+  Future<void> stop() async {}
+
+  @override
+  Future<void> dispose() async {
+    await _completed.close();
+  }
 }
 
 class _FakeRoomPlaylistApi implements RoomMusicPlaylistApi {

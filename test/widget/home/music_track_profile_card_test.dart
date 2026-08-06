@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:client/src/app/music_track_preview.dart';
 import 'package:client/src/home/music_track_profile_card.dart';
 import 'package:client/src/protocol/api_client.dart';
+import 'package:client/src/protocol/models.dart';
 import 'package:client/src/ui/ui.dart' as ui;
 
 void main() {
@@ -24,6 +25,7 @@ void main() {
           api: api,
           platform: player,
         );
+        PersonalMusicPlaylist? addedToPlaylist;
         addTearDown(controller.dispose);
 
         await tester.pumpWidget(
@@ -42,6 +44,20 @@ void main() {
                     durationMs: 180000,
                   ),
                   previewController: controller,
+                  playlists: const [
+                    PersonalMusicPlaylist(
+                      id: 'playlist-1',
+                      name: '完整歌单名称',
+                      description: '',
+                      revision: 1,
+                      itemCount: 2,
+                      createdAt: null,
+                      updatedAt: null,
+                    ),
+                  ],
+                  onAddToPlaylist: (playlist) async {
+                    addedToPlaylist = playlist;
+                  },
                   child: const SizedBox(
                     key: ValueKey<String>('track-row'),
                     width: 240,
@@ -57,6 +73,7 @@ void main() {
         await tester.tap(find.byKey(const ValueKey<String>('track-row')));
         await tester.pumpAndSettle();
         expect(find.text('试听'), findsOneWidget);
+        expect(find.text('添加到歌单'), findsOneWidget);
         expect(find.text('3:00'), findsOneWidget);
 
         await tester.tap(
@@ -69,6 +86,25 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('取消试听'), findsOneWidget);
         expect(player.playCalls, 1);
+
+        await tester.tap(
+          find.byKey(
+            const ValueKey<String>('music-track-card-add-to-playlist'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('选择歌单'), findsOneWidget);
+        expect(find.text('完整歌单名称'), findsOneWidget);
+        await tester.tap(
+          find.byKey(
+            const ValueKey<String>(
+              'music-track-playlist-target-add:playlist-1',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(addedToPlaylist?.id, 'playlist-1');
+        expect(find.text('取消试听'), findsOneWidget);
 
         await tester.tapAt(const Offset(700, 500));
         await tester.pump(const Duration(milliseconds: 200));
@@ -86,8 +122,8 @@ class _PreviewApi implements MusicTrackPreviewApi {
     _download.complete(
       DownloadedFile(
         bytes: Uint8List.fromList([1, 2, 3]),
-        filename: 'preview.ogg',
-        mimeType: 'audio/ogg',
+        filename: 'preview.m4a',
+        mimeType: 'audio/mp4',
       ),
     );
   }
