@@ -1117,6 +1117,128 @@ void main() {
     TargetPlatform.macOS,
     TargetPlatform.android,
   ]) {
+    testWidgets('room playlist management clones one row on ${platform.name}', (
+      tester,
+    ) async {
+      final size = platform == TargetPlatform.android
+          ? const Size(360, 800)
+          : const Size(720, 800);
+      await tester.binding.setSurfaceSize(size);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final roomApi = _FakeRoomPlaylistApi();
+      final controller = PersonalMusicPlaylistsController.room(
+        roomApi: roomApi,
+        roomId: 'room_1',
+        canManage: true,
+        searchTracks: ({required keyword, required source}) async => const [],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ui.uiTheme().copyWith(platform: platform),
+          home: Scaffold(
+            body: MusicPlaylistsPanel(
+              controller: controller,
+              title: '房间歌单',
+              unavailableMessage: '房间歌单暂不可用',
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('manage-personal-music-playlists')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('clone-selected-room-music-playlists')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('share-personal-music-playlists')),
+        findsNothing,
+      );
+
+      final card = find.byKey(
+        const ValueKey('personal-music-playlist-card-mbp_room_1'),
+      );
+      final cloneButton = find.byKey(
+        const ValueKey('clone-room-music-playlist-mbp_room_1'),
+      );
+      expect(cloneButton, findsOneWidget);
+      expect(
+        find.descendant(of: card, matching: find.byTooltip('删除')),
+        findsNothing,
+      );
+
+      await tester.tap(cloneButton);
+      await tester.pumpAndSettle();
+      expect(find.text('克隆歌单'), findsOneWidget);
+      expect(find.textContaining('房间备注名·歌单名'), findsOneWidget);
+      await tester.tap(find.text('克隆').last);
+      await tester.pumpAndSettle();
+
+      expect(roomApi.cloneRequests, ['mbp_room_1']);
+      expect(find.text('已克隆到我的歌单 - 房间备注名·房间精选'), findsOneWidget);
+      expect(find.text('取消管理'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('room playlist clone shows the 50-playlist limit notice', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(720, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final roomApi = _FakeRoomPlaylistApi(
+      cloneError: ApiException(
+        '个人歌单数量已达到上限',
+        statusCode: 409,
+        code: 'playlist_limit_reached',
+        requestId: null,
+      ),
+    );
+    final controller = PersonalMusicPlaylistsController.room(
+      roomApi: roomApi,
+      roomId: 'room_1',
+      canManage: true,
+      searchTracks: ({required keyword, required source}) async => const [],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ui.uiTheme(),
+        home: Scaffold(
+          body: MusicPlaylistsPanel(
+            controller: controller,
+            title: '房间歌单',
+            unavailableMessage: '房间歌单暂不可用',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('manage-personal-music-playlists')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('clone-room-music-playlist-mbp_room_1')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('克隆').last);
+    await tester.pumpAndSettle();
+
+    expect(roomApi.cloneRequests, ['mbp_room_1']);
+    expect(find.text('克隆失败：我的歌单已达 50 个上限'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final platform in [
+    TargetPlatform.windows,
+    TargetPlatform.macOS,
+    TargetPlatform.android,
+  ]) {
     testWidgets(
       'room playlist creation imports a personal playlist on ${platform.name}',
       (tester) async {
@@ -1522,8 +1644,15 @@ class _FakePreviewPlatform implements MusicTrackPreviewPlatform {
 }
 
 class _FakeRoomPlaylistApi
-    implements RoomMusicPlaylistApi, RoomMusicPlaylistImportApi {
+    implements
+        RoomMusicPlaylistApi,
+        RoomMusicPlaylistImportApi,
+        RoomMusicPlaylistCloneApi {
+  _FakeRoomPlaylistApi({this.cloneError});
+
   final List<String> importRequests = [];
+  final List<String> cloneRequests = [];
+  final Object? cloneError;
   static const playlist = PersonalMusicPlaylist(
     id: 'mbp_room_1',
     name: '房间精选',
@@ -1533,7 +1662,15 @@ class _FakeRoomPlaylistApi
     createdAt: null,
     updatedAt: null,
   );
-
+  static const cloneResult = PersonalMusicPlaylist(
+    id: 'mbp_personal_clone_1',
+    name: '房间备注名·房间精选',
+    description: '',
+    revision: 1,
+    itemCount: 1,
+    createdAt: null,
+    updatedAt: null,
+  );
   static const item = PersonalMusicPlaylistItem(
     id: 'mbpi_room_1',
     playlistId: 'mbp_room_1',
@@ -1601,6 +1738,17 @@ class _FakeRoomPlaylistApi
       createdAt: null,
       updatedAt: null,
     );
+  }
+
+  @override
+  Future<PersonalMusicPlaylist> cloneRoomMusicPlaylistToPersonal({
+    required String roomId,
+    required String playlistId,
+  }) async {
+    expect(roomId, 'room_1');
+    cloneRequests.add(playlistId);
+    if (cloneError case final error?) throw error;
+    return cloneResult;
   }
 
   @override

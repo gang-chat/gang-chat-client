@@ -3309,6 +3309,24 @@ void main() {
             );
           case (
             'POST',
+            '/api/v1/rooms/room_1/music-box/playlists/mbp_room_2/clone-to-me',
+          ):
+            expect(request.body, isEmpty);
+            return http.Response(
+              jsonEncode({
+                'playlist': {
+                  'id': 'mbp_personal_clone_1',
+                  'name': '房间备注名·新歌单',
+                  'description': '',
+                  'revision': 1,
+                  'item_count': 0,
+                },
+              }),
+              201,
+              headers: {'content-type': 'application/json; charset=utf-8'},
+            );
+          case (
+            'POST',
             '/api/v1/rooms/room_1/music-box/playlists/mbp_room_2/items',
           ):
             expect(jsonDecode(request.body), {
@@ -3376,6 +3394,10 @@ void main() {
         source: 'netease',
       ),
     );
+    final cloned = await api.cloneRoomMusicPlaylistToPersonal(
+      roomId: 'room_1',
+      playlistId: created.id,
+    );
     await api.pinRoomMusicPlaylists(
       roomId: 'room_1',
       playlistIds: [created.id, listed.playlists.single.id],
@@ -3388,7 +3410,8 @@ void main() {
     await api.deleteRoomMusicPlaylist(roomId: 'room_1', playlistId: created.id);
 
     expect(imported.itemCount, 1);
-    expect(seen, hasLength(7));
+    expect(cloned.name, '房间备注名·新歌单');
+    expect(seen, hasLength(8));
     api.close();
   });
 }

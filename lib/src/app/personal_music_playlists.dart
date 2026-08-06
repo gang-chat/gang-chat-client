@@ -90,6 +90,12 @@ abstract interface class _MusicPlaylistsBackend {
 
   Future<PersonalMusicPlaylistPage?> loadImportPlaylists();
 
+  bool get canCloneRoomPlaylistsToPersonal;
+
+  Future<PersonalMusicPlaylist> cloneRoomPlaylistToPersonal({
+    required String playlistId,
+  });
+
   Future<PersonalMusicPlaylist> createPlaylist({
     required String name,
     String? importPlaylistId,
@@ -179,6 +185,9 @@ class PersonalMusicPlaylistsController {
   bool get canImportPersonalPlaylist =>
       _backend?.canImportPersonalPlaylist ?? false;
 
+  bool get canCloneRoomPlaylistsToPersonal =>
+      _backend?.canCloneRoomPlaylistsToPersonal ?? false;
+
   Future<PersonalMusicPlaylistPage?> loadPlaylists() {
     final client = _backend;
     if (client == null) return Future.value();
@@ -187,6 +196,15 @@ class PersonalMusicPlaylistsController {
 
   Future<PersonalMusicPlaylistPage?> loadImportPlaylists() {
     return _backend?.loadImportPlaylists() ?? Future.value();
+  }
+
+  Future<PersonalMusicPlaylist?> cloneRoomPlaylistToPersonal(
+    String playlistId,
+  ) {
+    final normalized = playlistId.trim();
+    if (normalized.isEmpty) return Future.value();
+    return _backend?.cloneRoomPlaylistToPersonal(playlistId: normalized) ??
+        Future.value();
   }
 
   Future<PersonalMusicPlaylist?> createPlaylist(
@@ -354,6 +372,16 @@ class _PersonalMusicPlaylistsBackend implements _MusicPlaylistsBackend {
   bool get canImportPersonalPlaylist => false;
 
   @override
+  bool get canCloneRoomPlaylistsToPersonal => false;
+
+  @override
+  Future<PersonalMusicPlaylist> cloneRoomPlaylistToPersonal({
+    required String playlistId,
+  }) {
+    return Future.error(StateError('个人歌单不能作为房间歌单的克隆来源'));
+  }
+
+  @override
   Future<PersonalMusicPlaylistPage?> loadImportPlaylists() {
     return Future.value();
   }
@@ -510,6 +538,25 @@ class _RoomMusicPlaylistsBackend implements _MusicPlaylistsBackend {
   @override
   bool get canImportPersonalPlaylist =>
       canManage && personalApi != null && roomApi is RoomMusicPlaylistImportApi;
+
+  @override
+  bool get canCloneRoomPlaylistsToPersonal =>
+      canManage && roomApi is RoomMusicPlaylistCloneApi;
+
+  @override
+  Future<PersonalMusicPlaylist> cloneRoomPlaylistToPersonal({
+    required String playlistId,
+  }) {
+    _requireManagePermission();
+    if (roomApi is! RoomMusicPlaylistCloneApi) {
+      return Future.error(StateError('当前服务端不支持克隆房间歌单'));
+    }
+    return (roomApi as RoomMusicPlaylistCloneApi)
+        .cloneRoomMusicPlaylistToPersonal(
+          roomId: roomId,
+          playlistId: playlistId,
+        );
+  }
 
   @override
   Future<PersonalMusicPlaylistPage?> loadImportPlaylists() {

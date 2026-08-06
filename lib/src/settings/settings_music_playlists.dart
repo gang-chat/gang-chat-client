@@ -46,6 +46,7 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
   bool _creating = false;
   bool _deletingPlaylists = false;
   bool _pinningPlaylists = false;
+  String? _cloningPlaylistId;
   bool _deletingItems = false;
   bool _pinningItems = false;
   bool _managingPlaylists = false;
@@ -75,6 +76,7 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
       _creating ||
       _deletingPlaylists ||
       _pinningPlaylists ||
+      _cloningPlaylistId != null ||
       _busyPlaylistIds.isNotEmpty;
 
   bool get _busy =>
@@ -84,6 +86,7 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
       _creating ||
       _deletingPlaylists ||
       _pinningPlaylists ||
+      _cloningPlaylistId != null ||
       _busyPlaylistIds.isNotEmpty ||
       _deletingItems ||
       _pinningItems;
@@ -515,6 +518,66 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
     }
   }
 
+  Future<void> _cloneRoomPlaylist(PersonalMusicPlaylist playlist) async {
+    if (!widget.controller.canCloneRoomPlaylistsToPersonal ||
+        _playlistManagementBusy) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => StickerConfirmDialog(
+        title: '克隆歌单',
+        body:
+            '确定将“${playlist.name}”克隆到“我的歌单”吗？'
+            '克隆后的名称使用“房间备注名·歌单名”。',
+        confirmLabel: '克隆',
+        confirmIcon: Icons.library_add_outlined,
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+    setState(() {
+      _cloningPlaylistId = playlist.id;
+      _error = null;
+    });
+    try {
+      final result = await widget.controller.cloneRoomPlaylistToPersonal(
+        playlist.id,
+      );
+      if (!mounted || result == null) return;
+      setState(() => _cloningPlaylistId = null);
+      _showRoomPlaylistCloneResultNotice(result);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _cloningPlaylistId = null);
+      _showRoomPlaylistCloneErrorNotice(error);
+    } finally {
+      if (mounted && _cloningPlaylistId == playlist.id) {
+        setState(() => _cloningPlaylistId = null);
+      }
+    }
+  }
+
+  void _showRoomPlaylistCloneResultNotice(PersonalMusicPlaylist result) {
+    // Wait until the confirmation route has finished closing and management
+    // mode has rebuilt. This keeps the global notice above the settled page
+    // instead of briefly placing it behind the outgoing dialog overlay.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showFloatingSuccessNotice(context, '已克隆到我的歌单 - ${result.name}');
+    });
+  }
+
+  void _showRoomPlaylistCloneErrorNotice(Object error) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final message =
+          error is ApiException && error.code == 'playlist_limit_reached'
+          ? '克隆失败：我的歌单已达 50 个上限'
+          : '克隆失败：$error';
+      showFloatingErrorNotice(context, message);
+    });
+  }
+
   Future<void> _movePlaylist(PersonalMusicPlaylist playlist, int delta) async {
     if (!_capabilities.canReorderPlaylists ||
         _playlistManagementBusy ||
@@ -866,6 +929,11 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
         onRename: _renamePlaylist,
         onMove: _movePlaylist,
         onDelete: _deleteSinglePlaylist,
+        useCloneAction: widget.controller.roomScoped,
+        cloningPlaylistId: _cloningPlaylistId,
+        onClone: widget.controller.canCloneRoomPlaylistsToPersonal
+            ? _cloneRoomPlaylist
+            : null,
       );
     }
     return SettingsFixedHeaderCard(
@@ -944,7 +1012,7 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
                 child: const Text('筛选'),
               ),
             ),
-            if (_managingPlaylists)
+            if (_managingPlaylists && !widget.controller.roomScoped)
               StickerActionGridEntry(
                 label: '分享',
                 button: const Button(
@@ -1240,6 +1308,9 @@ class _MusicPlaylistSummaryList extends StatelessWidget {
     required this.onRename,
     required this.onMove,
     required this.onDelete,
+    required this.useCloneAction,
+    required this.cloningPlaylistId,
+    required this.onClone,
   });
 
   final List<PersonalMusicPlaylist> playlists;
@@ -1251,6 +1322,9 @@ class _MusicPlaylistSummaryList extends StatelessWidget {
   final ValueChanged<PersonalMusicPlaylist> onRename;
   final void Function(PersonalMusicPlaylist playlist, int direction) onMove;
   final ValueChanged<PersonalMusicPlaylist> onDelete;
+  final bool useCloneAction;
+  final String? cloningPlaylistId;
+  final ValueChanged<PersonalMusicPlaylist>? onClone;
 
   @override
   Widget build(BuildContext context) {
@@ -1301,6 +1375,9 @@ class _MusicPlaylistSummaryList extends StatelessWidget {
             onMoveUp: () => onMove(playlists[index], -1),
             onMoveDown: () => onMove(playlists[index], 1),
             onDelete: () => onDelete(playlists[index]),
+            useCloneAction: useCloneAction,
+            cloning: cloningPlaylistId == playlists[index].id,
+            onClone: onClone == null ? null : () => onClone!(playlists[index]),
           ),
         );
       },
@@ -1323,6 +1400,9 @@ class _MusicPlaylistSummaryTile extends StatelessWidget {
     required this.onMoveUp,
     required this.onMoveDown,
     required this.onDelete,
+    required this.useCloneAction,
+    required this.cloning,
+    required this.onClone,
   });
 
   final PersonalMusicPlaylist playlist;
@@ -1338,6 +1418,9 @@ class _MusicPlaylistSummaryTile extends StatelessWidget {
   final VoidCallback onMoveUp;
   final VoidCallback onMoveDown;
   final VoidCallback onDelete;
+  final bool useCloneAction;
+  final bool cloning;
+  final VoidCallback? onClone;
 
   @override
   Widget build(BuildContext context) {
@@ -1429,13 +1512,23 @@ class _MusicPlaylistSummaryTile extends StatelessWidget {
             icon: const Icon(Icons.arrow_downward),
             size: 36,
           ),
-          ButtonIcon(
-            tooltip: '删除',
-            onPressed: busy ? null : onDelete,
-            tone: ButtonTone.danger,
-            icon: const Icon(Icons.delete_outline),
-            size: 36,
-          ),
+          if (useCloneAction)
+            ButtonIcon(
+              key: ValueKey('clone-room-music-playlist-${playlist.id}'),
+              tooltip: '克隆',
+              onPressed: busy || cloning ? null : onClone,
+              loading: cloning,
+              icon: const Icon(Icons.library_add_outlined),
+              size: 36,
+            )
+          else
+            ButtonIcon(
+              tooltip: '删除',
+              onPressed: busy ? null : onDelete,
+              tone: ButtonTone.danger,
+              icon: const Icon(Icons.delete_outline),
+              size: 36,
+            ),
         ],
       ),
     );

@@ -869,6 +869,7 @@ netease:108485:opus-48k-stereo-fec-v1
 
 - `GET /rooms/:room_id/music-box/playlists`
 - `POST /rooms/:room_id/music-box/playlists`
+- `POST /rooms/:room_id/music-box/playlists/:playlist_id/clone-to-me`
 - `GET /rooms/:room_id/music-box/playlists/:playlist_id`
 - `PATCH /rooms/:room_id/music-box/playlists/:playlist_id`
 - `DELETE /rooms/:room_id/music-box/playlists/:playlist_id`
@@ -882,6 +883,7 @@ netease:108485:opus-48k-stereo-fec-v1
 
 - 歌单列表和歌单项必须分页。
 - 批量添加歌单到房间使用一个幂等请求和一个数据库事务。
+- 房间歌单管理中，每行原有的单歌单“删除”按钮替换为“克隆”；删除仍通过顶部勾选后的批量删除入口完成，不提供批量克隆。克隆把该房间歌单复制到当前用户的“我的歌单”，目标名称使用当前用户的房间备注名（没有备注时回退房间名）与原歌单名组成“房间名·歌单名”，重复名称沿用个人歌单的自动编号规则。服务端必须锁定用户容量并在一个事务内复制歌单与全部歌曲，个人歌单已达 50 个时返回 `playlist_limit_reached`，不能留下空歌单或部分歌曲。客户端应在确认窗口关闭且页面状态稳定后显示全局浮窗：成功时显示“已克隆到我的歌单 - 目标歌单名”，容量已满时明确显示 50 个上限。
 - 响应不必返回全部 500 个歌单项；返回摘要、revision 和第一页，后续按页获取。
 - 房间完整快照在队列较大时也应支持摘要与分页演进，但第一阶段可在 200 首上限内继续返回完整活动队列。
 
@@ -1191,6 +1193,7 @@ netease:108485:opus-48k-stereo-fec-v1
 - 快速连续点击不会重复发送或冻结 UI。
 - 歌单分页和项目重排。
 - Android 触屏、Windows/macOS 鼠标入口。
+- 三端房间歌单管理行末使用单歌单“克隆”替换单歌单“删除”，确认顶部批量克隆入口不存在、顶部批量删除仍可用，以及备注名回退、个人歌单 50 个上限、歌曲顺序和事务失败无残留；个人歌单管理的行末删除与原有“分享”入口保持不变。
 - 歌曲名片可选择文本的右键复制、Android 选择菜单与选择期间名片存活。
 - 点歌人头像与名称紧邻右对齐、名称不触发选择菜单；头像嵌套用户名片且父歌曲名片保持打开，并正确显示当前房间身份和按权限提供“管理成员”。
 - 删除队列条目成功/失败浮动提示，以及长歌单名的无前缀、无省略号自适应布局。
