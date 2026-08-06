@@ -3316,7 +3316,7 @@ void main() {
               jsonEncode({
                 'playlist': {
                   'id': 'mbp_personal_clone_1',
-                  'name': '房间备注名·新歌单',
+                  'name': '房间备注名 · 新歌单',
                   'description': '',
                   'revision': 1,
                   'item_count': 0,
@@ -3410,7 +3410,7 @@ void main() {
     await api.deleteRoomMusicPlaylist(roomId: 'room_1', playlistId: created.id);
 
     expect(imported.itemCount, 1);
-    expect(cloned.name, '房间备注名·新歌单');
+    expect(cloned.name, '房间备注名 · 新歌单');
     expect(seen, hasLength(8));
     api.close();
   });

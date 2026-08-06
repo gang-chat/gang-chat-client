@@ -1175,12 +1175,12 @@ void main() {
       await tester.tap(cloneButton);
       await tester.pumpAndSettle();
       expect(find.text('克隆歌单'), findsOneWidget);
-      expect(find.textContaining('房间备注名·歌单名'), findsOneWidget);
+      expect(find.textContaining('房间备注名 · 歌单名'), findsOneWidget);
       await tester.tap(find.text('克隆').last);
       await tester.pumpAndSettle();
 
       expect(roomApi.cloneRequests, ['mbp_room_1']);
-      expect(find.text('已克隆到我的歌单 - 房间备注名·房间精选'), findsOneWidget);
+      expect(find.text('已克隆到我的歌单 - 房间备注名 · 房间精选'), findsOneWidget);
       expect(find.text('取消管理'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
@@ -1664,7 +1664,7 @@ class _FakeRoomPlaylistApi
   );
   static const cloneResult = PersonalMusicPlaylist(
     id: 'mbp_personal_clone_1',
-    name: '房间备注名·房间精选',
+    name: '房间备注名 · 房间精选',
     description: '',
     revision: 1,
     itemCount: 1,

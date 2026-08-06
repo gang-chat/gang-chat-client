@@ -529,7 +529,7 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
         title: '克隆歌单',
         body:
             '确定将“${playlist.name}”克隆到“我的歌单”吗？'
-            '克隆后的名称使用“房间备注名·歌单名”。',
+            '克隆后的名称使用“房间备注名 · 歌单名”。',
         confirmLabel: '克隆',
         confirmIcon: Icons.library_add_outlined,
       ),
