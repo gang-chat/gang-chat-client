@@ -294,6 +294,47 @@ void main() {
       );
     },
   );
+
+  test('batch add validates scope and preserves selected item order', () async {
+    final api = _BatchAddPlaylistApi();
+    final controller = PersonalMusicPlaylistsController(api);
+
+    expect(controller.canBatchAddItems, isTrue);
+    expect(
+      await controller.batchAddItems(
+        sourcePlaylistId: ' source ',
+        targetPlaylistId: ' target ',
+        itemIds: const [' second ', 'first'],
+      ),
+      isNotNull,
+    );
+    expect(api.sourcePlaylistId, 'source');
+    expect(api.targetPlaylistId, 'target');
+    expect(api.itemIds, ['second', 'first']);
+
+    api.sourcePlaylistId = null;
+    expect(
+      await controller.batchAddItems(
+        sourcePlaylistId: 'same',
+        targetPlaylistId: 'same',
+        itemIds: const ['first'],
+      ),
+      isNull,
+    );
+    expect(
+      await controller.batchAddItems(
+        sourcePlaylistId: 'source',
+        targetPlaylistId: 'target',
+        itemIds: const ['first', 'first'],
+      ),
+      isNull,
+    );
+    expect(api.sourcePlaylistId, isNull);
+    expect(
+      PersonalMusicPlaylistsController(_PagingPlaylistApi()).canBatchAddItems,
+      isFalse,
+    );
+  });
 }
 
 class _MergePlaylistApi extends _PagingPlaylistApi
@@ -327,6 +368,44 @@ class _MergePlaylistApi extends _PagingPlaylistApi
       deletedPlaylistCount: 2,
       retainedPlaylistCount: 0,
       consumedSourceItemCount: 2,
+      truncated: false,
+    );
+  }
+}
+
+class _BatchAddPlaylistApi extends _PagingPlaylistApi
+    implements PersonalMusicPlaylistBatchAddApi {
+  String? sourcePlaylistId;
+  String? targetPlaylistId;
+  List<String>? itemIds;
+
+  @override
+  Future<PersonalMusicPlaylistBatchAddResult>
+  batchAddPersonalMusicPlaylistItems({
+    required String sourcePlaylistId,
+    required String targetPlaylistId,
+    required List<String> itemIds,
+  }) async {
+    this.sourcePlaylistId = sourcePlaylistId;
+    this.targetPlaylistId = targetPlaylistId;
+    this.itemIds = List<String>.of(itemIds);
+    const playlist = PersonalMusicPlaylist(
+      id: 'target',
+      name: '目标歌单',
+      description: '',
+      revision: 2,
+      itemCount: 3,
+      createdAt: null,
+      updatedAt: null,
+    );
+    return const PersonalMusicPlaylistBatchAddResult(
+      playlist: playlist,
+      selectedItemCount: 2,
+      uniqueItemCount: 2,
+      duplicateCount: 0,
+      alreadyPresentCount: 0,
+      addedItemCount: 2,
+      omittedCount: 0,
       truncated: false,
     );
   }

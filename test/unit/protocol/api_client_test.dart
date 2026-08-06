@@ -3485,6 +3485,70 @@ void main() {
     expect(seen, hasLength(9));
     api.close();
   });
+
+  test('playlist batch add APIs preserve selected item order', () async {
+    final seen = <String>[];
+    final api = GangApiClient(
+      baseUrl: 'http://example.test/api/v1',
+      accessTokenProvider: ({bool forceRefresh = false}) async => 'token',
+      httpClient: MockClient((request) async {
+        seen.add('${request.method} ${request.url.path}');
+        expect(request.headers['authorization'], 'Bearer token');
+        expect(jsonDecode(request.body), {
+          'source_playlist_id': request.url.path.contains('/rooms/')
+              ? 'room_source'
+              : 'personal_source',
+          'item_ids': ['second', 'first'],
+        });
+        return http.Response(
+          jsonEncode({
+            'playlist': {
+              'id': request.url.path.contains('/rooms/')
+                  ? 'room_target'
+                  : 'personal_target',
+              'name': '目标歌单',
+              'description': '',
+              'revision': 3,
+              'item_count': 500,
+            },
+            'batch_add': {
+              'selected_item_count': 2,
+              'unique_item_count': 2,
+              'duplicate_count': 0,
+              'already_present_count': 0,
+              'added_item_count': 1,
+              'omitted_count': 1,
+              'truncated': true,
+            },
+          }),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      }),
+    );
+
+    final personal = await api.batchAddPersonalMusicPlaylistItems(
+      sourcePlaylistId: 'personal_source',
+      targetPlaylistId: 'personal_target',
+      itemIds: const ['second', 'first'],
+    );
+    final room = await api.batchAddRoomMusicPlaylistItems(
+      roomId: 'room_1',
+      sourcePlaylistId: 'room_source',
+      targetPlaylistId: 'room_target',
+      itemIds: const ['second', 'first'],
+    );
+
+    expect(seen, [
+      'POST /api/v1/me/music-box/playlists/personal_target/items/batch-add',
+      'POST /api/v1/rooms/room_1/music-box/playlists/room_target/items/batch-add',
+    ]);
+    expect(personal.addedItemCount, 1);
+    expect(personal.omittedCount, 1);
+    expect(personal.truncated, isTrue);
+    expect(room.playlist.id, 'room_target');
+    api.close();
+  });
 }
 
 Map<String, Object?> _roomInviteJson({

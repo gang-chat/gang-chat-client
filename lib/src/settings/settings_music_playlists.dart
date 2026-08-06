@@ -49,6 +49,7 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
   bool _mergingPlaylists = false;
   String? _cloningPlaylistId;
   bool _deletingItems = false;
+  bool _addingSelectedItems = false;
   bool _pinningItems = false;
   bool _managingPlaylists = false;
   bool _managingItems = false;
@@ -92,6 +93,7 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
       _cloningPlaylistId != null ||
       _busyPlaylistIds.isNotEmpty ||
       _deletingItems ||
+      _addingSelectedItems ||
       _pinningItems;
 
   @override
@@ -800,7 +802,12 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
   }
 
   void _toggleItemSelection(String itemID) {
-    if (!_managingItems || _deletingItems || _pinningItems) return;
+    if (!_managingItems ||
+        _deletingItems ||
+        _addingSelectedItems ||
+        _pinningItems) {
+      return;
+    }
     setState(() {
       _selectedItemIds = toggledPersonalPlaylistSelection(
         _selectedItemIds,
@@ -810,6 +817,7 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
   }
 
   void _toggleSelectVisible() {
+    if (_addingSelectedItems || _deletingItems || _pinningItems) return;
     final visibleIDs = _items.map((item) => item.id).toSet();
     final allSelected =
         visibleIDs.isNotEmpty && visibleIDs.every(_selectedItemIds.contains);
@@ -829,7 +837,8 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
     if (!_capabilities.canDeleteItems ||
         playlist == null ||
         _selectedItemIds.isEmpty ||
-        _deletingItems) {
+        _deletingItems ||
+        _addingSelectedItems) {
       return;
     }
     final count = _selectedItemIds.length;
@@ -864,6 +873,125 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
     } finally {
       if (mounted) setState(() => _deletingItems = false);
     }
+  }
+
+  Future<void> _addSelectedItemsToPlaylist() async {
+    final source = _activePlaylist;
+    if (source == null ||
+        !widget.controller.canBatchAddItems ||
+        _selectedItemIds.isEmpty ||
+        _addingSelectedItems) {
+      return;
+    }
+    final targets = [
+      for (final playlist in _playlists)
+        if (playlist.id != source.id) playlist,
+    ];
+    if (targets.isEmpty) {
+      showFloatingErrorNotice(context, '没有可添加歌曲的其他歌单');
+      return;
+    }
+    final target = await showDialog<PersonalMusicPlaylist>(
+      context: context,
+      builder: (context) => _MusicPlaylistImportDialog(
+        playlists: targets,
+        selectedPlaylistId: null,
+        title: '选择目标歌单',
+        emptyText: '没有可添加歌曲的其他歌单',
+        pickerKey: const ValueKey<String>(
+          'music-playlist-batch-add-target-picker',
+        ),
+        optionKeyPrefix: 'music-playlist-batch-add-target',
+      ),
+    );
+    if (!mounted || target == null) return;
+
+    final selectedIDs = _selectedItemIds.toList(growable: false);
+    final available = (_maxPlaylistItems - target.itemCount).clamp(
+      0,
+      _maxPlaylistItems,
+    );
+    if (available == 0) {
+      showFloatingErrorNotice(
+        context,
+        '添加失败：“${target.name}”已达 $_maxPlaylistItems 首上限',
+      );
+      return;
+    }
+    final exceedsLimit = selectedIDs.length > available;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => StickerConfirmDialog(
+        title: exceedsLimit ? '歌曲不能全部添加' : '确认添加歌曲',
+        body: exceedsLimit
+            ? '“${target.name}”最多还能添加 $available 首，无法全部添加。'
+                  '系统会按选择顺序、按具体链接去重，最多添加到 '
+                  '$_maxPlaylistItems 首；原歌单中的歌曲不会删除。是否继续？'
+            : '确定将已选择的 ${selectedIDs.length} 首歌曲按选择顺序添加到'
+                  '“${target.name}”吗？重复链接不会再次添加，原歌单中的歌曲不会删除。',
+        confirmLabel: exceedsLimit ? '继续添加' : '确认添加',
+        confirmIcon: Icons.playlist_add,
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+
+    setState(() {
+      _addingSelectedItems = true;
+      _error = null;
+    });
+    try {
+      final result = await widget.controller.batchAddItems(
+        sourcePlaylistId: source.id,
+        targetPlaylistId: target.id,
+        itemIds: selectedIDs,
+      );
+      if (!mounted || result == null) return;
+      await _reloadPlaylistSummariesWithoutClosing();
+      if (!mounted) return;
+      setState(() {
+        _managingItems = false;
+        _selectedItemIds = const {};
+      });
+      _showPlaylistBatchAddResultNotice(result);
+    } catch (error) {
+      if (mounted) showFloatingErrorNotice(context, '添加歌曲失败：$error');
+    } finally {
+      if (mounted) setState(() => _addingSelectedItems = false);
+    }
+  }
+
+  void _showPlaylistBatchAddResultNotice(
+    PersonalMusicPlaylistBatchAddResult result,
+  ) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final targetName = result.playlist.name;
+      if (result.addedItemCount == 0 && result.omittedCount > 0) {
+        showFloatingErrorNotice(
+          context,
+          '“$targetName”已达 $_maxPlaylistItems 首上限，没有歌曲被添加',
+        );
+        return;
+      }
+      if (result.addedItemCount == 0) {
+        showFloatingSuccessNotice(context, '“$targetName”已包含所选歌曲，未重复添加');
+        return;
+      }
+      if (result.truncated) {
+        showFloatingSuccessNotice(
+          context,
+          '已添加到“$targetName”，新增 ${result.addedItemCount} 首；'
+          '目标歌单已达 $_maxPlaylistItems 首上限，${result.omittedCount} 首未添加',
+        );
+        return;
+      }
+      final skipped = result.duplicateCount + result.alreadyPresentCount;
+      final skippedLabel = skipped == 0 ? '' : '，已跳过 $skipped 首重复歌曲';
+      showFloatingSuccessNotice(
+        context,
+        '已添加到“$targetName”，新增 ${result.addedItemCount} 首$skippedLabel',
+      );
+    });
   }
 
   Future<void> _pinSelectedItems() async {
@@ -1207,7 +1335,10 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
           managing: _managingItems,
           selectionNumber: selectionNumbers[item.id],
           busy:
-              _pinningItems || _deletingItems || _busyItemIds.contains(item.id),
+              _pinningItems ||
+              _deletingItems ||
+              _addingSelectedItems ||
+              _busyItemIds.contains(item.id),
           canMoveUp: !_filterActive && index > 0,
           canMoveDown:
               !_filterActive && (index < _items.length - 1 || _itemsHaveMore),
@@ -1294,6 +1425,7 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
                 onPressed: _managingItems
                     ? (_capabilities.canDeleteItems &&
                               !_deletingItems &&
+                              !_addingSelectedItems &&
                               _selectedItemIds.isNotEmpty
                           ? _deleteSelectedItems
                           : null)
@@ -1336,13 +1468,21 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
             ),
             if (_managingItems)
               StickerActionGridEntry(
-                label: '分享',
-                button: const Button(
-                  key: ValueKey('share-personal-music-playlist-items'),
-                  onPressed: null,
-                  icon: Icon(Icons.share_outlined),
+                label: '添加',
+                button: Button(
+                  key: const ValueKey(
+                    'add-selected-personal-music-playlist-items',
+                  ),
+                  onPressed:
+                      widget.controller.canBatchAddItems &&
+                          !_addingSelectedItems &&
+                          _selectedItemIds.isNotEmpty
+                      ? _addSelectedItemsToPlaylist
+                      : null,
+                  loading: _addingSelectedItems,
+                  icon: const Icon(Icons.playlist_add),
                   width: double.infinity,
-                  child: Text('分享'),
+                  child: const Text('添加'),
                 ),
               ),
             if (_managingItems)
@@ -2830,10 +2970,20 @@ class _MusicPlaylistImportDialog extends StatelessWidget {
   const _MusicPlaylistImportDialog({
     required this.playlists,
     required this.selectedPlaylistId,
+    this.title = '选择歌单',
+    this.emptyText = '我的歌单为空',
+    this.pickerKey = const ValueKey<String>(
+      'personal-music-playlist-import-picker',
+    ),
+    this.optionKeyPrefix = 'personal-music-playlist-import-option',
   });
 
   final List<PersonalMusicPlaylist> playlists;
   final String? selectedPlaylistId;
+  final String title;
+  final String emptyText;
+  final Key pickerKey;
+  final String optionKeyPrefix;
 
   @override
   Widget build(BuildContext context) {
@@ -2842,7 +2992,7 @@ class _MusicPlaylistImportDialog extends StatelessWidget {
       520.0,
     );
     return DialogFrame(
-      title: '选择歌单',
+      title: title,
       icon: Icons.library_music_outlined,
       maxWidth: 560,
       adaptiveActions: [
@@ -2852,10 +3002,10 @@ class _MusicPlaylistImportDialog extends StatelessWidget {
         ),
       ],
       child: SizedBox(
-        key: const ValueKey<String>('personal-music-playlist-import-picker'),
+        key: pickerKey,
         height: viewportHeight,
         child: playlists.isEmpty
-            ? const Center(child: _SettingsEmptyState(text: '我的歌单为空'))
+            ? Center(child: _SettingsEmptyState(text: emptyText))
             : ListView.separated(
                 padding: EdgeInsets.zero,
                 itemCount: playlists.length,
@@ -2865,6 +3015,7 @@ class _MusicPlaylistImportDialog extends StatelessWidget {
                   return _MusicPlaylistImportTile(
                     playlist: playlist,
                     selected: playlist.id == selectedPlaylistId,
+                    optionKeyPrefix: optionKeyPrefix,
                     onPressed: () => Navigator.of(context).pop(playlist),
                   );
                 },
@@ -2878,11 +3029,13 @@ class _MusicPlaylistImportTile extends StatelessWidget {
   const _MusicPlaylistImportTile({
     required this.playlist,
     required this.selected,
+    this.optionKeyPrefix = 'personal-music-playlist-import-option',
     required this.onPressed,
   });
 
   final PersonalMusicPlaylist playlist;
   final bool selected;
+  final String optionKeyPrefix;
   final VoidCallback onPressed;
 
   @override
@@ -2909,9 +3062,7 @@ class _MusicPlaylistImportTile extends StatelessWidget {
         final measuredHeight = namePainter.height + 39;
         final height = measuredHeight < 58 ? 58.0 : measuredHeight;
         return PressableSurface(
-          key: ValueKey<String>(
-            'personal-music-playlist-import-option-${playlist.id}',
-          ),
+          key: ValueKey<String>('$optionKeyPrefix-${playlist.id}'),
           height: height,
           selected: selected,
           onPressed: onPressed,

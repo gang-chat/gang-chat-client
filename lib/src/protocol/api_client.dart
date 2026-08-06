@@ -635,6 +635,17 @@ abstract interface class PersonalMusicPlaylistMergeApi {
   });
 }
 
+/// Optional extension for atomically copying selected saved songs into
+/// another personal playlist without mutating the source playlist.
+abstract interface class PersonalMusicPlaylistBatchAddApi {
+  Future<PersonalMusicPlaylistBatchAddResult>
+  batchAddPersonalMusicPlaylistItems({
+    required String sourcePlaylistId,
+    required String targetPlaylistId,
+    required List<String> itemIds,
+  });
+}
+
 /// Authenticated transport for an explicitly initiated local song preview.
 /// This is separate from [GangApi] so older fakes and read-only playlist
 /// adapters do not gain a required method when preview support is unavailable.
@@ -740,6 +751,16 @@ abstract interface class RoomMusicPlaylistMergeApi {
   });
 }
 
+/// Room-scoped counterpart of [PersonalMusicPlaylistBatchAddApi].
+abstract interface class RoomMusicPlaylistBatchAddApi {
+  Future<PersonalMusicPlaylistBatchAddResult> batchAddRoomMusicPlaylistItems({
+    required String roomId,
+    required String sourcePlaylistId,
+    required String targetPlaylistId,
+    required List<String> itemIds,
+  });
+}
+
 /// Optional room-playlist extension that atomically imports one of the
 /// authenticated user's personal playlists while creating the room playlist.
 /// Kept separate so existing room playlist fakes and older adapters remain
@@ -766,8 +787,10 @@ class GangApiClient
         GangApi,
         PersonalMusicPlaylistApi,
         PersonalMusicPlaylistMergeApi,
+        PersonalMusicPlaylistBatchAddApi,
         RoomMusicPlaylistApi,
         RoomMusicPlaylistMergeApi,
+        RoomMusicPlaylistBatchAddApi,
         RoomMusicPlaylistImportApi,
         RoomMusicPlaylistCloneApi,
         MusicTrackPreviewApi,
@@ -2606,6 +2629,26 @@ class GangApiClient
   }
 
   @override
+  Future<PersonalMusicPlaylistBatchAddResult>
+  batchAddPersonalMusicPlaylistItems({
+    required String sourcePlaylistId,
+    required String targetPlaylistId,
+    required List<String> itemIds,
+  }) async {
+    final decoded = await _sendJson((token) {
+      return _httpClient.post(
+        _uri('/me/music-box/playlists/$targetPlaylistId/items/batch-add'),
+        headers: _headers(token),
+        body: encodeJsonBody({
+          'source_playlist_id': sourcePlaylistId,
+          'item_ids': itemIds,
+        }),
+      );
+    });
+    return PersonalMusicPlaylistBatchAddResult.fromJson(decoded);
+  }
+
+  @override
   Future<void> deletePersonalMusicPlaylistItem({
     required String playlistId,
     required String itemId,
@@ -2861,6 +2904,29 @@ class GangApiClient
     return PersonalMusicPlaylistItem.fromJson(
       decoded['item']! as Map<String, Object?>,
     );
+  }
+
+  @override
+  Future<PersonalMusicPlaylistBatchAddResult> batchAddRoomMusicPlaylistItems({
+    required String roomId,
+    required String sourcePlaylistId,
+    required String targetPlaylistId,
+    required List<String> itemIds,
+  }) async {
+    final decoded = await _sendJson((token) {
+      return _httpClient.post(
+        _uri(
+          '/rooms/$roomId/music-box/playlists/'
+          '$targetPlaylistId/items/batch-add',
+        ),
+        headers: _headers(token),
+        body: encodeJsonBody({
+          'source_playlist_id': sourcePlaylistId,
+          'item_ids': itemIds,
+        }),
+      );
+    });
+    return PersonalMusicPlaylistBatchAddResult.fromJson(decoded);
   }
 
   @override

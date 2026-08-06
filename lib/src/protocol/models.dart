@@ -2785,6 +2785,48 @@ class PersonalMusicPlaylistMergeResult {
   }
 }
 
+class PersonalMusicPlaylistBatchAddResult {
+  const PersonalMusicPlaylistBatchAddResult({
+    required this.playlist,
+    required this.selectedItemCount,
+    required this.uniqueItemCount,
+    required this.duplicateCount,
+    required this.alreadyPresentCount,
+    required this.addedItemCount,
+    required this.omittedCount,
+    required this.truncated,
+  });
+
+  final PersonalMusicPlaylist playlist;
+  final int selectedItemCount;
+  final int uniqueItemCount;
+  final int duplicateCount;
+  final int alreadyPresentCount;
+  final int addedItemCount;
+  final int omittedCount;
+  final bool truncated;
+
+  factory PersonalMusicPlaylistBatchAddResult.fromJson(
+    Map<String, Object?> json,
+  ) {
+    final batchAdd = _nullableMap(json['batch_add']);
+    return PersonalMusicPlaylistBatchAddResult(
+      playlist: PersonalMusicPlaylist.fromJson(
+        json['playlist']! as Map<String, Object?>,
+      ),
+      selectedItemCount:
+          _intFromJson(batchAdd, const ['selected_item_count']) ?? 0,
+      uniqueItemCount: _intFromJson(batchAdd, const ['unique_item_count']) ?? 0,
+      duplicateCount: _intFromJson(batchAdd, const ['duplicate_count']) ?? 0,
+      alreadyPresentCount:
+          _intFromJson(batchAdd, const ['already_present_count']) ?? 0,
+      addedItemCount: _intFromJson(batchAdd, const ['added_item_count']) ?? 0,
+      omittedCount: _intFromJson(batchAdd, const ['omitted_count']) ?? 0,
+      truncated: _boolFromJson(batchAdd, const ['truncated']) ?? false,
+    );
+  }
+}
+
 class PersonalMusicPlaylistItem {
   const PersonalMusicPlaylistItem({
     required this.id,

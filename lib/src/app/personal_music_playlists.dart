@@ -103,6 +103,14 @@ abstract interface class _MusicPlaylistsBackend {
     required List<String> playlistIds,
   });
 
+  bool get canBatchAddItems;
+
+  Future<PersonalMusicPlaylistBatchAddResult> batchAddItems({
+    required String sourcePlaylistId,
+    required String targetPlaylistId,
+    required List<String> itemIds,
+  });
+
   Future<PersonalMusicPlaylist> createPlaylist({
     required String name,
     String? importPlaylistId,
@@ -197,6 +205,8 @@ class PersonalMusicPlaylistsController {
 
   bool get canMergePlaylists => _backend?.canMergePlaylists ?? false;
 
+  bool get canBatchAddItems => _backend?.canBatchAddItems ?? false;
+
   Future<PersonalMusicPlaylistPage?> loadPlaylists() {
     final client = _backend;
     if (client == null) return Future.value();
@@ -230,6 +240,31 @@ class PersonalMusicPlaylistsController {
     return _backend?.mergePlaylists(
           name: normalizedName,
           playlistIds: normalizedIDs,
+        ) ??
+        Future.value();
+  }
+
+  Future<PersonalMusicPlaylistBatchAddResult?> batchAddItems({
+    required String sourcePlaylistId,
+    required String targetPlaylistId,
+    required Iterable<String> itemIds,
+  }) {
+    final sourceID = sourcePlaylistId.trim();
+    final targetID = targetPlaylistId.trim();
+    final requestedItemIDs = itemIds.toList(growable: false);
+    final normalizedItemIDs = uniquePersonalPlaylistItemIds(requestedItemIDs);
+    if (sourceID.isEmpty ||
+        targetID.isEmpty ||
+        sourceID == targetID ||
+        normalizedItemIDs.isEmpty ||
+        normalizedItemIDs.length != requestedItemIDs.length ||
+        normalizedItemIDs.length > 500) {
+      return Future.value();
+    }
+    return _backend?.batchAddItems(
+          sourcePlaylistId: sourceID,
+          targetPlaylistId: targetID,
+          itemIds: normalizedItemIDs,
         ) ??
         Future.value();
   }
@@ -405,6 +440,9 @@ class _PersonalMusicPlaylistsBackend implements _MusicPlaylistsBackend {
   bool get canMergePlaylists => api is PersonalMusicPlaylistMergeApi;
 
   @override
+  bool get canBatchAddItems => api is PersonalMusicPlaylistBatchAddApi;
+
+  @override
   Future<PersonalMusicPlaylist> cloneRoomPlaylistToPersonal({
     required String playlistId,
   }) {
@@ -422,6 +460,24 @@ class _PersonalMusicPlaylistsBackend implements _MusicPlaylistsBackend {
     }
     return (mergeApi as PersonalMusicPlaylistMergeApi)
         .mergePersonalMusicPlaylists(name: name, playlistIds: playlistIds);
+  }
+
+  @override
+  Future<PersonalMusicPlaylistBatchAddResult> batchAddItems({
+    required String sourcePlaylistId,
+    required String targetPlaylistId,
+    required List<String> itemIds,
+  }) {
+    final batchApi = api;
+    if (batchApi is! PersonalMusicPlaylistBatchAddApi) {
+      return Future.error(StateError('当前服务端不支持批量添加个人歌单歌曲'));
+    }
+    return (batchApi as PersonalMusicPlaylistBatchAddApi)
+        .batchAddPersonalMusicPlaylistItems(
+          sourcePlaylistId: sourcePlaylistId,
+          targetPlaylistId: targetPlaylistId,
+          itemIds: itemIds,
+        );
   }
 
   @override
@@ -591,6 +647,10 @@ class _RoomMusicPlaylistsBackend implements _MusicPlaylistsBackend {
       canManage && roomApi is RoomMusicPlaylistMergeApi;
 
   @override
+  bool get canBatchAddItems =>
+      canManage && roomApi is RoomMusicPlaylistBatchAddApi;
+
+  @override
   Future<PersonalMusicPlaylist> cloneRoomPlaylistToPersonal({
     required String playlistId,
   }) {
@@ -620,6 +680,26 @@ class _RoomMusicPlaylistsBackend implements _MusicPlaylistsBackend {
       name: name,
       playlistIds: playlistIds,
     );
+  }
+
+  @override
+  Future<PersonalMusicPlaylistBatchAddResult> batchAddItems({
+    required String sourcePlaylistId,
+    required String targetPlaylistId,
+    required List<String> itemIds,
+  }) {
+    _requireManagePermission();
+    final batchApi = roomApi;
+    if (batchApi is! RoomMusicPlaylistBatchAddApi) {
+      return Future.error(StateError('当前服务端不支持批量添加房间歌单歌曲'));
+    }
+    return (batchApi as RoomMusicPlaylistBatchAddApi)
+        .batchAddRoomMusicPlaylistItems(
+          roomId: roomId,
+          sourcePlaylistId: sourcePlaylistId,
+          targetPlaylistId: targetPlaylistId,
+          itemIds: itemIds,
+        );
   }
 
   @override

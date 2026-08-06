@@ -582,7 +582,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('取消管理'), findsOneWidget);
-      expect(find.text('分享'), findsOneWidget);
+      expect(find.text('添加'), findsOneWidget);
       expect(find.text('置顶'), findsOneWidget);
       expect(find.text('全选已加载'), findsOneWidget);
       expect(
@@ -600,7 +600,9 @@ void main() {
       expect(
         tester
             .widget<ui.Button>(
-              find.byKey(const ValueKey('share-personal-music-playlist-items')),
+              find.byKey(
+                const ValueKey('add-selected-personal-music-playlist-items'),
+              ),
             )
             .onPressed,
         isNull,
@@ -754,6 +756,77 @@ void main() {
     TargetPlatform.android,
   ]) {
     testWidgets(
+      'batch adds personal songs without removing the source on ${platform.name}',
+      (tester) async {
+        final size = platform == TargetPlatform.android
+            ? const Size(360, 900)
+            : const Size(720, 900);
+        await tester.binding.setSurfaceSize(size);
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final api = _FakePersonalPlaylistApi(
+          playlists: const [
+            _FakePersonalPlaylistApi.playlist,
+            _FakePersonalPlaylistApi.emptyPlaylist,
+          ],
+          playlistItems: const [
+            _FakePersonalPlaylistApi.playlistItem,
+            PersonalMusicPlaylistItem(
+              id: 'mbpi_2',
+              playlistId: 'mbp_1',
+              trackId: 'track_2',
+              source: 'netease',
+              title: '夜曲',
+              artists: ['周杰伦'],
+              durationMs: 226000,
+              sortOrder: 20,
+              createdAt: null,
+            ),
+          ],
+        );
+
+        await _pumpPlaylistSettings(tester, api, platform: platform);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('夜晚'));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('manage-personal-music-playlist-items')),
+        );
+        await tester.pumpAndSettle();
+        for (final itemID in ['mbpi_2', 'mbpi_1']) {
+          final card = find.byKey(
+            ValueKey('personal-music-playlist-item-$itemID'),
+          );
+          await tester.tapAt(tester.getTopLeft(card) + const Offset(2, 2));
+        }
+        await tester.pumpAndSettle();
+
+        final addButton = find.byKey(
+          const ValueKey('add-selected-personal-music-playlist-items'),
+        );
+        expect(tester.widget<ui.Button>(addButton).onPressed, isNotNull);
+        await tester.tap(addButton);
+        await tester.pumpAndSettle();
+        expect(find.text('选择目标歌单'), findsOneWidget);
+        await tester.tap(
+          find.byKey(
+            const ValueKey('music-playlist-batch-add-target-mbp_empty'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('确认添加歌曲'), findsOneWidget);
+        expect(find.textContaining('原歌单中的歌曲不会删除'), findsOneWidget);
+        expect(api.batchAddRequests, isEmpty);
+        await tester.tap(find.text('确认添加'));
+        await tester.pumpAndSettle();
+
+        expect(api.batchAddRequests, ['mbp_1:mbp_empty:mbpi_2,mbpi_1']);
+        expect(api.playlistItems, hasLength(2));
+        expect(find.textContaining('已添加到“空歌单”'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
       'merges personal playlists in selection order on ${platform.name}',
       (tester) async {
         final size = platform == TargetPlatform.android
@@ -873,6 +946,133 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('batch adds selected room songs to another room playlist', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(360, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final roomApi = _FakeRoomPlaylistApi(
+      playlists: const [
+        _FakeRoomPlaylistApi.playlist,
+        _FakeRoomPlaylistApi.secondPlaylist,
+      ],
+    );
+    final controller = PersonalMusicPlaylistsController.room(
+      roomApi: roomApi,
+      roomId: 'room_1',
+      canManage: true,
+      searchTracks: ({required keyword, required source}) async => const [],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ui.uiTheme().copyWith(platform: TargetPlatform.android),
+        home: Scaffold(
+          body: MusicPlaylistsPanel(
+            controller: controller,
+            title: '房间歌单',
+            unavailableMessage: '房间歌单暂不可用',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('房间精选'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('manage-personal-music-playlist-items')),
+    );
+    await tester.pumpAndSettle();
+    final item = find.byKey(
+      const ValueKey('personal-music-playlist-item-mbpi_room_1'),
+    );
+    await tester.tapAt(tester.getTopLeft(item) + const Offset(2, 2));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('add-selected-personal-music-playlist-items')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('music-playlist-batch-add-target-mbp_room_2')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认添加'));
+    await tester.pumpAndSettle();
+
+    expect(roomApi.batchAddRequests, [
+      'room_1:mbp_room_1:mbp_room_2:mbpi_room_1',
+    ]);
+    expect(find.textContaining('已添加到“房间第二歌单”'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('warns and reports when a target playlist only has one slot', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(360, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final api = _FakePersonalPlaylistApi(
+      playlists: const [
+        _FakePersonalPlaylistApi.playlist,
+        PersonalMusicPlaylist(
+          id: 'mbp_almost_full',
+          name: '即将满的歌单',
+          description: '',
+          revision: 1,
+          itemCount: 499,
+          createdAt: null,
+          updatedAt: null,
+        ),
+      ],
+      playlistItems: const [
+        _FakePersonalPlaylistApi.playlistItem,
+        PersonalMusicPlaylistItem(
+          id: 'mbpi_2',
+          playlistId: 'mbp_1',
+          trackId: 'track_2',
+          source: 'netease',
+          title: '夜曲',
+          artists: ['周杰伦'],
+          durationMs: 226000,
+          sortOrder: 20,
+          createdAt: null,
+        ),
+      ],
+    );
+    await _pumpPlaylistSettings(tester, api, platform: TargetPlatform.android);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('夜晚'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('manage-personal-music-playlist-items')),
+    );
+    await tester.pumpAndSettle();
+    for (final itemID in ['mbpi_1', 'mbpi_2']) {
+      final item = find.byKey(ValueKey('personal-music-playlist-item-$itemID'));
+      await tester.tapAt(tester.getTopLeft(item) + const Offset(2, 2));
+    }
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('add-selected-personal-music-playlist-items')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(
+        const ValueKey('music-playlist-batch-add-target-mbp_almost_full'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('歌曲不能全部添加'), findsOneWidget);
+    expect(find.textContaining('最多还能添加 1 首'), findsOneWidget);
+    expect(api.batchAddRequests, isEmpty);
+    await tester.tap(find.text('继续添加'));
+    await tester.pumpAndSettle();
+
+    expect(api.batchAddRequests, ['mbp_1:mbp_almost_full:mbpi_1,mbpi_2']);
+    expect(find.textContaining('目标歌单已达 500 首上限'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('warns before merging more than 500 playlist items', (
     tester,
@@ -1523,7 +1723,8 @@ class _FakePersonalPlaylistApi
     implements
         GangApi,
         PersonalMusicPlaylistApi,
-        PersonalMusicPlaylistMergeApi {
+        PersonalMusicPlaylistMergeApi,
+        PersonalMusicPlaylistBatchAddApi {
   _FakePersonalPlaylistApi({
     this.onSearch,
     List<PersonalMusicPlaylist>? playlists,
@@ -1580,6 +1781,7 @@ class _FakePersonalPlaylistApi
   final List<String> renameRequests = [];
   final List<String> addRequests = [];
   final List<String> mergeRequests = [];
+  final List<String> batchAddRequests = [];
   int listRequestCount = 0;
   Completer<PersonalMusicPlaylistPage>? nextPlaylistListResponse;
 
@@ -1684,6 +1886,42 @@ class _FakePersonalPlaylistApi
       retainedPlaylistCount: 0,
       consumedSourceItemCount: sourceItemCount,
       truncated: false,
+    );
+  }
+
+  @override
+  Future<PersonalMusicPlaylistBatchAddResult>
+  batchAddPersonalMusicPlaylistItems({
+    required String sourcePlaylistId,
+    required String targetPlaylistId,
+    required List<String> itemIds,
+  }) async {
+    batchAddRequests.add(
+      '$sourcePlaylistId:$targetPlaylistId:${itemIds.join(',')}',
+    );
+    final targetIndex = playlists.indexWhere(
+      (playlist) => playlist.id == targetPlaylistId,
+    );
+    final current = playlists[targetIndex];
+    final available = 500 - current.itemCount;
+    final addedCount = available <= 0
+        ? 0
+        : (itemIds.length < available ? itemIds.length : available);
+    final omittedCount = itemIds.length - addedCount;
+    final updated = current.copyWith(
+      itemCount: current.itemCount + addedCount,
+      revision: current.revision + 1,
+    );
+    playlists[targetIndex] = updated;
+    return PersonalMusicPlaylistBatchAddResult(
+      playlist: updated,
+      selectedItemCount: itemIds.length,
+      uniqueItemCount: itemIds.length,
+      duplicateCount: 0,
+      alreadyPresentCount: 0,
+      addedItemCount: addedCount,
+      omittedCount: omittedCount,
+      truncated: omittedCount > 0,
     );
   }
 
@@ -1876,6 +2114,7 @@ class _FakeRoomPlaylistApi
     implements
         RoomMusicPlaylistApi,
         RoomMusicPlaylistMergeApi,
+        RoomMusicPlaylistBatchAddApi,
         RoomMusicPlaylistImportApi,
         RoomMusicPlaylistCloneApi {
   _FakeRoomPlaylistApi({
@@ -1888,6 +2127,7 @@ class _FakeRoomPlaylistApi
   final List<String> importRequests = [];
   final List<String> cloneRequests = [];
   final List<String> mergeRequests = [];
+  final List<String> batchAddRequests = [];
   final List<PersonalMusicPlaylist> playlists;
   final Object? cloneError;
   static const playlist = PersonalMusicPlaylist(
@@ -2030,6 +2270,42 @@ class _FakeRoomPlaylistApi
       retainedPlaylistCount: 0,
       consumedSourceItemCount: sourceItemCount,
       truncated: false,
+    );
+  }
+
+  @override
+  Future<PersonalMusicPlaylistBatchAddResult> batchAddRoomMusicPlaylistItems({
+    required String roomId,
+    required String sourcePlaylistId,
+    required String targetPlaylistId,
+    required List<String> itemIds,
+  }) async {
+    batchAddRequests.add(
+      '$roomId:$sourcePlaylistId:$targetPlaylistId:${itemIds.join(',')}',
+    );
+    final targetIndex = playlists.indexWhere(
+      (playlist) => playlist.id == targetPlaylistId,
+    );
+    final current = playlists[targetIndex];
+    final available = 500 - current.itemCount;
+    final addedCount = available <= 0
+        ? 0
+        : (itemIds.length < available ? itemIds.length : available);
+    final omittedCount = itemIds.length - addedCount;
+    final updated = current.copyWith(
+      itemCount: current.itemCount + addedCount,
+      revision: current.revision + 1,
+    );
+    playlists[targetIndex] = updated;
+    return PersonalMusicPlaylistBatchAddResult(
+      playlist: updated,
+      selectedItemCount: itemIds.length,
+      uniqueItemCount: itemIds.length,
+      duplicateCount: 0,
+      alreadyPresentCount: 0,
+      addedItemCount: addedCount,
+      omittedCount: omittedCount,
+      truncated: omittedCount > 0,
     );
   }
 
