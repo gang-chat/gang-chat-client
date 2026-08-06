@@ -636,6 +636,16 @@ abstract interface class MusicTrackPreviewApi {
   });
 }
 
+/// Clones the immutable saved-playlist snapshot that is currently active in a
+/// room. Kept separate from [GangApi] so older fakes remain source-compatible.
+abstract interface class MusicBoxActivePlaylistCloneApi {
+  Future<PersonalMusicPlaylist> cloneActiveMusicBoxPlaylist({
+    required String roomId,
+    required String playlistId,
+    required String snapshotId,
+  });
+}
+
 abstract interface class RoomMusicPlaylistApi {
   Future<PersonalMusicPlaylistPage> listRoomMusicPlaylists({
     required String roomId,
@@ -717,7 +727,8 @@ class GangApiClient
         GangApi,
         PersonalMusicPlaylistApi,
         RoomMusicPlaylistApi,
-        MusicTrackPreviewApi {
+        MusicTrackPreviewApi,
+        MusicBoxActivePlaylistCloneApi {
   GangApiClient({
     required this.baseUrl,
     required this.accessTokenProvider,
@@ -2894,6 +2905,27 @@ class GangApiClient
       );
     });
     return MusicBoxState.fromJson(decoded);
+  }
+
+  @override
+  Future<PersonalMusicPlaylist> cloneActiveMusicBoxPlaylist({
+    required String roomId,
+    required String playlistId,
+    required String snapshotId,
+  }) async {
+    final decoded = await _sendJson((token) {
+      return _httpClient.post(
+        _uri('/rooms/$roomId/music-box/active-playlist/clone'),
+        headers: _headers(token),
+        body: encodeJsonBody({
+          'playlist_id': playlistId,
+          'snapshot_id': snapshotId,
+        }),
+      );
+    });
+    return PersonalMusicPlaylist.fromJson(
+      decoded['playlist']! as Map<String, Object?>,
+    );
   }
 
   Future<Map<String, Object?>> _sendJson(

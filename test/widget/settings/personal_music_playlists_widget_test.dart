@@ -994,6 +994,8 @@ void main() {
         await tester.binding.setSurfaceSize(size);
         addTearDown(() => tester.binding.setSurfaceSize(null));
         final api = _FakeRoomPlaylistApi();
+        final previewApi = _PreviewPersonalPlaylistApi();
+        final previewFactory = _FakePreviewPlatformFactory();
         final controller = PersonalMusicPlaylistsController.room(
           roomApi: api,
           roomId: 'room_1',
@@ -1009,6 +1011,8 @@ void main() {
                 controller: controller,
                 title: '房间歌单',
                 unavailableMessage: '房间歌单暂不可用',
+                previewApi: previewApi,
+                previewPlatformFactory: previewFactory,
               ),
             ),
           ),
@@ -1057,10 +1061,55 @@ void main() {
               .onPressed,
           isNull,
         );
+        await tester.tap(find.text('房间歌曲'));
+        await tester.pumpAndSettle();
+        expect(find.text('试听'), findsOneWidget);
+        expect(find.text('添加到歌单'), findsNothing);
+        expect(
+          find.byKey(const ValueKey<String>('music-track-card-preview')),
+          findsOneWidget,
+        );
         expect(tester.takeException(), isNull);
       },
     );
   }
+
+  testWidgets('room playlist managers get preview and add actions', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(720, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = PersonalMusicPlaylistsController.room(
+      roomApi: _FakeRoomPlaylistApi(),
+      roomId: 'room_1',
+      canManage: true,
+      searchTracks: ({required keyword, required source}) async => const [],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ui.uiTheme(),
+        home: Scaffold(
+          body: MusicPlaylistsPanel(
+            controller: controller,
+            title: '房间歌单',
+            unavailableMessage: '房间歌单暂不可用',
+            previewApi: _PreviewPersonalPlaylistApi(),
+            previewPlatformFactory: _FakePreviewPlatformFactory(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('房间精选'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('房间歌曲'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('试听'), findsOneWidget);
+    expect(find.text('添加到歌单'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
 
 Future<void> _pumpPlaylistSettings(

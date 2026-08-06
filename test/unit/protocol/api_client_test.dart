@@ -2938,6 +2938,7 @@ void main() {
               'active_source': {
                 'type': 'room_playlist',
                 'playlist_id': 'playlist_1',
+                'snapshot_id': 'snapshot_1',
                 'name': 'Room list',
               },
               'queue': [],
@@ -2956,10 +2957,53 @@ void main() {
       );
 
       expect(state.activeSource.type, MusicBoxActiveSourceType.roomPlaylist);
+      expect(state.activeSource.snapshotId, 'snapshot_1');
       expect(state.revision, 2);
       api.close();
     },
   );
+
+  test('cloneActiveMusicBoxPlaylist pins the immutable snapshot', () async {
+    final api = GangApiClient(
+      baseUrl: 'http://example.test/api/v1',
+      accessTokenProvider: ({bool forceRefresh = false}) async => 'token',
+      httpClient: MockClient((request) async {
+        expect(request.method, 'POST');
+        expect(
+          request.url.path,
+          '/api/v1/rooms/room_1/music-box/active-playlist/clone',
+        );
+        expect(jsonDecode(request.body) as Map<String, Object?>, {
+          'playlist_id': 'playlist_1',
+          'snapshot_id': 'snapshot_1',
+        });
+        return http.Response(
+          jsonEncode({
+            'playlist': {
+              'id': 'playlist_clone',
+              'name': '朋友的歌单 · 夜晚',
+              'description': '',
+              'revision': 1,
+              'item_count': 2,
+            },
+          }),
+          201,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      }),
+    );
+
+    final playlist = await api.cloneActiveMusicBoxPlaylist(
+      roomId: 'room_1',
+      playlistId: 'playlist_1',
+      snapshotId: 'snapshot_1',
+    );
+
+    expect(playlist.id, 'playlist_clone');
+    expect(playlist.name, '朋友的歌单 · 夜晚');
+    expect(playlist.itemCount, 2);
+    api.close();
+  });
 
   test('removeMusicBoxItem deletes the queue item', () async {
     final api = GangApiClient(

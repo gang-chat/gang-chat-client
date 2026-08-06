@@ -163,6 +163,17 @@ class MusicBoxController {
     );
   }
 
+  Future<PersonalMusicPlaylist> cloneActivePlaylist({
+    required String roomId,
+    required MusicBoxActiveSource source,
+  }) {
+    return (api as MusicBoxActivePlaylistCloneApi).cloneActiveMusicBoxPlaylist(
+      roomId: roomId,
+      playlistId: source.id,
+      snapshotId: source.snapshotId,
+    );
+  }
+
   Future<PersonalMusicPlaylistPage> loadRoomPlaylists({
     required String roomId,
     int page = 1,

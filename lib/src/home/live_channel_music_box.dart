@@ -33,6 +33,7 @@ class LiveMusicBoxPanel extends StatelessWidget {
     this.controller,
     this.roomId,
     this.room,
+    this.previewPlatformFactory,
     this.onStateChanged,
     this.currentUser,
     this.onResolveUserProfile,
@@ -60,6 +61,7 @@ class LiveMusicBoxPanel extends StatelessWidget {
   final MusicBoxController? controller;
   final String? roomId;
   final PublicRoom? room;
+  final MusicTrackPreviewPlatformFactory? previewPlatformFactory;
   final ValueChanged<MusicBoxState>? onStateChanged;
   final CurrentUser? currentUser;
   final UserProfileResolver? onResolveUserProfile;
@@ -95,6 +97,7 @@ class LiveMusicBoxPanel extends StatelessWidget {
       controller: controller,
       roomId: roomId,
       room: room,
+      previewPlatformFactory: previewPlatformFactory,
       onStateChanged: onStateChanged,
       currentUser: currentUser,
       onResolveUserProfile: onResolveUserProfile,
@@ -704,6 +707,7 @@ class _MusicBoxBody extends StatefulWidget {
     required this.controller,
     required this.roomId,
     required this.room,
+    required this.previewPlatformFactory,
     required this.onStateChanged,
     required this.currentUser,
     required this.onResolveUserProfile,
@@ -724,6 +728,7 @@ class _MusicBoxBody extends StatefulWidget {
   final MusicBoxController? controller;
   final String? roomId;
   final PublicRoom? room;
+  final MusicTrackPreviewPlatformFactory? previewPlatformFactory;
   final ValueChanged<MusicBoxState>? onStateChanged;
   final CurrentUser? currentUser;
   final UserProfileResolver? onResolveUserProfile;
@@ -862,6 +867,30 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
     final source = widget.state.activeSource;
     if (source.type == MusicBoxActiveSourceType.temporary ||
         source.id.isEmpty) {
+      return;
+    }
+    final isAnotherUsersPlaylist =
+        source.type == MusicBoxActiveSourceType.userPlaylist &&
+        source.ownerUserId.isNotEmpty &&
+        source.ownerUserId != widget.currentUser?.id;
+    final controller = widget.controller;
+    final roomId = widget.roomId;
+    if (isAnotherUsersPlaylist && controller != null && roomId != null) {
+      final snapshotItems = List<MusicBoxQueueItem>.unmodifiable(
+        widget.state.queue,
+      );
+      unawaited(
+        showDialog<void>(
+          context: context,
+          builder: (context) => _ActiveMusicPlaylistDialog(
+            source: source,
+            items: snapshotItems,
+            controller: controller,
+            roomId: roomId,
+            previewPlatformFactory: widget.previewPlatformFactory,
+          ),
+        ),
+      );
       return;
     }
     await _viewPlaylist(
@@ -1114,6 +1143,288 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ActiveMusicPlaylistDialog extends StatefulWidget {
+  const _ActiveMusicPlaylistDialog({
+    required this.source,
+    required this.items,
+    required this.controller,
+    required this.roomId,
+    required this.previewPlatformFactory,
+  });
+
+  final MusicBoxActiveSource source;
+  final List<MusicBoxQueueItem> items;
+  final MusicBoxController controller;
+  final String roomId;
+  final MusicTrackPreviewPlatformFactory? previewPlatformFactory;
+
+  @override
+  State<_ActiveMusicPlaylistDialog> createState() =>
+      _ActiveMusicPlaylistDialogState();
+}
+
+class _ActiveMusicPlaylistDialogState
+    extends State<_ActiveMusicPlaylistDialog> {
+  MusicTrackPreviewController? _previewController;
+  List<PersonalMusicPlaylist> _myPlaylists = const [];
+  int _maxPlaylists = 50;
+  bool _loadingPlaylists = true;
+  bool _cloning = false;
+  PersonalMusicPlaylist? _clonedPlaylist;
+
+  bool get _playlistLimitReached =>
+      !_loadingPlaylists && _myPlaylists.length >= _maxPlaylists;
+
+  @override
+  void initState() {
+    super.initState();
+    final api = widget.controller.api;
+    final factory = widget.previewPlatformFactory;
+    if (api is MusicTrackPreviewApi && factory != null) {
+      _previewController = MusicTrackPreviewController(
+        api: api as MusicTrackPreviewApi,
+        platform: factory.create(),
+      );
+    }
+    unawaited(_loadMyPlaylists());
+  }
+
+  @override
+  void dispose() {
+    final preview = _previewController;
+    if (preview != null) unawaited(preview.dispose());
+    super.dispose();
+  }
+
+  Future<void> _loadMyPlaylists() async {
+    try {
+      final page = await widget.controller.loadMyPlaylists();
+      if (!mounted) return;
+      setState(() {
+        _myPlaylists = page.playlists;
+        _maxPlaylists = page.maxPlaylists;
+        _loadingPlaylists = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingPlaylists = false);
+    }
+  }
+
+  Future<void> _clone() async {
+    if (_cloning ||
+        _loadingPlaylists ||
+        _clonedPlaylist != null ||
+        _playlistLimitReached ||
+        widget.source.snapshotId.isEmpty ||
+        widget.controller.api is! MusicBoxActivePlaylistCloneApi) {
+      return;
+    }
+    setState(() => _cloning = true);
+    try {
+      final playlist = await widget.controller.cloneActivePlaylist(
+        roomId: widget.roomId,
+        source: widget.source,
+      );
+      if (!mounted) return;
+      setState(() {
+        _clonedPlaylist = playlist;
+        _myPlaylists = [..._myPlaylists, playlist];
+      });
+      showFloatingSuccessNotice(context, '已克隆为「${playlist.name}」');
+    } catch (error) {
+      if (mounted) {
+        showFloatingErrorNotice(
+          context,
+          musicBoxControlErrorMessage(error, '克隆歌单失败，请重试'),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _cloning = false);
+    }
+  }
+
+  Future<void> _addToPlaylist(
+    MusicBoxQueueItem item,
+    PersonalMusicPlaylist playlist,
+  ) {
+    return widget.controller.addQueueItemToMyPlaylist(
+      playlistId: playlist.id,
+      item: item,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canClone =
+        widget.controller.api is MusicBoxActivePlaylistCloneApi &&
+        widget.source.snapshotId.isNotEmpty &&
+        !_loadingPlaylists &&
+        !_playlistLimitReached &&
+        _clonedPlaylist == null;
+    final cloneLabel = _clonedPlaylist != null
+        ? '已克隆到我的歌单'
+        : _loadingPlaylists
+        ? '正在检查我的歌单'
+        : _playlistLimitReached
+        ? '我的歌单已满'
+        : '克隆到我的歌单';
+    final height = (MediaQuery.sizeOf(context).height * 0.68).clamp(
+      260.0,
+      620.0,
+    );
+    return DialogFrame(
+      title: widget.source.name,
+      icon: Icons.queue_music,
+      maxWidth: 760,
+      adaptiveActions: [
+        ResponsiveDialogAction(
+          buttonKey: const ValueKey<String>('active-music-playlist-clone'),
+          label: cloneLabel,
+          icon: Icons.library_add,
+          tone: ButtonTone.primary,
+          loading: _cloning,
+          onPressed: canClone ? () => unawaited(_clone()) : null,
+        ),
+        ResponsiveDialogAction(
+          buttonKey: const ValueKey<String>('active-music-playlist-done'),
+          label: '完成',
+          icon: Icons.check,
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ],
+      child: SizedBox(
+        key: const ValueKey<String>('active-music-playlist-dialog'),
+        height: height,
+        child: widget.items.isEmpty
+            ? const _MusicBoxEmpty(icon: Icons.music_off, message: '这个歌单还没有歌曲')
+            : ListView.separated(
+                key: const ValueKey<String>('active-music-playlist-tracks'),
+                padding: EdgeInsets.zero,
+                itemCount: widget.items.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                itemBuilder: (context, index) {
+                  final item = widget.items[index];
+                  return _ActiveMusicPlaylistTrackTile(
+                    item: item,
+                    previewController: _previewController,
+                    playlists: _myPlaylists,
+                    onAddToPlaylist: (playlist) =>
+                        _addToPlaylist(item, playlist),
+                  );
+                },
+              ),
+      ),
+    );
+  }
+}
+
+class _ActiveMusicPlaylistTrackTile extends StatelessWidget {
+  const _ActiveMusicPlaylistTrackTile({
+    required this.item,
+    required this.previewController,
+    required this.playlists,
+    required this.onAddToPlaylist,
+  });
+
+  final MusicBoxQueueItem item;
+  final MusicTrackPreviewController? previewController;
+  final List<PersonalMusicPlaylist> playlists;
+  final Future<void> Function(PersonalMusicPlaylist playlist) onAddToPlaylist;
+
+  @override
+  Widget build(BuildContext context) {
+    final artists = item.artist
+        .split(RegExp(r'[、,，]'))
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false);
+    final subtitle = [
+      if (artists.isNotEmpty) artists.join('、'),
+      music_box_display.musicBoxSourceLabel(item.source),
+    ].join(' · ');
+    final surface = LayoutBuilder(
+      builder: (context, constraints) {
+        const titleStyle = TextStyle(
+          color: UiColors.text,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+        );
+        const subtitleStyle = TextStyle(
+          color: UiColors.textMuted,
+          fontSize: 12,
+        );
+        final textWidth = (constraints.maxWidth - 58).clamp(
+          40.0,
+          double.infinity,
+        );
+        final adaptiveTitle = _musicBoxAdaptiveListTextStyle(
+          context,
+          text: item.title,
+          baseStyle: titleStyle,
+          width: textWidth,
+        );
+        final adaptiveSubtitle = _musicBoxAdaptiveListTextStyle(
+          context,
+          text: subtitle,
+          baseStyle: subtitleStyle,
+          width: textWidth,
+        );
+        final height = _musicBoxAdaptiveSongRowHeight(
+          context,
+          width: textWidth,
+          title: item.title,
+          subtitle: subtitle,
+          titleStyle: adaptiveTitle,
+          subtitleStyle: adaptiveSubtitle,
+        );
+        return PressableSurface(
+          key: ValueKey<String>('active-music-playlist-track:${item.id}'),
+          width: double.infinity,
+          height: height,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          backgroundColor: UiColors.surfaceLow,
+          pressedBackgroundColor: UiColors.surfacePressed,
+          borderColor: UiColors.border,
+          borderRadius: UiRadii.md,
+          child: Row(
+            children: [
+              const Icon(Icons.music_note, size: 20, color: UiColors.accent),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(item.title, style: adaptiveTitle, softWrap: true),
+                    const SizedBox(height: 3),
+                    Text(subtitle, style: adaptiveSubtitle, softWrap: true),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    final preview = previewController;
+    if (preview == null) return surface;
+    return MusicTrackHoverCard(
+      data: MusicTrackCardData(
+        id: item.id,
+        source: item.source,
+        trackId: item.trackId,
+        title: item.title,
+        artists: artists,
+        durationMs: item.durationMs,
+      ),
+      previewController: preview,
+      playlists: playlists,
+      onAddToPlaylist: onAddToPlaylist,
+      child: surface,
     );
   }
 }

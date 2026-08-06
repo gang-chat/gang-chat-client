@@ -2354,6 +2354,7 @@ class MusicBoxActiveSource {
     this.id = '',
     this.name = '点歌队列',
     this.ownerUserId = '',
+    this.snapshotId = '',
     this.owner,
   });
 
@@ -2361,6 +2362,7 @@ class MusicBoxActiveSource {
   final String id;
   final String name;
   final String ownerUserId;
+  final String snapshotId;
   final MusicBoxRequester? owner;
 
   factory MusicBoxActiveSource.fromJson(Map<String, Object?>? json) {
@@ -2373,6 +2375,7 @@ class MusicBoxActiveSource {
           ? '点歌队列'
           : parsedName ?? '未命名歌单',
       ownerUserId: _stringFromJson(json, const ['owner_user_id']) ?? '',
+      snapshotId: _stringFromJson(json, const ['snapshot_id']) ?? '',
       owner: MusicBoxRequester.fromJson(_nullableMap(json?['owner'])),
     );
   }

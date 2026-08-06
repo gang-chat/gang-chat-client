@@ -62,6 +62,7 @@ import '../protocol/api_client.dart'
     show
         ApiException,
         MessagePage,
+        MusicTrackPreviewApi,
         RoomMusicPlaylistApi,
         UploadCancelledException,
         UploadTransferController;

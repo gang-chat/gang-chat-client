@@ -3645,6 +3645,9 @@ class _SettingsPageState extends State<SettingsPage>
   Widget _buildMusicPlaylistsContent() {
     return MusicPlaylistsPanel(
       controller: _musicPlaylistsController,
+      previewApi: widget.api is MusicTrackPreviewApi
+          ? widget.api as MusicTrackPreviewApi
+          : null,
       previewPlatformFactory: widget.musicTrackPreviewPlatformFactory,
       reloadToken: _playlistReloadToken,
       unavailableMessage: _isManagingUser

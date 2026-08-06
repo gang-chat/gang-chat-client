@@ -362,6 +362,9 @@ extension _HomeShellLayout on _HomeShellState {
           ),
           title: '房间歌单',
           unavailableMessage: '房间歌单需要登录后从服务端读取',
+          previewApi: _services.api is MusicTrackPreviewApi
+              ? _services.api as MusicTrackPreviewApi
+              : null,
           previewPlatformFactory: widget.musicTrackPreviewPlatformFactory,
         ),
       );
@@ -428,6 +431,8 @@ extension _HomeShellLayout on _HomeShellState {
         musicBoxRoom: _selectedRoom == null
             ? null
             : room_display.publicRoomFromRoomDetail(_selectedRoom!),
+        musicTrackPreviewPlatformFactory:
+            widget.musicTrackPreviewPlatformFactory,
         onMusicBoxStateChanged: _applyMusicBoxSnapshot,
         onMusicBoxQueueResult: (result) =>
             unawaited(_queueMusicBoxTrack(result)),

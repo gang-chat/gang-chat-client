@@ -1,4 +1,8 @@
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:client/src/app/music_box_controller.dart';
+import 'package:client/src/app/music_track_preview.dart';
 import 'package:client/src/home/hover_card_anchor.dart';
 import 'package:client/src/home/live_channel_pane.dart';
 import 'package:client/src/home/music_playlist_profile_card.dart';
@@ -64,6 +68,7 @@ Widget _host(
   UserProfileResolver? onResolveUserProfile,
   RoomProfileResolver? onResolveRoomProfile,
   UserProfileActionBuilder? userProfileActionBuilder,
+  MusicTrackPreviewPlatformFactory? previewPlatformFactory,
 }) {
   return MaterialApp(
     theme: uiTheme().copyWith(platform: platform),
@@ -87,6 +92,7 @@ Widget _host(
           onResolveUserProfile: onResolveUserProfile,
           onResolveRoomProfile: onResolveRoomProfile,
           userProfileActionBuilder: userProfileActionBuilder,
+          previewPlatformFactory: previewPlatformFactory,
           onTogglePlayback: () {},
           onSkip: () {},
           onQueueResult: onQueueResult ?? (_) {},
@@ -206,6 +212,87 @@ class _RoomPlaylistApiFake extends _MusicBoxApiFake
       maxPlaylistItems: 500,
     );
   }
+}
+
+class _CloneablePlaylistApiFake extends _RoomPlaylistApiFake
+    implements MusicBoxActivePlaylistCloneApi, MusicTrackPreviewApi {
+  _CloneablePlaylistApiFake(super.state)
+    : super(
+        playlist: const PersonalMusicPlaylist(
+          id: 'unused',
+          name: 'unused',
+          description: '',
+          revision: 1,
+          itemCount: 0,
+          createdAt: null,
+          updatedAt: null,
+        ),
+        items: const [],
+      );
+
+  String? clonedPlaylistId;
+  String? clonedSnapshotId;
+
+  @override
+  Future<PersonalMusicPlaylist> cloneActiveMusicBoxPlaylist({
+    required String roomId,
+    required String playlistId,
+    required String snapshotId,
+  }) async {
+    clonedPlaylistId = playlistId;
+    clonedSnapshotId = snapshotId;
+    return const PersonalMusicPlaylist(
+      id: 'cloned-playlist',
+      name: '朋友的歌单 · 夜晚精选',
+      description: '',
+      revision: 1,
+      itemCount: 2,
+      createdAt: null,
+      updatedAt: null,
+    );
+  }
+
+  @override
+  Future<DownloadedFile> downloadMusicTrackPreview({
+    required String source,
+    required String trackId,
+  }) async {
+    return DownloadedFile(
+      bytes: Uint8List.fromList([1, 2, 3]),
+      filename: 'preview.ogg',
+      mimeType: 'audio/ogg',
+    );
+  }
+}
+
+class _MusicBoxPreviewFactory implements MusicTrackPreviewPlatformFactory {
+  @override
+  MusicTrackPreviewPlatform create() => _MusicBoxPreviewPlatform();
+}
+
+class _MusicBoxPreviewPlatform implements MusicTrackPreviewPlatform {
+  final StreamController<void> _completed = StreamController<void>.broadcast();
+
+  @override
+  Stream<void> get onCompleted => _completed.stream;
+
+  @override
+  Future<MusicTrackPreviewAsset?> findCached(String cacheKey) async => null;
+
+  @override
+  Future<MusicTrackPreviewAsset> store(
+    String cacheKey,
+    Uint8List bytes,
+  ) async => MusicTrackPreviewAsset(cacheKey);
+
+  @override
+  Future<void> play(MusicTrackPreviewAsset asset) async {}
+
+  @override
+  Future<void> stop() async {}
+
+  @override
+  Future<void> dispose() => _completed.close();
 }
 
 MusicBoxState _state({
@@ -561,6 +648,141 @@ void main() {
     expect(find.text('点歌人'), findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  for (final platform in const [
+    TargetPlatform.windows,
+    TargetPlatform.macOS,
+    TargetPlatform.android,
+  ]) {
+    testWidgets(
+      '${platform.name} views and clones another user playlist snapshot',
+      (tester) async {
+        final searchController = TextEditingController();
+        addTearDown(searchController.dispose);
+        const tracks = [
+          MusicBoxQueueItem(
+            id: 'snapshot-track-1',
+            source: 'netease',
+            trackId: 'track-1',
+            title: '第一首完整歌曲',
+            artist: '歌手甲',
+            durationMs: 180000,
+            status: MusicBoxQueueItemStatus.ready,
+            fileSizeBytes: 100,
+            error: '',
+            addedByUserId: 'other-user',
+            createdAt: null,
+          ),
+          MusicBoxQueueItem(
+            id: 'snapshot-track-2',
+            source: 'bilibili',
+            trackId: 'BV1snapshot',
+            title: '第二首完整歌曲',
+            artist: '歌手乙',
+            durationMs: 210000,
+            status: MusicBoxQueueItemStatus.ready,
+            fileSizeBytes: 100,
+            error: '',
+            addedByUserId: 'other-user',
+            createdAt: null,
+          ),
+        ];
+        final state = _state(
+          playbackState: MusicBoxPlaybackState.stopped,
+          positionMs: 1000,
+          queue: tracks,
+          currentItemId: 'snapshot-track-1',
+          activeSource: const MusicBoxActiveSource(
+            type: MusicBoxActiveSourceType.userPlaylist,
+            id: 'other-playlist',
+            name: '夜晚精选',
+            ownerUserId: 'other-user',
+            snapshotId: 'snapshot-1',
+            owner: MusicBoxRequester(
+              userId: 'other-user',
+              username: 'friend',
+              displayName: '朋友',
+              avatarUrl: null,
+              defaultAvatarKey: 'blue-2',
+            ),
+          ),
+        );
+        final api = _CloneablePlaylistApiFake(state);
+
+        await tester.pumpWidget(
+          _host(
+            state,
+            searchController,
+            platform: platform,
+            height: 620,
+            musicBoxController: MusicBoxController(api: api),
+            roomId: 'room-1',
+            currentUser: _playlistCurrentUser,
+            room: _playlistRoom,
+            previewPlatformFactory: _MusicBoxPreviewFactory(),
+          ),
+        );
+
+        final header = find.byKey(
+          const ValueKey<String>('music-box-current-queue-header'),
+        );
+        await tester.tap(header);
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey<String>('music-playlist-card-view')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey<String>('active-music-playlist-dialog')),
+          findsOneWidget,
+        );
+        final dialog = find.byKey(
+          const ValueKey<String>('active-music-playlist-dialog'),
+        );
+        expect(
+          find.descendant(of: dialog, matching: find.text('第一首完整歌曲')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: dialog, matching: find.text('第二首完整歌曲')),
+          findsOneWidget,
+        );
+
+        await tester.tap(
+          find.byKey(
+            const ValueKey<String>(
+              'active-music-playlist-track:snapshot-track-1',
+            ),
+          ),
+        );
+        await tester.pump();
+        expect(
+          find.byKey(
+            const ValueKey<String>('music-track-card:snapshot-track-1'),
+          ),
+          findsOneWidget,
+        );
+        await tester.tap(
+          find.byKey(
+            const ValueKey<String>(
+              'active-music-playlist-track:snapshot-track-1',
+            ),
+          ),
+        );
+        await tester.pump();
+
+        await tester.tap(
+          find.byKey(const ValueKey<String>('active-music-playlist-clone')),
+        );
+        await tester.pumpAndSettle();
+        expect(api.clonedPlaylistId, 'other-playlist');
+        expect(api.clonedSnapshotId, 'snapshot-1');
+        expect(find.text('已克隆到我的歌单'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 
   for (final platform in const [
     TargetPlatform.windows,

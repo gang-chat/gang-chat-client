@@ -7,14 +7,17 @@ import '../app/audio_levels.dart';
 import '../app/live_display.dart' as live_display;
 import '../app/music_box_controller.dart';
 import '../app/music_box_display.dart' as music_box_display;
+import '../app/music_track_preview.dart';
 import '../app/room_display.dart' as room_display;
 import '../live/live_session.dart';
 import '../live/live_video_track_view.dart';
+import '../protocol/api_client.dart';
 import '../protocol/models.dart';
 import '../shell/full_screen_system_ui_controller.dart';
 import '../ui/ui.dart';
 import 'hover_card_anchor.dart';
 import 'music_playlist_profile_card.dart';
+import 'music_track_profile_card.dart';
 import 'room_profile_card.dart';
 
 part 'live_channel_members.dart';
@@ -121,6 +124,7 @@ class LiveChannelPane extends StatefulWidget {
     this.musicBoxController,
     this.musicBoxRoomId,
     this.musicBoxRoom,
+    this.musicTrackPreviewPlatformFactory,
     this.onMusicBoxStateChanged,
     required this.onMusicBoxQueueResult,
     required this.onMusicBoxRemoveItem,
@@ -199,6 +203,7 @@ class LiveChannelPane extends StatefulWidget {
   final MusicBoxController? musicBoxController;
   final String? musicBoxRoomId;
   final PublicRoom? musicBoxRoom;
+  final MusicTrackPreviewPlatformFactory? musicTrackPreviewPlatformFactory;
   final ValueChanged<MusicBoxState>? onMusicBoxStateChanged;
   final ValueChanged<MusicBoxSearchResult> onMusicBoxQueueResult;
   final ValueChanged<MusicBoxQueueItem> onMusicBoxRemoveItem;
@@ -461,6 +466,8 @@ class _LiveChannelPaneState extends State<LiveChannelPane> {
                             controller: widget.musicBoxController,
                             roomId: widget.musicBoxRoomId,
                             room: widget.musicBoxRoom,
+                            previewPlatformFactory:
+                                widget.musicTrackPreviewPlatformFactory,
                             onStateChanged: widget.onMusicBoxStateChanged,
                             currentUser: widget.currentUser,
                             onResolveUserProfile:

@@ -8,6 +8,7 @@ class MusicPlaylistsPanel extends StatefulWidget {
     required this.unavailableMessage,
     this.onLoadingChanged,
     this.title = '歌单管理',
+    this.previewApi,
     this.previewPlatformFactory,
   });
 
@@ -16,6 +17,7 @@ class MusicPlaylistsPanel extends StatefulWidget {
   final String unavailableMessage;
   final ValueChanged<bool>? onLoadingChanged;
   final String title;
+  final MusicTrackPreviewApi? previewApi;
   final MusicTrackPreviewPlatformFactory? previewPlatformFactory;
 
   @override
@@ -97,6 +99,7 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
   void didUpdateWidget(covariant MusicPlaylistsPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller.api != widget.controller.api ||
+        oldWidget.previewApi != widget.previewApi ||
         oldWidget.previewPlatformFactory != widget.previewPlatformFactory) {
       final previous = _previewController;
       _previewController = _createPreviewController();
@@ -122,7 +125,7 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
   }
 
   MusicTrackPreviewController? _createPreviewController() {
-    final api = widget.controller.api;
+    final api = widget.previewApi ?? widget.controller.api;
     final factory = widget.previewPlatformFactory;
     if (api is! MusicTrackPreviewApi || factory == null) return null;
     return MusicTrackPreviewController(api: api, platform: factory.create());
