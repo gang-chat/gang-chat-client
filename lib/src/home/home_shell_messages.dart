@@ -80,6 +80,22 @@ extension _HomeShellMessages on _HomeShellState {
         : _messageQuoteDrafts[roomId] ?? const <MessageQuote>[];
   }
 
+  Message? get _selectedComposerComponent {
+    final roomId = _selectedServerId;
+    return roomId == null ? null : _messageComponentDrafts[roomId];
+  }
+
+  void _removeSelectedComposerComponent() {
+    final roomId = _selectedServerId;
+    if (roomId == null || !_messageComponentDrafts.containsKey(roomId)) return;
+    _setHomeState(() {
+      final next = Map<String, Message>.of(_messageComponentDrafts)
+        ..remove(roomId);
+      _messageComponentDrafts = Map<String, Message>.unmodifiable(next);
+      _saveDraftInState();
+    });
+  }
+
   void _quoteChatMessage(Message message) {
     if (!_canQuoteChatMessage(message)) return;
     final current =
@@ -462,8 +478,12 @@ extension _HomeShellMessages on _HomeShellState {
     final hasAttachments = _stagedAttachments.isNotEmpty;
     final hasQuote =
         (_messageQuoteDrafts[roomId] ?? const <MessageQuote>[]).isNotEmpty;
+    final hasComponent = _messageComponentDrafts.containsKey(roomId);
     final hasVisibleDraft =
-        draftText.trim().isNotEmpty || hasAttachments || hasQuote;
+        draftText.trim().isNotEmpty ||
+        hasAttachments ||
+        hasQuote ||
+        hasComponent;
     final current = _messageDrafts[roomId];
     final currentAttachments = _stagedAttachmentDrafts[roomId] ?? const [];
     final sameText = current == draftText;
@@ -524,6 +544,11 @@ extension _HomeShellMessages on _HomeShellState {
         ..remove(roomId);
       _messageQuoteDrafts = Map<String, List<MessageQuote>>.unmodifiable(next);
     }
+    if (_messageComponentDrafts.containsKey(roomId)) {
+      final next = Map<String, Message>.of(_messageComponentDrafts)
+        ..remove(roomId);
+      _messageComponentDrafts = Map<String, Message>.unmodifiable(next);
+    }
   }
 
   void _cancelAllDraftAttachments() {
@@ -551,6 +576,7 @@ extension _HomeShellMessages on _HomeShellState {
       ..._messageDrafts.keys,
       ..._stagedAttachmentDrafts.keys,
       ..._messageQuoteDrafts.keys,
+      ..._messageComponentDrafts.keys,
     };
     final previews = <String, String>{};
     for (final roomId in roomIds) {
@@ -563,6 +589,12 @@ extension _HomeShellMessages on _HomeShellState {
   String? _roomDraftPreviewFor(String roomId) {
     final attachments = _stagedAttachmentDrafts[roomId] ?? const [];
     final attachment = attachments.isEmpty ? null : attachments.first;
+    final component = _messageComponentDrafts[roomId];
+    if (component != null) {
+      return component.playlistAttachment != null
+          ? '[歌单] ${component.playlistAttachment!.playlist!.name}'
+          : '[歌曲] ${component.musicTrackAttachment!.track!.title}';
+    }
     return room_display.roomDraftPreviewText(
       text: _messageDrafts[roomId],
       attachmentFilename: attachment?.file.name,
@@ -585,6 +617,37 @@ extension _HomeShellMessages on _HomeShellState {
       canReeditRecalledText: _canReeditRecalledTextMessage,
       canInspectRecalledText: _canInspectRecalledTextMessage,
       onViewSharedPlaylist: _viewSharedPlaylistMessage,
+      sharedTrackPreviewController: _sharedMessageTrackPreviewController,
+      loadSharedTrackPlaylists: _loadSharedTrackPlaylists,
+      onAddSharedTrackToPlaylist: _addSharedTrackToPlaylist,
+    );
+  }
+
+  Future<List<PersonalMusicPlaylist>> _loadSharedTrackPlaylists() async {
+    final api = _services.api;
+    if (api is! PersonalMusicPlaylistApi) return const [];
+    final page = await (api as PersonalMusicPlaylistApi)
+        .listPersonalMusicPlaylists(pageSize: 50);
+    return page.playlists;
+  }
+
+  Future<void> _addSharedTrackToPlaylist(
+    SharedMusicTrack track,
+    PersonalMusicPlaylist playlist,
+  ) async {
+    final api = _services.api;
+    if (api is! PersonalMusicPlaylistApi) {
+      throw StateError('当前版本不支持添加到歌单');
+    }
+    await (api as PersonalMusicPlaylistApi).addPersonalMusicPlaylistItem(
+      playlistId: playlist.id,
+      track: MusicBoxSearchResult(
+        trackId: track.trackId,
+        name: track.title,
+        artists: track.artists,
+        source: track.source,
+      ),
+      durationMs: track.durationMs > 0 ? track.durationMs : null,
     );
   }
 
@@ -791,12 +854,27 @@ extension _HomeShellMessages on _HomeShellState {
     BuildContext context,
     Message message,
   ) async {
+    final isMusicComponent =
+        message.playlistAttachment != null ||
+        message.musicTrackAttachment != null;
+    if (isMusicComponent) {
+      final text = message_display.messageClipboardText(message);
+      if (text.isEmpty) {
+        throw Exception('这条消息没有可复制的内容');
+      }
+      await _clipboardService.writeText(text);
+      // Pending messages only carry a local client id and cannot be resolved
+      // to the immutable server snapshot used by structured paste.
+      _copiedMessageComponent = message.pending ? null : message;
+      return;
+    }
+    _copiedMessageComponent = null;
     final attachments = _copyableMessageAttachments(message);
     if (attachments.isNotEmpty) {
       await _copyMessageAttachments(context, message, attachments);
       return;
     }
-    final text = message_display.messageCopyText(message);
+    final text = message_display.messageClipboardText(message);
     if (text.isEmpty) {
       throw Exception('这条消息没有可复制的内容');
     }
@@ -1115,6 +1193,25 @@ extension _HomeShellMessages on _HomeShellState {
 
   Future<void> _sendText(String value) async {
     final body = value.trimRight();
+    final component = _selectedComposerComponent;
+    if (component != null) {
+      if (body.trim().isNotEmpty) {
+        _setHomeState(() => _sendError = '歌单或歌曲组件不能与普通文字同时发送，请先清空文字或移除组件');
+        return;
+      }
+      await _sendComposed(
+        body: '',
+        type: component.type,
+        attachments: [
+          MessageAttachment(
+            type: component.type,
+            sourceMessageId: component.id,
+          ),
+        ],
+        clearComposer: true,
+      );
+      return;
+    }
     // When files are staged, the message goes out as a file message carrying
     // them as attachments (the body rides along). Otherwise it's plain text.
     if (_stagedAttachments.isNotEmpty) {
@@ -1200,6 +1297,11 @@ extension _HomeShellMessages on _HomeShellState {
             }
           });
           if (clearComposer) {
+            _setHomeState(() {
+              final next = Map<String, Message>.of(_messageComponentDrafts)
+                ..remove(room.id);
+              _messageComponentDrafts = Map<String, Message>.unmodifiable(next);
+            });
             _setComposerText('', saveDraft: true);
           } else if (quotes.isNotEmpty) {
             _saveComposerDraftValue(_composerController.text);
@@ -1631,6 +1733,7 @@ extension _HomeShellMessages on _HomeShellState {
   Future<bool> _canPasteAttachments() async {
     if (_selectedRoom == null) return false;
     try {
+      if (await _clipboardContainsCopiedMessageComponent()) return true;
       final paths = await _clipboardService.readFilePaths();
       if (file_display.normalizedFilePaths(paths).isNotEmpty) return true;
       final image = await _clipboardService.readImageFile();
@@ -1643,6 +1746,30 @@ extension _HomeShellMessages on _HomeShellState {
   Future<bool> _pasteAttachments() async {
     if (_selectedRoom == null) return false;
     try {
+      if (await _clipboardContainsCopiedMessageComponent()) {
+        if (!mounted) return false;
+        if (_composerController.text.trim().isNotEmpty) {
+          _setHomeState(() => _sendError = '请先清空输入内容，再粘贴歌单或歌曲组件');
+          return true;
+        }
+        if (_stagedAttachments.isNotEmpty) {
+          _setHomeState(() => _sendError = '请先移除已选文件，再粘贴歌单或歌曲');
+          return true;
+        }
+        final roomId = _selectedServerId;
+        final component = _copiedMessageComponent;
+        if (roomId == null || component == null) return false;
+        _setHomeState(() {
+          final next = Map<String, Message>.of(_messageComponentDrafts);
+          next[roomId] = component;
+          _messageComponentDrafts = Map<String, Message>.unmodifiable(next);
+          _sendError = null;
+          _saveDraftInState();
+        });
+        _composerPanelController.closePanel();
+        _composerPanelController.requestInputFocus();
+        return true;
+      }
       final paths = await _clipboardService.readFilePaths();
       if (!mounted) return false;
       final normalized = file_display.normalizedFilePaths(paths);
@@ -1674,6 +1801,13 @@ extension _HomeShellMessages on _HomeShellState {
     }
   }
 
+  Future<bool> _clipboardContainsCopiedMessageComponent() async {
+    final component = _copiedMessageComponent;
+    if (component == null || component.isRemoved) return false;
+    final clipboardText = await _clipboardService.readText();
+    return clipboardText == message_display.messageClipboardText(component);
+  }
+
   void _handleDroppedFiles(FileDropEvent event) {
     if (!_composerContainsDropPoint(event.x, event.y)) return;
     _stageAttachmentPaths(event.paths);
@@ -1702,6 +1836,12 @@ extension _HomeShellMessages on _HomeShellState {
     if (_selectedRoom == null || files.isEmpty) return;
     final fresh = <_StagedAttachment>[];
     _setHomeState(() {
+      final roomId = _selectedServerId;
+      if (roomId != null && _messageComponentDrafts.containsKey(roomId)) {
+        final next = Map<String, Message>.of(_messageComponentDrafts)
+          ..remove(roomId);
+        _messageComponentDrafts = Map<String, Message>.unmodifiable(next);
+      }
       for (final file in files) {
         final entry = _StagedAttachment(
           id: _messagesController.mintClientId('att'),

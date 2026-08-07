@@ -104,6 +104,9 @@ class ChatMessageActions {
     this.canReeditRecalledText = _neverCanRecall,
     this.canInspectRecalledText = _neverCanRecall,
     this.onViewSharedPlaylist = _noopSharedPlaylist,
+    this.sharedTrackPreviewController,
+    this.loadSharedTrackPlaylists,
+    this.onAddSharedTrackToPlaylist,
   });
 
   const ChatMessageActions.disabled()
@@ -117,7 +120,10 @@ class ChatMessageActions {
       onReeditRecalledText = _syncNoop,
       canReeditRecalledText = _neverCanRecall,
       canInspectRecalledText = _neverCanRecall,
-      onViewSharedPlaylist = _noopSharedPlaylist;
+      onViewSharedPlaylist = _noopSharedPlaylist,
+      sharedTrackPreviewController = null,
+      loadSharedTrackPlaylists = null,
+      onAddSharedTrackToPlaylist = null;
 
   final Future<void> Function(BuildContext context, Message message) onCopy;
   final void Function(Message message) onQuote;
@@ -137,6 +143,14 @@ class ChatMessageActions {
     SharedMusicPlaylist playlist,
   )
   onViewSharedPlaylist;
+  final MusicTrackPreviewController? sharedTrackPreviewController;
+  final Future<List<PersonalMusicPlaylist>> Function()?
+  loadSharedTrackPlaylists;
+  final Future<void> Function(
+    SharedMusicTrack track,
+    PersonalMusicPlaylist playlist,
+  )?
+  onAddSharedTrackToPlaylist;
 
   static Future<void> _noop(BuildContext context, Message message) async {}
   static Future<void> _noopQuote(
@@ -2368,6 +2382,9 @@ class ChatMessageContent extends StatelessWidget {
     this.timestampNow,
     this.showDetailedTimestamps = false,
     this.onViewSharedPlaylist,
+    this.sharedTrackPreviewController,
+    this.loadSharedTrackPlaylists,
+    this.onAddSharedTrackToPlaylist,
   });
 
   final Message message;
@@ -2400,6 +2417,14 @@ class ChatMessageContent extends StatelessWidget {
     SharedMusicPlaylist playlist,
   )?
   onViewSharedPlaylist;
+  final MusicTrackPreviewController? sharedTrackPreviewController;
+  final Future<List<PersonalMusicPlaylist>> Function()?
+  loadSharedTrackPlaylists;
+  final Future<void> Function(
+    SharedMusicTrack track,
+    PersonalMusicPlaylist playlist,
+  )?
+  onAddSharedTrackToPlaylist;
 
   @override
   Widget build(BuildContext context) {
@@ -2451,6 +2476,12 @@ class ChatMessageContent extends StatelessWidget {
             onEnterCommonRoom: onEnterProfileRoom,
             userProfileActionBuilder: profileActionBuilder,
           ),
+          message_display.MessageContentKind.musicTrack => _MusicTrackShareBody(
+            track: message.musicTrackAttachment!.track!,
+            previewController: sharedTrackPreviewController,
+            loadPlaylists: loadSharedTrackPlaylists,
+            onAddToPlaylist: onAddSharedTrackToPlaylist,
+          ),
           message_display.MessageContentKind.text => _TextBody(
             message: message,
             profileCurrentUser: currentUser,
@@ -2493,6 +2524,95 @@ class ChatMessageContent extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+class _MusicTrackShareBody extends StatelessWidget {
+  const _MusicTrackShareBody({
+    required this.track,
+    required this.previewController,
+    required this.loadPlaylists,
+    required this.onAddToPlaylist,
+  });
+
+  final SharedMusicTrack track;
+  final MusicTrackPreviewController? previewController;
+  final Future<List<PersonalMusicPlaylist>> Function()? loadPlaylists;
+  final Future<void> Function(
+    SharedMusicTrack track,
+    PersonalMusicPlaylist playlist,
+  )?
+  onAddToPlaylist;
+
+  @override
+  Widget build(BuildContext context) {
+    final data = MusicTrackCardData(
+      id: track.id,
+      source: track.source,
+      trackId: track.trackId,
+      title: track.title,
+      artists: track.artists,
+      durationMs: track.durationMs,
+    );
+    final artists = track.artists
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .join('、');
+    final panel = Container(
+      key: ValueKey<String>('shared-music-track-message-${track.id}'),
+      constraints: const BoxConstraints(minWidth: 210, maxWidth: 360),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: UiColors.surfaceRaised,
+        border: Border.all(color: UiColors.border),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.music_note, color: UiColors.accent, size: 26),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  track.title,
+                  maxLines: 4,
+                  overflow: TextOverflow.fade,
+                  style: UiTypography.body.copyWith(
+                    color: UiColors.text,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (artists.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    artists,
+                    maxLines: 2,
+                    overflow: TextOverflow.fade,
+                    style: UiTypography.label.copyWith(
+                      color: UiColors.textMuted,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+    final preview = previewController;
+    if (preview == null) return panel;
+    return MusicTrackHoverCard(
+      data: data,
+      previewController: preview,
+      loadPlaylists: loadPlaylists,
+      onAddToPlaylist: onAddToPlaylist == null
+          ? null
+          : (playlist) => onAddToPlaylist!(track, playlist),
+      child: panel,
     );
   }
 }
@@ -2794,6 +2914,12 @@ class _MessageBubbleState extends State<_MessageBubble> {
                 onOpenQuote: widget.messageActions.onOpenQuote,
                 onViewSharedPlaylist:
                     widget.messageActions.onViewSharedPlaylist,
+                sharedTrackPreviewController:
+                    widget.messageActions.sharedTrackPreviewController,
+                loadSharedTrackPlaylists:
+                    widget.messageActions.loadSharedTrackPlaylists,
+                onAddSharedTrackToPlaylist:
+                    widget.messageActions.onAddSharedTrackToPlaylist,
               ),
             ),
           ),

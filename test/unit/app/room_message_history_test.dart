@@ -7,7 +7,16 @@ void main() {
   test('history categories expose stable server values', () {
     expect(
       RoomMessageHistoryCategory.values.map((category) => category.apiValue),
-      ['all', 'links', 'voice', 'stickers', 'images', 'files', 'system'],
+      [
+        'all',
+        'links',
+        'voice',
+        'stickers',
+        'images',
+        'files',
+        'music',
+        'system',
+      ],
     );
   });
 

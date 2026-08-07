@@ -480,6 +480,100 @@ void main() {
     api.close();
   });
 
+  test('music track share serializes source and parses snapshot', () async {
+    const requestedAttachment = MessageAttachment(
+      type: 'music_track',
+      playlistId: 'playlist_1',
+      playlistScope: 'room',
+      sourceRoomId: 'source_room',
+      itemId: 'item_1',
+    );
+    final api = GangApiClient(
+      baseUrl: 'http://example.test/api/v1',
+      accessTokenProvider: ({bool forceRefresh = false}) async => 'token',
+      httpClient: MockClient((request) async {
+        expect(request.method, 'POST');
+        expect(request.url.path, '/api/v1/rooms/room_1/messages');
+        expect(
+          jsonDecode(utf8.decode(request.bodyBytes)) as Map<String, Object?>,
+          {
+            'client_message_id': 'cmsg_track_1',
+            'body': '',
+            'type': 'music_track',
+            'attachments': [requestedAttachment.toJson()],
+          },
+        );
+        return http.Response.bytes(
+          utf8.encode(
+            jsonEncode({
+              'message': {
+                'id': 'msg_track_1',
+                'room_id': 'room_1',
+                'sender': {
+                  'id': 'user_1',
+                  'username': 'alice',
+                  'display_name': 'Alice',
+                },
+                'client_message_id': 'cmsg_track_1',
+                'type': 'music_track',
+                'body': '[歌曲] 晴天',
+                'attachments': [
+                  {
+                    'type': 'music_track',
+                    'track': {
+                      'id': 'item_1',
+                      'playlist_id': 'playlist_1',
+                      'track_id': 'track_1',
+                      'source': 'netease',
+                      'title': '晴天',
+                      'artists': ['周杰伦'],
+                      'duration_ms': 269000,
+                    },
+                  },
+                ],
+                'created_at': '2026-08-07T09:32:00Z',
+              },
+            }),
+          ),
+          201,
+          headers: {'content-type': 'application/json'},
+        );
+      }),
+    );
+
+    final message = await api.sendMessage(
+      roomId: 'room_1',
+      clientMessageId: 'cmsg_track_1',
+      body: '',
+      type: 'music_track',
+      attachments: const [requestedAttachment],
+    );
+
+    expect(message.musicTrackAttachment?.track?.title, '晴天');
+    expect(message.musicTrackAttachment?.track?.trackId, 'track_1');
+    api.close();
+  });
+
+  test('copied music component serializes its source message reference', () {
+    const playlist = MessageAttachment(
+      type: 'playlist',
+      sourceMessageId: 'message_playlist_1',
+    );
+    const track = MessageAttachment(
+      type: 'music_track',
+      sourceMessageId: 'message_track_1',
+    );
+
+    expect(playlist.toJson(), {
+      'type': 'playlist',
+      'source_message_id': 'message_playlist_1',
+    });
+    expect(track.toJson(), {
+      'type': 'music_track',
+      'source_message_id': 'message_track_1',
+    });
+  });
+
   test('shared playlist clone uses the message-scoped endpoint', () async {
     final api = GangApiClient(
       baseUrl: 'http://example.test/api/v1',

@@ -366,6 +366,12 @@ class _RoomMessageHistoryPaneState extends State<_RoomMessageHistoryPane> {
             null,
         onOpenQuote: widget.messageActions.onOpenQuote,
         onViewSharedPlaylist: widget.messageActions.onViewSharedPlaylist,
+        sharedTrackPreviewController:
+            widget.messageActions.sharedTrackPreviewController,
+        loadSharedTrackPlaylists:
+            widget.messageActions.loadSharedTrackPlaylists,
+        onAddSharedTrackToPlaylist:
+            widget.messageActions.onAddSharedTrackToPlaylist,
       ),
       inline: false,
     );
@@ -531,6 +537,13 @@ class _RoomMessageHistoryPaneState extends State<_RoomMessageHistoryPane> {
                               .files,
                           label: '文件',
                           icon: Icons.attach_file,
+                        ),
+                        Segment(
+                          value: room_message_history
+                              .RoomMessageHistoryCategory
+                              .music,
+                          label: '音乐',
+                          icon: Icons.library_music_outlined,
                         ),
                         Segment(
                           value: room_message_history

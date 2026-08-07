@@ -216,6 +216,8 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   List<Message> _messages = const [];
   Map<String, String> _messageDrafts = const {};
   Map<String, List<MessageQuote>> _messageQuoteDrafts = const {};
+  Map<String, Message> _messageComponentDrafts = const {};
+  Message? _copiedMessageComponent;
   Map<String, List<_StagedAttachment>> _stagedAttachmentDrafts = const {};
   bool _updatingComposerFromDraft = false;
   message_mentions.MessageMentionQuery? _composerMentionQuery;
@@ -317,6 +319,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   bool _screenSharing = false;
   bool _switchingAndroidLocalVideoSource = false;
   bool _voiceBlocked = false;
+  MusicTrackPreviewController? _sharedMessageTrackPreviewController;
   final Set<String> _busyLiveMemberRemovalIds = <String>{};
   final Set<String> _busyLiveMemberModerationIds = <String>{};
   // The selected room's music box snapshot, or null when not loaded / disabled.
@@ -579,6 +582,8 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     unawaited(_livePresenceSoundPlayer.dispose());
     unawaited(_livePresenceSpeechPlayer.dispose());
     unawaited(_messageNotificationSoundPlayer.dispose());
+    final sharedTrackPreview = _sharedMessageTrackPreviewController;
+    if (sharedTrackPreview != null) unawaited(sharedTrackPreview.dispose());
     widget.app.serverClock.removeListener(_handleServerClockChanged);
     _cancelActiveDownloads();
     _services.close();
@@ -650,12 +655,23 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   }
 
   void _installServices() {
+    final previousSharedTrackPreview = _sharedMessageTrackPreviewController;
     _services = AuthenticatedAppServices(
       widget.app,
       audioDeviceStore: widget.audioDeviceStore,
       liveSessionController: widget.liveSessionController,
       realtime: widget.realtime,
     );
+    final api = _services.api;
+    _sharedMessageTrackPreviewController = api is MusicTrackPreviewApi
+        ? MusicTrackPreviewController(
+            api: api as MusicTrackPreviewApi,
+            platform: widget.musicTrackPreviewPlatformFactory.create(),
+          )
+        : null;
+    if (previousSharedTrackPreview != null) {
+      unawaited(previousSharedTrackPreview.dispose());
+    }
   }
 
   void _installAndroidPushRegistration() {

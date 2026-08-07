@@ -166,6 +166,28 @@ void main() {
         ),
         MessageContentKind.playlist,
       );
+      expect(
+        messageContentKind(
+          _message(
+            type: 'music_track',
+            attachments: const [
+              MessageAttachment(
+                type: 'music_track',
+                track: SharedMusicTrack(
+                  id: 'item_1',
+                  playlistId: 'playlist_1',
+                  trackId: 'track_1',
+                  source: 'netease',
+                  title: '歌曲',
+                  artists: ['歌手'],
+                  durationMs: 180000,
+                ),
+              ),
+            ],
+          ),
+        ),
+        MessageContentKind.musicTrack,
+      );
     },
   );
 
@@ -340,6 +362,77 @@ void main() {
       ),
       'Admin 删除了一条消息',
     );
+  });
+
+  test('messageClipboardText preserves complete music components', () {
+    const creator = UserSummary(
+      id: 'user_creator',
+      username: 'alice',
+      displayName: 'Alice',
+      avatarUrl: null,
+      defaultAvatarKey: 'blue-3',
+      roomDisplayName: '房内 Alice',
+    );
+    final playlistMessage = _message(
+      type: 'playlist',
+      body: '[歌单] 夜晚',
+      attachments: [
+        MessageAttachment(
+          type: 'playlist',
+          playlist: SharedMusicPlaylist(
+            id: 'playlist_1',
+            name: '夜晚',
+            description: '适合夜里',
+            itemCount: 1,
+            createdAt: DateTime.utc(2026, 8, 7, 9, 30),
+            creator: creator,
+            items: [
+              PersonalMusicPlaylistItem(
+                id: 'item_1',
+                playlistId: 'playlist_1',
+                trackId: 'track_1',
+                source: 'netease',
+                title: '晴天',
+                artists: const ['周杰伦'],
+                durationMs: 269000,
+                sortOrder: 10,
+                createdAt: null,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+    final playlistText = messageClipboardText(playlistMessage);
+    expect(playlistText, contains('[歌单] 夜晚'));
+    expect(playlistText, contains('歌曲数量：1'));
+    expect(playlistText, contains('创建人：房内 Alice'));
+    expect(playlistText, contains('1. 晴天 - 周杰伦 [netease:track_1]'));
+
+    final trackText = messageClipboardText(
+      _message(
+        type: 'music_track',
+        body: '[歌曲] 晴天',
+        attachments: const [
+          MessageAttachment(
+            type: 'music_track',
+            track: SharedMusicTrack(
+              id: 'item_1',
+              playlistId: 'playlist_1',
+              trackId: 'track_1',
+              source: 'netease',
+              title: '晴天',
+              artists: ['周杰伦'],
+              durationMs: 269000,
+            ),
+          ),
+        ],
+      ),
+    );
+    expect(trackText, contains('[歌曲] 晴天'));
+    expect(trackText, contains('歌手：周杰伦'));
+    expect(trackText, contains('时长：4:29'));
+    expect(trackText, contains('链接标识：track_1'));
   });
 
   test('messageQuoteSnapshot omits the sender for system messages', () {

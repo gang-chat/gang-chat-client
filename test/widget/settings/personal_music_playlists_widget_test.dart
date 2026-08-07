@@ -611,8 +611,12 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.descendant(of: item, matching: find.byTooltip('删除')),
+        find.descendant(of: item, matching: find.byTooltip('分享歌曲')),
         findsOneWidget,
+      );
+      expect(
+        find.descendant(of: item, matching: find.byTooltip('删除')),
+        findsNothing,
       );
       expect(
         tester
@@ -828,6 +832,46 @@ void main() {
 
       expect(api.shareRequests, ['room_2:playlist:mbp_1']);
       expect(find.textContaining('已将“夜晚”分享到“另一个房间”'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'playlist item share replaces single delete and sends a snapshot reference',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(720, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final api = _FakePersonalPlaylistApi();
+
+      await _pumpPlaylistSettings(tester, api);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('personal-music-playlist-card-mbp_1')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('manage-personal-music-playlist-items')),
+      );
+      await tester.pumpAndSettle();
+
+      final shareButton = find.byKey(
+        const ValueKey('share-music-playlist-item-mbpi_1'),
+      );
+      expect(shareButton, findsOneWidget);
+      expect(find.byIcon(Icons.delete_outline), findsOneWidget);
+      await tester.tap(shareButton);
+      await tester.pumpAndSettle();
+
+      expect(find.text('分享歌曲'), findsOneWidget);
+      await tester.tap(
+        find.byKey(const ValueKey('music-track-share-room-option-room_2')),
+      );
+      await tester.pump();
+      await tester.tap(find.text('确认分享'));
+      await tester.pumpAndSettle();
+
+      expect(api.shareRequests, ['room_2:music_track:mbp_1:mbpi_1']);
+      expect(find.textContaining('已将“晴天”分享到'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -2204,8 +2248,11 @@ class _FakePersonalPlaylistApi
     List<String> quoteMessageIds = const [],
     String? idempotencyKey,
   }) async {
-    final playlistId = attachments.single.playlistId;
-    shareRequests.add('$roomId:$type:$playlistId');
+    final attachment = attachments.single;
+    final identifier = type == 'music_track'
+        ? '${attachment.playlistId}:${attachment.itemId}'
+        : attachment.playlistId;
+    shareRequests.add('$roomId:$type:$identifier');
     return Message(
       id: 'message_${shareRequests.length}',
       roomId: roomId,

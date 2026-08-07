@@ -197,6 +197,11 @@ class PersonalMusicPlaylistsController {
 
   bool get roomScoped => _backend is _RoomMusicPlaylistsBackend;
 
+  String? get sourceRoomId {
+    final backend = _backend;
+    return backend is _RoomMusicPlaylistsBackend ? backend.roomId : null;
+  }
+
   bool get canImportPersonalPlaylist =>
       _backend?.canImportPersonalPlaylist ?? false;
 

@@ -30,6 +30,7 @@ import '../app/composer_attachment_display.dart' as composer_attachment;
 import '../app/live_display.dart' as live_display;
 import '../app/message_display.dart' as message_display;
 import '../app/message_mentions.dart' as message_mentions;
+import '../app/music_track_preview.dart';
 import '../app/room_display.dart' as room_display;
 import '../app/sticker_display.dart' as sticker_display;
 import '../app/voice_message_display.dart' as voice_display;
@@ -40,6 +41,7 @@ import 'adaptive_layout.dart';
 import 'chat_image_preview.dart';
 import 'hover_card_anchor.dart';
 import 'music_playlist_profile_card.dart';
+import 'music_track_profile_card.dart';
 import 'room_profile_card.dart';
 
 export 'chat_image_preview.dart';
@@ -98,6 +100,8 @@ class ChatPane extends StatelessWidget {
     required this.composerAttachments,
     this.composerQuotes = const [],
     this.onRemoveComposerQuote,
+    this.composerComponent,
+    this.onRemoveComposerComponent,
     required this.fileActionHighlighted,
     this.mentionOptions = const [],
     this.mentionMembers = const [],
@@ -165,6 +169,8 @@ class ChatPane extends StatelessWidget {
   final List<composer_attachment.ComposerAttachmentView> composerAttachments;
   final List<MessageQuote> composerQuotes;
   final ValueChanged<String>? onRemoveComposerQuote;
+  final Message? composerComponent;
+  final VoidCallback? onRemoveComposerComponent;
   final bool fileActionHighlighted;
   final List<message_mentions.MessageMentionOption> mentionOptions;
   final List<RoomMember> mentionMembers;
@@ -316,6 +322,8 @@ class ChatPane extends StatelessWidget {
                 attachments: composerAttachments,
                 quotes: composerQuotes,
                 onRemoveQuote: onRemoveComposerQuote,
+                component: composerComponent,
+                onRemoveComponent: onRemoveComposerComponent,
                 imagePreviewActions: imagePreviewActions,
                 fileActionHighlighted: fileActionHighlighted,
                 mentionOptions: mentionOptions,

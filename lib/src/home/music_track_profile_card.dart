@@ -39,6 +39,7 @@ class MusicTrackHoverCard extends StatefulWidget {
     required this.previewController,
     required this.child,
     this.playlists = const [],
+    this.loadPlaylists,
     this.playlistsRoomScoped = false,
     this.onAddToPlaylist,
   });
@@ -47,6 +48,7 @@ class MusicTrackHoverCard extends StatefulWidget {
   final MusicTrackPreviewController previewController;
   final Widget child;
   final List<PersonalMusicPlaylist> playlists;
+  final Future<List<PersonalMusicPlaylist>> Function()? loadPlaylists;
   final bool playlistsRoomScoped;
   final Future<void> Function(PersonalMusicPlaylist playlist)? onAddToPlaylist;
 
@@ -57,6 +59,8 @@ class MusicTrackHoverCard extends StatefulWidget {
 class _MusicTrackHoverCardState extends State<MusicTrackHoverCard> {
   bool _showPlaylistPicker = false;
   String? _addingPlaylistId;
+  List<PersonalMusicPlaylist>? _loadedPlaylists;
+  bool _loadingPlaylists = false;
 
   @override
   void didUpdateWidget(covariant MusicTrackHoverCard oldWidget) {
@@ -68,6 +72,29 @@ class _MusicTrackHoverCardState extends State<MusicTrackHoverCard> {
       );
       _showPlaylistPicker = false;
       _addingPlaylistId = null;
+    }
+    if (oldWidget.loadPlaylists != widget.loadPlaylists) {
+      _loadedPlaylists = null;
+      _loadingPlaylists = false;
+    }
+  }
+
+  Future<void> _ensurePlaylistsLoaded() async {
+    final load = widget.loadPlaylists;
+    if (load == null || _loadedPlaylists != null || _loadingPlaylists) return;
+    setState(() => _loadingPlaylists = true);
+    try {
+      final playlists = await load();
+      if (mounted) setState(() => _loadedPlaylists = playlists);
+    } catch (error) {
+      if (mounted) {
+        showFloatingErrorNotice(
+          context,
+          userFacingErrorMessage(error, fallback: '加载歌单失败，请重试'),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loadingPlaylists = false);
     }
   }
 
@@ -118,6 +145,7 @@ class _MusicTrackHoverCardState extends State<MusicTrackHoverCard> {
       cardWidth: 304,
       resetKey: Object.hash(widget.data.id, trackKey),
       onVisibilityChanged: (visible) {
+        if (visible) unawaited(_ensurePlaylistsLoaded());
         if (!visible) {
           unawaited(widget.previewController.stopIf(trackKey));
           if (_showPlaylistPicker && mounted) {
@@ -135,7 +163,8 @@ class _MusicTrackHoverCardState extends State<MusicTrackHoverCard> {
             loading: preview.isLoading(trackKey),
             playing: preview.isPlaying(trackKey),
             onTogglePreview: _togglePreview,
-            playlists: widget.playlists,
+            playlists: _loadedPlaylists ?? widget.playlists,
+            loadingPlaylists: _loadingPlaylists,
             playlistsRoomScoped: widget.playlistsRoomScoped,
             showPlaylistPicker: _showPlaylistPicker,
             addingPlaylistId: _addingPlaylistId,
@@ -160,6 +189,7 @@ class _MusicTrackProfileCard extends StatelessWidget {
     required this.playing,
     required this.onTogglePreview,
     required this.playlists,
+    required this.loadingPlaylists,
     required this.playlistsRoomScoped,
     required this.showPlaylistPicker,
     required this.addingPlaylistId,
@@ -173,6 +203,7 @@ class _MusicTrackProfileCard extends StatelessWidget {
   final bool playing;
   final VoidCallback onTogglePreview;
   final List<PersonalMusicPlaylist> playlists;
+  final bool loadingPlaylists;
   final bool playlistsRoomScoped;
   final bool showPlaylistPicker;
   final String? addingPlaylistId;
@@ -274,7 +305,12 @@ class _MusicTrackProfileCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: UiSpacing.sm),
-            if (playlists.isEmpty)
+            if (loadingPlaylists)
+              const SizedBox(
+                height: 54,
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (playlists.isEmpty)
               const SizedBox(
                 height: 54,
                 child: Center(

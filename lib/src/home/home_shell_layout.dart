@@ -370,6 +370,8 @@ extension _HomeShellLayout on _HomeShellState {
               ? _services.api as MusicTrackPreviewApi
               : null,
           previewPlatformFactory: widget.musicTrackPreviewPlatformFactory,
+          shareApi: _services.api,
+          currentUser: _currentUser,
         ),
       );
     }
@@ -514,6 +516,8 @@ extension _HomeShellLayout on _HomeShellState {
       composerAttachments: _stagedAttachmentViews,
       composerQuotes: _selectedComposerQuotes,
       onRemoveComposerQuote: _removeSelectedComposerQuote,
+      composerComponent: _selectedComposerComponent,
+      onRemoveComposerComponent: _removeSelectedComposerComponent,
       fileActionHighlighted:
           _pickingAttachments || _stagedAttachments.isNotEmpty,
       mentionOptions: _composerMentionOptions,

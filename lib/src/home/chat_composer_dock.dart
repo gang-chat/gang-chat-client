@@ -27,6 +27,8 @@ class _ComposerDock extends StatelessWidget {
     required this.attachments,
     required this.quotes,
     required this.onRemoveQuote,
+    required this.component,
+    required this.onRemoveComponent,
     required this.imagePreviewActions,
     required this.fileActionHighlighted,
     required this.mentionOptions,
@@ -65,6 +67,8 @@ class _ComposerDock extends StatelessWidget {
   final List<composer_attachment.ComposerAttachmentView> attachments;
   final List<MessageQuote> quotes;
   final ValueChanged<String>? onRemoveQuote;
+  final Message? component;
+  final VoidCallback? onRemoveComponent;
   final ChatImagePreviewActions imagePreviewActions;
   final bool fileActionHighlighted;
   final List<message_mentions.MessageMentionOption> mentionOptions;
@@ -137,7 +141,7 @@ class _ComposerDock extends StatelessWidget {
               inputFormatters: inputFormatters,
               onPasteFiles: onPasteFiles,
               onCanPasteFiles: onCanPasteFiles,
-              header: quotes.isEmpty
+              header: quotes.isEmpty && component == null
                   ? null
                   : Column(
                       mainAxisSize: MainAxisSize.min,
@@ -152,6 +156,13 @@ class _ComposerDock extends StatelessWidget {
                                 : () => onRemoveQuote!(quotes[index].messageId),
                             compact: true,
                             imagePreviewActions: imagePreviewActions,
+                          ),
+                        ],
+                        if (component != null) ...[
+                          if (quotes.isNotEmpty) const SizedBox(height: 6),
+                          _ComposerMessageComponentCard(
+                            message: component!,
+                            onClose: onRemoveComponent,
                           ),
                         ],
                       ],
@@ -218,6 +229,88 @@ class _ComposerDock extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ComposerMessageComponentCard extends StatelessWidget {
+  const _ComposerMessageComponentCard({
+    required this.message,
+    required this.onClose,
+  });
+
+  final Message message;
+  final VoidCallback? onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final playlist = message.playlistAttachment?.playlist;
+    final track = message.musicTrackAttachment?.track;
+    final isPlaylist = playlist != null;
+    final title = playlist?.name ?? track?.title ?? message.body.trim();
+    final artists =
+        track?.artists
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty)
+            .join(' / ') ??
+        '';
+    final subtitle = isPlaylist
+        ? '${playlist.itemCount} 首歌曲'
+        : artists.isEmpty
+        ? '歌曲'
+        : artists;
+    return Container(
+      key: const ValueKey('composer-message-component'),
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
+      decoration: BoxDecoration(
+        color: UiColors.surfaceRaised,
+        border: Border.all(color: UiColors.border),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(
+            isPlaylist ? Icons.queue_music_outlined : Icons.music_note,
+            color: UiColors.accent,
+            size: 22,
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: UiTypography.body.copyWith(
+                    color: UiColors.text,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: UiTypography.label.copyWith(color: UiColors.textMuted),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            key: const ValueKey('remove-composer-message-component'),
+            onPressed: onClose,
+            icon: const Icon(Icons.close),
+            iconSize: 16,
+            color: UiColors.textMuted,
+            tooltip: '移除组件',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            splashRadius: 16,
+          ),
+        ],
       ),
     );
   }

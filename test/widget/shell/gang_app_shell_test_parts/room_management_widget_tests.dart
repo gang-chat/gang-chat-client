@@ -482,6 +482,16 @@ void registerShellRoomManagementWidgetTests() {
       ),
       isTrue,
     );
+    await tester.tap(find.text('音乐'));
+    await tester.pumpAndSettle();
+    expect(
+      requestedUris.any(
+        (uri) =>
+            uri.path == '/api/v1/rooms/server-alpha/message-history' &&
+            uri.queryParameters['category'] == 'music',
+      ),
+      isTrue,
+    );
 
     await tester.tap(
       find.byKey(const ValueKey('room-message-history-member-filter')),

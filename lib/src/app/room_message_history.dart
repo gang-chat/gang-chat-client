@@ -8,6 +8,7 @@ enum RoomMessageHistoryCategory {
   stickers,
   images,
   files,
+  music,
   system,
 }
 
@@ -19,6 +20,7 @@ extension RoomMessageHistoryCategoryValue on RoomMessageHistoryCategory {
     RoomMessageHistoryCategory.stickers => 'stickers',
     RoomMessageHistoryCategory.images => 'images',
     RoomMessageHistoryCategory.files => 'files',
+    RoomMessageHistoryCategory.music => 'music',
     RoomMessageHistoryCategory.system => 'system',
   };
 }

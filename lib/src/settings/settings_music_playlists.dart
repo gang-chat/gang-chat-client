@@ -53,6 +53,7 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
   bool _mergingPlaylists = false;
   String? _cloningPlaylistId;
   String? _sharingPlaylistId;
+  String? _sharingItemId;
   bool _deletingItems = false;
   bool _addingSelectedItems = false;
   bool _pinningItems = false;
@@ -100,7 +101,8 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
       _busyPlaylistIds.isNotEmpty ||
       _deletingItems ||
       _addingSelectedItems ||
-      _pinningItems;
+      _pinningItems ||
+      _sharingItemId != null;
 
   @override
   void initState() {
@@ -721,6 +723,56 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
     }
   }
 
+  Future<void> _sharePlaylistItem(PersonalMusicPlaylistItem item) async {
+    final api = widget.shareApi;
+    final playlist = _activePlaylist;
+    if (api == null || playlist == null || _sharingItemId != null) return;
+    final room = await showDialog<RoomCard>(
+      context: context,
+      builder: (context) => _MusicPlaylistShareRoomDialog(
+        api: api,
+        playlistName: item.title,
+        currentUser: widget.currentUser,
+        dialogTitle: '分享歌曲',
+        itemLabel: '歌曲',
+        keyPrefix: 'music-track-share-room',
+      ),
+    );
+    if (!mounted || room == null) return;
+    setState(() {
+      _sharingItemId = item.id;
+      _error = null;
+    });
+    try {
+      await api.sendMessage(
+        roomId: room.id,
+        clientMessageId: newUuid(),
+        body: '',
+        type: 'music_track',
+        attachments: [
+          MessageAttachment(
+            type: 'music_track',
+            playlistId: playlist.id,
+            playlistScope: widget.controller.roomScoped ? 'room' : 'personal',
+            sourceRoomId: widget.controller.sourceRoomId,
+            itemId: item.id,
+          ),
+        ],
+      );
+      if (!mounted) return;
+      showFloatingSuccessNotice(
+        context,
+        '已将“${item.title}”分享到“${room.displayName}”',
+      );
+    } catch (error) {
+      if (mounted) showFloatingErrorNotice(context, '分享歌曲失败：$error');
+    } finally {
+      if (mounted && _sharingItemId == item.id) {
+        setState(() => _sharingItemId = null);
+      }
+    }
+  }
+
   Future<void> _movePlaylist(PersonalMusicPlaylist playlist, int delta) async {
     if (!_capabilities.canReorderPlaylists ||
         _playlistManagementBusy ||
@@ -1049,42 +1101,6 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
     }
   }
 
-  Future<void> _deleteSingleItem(PersonalMusicPlaylistItem item) async {
-    final playlist = _activePlaylist;
-    if (!_capabilities.canDeleteItems ||
-        playlist == null ||
-        _busyItemIds.contains(item.id)) {
-      return;
-    }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => StickerConfirmDialog(
-        title: '删除歌曲',
-        body: '确定从“${playlist.name}”中删除“${item.title}”吗？',
-        confirmLabel: '删除',
-        confirmIcon: Icons.delete_outline,
-        danger: true,
-      ),
-    );
-    if (!mounted || confirmed != true) return;
-    setState(() {
-      _busyItemIds.add(item.id);
-      _error = null;
-    });
-    try {
-      await widget.controller.deleteItems(
-        playlistId: playlist.id,
-        itemIds: [item.id],
-      );
-      await _loadItems(reset: true);
-      await _reloadPlaylistSummariesWithoutClosing();
-    } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
-    } finally {
-      if (mounted) setState(() => _busyItemIds.remove(item.id));
-    }
-  }
-
   Future<void> _moveItem(PersonalMusicPlaylistItem item, int delta) async {
     final playlist = _activePlaylist;
     if (!_capabilities.canReorderItems ||
@@ -1363,12 +1379,15 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
               _pinningItems ||
               _deletingItems ||
               _addingSelectedItems ||
+              _sharingItemId == item.id ||
               _busyItemIds.contains(item.id),
           canMoveUp: !_filterActive && index > 0,
           canMoveDown:
               !_filterActive && (index < _items.length - 1 || _itemsHaveMore),
           onTap: () => _toggleItemSelection(item.id),
-          onDelete: () => _deleteSingleItem(item),
+          onShare: widget.shareApi == null
+              ? null
+              : () => _sharePlaylistItem(item),
           onMoveUp: () => _moveItem(item, -1),
           onMoveDown: () => _moveItem(item, 1),
           previewController: _previewController,
@@ -2039,7 +2058,7 @@ class _MusicPlaylistItemTile extends StatelessWidget {
     required this.canMoveUp,
     required this.canMoveDown,
     required this.onTap,
-    required this.onDelete,
+    required this.onShare,
     required this.onMoveUp,
     required this.onMoveDown,
     required this.previewController,
@@ -2055,7 +2074,7 @@ class _MusicPlaylistItemTile extends StatelessWidget {
   final bool canMoveUp;
   final bool canMoveDown;
   final VoidCallback onTap;
-  final VoidCallback onDelete;
+  final VoidCallback? onShare;
   final VoidCallback onMoveUp;
   final VoidCallback onMoveDown;
   final MusicTrackPreviewController? previewController;
@@ -2149,14 +2168,15 @@ class _MusicPlaylistItemTile extends StatelessWidget {
             icon: const Icon(Icons.arrow_downward),
             size: 36,
           ),
-          ButtonIcon(
-            tooltip: '删除',
-            onPressed: busy ? null : onDelete,
-            tone: ButtonTone.danger,
-            icon: const Icon(Icons.delete_outline),
-            size: 36,
-            loading: busy,
-          ),
+          if (onShare != null)
+            ButtonIcon(
+              key: ValueKey<String>('share-music-playlist-item-${item.id}'),
+              tooltip: '分享歌曲',
+              onPressed: busy ? null : onShare,
+              icon: const Icon(Icons.share_outlined),
+              size: 36,
+              loading: busy,
+            ),
         ],
       ),
     );
@@ -2795,11 +2815,17 @@ class _MusicPlaylistShareRoomDialog extends StatefulWidget {
     required this.api,
     required this.playlistName,
     required this.currentUser,
+    this.dialogTitle = '分享歌单',
+    this.itemLabel = '歌单',
+    this.keyPrefix = 'music-playlist-share-room',
   });
 
   final GangApi api;
   final String playlistName;
   final CurrentUser? currentUser;
+  final String dialogTitle;
+  final String itemLabel;
+  final String keyPrefix;
 
   @override
   State<_MusicPlaylistShareRoomDialog> createState() =>
@@ -2920,7 +2946,7 @@ class _MusicPlaylistShareRoomDialogState
       560.0,
     );
     return DialogFrame(
-      title: '分享歌单',
+      title: widget.dialogTitle,
       icon: Icons.share_outlined,
       maxWidth: 620,
       adaptiveActions: [
@@ -2941,12 +2967,12 @@ class _MusicPlaylistShareRoomDialogState
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              '选择要将歌单“${widget.playlistName}”分享到的文字频道',
+              '选择要将${widget.itemLabel}“${widget.playlistName}”分享到的文字频道',
               style: const TextStyle(color: _textMuted, fontSize: 12),
             ),
             const SizedBox(height: 10),
             Input(
-              key: const ValueKey('music-playlist-share-room-search'),
+              key: ValueKey('${widget.keyPrefix}-search'),
               controller: _searchController,
               focusNode: _searchFocusNode,
               prefixIcon: Icons.search,
@@ -2982,7 +3008,7 @@ class _MusicPlaylistShareRoomDialogState
                               if (widget.currentUser case final currentUser?)
                                 RoomHoverCard(
                                   key: ValueKey<String>(
-                                    'music-playlist-share-room-profile-${room.id}',
+                                    '${widget.keyPrefix}-profile-${room.id}',
                                   ),
                                   room: _roomProfile(room),
                                   currentUser: currentUser,
@@ -3009,7 +3035,7 @@ class _MusicPlaylistShareRoomDialogState
                               Expanded(
                                 child: UiPointerTapRegion(
                                   key: ValueKey(
-                                    'music-playlist-share-room-option-${room.id}',
+                                    '${widget.keyPrefix}-option-${room.id}',
                                   ),
                                   onTap: () =>
                                       setState(() => _selectedRoomId = room.id),

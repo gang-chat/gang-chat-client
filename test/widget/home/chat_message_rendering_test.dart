@@ -1599,6 +1599,55 @@ void main() {
     expect(removed, 'composer_source');
   });
 
+  testWidgets('copied music component is complete and removable in composer', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    var removed = false;
+    final component = _message(
+      type: 'music_track',
+      body: '[歌曲] 很长但必须完整显示的歌曲名称',
+      attachments: const [
+        MessageAttachment(
+          type: 'music_track',
+          track: SharedMusicTrack(
+            id: 'item_1',
+            playlistId: 'playlist_1',
+            trackId: 'track_1',
+            source: 'netease',
+            title: '很长但必须完整显示的歌曲名称',
+            artists: ['歌手甲', '歌手乙'],
+            durationMs: 180000,
+          ),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _host(
+        _chatPane(
+          controller: controller,
+          room: _roomDetail,
+          messages: const [],
+          composerComponent: component,
+          onRemoveComposerComponent: () => removed = true,
+        ),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('composer-message-component')),
+      findsOneWidget,
+    );
+    expect(find.text('很长但必须完整显示的歌曲名称'), findsOneWidget);
+    expect(find.text('歌手甲 / 歌手乙'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('remove-composer-message-component')),
+    );
+    expect(removed, isTrue);
+  });
+
   testWidgets('image quote shows only a clickable thumbnail', (tester) async {
     MessageQuote? opened;
     final quote = MessageQuote(
@@ -3055,6 +3104,8 @@ Widget _chatPane({
   VoidCallback? onViewedNewMessages,
   List<MessageQuote> composerQuotes = const [],
   ValueChanged<String>? onRemoveComposerQuote,
+  Message? composerComponent,
+  VoidCallback? onRemoveComposerComponent,
 }) {
   return ChatPane(
     currentUser: _currentUser,
@@ -3083,6 +3134,8 @@ Widget _chatPane({
     composerAttachments: const <composer_attachment.ComposerAttachmentView>[],
     composerQuotes: composerQuotes,
     onRemoveComposerQuote: onRemoveComposerQuote,
+    composerComponent: composerComponent,
+    onRemoveComposerComponent: onRemoveComposerComponent,
     fileActionHighlighted: false,
     mentionMembers: mentionMembers,
     mentionMembersReady: mentionMembersReady,

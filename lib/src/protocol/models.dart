@@ -572,7 +572,12 @@ class MessageAttachment {
   const MessageAttachment({
     required this.type,
     this.playlistId,
+    this.playlistScope,
+    this.sourceRoomId,
+    this.sourceMessageId,
+    this.itemId,
     this.playlist,
+    this.track,
     this.stickerId,
     this.name,
     this.asset,
@@ -589,7 +594,12 @@ class MessageAttachment {
 
   final String type;
   final String? playlistId;
+  final String? playlistScope;
+  final String? sourceRoomId;
+  final String? sourceMessageId;
+  final String? itemId;
   final SharedMusicPlaylist? playlist;
+  final SharedMusicTrack? track;
   final String? stickerId;
   final String? name;
   final UploadedAsset? asset;
@@ -609,12 +619,18 @@ class MessageAttachment {
     final actorJson = _nullableMap(json['actor']);
     final targetJson = _nullableMap(json['target']);
     final playlistJson = _nullableMap(json['playlist']);
+    final trackJson = _nullableMap(json['track']);
     return MessageAttachment(
       type: json['type'] as String? ?? 'file',
       playlistId: _stringFromJson(json, const ['playlist_id']),
+      playlistScope: _stringFromJson(json, const ['playlist_scope']),
+      sourceRoomId: _stringFromJson(json, const ['source_room_id']),
+      sourceMessageId: _stringFromJson(json, const ['source_message_id']),
+      itemId: _stringFromJson(json, const ['item_id']),
       playlist: playlistJson == null
           ? null
           : SharedMusicPlaylist.fromJson(playlistJson),
+      track: trackJson == null ? null : SharedMusicTrack.fromJson(trackJson),
       stickerId: json['sticker_id'] as String?,
       name: json['name'] as String?,
       asset: assetJson == null ? null : UploadedAsset.fromJson(assetJson),
@@ -634,7 +650,12 @@ class MessageAttachment {
     return {
       'type': type,
       if (playlistId != null) 'playlist_id': playlistId,
+      if (playlistScope != null) 'playlist_scope': playlistScope,
+      if (sourceRoomId != null) 'source_room_id': sourceRoomId,
+      if (sourceMessageId != null) 'source_message_id': sourceMessageId,
+      if (itemId != null) 'item_id': itemId,
       if (playlist != null) 'playlist': playlist!.toJson(),
+      if (track != null) 'track': track!.toJson(),
       if (stickerId != null) 'sticker_id': stickerId,
       if (name != null) 'name': name,
       if (asset != null) 'asset': asset!.toJson(),
@@ -647,6 +668,54 @@ class MessageAttachment {
       if (toRole != null) 'to_role': toRole,
       if (oldValue != null) 'old_value': oldValue,
       if (newValue != null) 'new_value': newValue,
+    };
+  }
+}
+
+/// Immutable song metadata embedded in a chat message at send time.
+class SharedMusicTrack {
+  const SharedMusicTrack({
+    required this.id,
+    required this.playlistId,
+    required this.trackId,
+    required this.source,
+    required this.title,
+    required this.artists,
+    required this.durationMs,
+  });
+
+  final String id;
+  final String playlistId;
+  final String trackId;
+  final String source;
+  final String title;
+  final List<String> artists;
+  final int durationMs;
+
+  factory SharedMusicTrack.fromJson(Map<String, Object?> json) {
+    return SharedMusicTrack(
+      id: _stringFromJson(json, const ['id']) ?? '',
+      playlistId: _stringFromJson(json, const ['playlist_id']) ?? '',
+      trackId: _stringFromJson(json, const ['track_id']) ?? '',
+      source: _stringFromJson(json, const ['source']) ?? '',
+      title: _stringFromJson(json, const ['title', 'name']) ?? '',
+      artists: (json['artists'] as List<Object?>? ?? const [])
+          .map((value) => value?.toString().trim() ?? '')
+          .where((value) => value.isNotEmpty)
+          .toList(growable: false),
+      durationMs: _intFromJson(json, const ['duration_ms']) ?? 0,
+    );
+  }
+
+  Map<String, Object?> toJson() {
+    return {
+      'id': id,
+      'playlist_id': playlistId,
+      'track_id': trackId,
+      'source': source,
+      'title': title,
+      'artists': artists,
+      'duration_ms': durationMs,
     };
   }
 }
@@ -1938,6 +2007,16 @@ class Message {
     if (type != 'playlist') return null;
     for (final attachment in attachments) {
       if (attachment.type == 'playlist' && attachment.playlist != null) {
+        return attachment;
+      }
+    }
+    return null;
+  }
+
+  MessageAttachment? get musicTrackAttachment {
+    if (type != 'music_track') return null;
+    for (final attachment in attachments) {
+      if (attachment.type == 'music_track' && attachment.track != null) {
         return attachment;
       }
     }

@@ -2,7 +2,7 @@ import '../protocol/models.dart';
 import 'file_display.dart';
 import 'voice_message_display.dart' as voice_display;
 
-enum MessageContentKind { sticker, voice, files, playlist, text }
+enum MessageContentKind { sticker, voice, files, playlist, musicTrack, text }
 
 const String kSystemMessageType = 'system';
 const String kSystemEventRoomMemberJoined = 'room_member_joined';
@@ -154,6 +154,9 @@ MessageContentKind messageContentKind(Message message) {
   }
   if (message.fileAttachments.isNotEmpty) return MessageContentKind.files;
   if (message.playlistAttachment != null) return MessageContentKind.playlist;
+  if (message.musicTrackAttachment != null) {
+    return MessageContentKind.musicTrack;
+  }
   return MessageContentKind.text;
 }
 
@@ -210,6 +213,68 @@ String messageCopyText(Message message) {
   final event = systemMessageEvent(message);
   if (event != null) return systemMessageCopyText(event);
   return message.body.trimRight();
+}
+
+/// Text written to the system clipboard for a complete chat component.
+///
+/// The normal [messageCopyText] deliberately stays compact because it is also
+/// used by history/search previews. Structured music messages use a dedicated
+/// clipboard representation so right-click copy never loses fields that are
+/// only visible inside their interactive card.
+String messageClipboardText(Message message) {
+  if (message.isRemoved) return removedMessageCopyText(message);
+  final playlist = message.playlistAttachment?.playlist;
+  if (playlist != null) return _musicPlaylistClipboardText(playlist);
+  final track = message.musicTrackAttachment?.track;
+  if (track != null) return _musicTrackClipboardText(track);
+  return messageCopyText(message);
+}
+
+String _musicPlaylistClipboardText(SharedMusicPlaylist playlist) {
+  final creator = _systemUserLabel(playlist.creator);
+  final createdAt = playlist.createdAt?.toLocal().toIso8601String() ?? '未知';
+  final lines = <String>[
+    '[歌单] ${playlist.name}',
+    '歌曲数量：${playlist.itemCount}',
+    '创建人：$creator',
+    '创建日期：$createdAt',
+  ];
+  final description = playlist.description.trim();
+  if (description.isNotEmpty) lines.add('简介：$description');
+  if (playlist.items.isNotEmpty) {
+    lines.add('歌曲：');
+    for (var index = 0; index < playlist.items.length; index++) {
+      final item = playlist.items[index];
+      final artists = item.artists
+          .map((value) => value.trim())
+          .where((value) => value.isNotEmpty)
+          .join(' / ');
+      lines.add(
+        '${index + 1}. ${item.title}'
+        '${artists.isEmpty ? '' : ' - $artists'}'
+        ' [${item.source}:${item.trackId}]',
+      );
+    }
+  }
+  return lines.join('\n');
+}
+
+String _musicTrackClipboardText(SharedMusicTrack track) {
+  final artists = track.artists
+      .map((value) => value.trim())
+      .where((value) => value.isNotEmpty)
+      .join(' / ');
+  final seconds = track.durationMs <= 0 ? 0 : track.durationMs ~/ 1000;
+  final duration = seconds <= 0
+      ? '未知'
+      : '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
+  return <String>[
+    '[歌曲] ${track.title}',
+    '歌手：${artists.isEmpty ? '未知' : artists}',
+    '时长：$duration',
+    '来源：${track.source}',
+    '链接标识：${track.trackId}',
+  ].join('\n');
 }
 
 MessageQuote messageQuoteSnapshot(Message message) {
