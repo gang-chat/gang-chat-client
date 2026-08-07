@@ -98,7 +98,7 @@ void main() {
   });
 
   test(
-    'messageContentKind prioritizes stickers then voice then files then text',
+    'messageContentKind recognizes playlists alongside existing message types',
     () {
       expect(messageContentKind(_message()), MessageContentKind.text);
       expect(
@@ -136,6 +136,35 @@ void main() {
           _message(type: 'sticker', attachments: [_stickerAttachment()]),
         ),
         MessageContentKind.sticker,
+      );
+      expect(
+        messageContentKind(
+          _message(
+            type: 'playlist',
+            attachments: const [
+              MessageAttachment(
+                type: 'playlist',
+                playlistId: 'playlist_1',
+                playlist: SharedMusicPlaylist(
+                  id: 'playlist_1',
+                  name: '夜晚',
+                  description: '',
+                  itemCount: 0,
+                  createdAt: null,
+                  creator: UserSummary(
+                    id: 'user_1',
+                    username: 'alice',
+                    displayName: 'Alice',
+                    avatarUrl: null,
+                    defaultAvatarKey: 'blue-1',
+                  ),
+                  items: [],
+                ),
+              ),
+            ],
+          ),
+        ),
+        MessageContentKind.playlist,
       );
     },
   );

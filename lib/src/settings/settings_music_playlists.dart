@@ -10,6 +10,7 @@ class MusicPlaylistsPanel extends StatefulWidget {
     this.title = '歌单管理',
     this.previewApi,
     this.previewPlatformFactory,
+    this.shareApi,
   });
 
   final PersonalMusicPlaylistsController controller;
@@ -19,6 +20,7 @@ class MusicPlaylistsPanel extends StatefulWidget {
   final String title;
   final MusicTrackPreviewApi? previewApi;
   final MusicTrackPreviewPlatformFactory? previewPlatformFactory;
+  final GangApi? shareApi;
 
   @override
   State<MusicPlaylistsPanel> createState() => _MusicPlaylistsPanelState();
@@ -48,6 +50,7 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
   bool _pinningPlaylists = false;
   bool _mergingPlaylists = false;
   String? _cloningPlaylistId;
+  String? _sharingPlaylistId;
   bool _deletingItems = false;
   bool _addingSelectedItems = false;
   bool _pinningItems = false;
@@ -80,6 +83,7 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
       _pinningPlaylists ||
       _mergingPlaylists ||
       _cloningPlaylistId != null ||
+      _sharingPlaylistId != null ||
       _busyPlaylistIds.isNotEmpty;
 
   bool get _busy =>
@@ -671,6 +675,47 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
     });
   }
 
+  Future<void> _sharePersonalPlaylist(PersonalMusicPlaylist playlist) async {
+    final api = widget.shareApi;
+    if (api == null ||
+        widget.controller.roomScoped ||
+        _playlistManagementBusy) {
+      return;
+    }
+    final room = await showDialog<RoomCard>(
+      context: context,
+      builder: (context) =>
+          _MusicPlaylistShareRoomDialog(api: api, playlistName: playlist.name),
+    );
+    if (!mounted || room == null) return;
+    setState(() {
+      _sharingPlaylistId = playlist.id;
+      _error = null;
+    });
+    try {
+      await api.sendMessage(
+        roomId: room.id,
+        clientMessageId: newUuid(),
+        body: '',
+        type: 'playlist',
+        attachments: [
+          MessageAttachment(type: 'playlist', playlistId: playlist.id),
+        ],
+      );
+      if (!mounted) return;
+      showFloatingSuccessNotice(
+        context,
+        '已将“${playlist.name}”分享到“${room.displayName}”',
+      );
+    } catch (error) {
+      if (mounted) showFloatingErrorNotice(context, '分享歌单失败：$error');
+    } finally {
+      if (mounted && _sharingPlaylistId == playlist.id) {
+        setState(() => _sharingPlaylistId = null);
+      }
+    }
+  }
+
   Future<void> _movePlaylist(PersonalMusicPlaylist playlist, int delta) async {
     if (!_capabilities.canReorderPlaylists ||
         _playlistManagementBusy ||
@@ -686,33 +731,6 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
         playlistId: playlist.id,
         delta: delta,
       );
-      await _loadPlaylists();
-    } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
-    } finally {
-      if (mounted) setState(() => _busyPlaylistIds.remove(playlist.id));
-    }
-  }
-
-  Future<void> _deleteSinglePlaylist(PersonalMusicPlaylist playlist) async {
-    if (!_capabilities.canDeletePlaylists || _playlistManagementBusy) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => StickerConfirmDialog(
-        title: '删除歌单',
-        body: '确定删除“${playlist.name}”吗？歌单中的歌曲记录也会一并删除。',
-        confirmLabel: '删除',
-        confirmIcon: Icons.delete_outline,
-        danger: true,
-      ),
-    );
-    if (!mounted || confirmed != true) return;
-    setState(() {
-      _busyPlaylistIds.add(playlist.id);
-      _error = null;
-    });
-    try {
-      await widget.controller.deletePlaylist(playlist.id);
       await _loadPlaylists();
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
@@ -1147,9 +1165,11 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
         onTap: _openOrSelectPlaylist,
         onRename: _renamePlaylist,
         onMove: _movePlaylist,
-        onDelete: _deleteSinglePlaylist,
         useCloneAction: widget.controller.roomScoped,
         cloningPlaylistId: _cloningPlaylistId,
+        canShare: widget.shareApi != null && !widget.controller.roomScoped,
+        sharingPlaylistId: _sharingPlaylistId,
+        onShare: _sharePersonalPlaylist,
         onClone: widget.controller.canCloneRoomPlaylistsToPersonal
             ? _cloneRoomPlaylist
             : null,
@@ -1543,9 +1563,11 @@ class _MusicPlaylistSummaryList extends StatelessWidget {
     required this.onTap,
     required this.onRename,
     required this.onMove,
-    required this.onDelete,
     required this.useCloneAction,
     required this.cloningPlaylistId,
+    required this.canShare,
+    required this.sharingPlaylistId,
+    required this.onShare,
     required this.onClone,
   });
 
@@ -1557,10 +1579,12 @@ class _MusicPlaylistSummaryList extends StatelessWidget {
   final ValueChanged<PersonalMusicPlaylist> onTap;
   final ValueChanged<PersonalMusicPlaylist> onRename;
   final void Function(PersonalMusicPlaylist playlist, int direction) onMove;
-  final ValueChanged<PersonalMusicPlaylist> onDelete;
   final bool useCloneAction;
   final String? cloningPlaylistId;
   final ValueChanged<PersonalMusicPlaylist>? onClone;
+  final bool canShare;
+  final String? sharingPlaylistId;
+  final ValueChanged<PersonalMusicPlaylist> onShare;
 
   @override
   Widget build(BuildContext context) {
@@ -1610,10 +1634,12 @@ class _MusicPlaylistSummaryList extends StatelessWidget {
             onRename: () => onRename(playlists[index]),
             onMoveUp: () => onMove(playlists[index], -1),
             onMoveDown: () => onMove(playlists[index], 1),
-            onDelete: () => onDelete(playlists[index]),
             useCloneAction: useCloneAction,
             cloning: cloningPlaylistId == playlists[index].id,
             onClone: onClone == null ? null : () => onClone!(playlists[index]),
+            canShare: canShare,
+            sharing: sharingPlaylistId == playlists[index].id,
+            onShare: () => onShare(playlists[index]),
           ),
         );
       },
@@ -1635,10 +1661,12 @@ class _MusicPlaylistSummaryTile extends StatelessWidget {
     required this.onRename,
     required this.onMoveUp,
     required this.onMoveDown,
-    required this.onDelete,
     required this.useCloneAction,
     required this.cloning,
     required this.onClone,
+    required this.canShare,
+    required this.sharing,
+    required this.onShare,
   });
 
   final PersonalMusicPlaylist playlist;
@@ -1653,10 +1681,12 @@ class _MusicPlaylistSummaryTile extends StatelessWidget {
   final VoidCallback onRename;
   final VoidCallback onMoveUp;
   final VoidCallback onMoveDown;
-  final VoidCallback onDelete;
   final bool useCloneAction;
   final bool cloning;
   final VoidCallback? onClone;
+  final bool canShare;
+  final bool sharing;
+  final VoidCallback onShare;
 
   @override
   Widget build(BuildContext context) {
@@ -1759,10 +1789,11 @@ class _MusicPlaylistSummaryTile extends StatelessWidget {
             )
           else
             ButtonIcon(
-              tooltip: '删除',
-              onPressed: busy ? null : onDelete,
-              tone: ButtonTone.danger,
-              icon: const Icon(Icons.delete_outline),
+              key: ValueKey('share-personal-music-playlist-${playlist.id}'),
+              tooltip: '分享',
+              onPressed: busy || !canShare || sharing ? null : onShare,
+              loading: sharing,
+              icon: const Icon(Icons.share_outlined),
               size: 36,
             ),
         ],
@@ -2749,6 +2780,232 @@ class _MusicPlaylistFieldLabel extends StatelessWidget {
         color: _textMuted,
         fontSize: 12,
         fontWeight: FontWeight.w500,
+      ),
+    );
+  }
+}
+
+class _MusicPlaylistShareRoomDialog extends StatefulWidget {
+  const _MusicPlaylistShareRoomDialog({
+    required this.api,
+    required this.playlistName,
+  });
+
+  final GangApi api;
+  final String playlistName;
+
+  @override
+  State<_MusicPlaylistShareRoomDialog> createState() =>
+      _MusicPlaylistShareRoomDialogState();
+}
+
+class _MusicPlaylistShareRoomDialogState
+    extends State<_MusicPlaylistShareRoomDialog> {
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  List<RoomCard> _rooms = const [];
+  String? _selectedRoomId;
+  String? _error;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadRooms());
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadRooms() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final rooms = <RoomCard>[];
+      final seen = <String>{};
+      final seenCursors = <String>{};
+      String? cursor;
+      do {
+        final page = await widget.api.listRooms(limit: 50, cursor: cursor);
+        for (final room in page.rooms) {
+          if (seen.add(room.id)) rooms.add(room);
+        }
+        final next = page.nextCursor?.trim();
+        cursor = next == null || next.isEmpty || !seenCursors.add(next)
+            ? null
+            : next;
+      } while (cursor != null);
+      if (!mounted) return;
+      setState(() {
+        _rooms = rooms;
+        _loading = false;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _searchFocusNode.requestFocus();
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = error.toString();
+      });
+    }
+  }
+
+  List<RoomCard> get _visibleRooms {
+    final query = _searchController.text.trim().toLowerCase();
+    if (query.isEmpty) return _rooms;
+    return _rooms
+        .where((room) {
+          return room.displayName.toLowerCase().contains(query) ||
+              room.name.toLowerCase().contains(query) ||
+              room.rid.toLowerCase().contains(query);
+        })
+        .toList(growable: false);
+  }
+
+  void _confirm() {
+    RoomCard? selected;
+    for (final room in _rooms) {
+      if (room.id == _selectedRoomId) {
+        selected = room;
+        break;
+      }
+    }
+    if (selected != null) Navigator.of(context).pop(selected);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final visibleRooms = _visibleRooms;
+    final viewportHeight = (MediaQuery.sizeOf(context).height * 0.58).clamp(
+      240.0,
+      560.0,
+    );
+    return DialogFrame(
+      title: '分享歌单',
+      icon: Icons.share_outlined,
+      maxWidth: 620,
+      adaptiveActions: [
+        ResponsiveDialogAction(
+          label: '取消',
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        ResponsiveDialogAction(
+          label: '确认分享',
+          icon: Icons.send_outlined,
+          tone: ButtonTone.primary,
+          onPressed: _selectedRoomId == null ? null : _confirm,
+        ),
+      ],
+      child: SizedBox(
+        height: viewportHeight,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              '选择要将“${widget.playlistName}”分享到的文字频道',
+              style: const TextStyle(color: _textMuted, fontSize: 12),
+            ),
+            const SizedBox(height: 10),
+            Input(
+              key: const ValueKey('music-playlist-share-room-search'),
+              controller: _searchController,
+              focusNode: _searchFocusNode,
+              prefixIcon: Icons.search,
+              hintText: '搜索房间',
+              showClearButton: true,
+              onChanged: (_) => setState(() {}),
+              textInputAction: TextInputAction.search,
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              _MusicPlaylistErrorText(_error!),
+            ],
+            const SizedBox(height: 10),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator(color: _cyan))
+                  : visibleRooms.isEmpty
+                  ? _SettingsEmptyState(
+                      text: _rooms.isEmpty ? '还没有可分享的房间' : '没有匹配的房间',
+                    )
+                  : ListView.separated(
+                      padding: EdgeInsets.zero,
+                      itemCount: visibleRooms.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final room = visibleRooms[index];
+                        final selected = room.id == _selectedRoomId;
+                        return UiPointerTapRegion(
+                          key: ValueKey(
+                            'music-playlist-share-room-option-${room.id}',
+                          ),
+                          onTap: () =>
+                              setState(() => _selectedRoomId = room.id),
+                          disableSelection: true,
+                          child: _SettingsSubPanel(
+                            highlighted: selected,
+                            hoverable: true,
+                            child: Row(
+                              children: [
+                                Avatar(
+                                  label: room.displayName,
+                                  imageUrl: AppConfigScope.of(
+                                    context,
+                                  ).resolveAssetUrl(room.avatarUrl),
+                                  defaultAvatarKey: room.defaultAvatarKey,
+                                  size: 36,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        room.displayName,
+                                        style: const TextStyle(
+                                          color: _textPrimary,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      if (room.rid.trim().isNotEmpty) ...[
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'RID：${room.rid}',
+                                          style: const TextStyle(
+                                            color: _textMuted,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                                Icon(
+                                  selected
+                                      ? Icons.radio_button_checked
+                                      : Icons.radio_button_off,
+                                  color: selected ? _cyan : _textMuted,
+                                  size: 20,
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }

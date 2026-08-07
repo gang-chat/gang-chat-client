@@ -365,6 +365,7 @@ class _RoomMessageHistoryPaneState extends State<_RoomMessageHistoryPane> {
             live_display.liveParticipantByUserId(widget.room.live, userId) !=
             null,
         onOpenQuote: widget.messageActions.onOpenQuote,
+        onCloneSharedPlaylist: widget.messageActions.onCloneSharedPlaylist,
       ),
       inline: false,
     );

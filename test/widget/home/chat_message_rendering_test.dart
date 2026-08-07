@@ -2354,6 +2354,127 @@ void main() {
     );
   });
 
+  for (final platform in const [
+    TargetPlatform.windows,
+    TargetPlatform.macOS,
+    TargetPlatform.android,
+  ]) {
+    testWidgets(
+      '${platform.name} shared playlist message opens clone and view actions',
+      (tester) async {
+        final controller = TextEditingController();
+        addTearDown(controller.dispose);
+        var cloned = 0;
+        final playlist = SharedMusicPlaylist(
+          id: 'shared_playlist_1',
+          name: '朋友的夜晚歌单',
+          description: '',
+          itemCount: 1,
+          createdAt: DateTime.utc(2026, 8, 7, 9, 30),
+          creator: const UserSummary(
+            id: 'friend_1',
+            username: 'friend',
+            displayName: '朋友',
+            roomDisplayName: '房间里的朋友',
+            avatarUrl: null,
+            defaultAvatarKey: 'blue-2',
+          ),
+          items: const [
+            PersonalMusicPlaylistItem(
+              id: 'shared_item_1',
+              playlistId: 'shared_playlist_1',
+              trackId: 'track_1',
+              source: 'netease',
+              title: '第一首歌',
+              artists: ['歌手'],
+              durationMs: 180000,
+              sortOrder: 10,
+              createdAt: null,
+            ),
+          ],
+        );
+        final message = _message(
+          type: 'playlist',
+          body: '[歌单] 朋友的夜晚歌单',
+          attachments: [
+            MessageAttachment(
+              type: 'playlist',
+              playlistId: playlist.id,
+              playlist: playlist,
+            ),
+          ],
+        );
+        final actions = ChatMessageActions(
+          onCopy: (_, _) async {},
+          onDeleteForMe: (_, _) async {},
+          onRecall: (_, _) async {},
+          canRecall: (_) => false,
+          onCloneSharedPlaylist: (_, clonedMessage, clonedPlaylist) async {
+            expect(clonedMessage.id, message.id);
+            expect(clonedPlaylist.id, playlist.id);
+            cloned += 1;
+          },
+        );
+
+        await tester.pumpWidget(
+          _host(
+            _chatPane(
+              controller: controller,
+              messages: [message],
+              messageActions: actions,
+            ),
+            height: 520,
+            platform: platform,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final embed = find.byKey(
+          const ValueKey<String>(
+            'shared-music-playlist-message-shared_playlist_1',
+          ),
+        );
+        expect(embed, findsOneWidget);
+        await tester.tap(embed);
+        await tester.pumpAndSettle();
+
+        final cloneAction = find.byKey(
+          const ValueKey<String>('music-playlist-card-play-all'),
+        );
+        final viewAction = find.byKey(
+          const ValueKey<String>('music-playlist-card-view'),
+        );
+        expect(find.text('克隆'), findsOneWidget);
+        expect(find.text('查看歌单'), findsOneWidget);
+        expect(cloneAction, findsOneWidget);
+        expect(viewAction, findsOneWidget);
+
+        await tester.tap(viewAction);
+        // The card deliberately keeps its action in the loading state while the
+        // read-only playlist dialog is open, so there is no fully settled frame.
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(
+          find.byKey(
+            const ValueKey<String>(
+              'shared-music-playlist-view-shared_playlist_1',
+            ),
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('第一首歌'), findsOneWidget);
+        await tester.tap(find.text('完成'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(embed);
+        await tester.pumpAndSettle();
+        await tester.tap(cloneAction);
+        await tester.pumpAndSettle();
+        expect(cloned, 1);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets('sticker bubble exposes the sticker name only as a tooltip', (
     tester,
   ) async {

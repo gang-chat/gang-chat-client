@@ -584,7 +584,40 @@ extension _HomeShellMessages on _HomeShellState {
       onReeditRecalledText: _reeditRecalledTextMessage,
       canReeditRecalledText: _canReeditRecalledTextMessage,
       canInspectRecalledText: _canInspectRecalledTextMessage,
+      onCloneSharedPlaylist: _cloneSharedPlaylistMessage,
     );
+  }
+
+  Future<void> _cloneSharedPlaylistMessage(
+    BuildContext context,
+    Message message,
+    SharedMusicPlaylist playlist,
+  ) async {
+    final api = _services.api;
+    if (api is! SharedMusicPlaylistCloneApi) {
+      if (context.mounted) showFloatingErrorNotice(context, '当前版本暂不支持克隆歌单');
+      return;
+    }
+    try {
+      final cloneApi = api as SharedMusicPlaylistCloneApi;
+      final cloned = await cloneApi.cloneSharedMusicPlaylistToPersonal(
+        roomId: message.roomId,
+        messageId: message.id,
+      );
+      if (context.mounted) {
+        showFloatingSuccessNotice(context, '已克隆到我的歌单 - ${cloned.name}');
+      }
+    } catch (error) {
+      if (!context.mounted) return;
+      final messageText = error is ApiException
+          ? switch (error.code) {
+              'playlist_limit_reached' => '克隆失败：我的歌单已达 50 个上限',
+              'not_found' => '克隆失败：该歌单消息已不可用',
+              _ => '克隆歌单失败：$error',
+            }
+          : '克隆歌单失败：$error';
+      showFloatingErrorNotice(context, messageText);
+    }
   }
 
   bool _canQuoteChatMessage(Message message) {

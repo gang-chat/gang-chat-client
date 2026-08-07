@@ -65,6 +65,7 @@ import '../protocol/api_client.dart'
         MusicTrackPreviewApi,
         PersonalMusicPlaylistApi,
         RoomMusicPlaylistApi,
+        SharedMusicPlaylistCloneApi,
         UploadCancelledException,
         UploadTransferController;
 import '../protocol/models.dart';

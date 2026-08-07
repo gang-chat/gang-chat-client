@@ -571,6 +571,8 @@ class Sticker {
 class MessageAttachment {
   const MessageAttachment({
     required this.type,
+    this.playlistId,
+    this.playlist,
     this.stickerId,
     this.name,
     this.asset,
@@ -586,6 +588,8 @@ class MessageAttachment {
   });
 
   final String type;
+  final String? playlistId;
+  final SharedMusicPlaylist? playlist;
   final String? stickerId;
   final String? name;
   final UploadedAsset? asset;
@@ -604,8 +608,13 @@ class MessageAttachment {
     final userJson = _nullableMap(json['user']);
     final actorJson = _nullableMap(json['actor']);
     final targetJson = _nullableMap(json['target']);
+    final playlistJson = _nullableMap(json['playlist']);
     return MessageAttachment(
       type: json['type'] as String? ?? 'file',
+      playlistId: _stringFromJson(json, const ['playlist_id']),
+      playlist: playlistJson == null
+          ? null
+          : SharedMusicPlaylist.fromJson(playlistJson),
       stickerId: json['sticker_id'] as String?,
       name: json['name'] as String?,
       asset: assetJson == null ? null : UploadedAsset.fromJson(assetJson),
@@ -624,6 +633,8 @@ class MessageAttachment {
   Map<String, Object?> toJson() {
     return {
       'type': type,
+      if (playlistId != null) 'playlist_id': playlistId,
+      if (playlist != null) 'playlist': playlist!.toJson(),
       if (stickerId != null) 'sticker_id': stickerId,
       if (name != null) 'name': name,
       if (asset != null) 'asset': asset!.toJson(),
@@ -636,6 +647,80 @@ class MessageAttachment {
       if (toRole != null) 'to_role': toRole,
       if (oldValue != null) 'old_value': oldValue,
       if (newValue != null) 'new_value': newValue,
+    };
+  }
+}
+
+/// Immutable playlist data embedded in a chat message at send time.
+///
+/// It is intentionally independent from the current user's playlist APIs: the
+/// source playlist may later be renamed or deleted, while message history must
+/// remain viewable and must never expose another user's management endpoint.
+class SharedMusicPlaylist {
+  const SharedMusicPlaylist({
+    required this.id,
+    required this.name,
+    required this.description,
+    required this.itemCount,
+    required this.createdAt,
+    required this.creator,
+    required this.items,
+  });
+
+  final String id;
+  final String name;
+  final String description;
+  final int itemCount;
+  final DateTime? createdAt;
+  final UserSummary creator;
+  final List<PersonalMusicPlaylistItem> items;
+
+  factory SharedMusicPlaylist.fromJson(Map<String, Object?> json) {
+    return SharedMusicPlaylist(
+      id: _stringFromJson(json, const ['id']) ?? '',
+      name: _stringFromJson(json, const ['name']) ?? '',
+      description: json['description']?.toString() ?? '',
+      itemCount: _intFromJson(json, const ['item_count']) ?? 0,
+      createdAt: _parseDateTime(json['created_at']),
+      creator: UserSummary.fromJson(
+        _nullableMap(json['creator']) ??
+            const <String, Object?>{
+              'id': '',
+              'username': 'unknown',
+              'display_name': '未知用户',
+              'avatar_url': null,
+              'default_avatar_key': 'blue-3',
+            },
+      ),
+      items: _listOfMaps(
+        json['items'],
+      ).map(PersonalMusicPlaylistItem.fromJson).toList(growable: false),
+    );
+  }
+
+  Map<String, Object?> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'description': description,
+      'item_count': itemCount,
+      'created_at': createdAt?.toIso8601String(),
+      'creator': _userSummaryToJson(creator),
+      'items': items
+          .map(
+            (item) => <String, Object?>{
+              'id': item.id,
+              'playlist_id': item.playlistId,
+              'track_id': item.trackId,
+              'source': item.source,
+              'title': item.title,
+              'artists': item.artists,
+              'duration_ms': item.durationMs,
+              'sort_order': item.sortOrder,
+              'created_at': item.createdAt?.toIso8601String(),
+            },
+          )
+          .toList(),
     };
   }
 }
@@ -1847,6 +1932,16 @@ class Message {
 
   Iterable<MessageAttachment> get fileAttachments {
     return attachments.where((attachment) => attachment.type == 'file');
+  }
+
+  MessageAttachment? get playlistAttachment {
+    if (type != 'playlist') return null;
+    for (final attachment in attachments) {
+      if (attachment.type == 'playlist' && attachment.playlist != null) {
+        return attachment;
+      }
+    }
+    return null;
   }
 
   factory Message.fromJson(Map<String, Object?> json) {

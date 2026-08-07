@@ -103,6 +103,7 @@ class ChatMessageActions {
     this.onReeditRecalledText = _syncNoop,
     this.canReeditRecalledText = _neverCanRecall,
     this.canInspectRecalledText = _neverCanRecall,
+    this.onCloneSharedPlaylist = _noopSharedPlaylist,
   });
 
   const ChatMessageActions.disabled()
@@ -115,7 +116,8 @@ class ChatMessageActions {
       canQuote = _neverCanRecall,
       onReeditRecalledText = _syncNoop,
       canReeditRecalledText = _neverCanRecall,
-      canInspectRecalledText = _neverCanRecall;
+      canInspectRecalledText = _neverCanRecall,
+      onCloneSharedPlaylist = _noopSharedPlaylist;
 
   final Future<void> Function(BuildContext context, Message message) onCopy;
   final void Function(Message message) onQuote;
@@ -129,6 +131,12 @@ class ChatMessageActions {
   final void Function(Message message) onReeditRecalledText;
   final bool Function(Message message) canReeditRecalledText;
   final bool Function(Message message) canInspectRecalledText;
+  final Future<void> Function(
+    BuildContext context,
+    Message message,
+    SharedMusicPlaylist playlist,
+  )
+  onCloneSharedPlaylist;
 
   static Future<void> _noop(BuildContext context, Message message) async {}
   static Future<void> _noopQuote(
@@ -138,6 +146,12 @@ class ChatMessageActions {
   static void _syncNoop(Message message) {}
 
   static bool _neverCanRecall(Message message) => false;
+
+  static Future<void> _noopSharedPlaylist(
+    BuildContext context,
+    Message message,
+    SharedMusicPlaylist playlist,
+  ) async {}
 }
 
 class _MessageStage extends StatefulWidget {
@@ -2353,6 +2367,7 @@ class ChatMessageContent extends StatelessWidget {
     this.onOpenQuote,
     this.timestampNow,
     this.showDetailedTimestamps = false,
+    this.onCloneSharedPlaylist,
   });
 
   final Message message;
@@ -2379,6 +2394,12 @@ class ChatMessageContent extends StatelessWidget {
   onOpenQuote;
   final DateTime? timestampNow;
   final bool showDetailedTimestamps;
+  final Future<void> Function(
+    BuildContext context,
+    Message message,
+    SharedMusicPlaylist playlist,
+  )?
+  onCloneSharedPlaylist;
 
   @override
   Widget build(BuildContext context) {
@@ -2419,6 +2440,16 @@ class ChatMessageContent extends StatelessWidget {
             fileDownloads: fileDownloads,
             downloadActions: downloadActions,
             imagePreviewActions: imagePreviewActions,
+          ),
+          message_display.MessageContentKind.playlist => _PlaylistShareBody(
+            message: message,
+            playlist: message.playlistAttachment!.playlist!,
+            onClone: onCloneSharedPlaylist,
+            currentUser: currentUser,
+            onResolveUserProfile: onResolveSenderProfile,
+            onResolveRoomProfile: onResolveRoomProfile,
+            onEnterCommonRoom: onEnterProfileRoom,
+            userProfileActionBuilder: profileActionBuilder,
           ),
           message_display.MessageContentKind.text => _TextBody(
             message: message,
@@ -2467,6 +2498,215 @@ class ChatMessageContent extends StatelessWidget {
 }
 
 void _ignoreMessageSelectionChange(bool active) {}
+
+class _PlaylistShareBody extends StatelessWidget {
+  const _PlaylistShareBody({
+    required this.message,
+    required this.playlist,
+    required this.onClone,
+    required this.currentUser,
+    required this.onResolveUserProfile,
+    required this.onResolveRoomProfile,
+    required this.onEnterCommonRoom,
+    required this.userProfileActionBuilder,
+  });
+
+  final Message message;
+  final SharedMusicPlaylist playlist;
+  final Future<void> Function(
+    BuildContext context,
+    Message message,
+    SharedMusicPlaylist playlist,
+  )?
+  onClone;
+  final CurrentUser currentUser;
+  final UserProfileResolver? onResolveUserProfile;
+  final RoomProfileResolver? onResolveRoomProfile;
+  final ValueChanged<PublicRoom>? onEnterCommonRoom;
+  final UserProfileActionBuilder? userProfileActionBuilder;
+
+  Future<void> _open(BuildContext context) {
+    return showDialog<void>(
+      context: context,
+      builder: (context) => _SharedMusicPlaylistDialog(playlist: playlist),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final creatorName =
+        playlist.creator.roomDisplayName?.trim().isNotEmpty == true
+        ? playlist.creator.roomDisplayName!.trim()
+        : playlist.creator.displayName;
+    final cardData = MusicPlaylistCardData(
+      id: playlist.id,
+      name: playlist.name,
+      songCount: playlist.itemCount,
+      createdAt: playlist.createdAt,
+      creator: playlist.creator,
+    );
+    return MusicPlaylistHoverCard(
+      data: cardData,
+      currentUser: currentUser,
+      onResolveUserProfile: onResolveUserProfile,
+      onResolveRoomProfile: onResolveRoomProfile,
+      onEnterCommonRoom: onEnterCommonRoom,
+      userProfileActionBuilder: userProfileActionBuilder,
+      primaryActionLabel: '克隆',
+      primaryActionIcon: Icons.library_add_outlined,
+      onPlayAll: onClone == null
+          ? null
+          : () => onClone!(context, message, playlist),
+      onViewPlaylist: () => _open(context),
+      child: Container(
+        key: ValueKey('shared-music-playlist-message-${playlist.id}'),
+        constraints: const BoxConstraints(minWidth: 210, maxWidth: 360),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: UiColors.surfaceRaised,
+          border: Border.all(color: UiColors.border),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.queue_music, color: UiColors.accent, size: 26),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    playlist.name,
+                    style: UiTypography.body.copyWith(
+                      color: UiColors.text,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '${playlist.itemCount} 首歌曲 · $creatorName',
+                    style: UiTypography.label.copyWith(
+                      color: UiColors.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(
+              Icons.chevron_right,
+              color: UiColors.textMuted,
+              size: 22,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SharedMusicPlaylistDialog extends StatelessWidget {
+  const _SharedMusicPlaylistDialog({required this.playlist});
+
+  final SharedMusicPlaylist playlist;
+
+  @override
+  Widget build(BuildContext context) {
+    final viewportHeight = (MediaQuery.sizeOf(context).height * 0.62).clamp(
+      220.0,
+      620.0,
+    );
+    return DialogFrame(
+      title: playlist.name,
+      icon: Icons.queue_music,
+      maxWidth: 720,
+      adaptiveActions: [
+        ResponsiveDialogAction(
+          label: '完成',
+          icon: Icons.check,
+          tone: ButtonTone.primary,
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ],
+      child: SizedBox(
+        key: ValueKey('shared-music-playlist-view-${playlist.id}'),
+        height: viewportHeight,
+        child: playlist.items.isEmpty
+            ? Center(
+                child: Text(
+                  '歌单中还没有歌曲',
+                  style: UiTypography.body.copyWith(color: UiColors.textMuted),
+                ),
+              )
+            : ListView.separated(
+                padding: EdgeInsets.zero,
+                itemCount: playlist.items.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 8),
+                itemBuilder: (context, index) {
+                  final item = playlist.items[index];
+                  final artists = item.artists.join('、').trim();
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: UiColors.surface,
+                      border: Border.all(color: UiColors.border),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.music_note,
+                          color: UiColors.accent,
+                          size: 22,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                item.title,
+                                style: UiTypography.body.copyWith(
+                                  color: UiColors.text,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              if (artists.isNotEmpty) ...[
+                                const SizedBox(height: 3),
+                                Text(
+                                  '$artists · ${_sharedPlaylistSourceLabel(item.source)}',
+                                  style: UiTypography.label.copyWith(
+                                    color: UiColors.textMuted,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+      ),
+    );
+  }
+}
+
+String _sharedPlaylistSourceLabel(String source) {
+  return switch (source.trim().toLowerCase()) {
+    'netease' => '网易云',
+    'bilibili' => '哔哩哔哩',
+    'tencent' => 'QQ音乐',
+    _ => source,
+  };
+}
 
 class _MessageBubble extends StatefulWidget {
   const _MessageBubble({
@@ -2651,6 +2891,8 @@ class _MessageBubbleState extends State<_MessageBubble> {
                 onSelectionActiveChanged: _handleTextSelectionActiveChanged,
                 textSelectionResetListenable: _textSelectionReset,
                 onOpenQuote: widget.messageActions.onOpenQuote,
+                onCloneSharedPlaylist:
+                    widget.messageActions.onCloneSharedPlaylist,
               ),
             ),
           ),

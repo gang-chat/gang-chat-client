@@ -33,6 +33,35 @@ Windows、macOS、Android 只负责搜索、控制、状态展示和本地监听
 个人歌单和房间歌单的 CRUD、分页、重排接口仍使用既有
 `/me/music-box/playlists` 和 `/rooms/:room_id/music-box/playlists` 路径。
 
+## 歌单消息分享
+
+个人歌单通过普通房间消息接口分享，继续复用房间成员权限、文字禁言、实时事件、未读数、推送和最后一条消息更新：
+
+```http
+POST /rooms/:room_id/messages
+```
+
+```json
+{
+  "client_message_id": "client_uuid",
+  "type": "playlist",
+  "body": "",
+  "attachments": [
+    { "type": "playlist", "playlist_id": "mbp_xxx" }
+  ]
+}
+```
+
+客户端不得提交可信歌单详情。服务端验证 `playlist_id` 属于当前账号后，将附件替换为包含 `playlist` 摘要、创建人快照和最多 500 首有序 `items` 的不可变快照，并把正文规范化为 `[歌单] 歌单名`。消息历史始终读取该快照，不依赖源歌单继续存在。
+
+从嵌套歌单名片克隆：
+
+```http
+POST /rooms/:room_id/messages/:message_id/playlist/clone-to-me
+```
+
+服务端重新检查房间访问权、消息未撤回且包含有效快照，然后在单一事务中创建个人歌单并写入全部歌曲；达到个人歌单上限返回 `409 playlist_limit_reached`，不得留下空歌单或部分歌曲。
+
 ### 本地试听
 
 设置和房间设置中的歌曲名片使用独立的本地试听接口，不加入房间队列，也不改变

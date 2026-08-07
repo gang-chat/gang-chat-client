@@ -674,7 +674,8 @@ void main() {
       expect(find.byTooltip('重命名'), findsOneWidget);
       expect(find.byTooltip('上移'), findsOneWidget);
       expect(find.byTooltip('下移'), findsOneWidget);
-      expect(find.byTooltip('删除'), findsOneWidget);
+      expect(find.byTooltip('分享'), findsOneWidget);
+      expect(find.byTooltip('删除'), findsNothing);
       expect(
         tester
             .widget<ui.Button>(
@@ -725,7 +726,9 @@ void main() {
       );
       expect(deleteButton.onPressed, isNotNull);
 
-      await tester.tap(find.byTooltip('删除'));
+      await tester.tap(
+        find.byKey(const ValueKey('delete-selected-personal-music-playlists')),
+      );
       await tester.pumpAndSettle();
       expect(find.text('删除歌单'), findsOneWidget);
       await tester.tap(find.text('取消'));
@@ -746,6 +749,49 @@ void main() {
 
       expect(find.text('没有符合筛选条件的歌单'), findsOneWidget);
       expect(find.textContaining('筛选 0 / 1'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'personal playlist share searches rooms and sends a snapshot request',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(720, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final api = _FakePersonalPlaylistApi();
+
+      await _pumpPlaylistSettings(tester, api);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('管理'));
+      await tester.pumpAndSettle();
+
+      final shareButton = find.byKey(
+        const ValueKey('share-personal-music-playlist-mbp_1'),
+      );
+      expect(shareButton, findsOneWidget);
+      await tester.tap(shareButton);
+      await tester.pumpAndSettle();
+
+      expect(find.text('分享歌单'), findsOneWidget);
+      expect(find.text('夜晚房间'), findsOneWidget);
+      expect(find.text('另一个房间'), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const ValueKey('music-playlist-share-room-search')),
+        '另一个',
+      );
+      await tester.pump();
+      expect(find.text('夜晚房间'), findsNothing);
+      expect(find.text('另一个房间'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(const ValueKey('music-playlist-share-room-option-room_2')),
+      );
+      await tester.pump();
+      await tester.tap(find.text('确认分享'));
+      await tester.pumpAndSettle();
+
+      expect(api.shareRequests, ['room_2:playlist:mbp_1']);
+      expect(find.textContaining('已将“夜晚”分享到“另一个房间”'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -1782,6 +1828,7 @@ class _FakePersonalPlaylistApi
   final List<String> addRequests = [];
   final List<String> mergeRequests = [];
   final List<String> batchAddRequests = [];
+  final List<String> shareRequests = [];
   int listRequestCount = 0;
   Completer<PersonalMusicPlaylistPage>? nextPlaylistListResponse;
 
@@ -2044,6 +2091,73 @@ class _FakePersonalPlaylistApi
     required String playlistId,
     required List<String> itemIds,
   }) async {}
+
+  @override
+  Future<RoomPage> listRooms({int limit = 50, String? cursor}) async {
+    return RoomPage(
+      rooms: [
+        RoomCard(
+          id: 'room_1',
+          name: '夜晚房间',
+          avatarUrl: null,
+          defaultAvatarKey: 'blue-1',
+          memberCount: 3,
+          liveParticipantCount: 0,
+          liveAvatarPreview: const [],
+          lastMessage: null,
+          unreadCount: 0,
+          updatedAt: DateTime.utc(2026, 8, 7),
+          rid: '10001',
+        ),
+        RoomCard(
+          id: 'room_2',
+          name: '另一个房间',
+          avatarUrl: null,
+          defaultAvatarKey: 'blue-2',
+          memberCount: 2,
+          liveParticipantCount: 0,
+          liveAvatarPreview: const [],
+          lastMessage: null,
+          unreadCount: 0,
+          updatedAt: DateTime.utc(2026, 8, 7),
+          rid: '10002',
+        ),
+      ],
+      nextCursor: null,
+    );
+  }
+
+  @override
+  Future<Message> sendMessage({
+    required String roomId,
+    required String clientMessageId,
+    required String body,
+    String type = 'text',
+    List<MessageAttachment> attachments = const [],
+    List<Map<String, Object?>> mentions = const [],
+    String? quoteMessageId,
+    List<String> quoteMessageIds = const [],
+    String? idempotencyKey,
+  }) async {
+    final playlistId = attachments.single.playlistId;
+    shareRequests.add('$roomId:$type:$playlistId');
+    return Message(
+      id: 'message_${shareRequests.length}',
+      roomId: roomId,
+      sender: const UserSummary(
+        id: 'user_1',
+        username: 'tester',
+        displayName: '测试用户',
+        avatarUrl: null,
+        defaultAvatarKey: 'blue-1',
+      ),
+      clientMessageId: clientMessageId,
+      type: type,
+      body: '[歌单] 夜晚',
+      attachments: attachments,
+      createdAt: DateTime.utc(2026, 8, 7),
+    );
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

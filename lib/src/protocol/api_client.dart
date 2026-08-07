@@ -782,6 +782,15 @@ abstract interface class RoomMusicPlaylistCloneApi {
   });
 }
 
+/// Optional extension for atomically cloning an immutable playlist embedded in
+/// a room message into the authenticated user's personal library.
+abstract interface class SharedMusicPlaylistCloneApi {
+  Future<PersonalMusicPlaylist> cloneSharedMusicPlaylistToPersonal({
+    required String roomId,
+    required String messageId,
+  });
+}
+
 class GangApiClient
     implements
         GangApi,
@@ -793,6 +802,7 @@ class GangApiClient
         RoomMusicPlaylistBatchAddApi,
         RoomMusicPlaylistImportApi,
         RoomMusicPlaylistCloneApi,
+        SharedMusicPlaylistCloneApi,
         MusicTrackPreviewApi,
         MusicBoxActivePlaylistCloneApi {
   GangApiClient({
@@ -2784,6 +2794,22 @@ class GangApiClient
     final decoded = await _sendJson((token) {
       return _httpClient.post(
         _uri('/rooms/$roomId/music-box/playlists/$playlistId/clone-to-me'),
+        headers: _headers(token),
+      );
+    });
+    return PersonalMusicPlaylist.fromJson(
+      decoded['playlist']! as Map<String, Object?>,
+    );
+  }
+
+  @override
+  Future<PersonalMusicPlaylist> cloneSharedMusicPlaylistToPersonal({
+    required String roomId,
+    required String messageId,
+  }) async {
+    final decoded = await _sendJson((token) {
+      return _httpClient.post(
+        _uri('/rooms/$roomId/messages/$messageId/playlist/clone-to-me'),
         headers: _headers(token),
       );
     });

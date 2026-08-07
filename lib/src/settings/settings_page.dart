@@ -3649,6 +3649,7 @@ class _SettingsPageState extends State<SettingsPage>
           ? widget.api as MusicTrackPreviewApi
           : null,
       previewPlatformFactory: widget.musicTrackPreviewPlatformFactory,
+      shareApi: _isManagingUser ? null : widget.api,
       reloadToken: _playlistReloadToken,
       unavailableMessage: _isManagingUser
           ? '管理其他账号时不能编辑个人歌单'

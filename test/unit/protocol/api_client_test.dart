@@ -346,24 +346,27 @@ void main() {
           },
         );
 
-        return http.Response(
-          jsonEncode({
-            'message': {
-              'id': 'msg_1',
-              'room_id': 'room_1',
-              'sender': {
-                'id': 'user_1',
-                'username': 'alice',
-                'display_name': 'Alice',
+        return http.Response.bytes(
+          utf8.encode(
+            jsonEncode({
+              'message': {
+                'id': 'msg_1',
+                'room_id': 'room_1',
+                'sender': {
+                  'id': 'user_1',
+                  'username': 'alice',
+                  'display_name': 'Alice',
+                },
+                'client_message_id': 'cmsg_1',
+                'type': 'sticker',
+                'body': '[ok]',
+                'attachments': [stickerAttachment.toJson()],
+                'created_at': '2026-05-31T14:00:00Z',
               },
-              'client_message_id': 'cmsg_1',
-              'type': 'sticker',
-              'body': '[ok]',
-              'attachments': [stickerAttachment.toJson()],
-              'created_at': '2026-05-31T14:00:00Z',
-            },
-          }),
+            }),
+          ),
           201,
+          headers: {'content-type': 'application/json'},
         );
       }),
     );
@@ -378,6 +381,142 @@ void main() {
 
     expect(message.type, 'sticker');
     expect(message.stickerAttachment?.asset?.url, '/assets/asset_1/ok.webp');
+    api.close();
+  });
+
+  test('playlist messages send an id and parse the server snapshot', () async {
+    const requestedAttachment = MessageAttachment(
+      type: 'playlist',
+      playlistId: 'playlist_1',
+    );
+    final snapshot = {
+      'id': 'playlist_1',
+      'name': '夜晚',
+      'description': '',
+      'item_count': 1,
+      'created_at': '2026-08-07T09:30:00Z',
+      'creator': {
+        'id': 'user_1',
+        'username': 'alice',
+        'display_name': 'Alice',
+        'room_display_name': '房间里的 Alice',
+        'avatar_url': null,
+        'default_avatar_key': 'blue-1',
+      },
+      'items': [
+        {
+          'id': 'item_1',
+          'playlist_id': 'playlist_1',
+          'track_id': 'track_1',
+          'source': 'netease',
+          'title': '第一首歌',
+          'artists': ['歌手'],
+          'duration_ms': 180000,
+          'sort_order': 10,
+          'created_at': '2026-08-07T09:31:00Z',
+        },
+      ],
+    };
+    final api = GangApiClient(
+      baseUrl: 'http://example.test/api/v1',
+      accessTokenProvider: ({bool forceRefresh = false}) async => 'token',
+      httpClient: MockClient((request) async {
+        expect(request.method, 'POST');
+        expect(request.url.path, '/api/v1/rooms/room_1/messages');
+        expect(
+          jsonDecode(utf8.decode(request.bodyBytes)) as Map<String, Object?>,
+          {
+            'client_message_id': 'cmsg_playlist_1',
+            'body': '',
+            'type': 'playlist',
+            'attachments': [requestedAttachment.toJson()],
+          },
+        );
+        return http.Response.bytes(
+          utf8.encode(
+            jsonEncode({
+              'message': {
+                'id': 'msg_playlist_1',
+                'room_id': 'room_1',
+                'sender': {
+                  'id': 'user_1',
+                  'username': 'alice',
+                  'display_name': 'Alice',
+                },
+                'client_message_id': 'cmsg_playlist_1',
+                'type': 'playlist',
+                'body': '[歌单] 夜晚',
+                'attachments': [
+                  {'type': 'playlist', 'playlist': snapshot},
+                ],
+                'created_at': '2026-08-07T09:32:00Z',
+              },
+            }),
+          ),
+          201,
+          headers: {'content-type': 'application/json'},
+        );
+      }),
+    );
+
+    final message = await api.sendMessage(
+      roomId: 'room_1',
+      clientMessageId: 'cmsg_playlist_1',
+      body: '',
+      type: 'playlist',
+      attachments: const [requestedAttachment],
+    );
+
+    expect(message.type, 'playlist');
+    expect(message.playlistAttachment?.playlist?.name, '夜晚');
+    expect(
+      message.playlistAttachment?.playlist?.creator.roomDisplayName,
+      '房间里的 Alice',
+    );
+    expect(
+      message.playlistAttachment?.playlist?.items.single.trackId,
+      'track_1',
+    );
+    api.close();
+  });
+
+  test('shared playlist clone uses the message-scoped endpoint', () async {
+    final api = GangApiClient(
+      baseUrl: 'http://example.test/api/v1',
+      accessTokenProvider: ({bool forceRefresh = false}) async => 'token',
+      httpClient: MockClient((request) async {
+        expect(request.method, 'POST');
+        expect(
+          request.url.path,
+          '/api/v1/rooms/room_1/messages/msg_1/playlist/clone-to-me',
+        );
+        return http.Response.bytes(
+          utf8.encode(
+            jsonEncode({
+              'playlist': {
+                'id': 'clone_1',
+                'name': '朋友的歌单 · 夜晚',
+                'description': '',
+                'revision': 1,
+                'item_count': 1,
+                'created_at': '2026-08-07T09:35:00Z',
+                'updated_at': '2026-08-07T09:35:00Z',
+              },
+            }),
+          ),
+          201,
+          headers: {'content-type': 'application/json'},
+        );
+      }),
+    );
+
+    final playlist = await api.cloneSharedMusicPlaylistToPersonal(
+      roomId: 'room_1',
+      messageId: 'msg_1',
+    );
+
+    expect(playlist.id, 'clone_1');
+    expect(playlist.name, '朋友的歌单 · 夜晚');
     api.close();
   });
 

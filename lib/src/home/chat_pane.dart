@@ -39,6 +39,7 @@ import '../ui/ui.dart';
 import 'adaptive_layout.dart';
 import 'chat_image_preview.dart';
 import 'hover_card_anchor.dart';
+import 'music_playlist_profile_card.dart';
 import 'room_profile_card.dart';
 
 export 'chat_image_preview.dart';

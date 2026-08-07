@@ -120,6 +120,8 @@ class MusicPlaylistHoverCard extends StatefulWidget {
     this.onResolveRoomProfile,
     this.onEnterCommonRoom,
     this.userProfileActionBuilder,
+    this.primaryActionLabel = '播放全部',
+    this.primaryActionIcon = Icons.play_arrow,
   });
 
   final MusicPlaylistCardData data;
@@ -132,6 +134,8 @@ class MusicPlaylistHoverCard extends StatefulWidget {
   final RoomProfileResolver? onResolveRoomProfile;
   final ValueChanged<PublicRoom>? onEnterCommonRoom;
   final UserProfileActionBuilder? userProfileActionBuilder;
+  final String primaryActionLabel;
+  final IconData primaryActionIcon;
 
   @override
   State<MusicPlaylistHoverCard> createState() => _MusicPlaylistHoverCardState();
@@ -266,6 +270,8 @@ class _MusicPlaylistHoverCardState extends State<MusicPlaylistHoverCard> {
         viewing: _viewing,
         onPlayAll: widget.onPlayAll == null ? null : _playAll,
         onViewPlaylist: widget.onViewPlaylist == null ? null : _viewPlaylist,
+        primaryActionLabel: widget.primaryActionLabel,
+        primaryActionIcon: widget.primaryActionIcon,
       ),
       child: widget.child,
     );
@@ -284,6 +290,8 @@ class _MusicPlaylistProfileCard extends StatelessWidget {
     required this.viewing,
     required this.onPlayAll,
     required this.onViewPlaylist,
+    required this.primaryActionLabel,
+    required this.primaryActionIcon,
   });
 
   final MusicPlaylistCardData data;
@@ -296,6 +304,8 @@ class _MusicPlaylistProfileCard extends StatelessWidget {
   final bool viewing;
   final VoidCallback? onPlayAll;
   final VoidCallback? onViewPlaylist;
+  final String primaryActionLabel;
+  final IconData primaryActionIcon;
 
   @override
   Widget build(BuildContext context) {
@@ -367,8 +377,10 @@ class _MusicPlaylistProfileCard extends StatelessWidget {
                 buttonKey: const ValueKey<String>(
                   'music-playlist-card-play-all',
                 ),
-                label: data.showPlayingStatus ? '正在播放' : '播放全部',
-                icon: Icons.play_arrow,
+                label: data.showPlayingStatus ? '正在播放' : primaryActionLabel,
+                icon: data.showPlayingStatus
+                    ? Icons.play_arrow
+                    : primaryActionIcon,
                 tone: ButtonTone.primary,
                 loading: !data.showPlayingStatus && playing,
                 onPressed: data.showPlayingStatus ? null : onPlayAll,

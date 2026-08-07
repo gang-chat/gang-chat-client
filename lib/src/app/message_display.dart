@@ -2,7 +2,7 @@ import '../protocol/models.dart';
 import 'file_display.dart';
 import 'voice_message_display.dart' as voice_display;
 
-enum MessageContentKind { sticker, voice, files, text }
+enum MessageContentKind { sticker, voice, files, playlist, text }
 
 const String kSystemMessageType = 'system';
 const String kSystemEventRoomMemberJoined = 'room_member_joined';
@@ -153,6 +153,7 @@ MessageContentKind messageContentKind(Message message) {
     return MessageContentKind.voice;
   }
   if (message.fileAttachments.isNotEmpty) return MessageContentKind.files;
+  if (message.playlistAttachment != null) return MessageContentKind.playlist;
   return MessageContentKind.text;
 }
 
