@@ -113,6 +113,98 @@ void main() {
       },
     );
   }
+
+  testWidgets('shared song picker keeps personal and room playlist scopes', (
+    tester,
+  ) async {
+    final controller = MusicTrackPreviewController(
+      api: _PreviewApi(),
+      platform: _PreviewPlatform(),
+    );
+    addTearDown(controller.dispose);
+    MusicTrackPlaylistTarget? addedTarget;
+    const personal = PersonalMusicPlaylist(
+      id: 'personal-1',
+      name: '我的歌单',
+      description: '',
+      revision: 1,
+      itemCount: 1,
+      createdAt: null,
+      updatedAt: null,
+    );
+    const room = PersonalMusicPlaylist(
+      id: 'room-1',
+      name: '当前房间歌单',
+      description: '',
+      revision: 1,
+      itemCount: 2,
+      createdAt: null,
+      updatedAt: null,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ui.uiTheme().copyWith(platform: TargetPlatform.windows),
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: MusicTrackHoverCard(
+              data: const MusicTrackCardData(
+                id: 'shared-track',
+                source: 'bilibili',
+                trackId: 'BV1test',
+                title: '分享歌曲',
+                artists: ['歌手'],
+                durationMs: 0,
+              ),
+              previewController: controller,
+              loadPlaylistTargets: () async => const [
+                MusicTrackPlaylistTarget.personal(personal),
+                MusicTrackPlaylistTarget.room(
+                  playlist: room,
+                  roomId: 'room-alpha',
+                ),
+              ],
+              onAddToPlaylistTarget: (target) async {
+                addedTarget = target;
+              },
+              child: const SizedBox(
+                key: ValueKey<String>('shared-track-row'),
+                width: 240,
+                height: 56,
+                child: Text('分享歌曲'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey<String>('shared-track-row')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('music-track-card-add-to-playlist')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('我的歌单'), findsOneWidget);
+    expect(find.text('当前房间歌单'), findsOneWidget);
+    expect(find.byIcon(Icons.person), findsOneWidget);
+    expect(find.byIcon(Icons.meeting_room), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(
+        const ValueKey<String>(
+          'music-track-playlist-target-add:room:room-alpha:room-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(addedTarget?.scope, MusicTrackPlaylistTargetScope.room);
+    expect(addedTarget?.roomId, 'room-alpha');
+    expect(addedTarget?.playlist.id, 'room-1');
+  });
 }
 
 class _PreviewApi implements MusicTrackPreviewApi {

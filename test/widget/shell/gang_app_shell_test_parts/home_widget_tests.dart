@@ -2542,6 +2542,144 @@ void registerShellHomeWidgetTests() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('shared song card lists personal and current room playlists', (
+    WidgetTester tester,
+  ) async {
+    final requestedPaths = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ui.uiTheme(),
+        home: HomePage(
+          app: _homeTestAppContext(
+            requestedPaths: requestedPaths,
+            includeSharedMusicTrackMessage: true,
+          ),
+          realtime: _NoopRealtimeService(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Alpha Room'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('分享歌曲完整名称'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('music-track-card-add-to-playlist')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Kai 的个人歌单'), findsOneWidget);
+    expect(find.text('Alpha 房间歌单'), findsOneWidget);
+    expect(requestedPaths, contains('/api/v1/me/music-box/playlists'));
+    expect(
+      requestedPaths,
+      contains('/api/v1/rooms/server-alpha/music-box/playlists'),
+    );
+
+    await tester.tap(
+      find.byKey(
+        const ValueKey<String>(
+          'music-track-playlist-target-add:room:server-alpha:mbp-room-alpha',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      requestedPaths,
+      contains(
+        '/api/v1/rooms/server-alpha/music-box/playlists/'
+        'mbp-room-alpha/items',
+      ),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('copied music message pastes as a removable component', (
+    WidgetTester tester,
+  ) async {
+    String? clipboardText;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          final arguments = call.arguments as Map<Object?, Object?>;
+          clipboardText = arguments['text'] as String?;
+          return null;
+        }
+        if (call.method == 'Clipboard.getData') {
+          final value = clipboardText;
+          return <String, dynamic>{
+            'text': value == null
+                ? null
+                : '${value.replaceAll('\n', '\r\n')}\r\n',
+          };
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ui.uiTheme(),
+        home: HomePage(
+          app: _homeTestAppContext(includeSharedMusicTrackMessage: true),
+          realtime: _NoopRealtimeService(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Alpha Room'));
+    await tester.pumpAndSettle();
+    final title = find.text('分享歌曲完整名称');
+    final secondaryClick = await tester.startGesture(
+      tester.getCenter(title),
+      kind: PointerDeviceKind.mouse,
+      buttons: kSecondaryMouseButton,
+    );
+    await secondaryClick.up();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('复制'));
+    await tester.pumpAndSettle();
+    expect(clipboardText, contains('[歌曲] 分享歌曲完整名称'));
+
+    final composerField = find.descendant(
+      of: find.byType(ui.ChatComposer),
+      matching: find.byType(TextField),
+    );
+    await tester.tap(composerField);
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.keyV);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.keyV);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('composer-message-component')),
+      findsOneWidget,
+    );
+    expect(tester.widget<TextField>(composerField).controller?.text, isEmpty);
+
+    await tester.tap(
+      find.byKey(const ValueKey('remove-composer-message-component')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('composer-message-component')),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('authenticated home shell opens live channel pane', (
     WidgetTester tester,
   ) async {

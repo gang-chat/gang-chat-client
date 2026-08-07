@@ -30,6 +30,32 @@ class MusicTrackCardData {
       MusicTrackPreviewTrack(source: source, trackId: trackId);
 }
 
+enum MusicTrackPlaylistTargetScope { personal, room }
+
+/// A writable playlist shown by a song card.
+///
+/// Keeping the scope beside the playlist prevents room playlists from being
+/// accidentally submitted through the personal-playlist API when a picker
+/// contains both kinds of target.
+class MusicTrackPlaylistTarget {
+  const MusicTrackPlaylistTarget.personal(this.playlist)
+    : scope = MusicTrackPlaylistTargetScope.personal,
+      roomId = null;
+
+  const MusicTrackPlaylistTarget.room({
+    required this.playlist,
+    required this.roomId,
+  }) : scope = MusicTrackPlaylistTargetScope.room;
+
+  final PersonalMusicPlaylist playlist;
+  final MusicTrackPlaylistTargetScope scope;
+  final String? roomId;
+
+  bool get roomScoped => scope == MusicTrackPlaylistTargetScope.room;
+
+  String get key => '${scope.name}:${roomId ?? ''}:${playlist.id}';
+}
+
 /// Song profile card for saved-playlist rows. Preview is local-only: it never
 /// changes the room queue or authoritative music-box playback state.
 class MusicTrackHoverCard extends StatefulWidget {
@@ -42,6 +68,10 @@ class MusicTrackHoverCard extends StatefulWidget {
     this.loadPlaylists,
     this.playlistsRoomScoped = false,
     this.onAddToPlaylist,
+    this.playlistTargets = const [],
+    this.loadPlaylistTargets,
+    this.playlistTargetsLoadKey,
+    this.onAddToPlaylistTarget,
   });
 
   final MusicTrackCardData data;
@@ -51,6 +81,11 @@ class MusicTrackHoverCard extends StatefulWidget {
   final Future<List<PersonalMusicPlaylist>> Function()? loadPlaylists;
   final bool playlistsRoomScoped;
   final Future<void> Function(PersonalMusicPlaylist playlist)? onAddToPlaylist;
+  final List<MusicTrackPlaylistTarget> playlistTargets;
+  final Future<List<MusicTrackPlaylistTarget>> Function()? loadPlaylistTargets;
+  final Object? playlistTargetsLoadKey;
+  final Future<void> Function(MusicTrackPlaylistTarget target)?
+  onAddToPlaylistTarget;
 
   @override
   State<MusicTrackHoverCard> createState() => _MusicTrackHoverCardState();
@@ -58,8 +93,8 @@ class MusicTrackHoverCard extends StatefulWidget {
 
 class _MusicTrackHoverCardState extends State<MusicTrackHoverCard> {
   bool _showPlaylistPicker = false;
-  String? _addingPlaylistId;
-  List<PersonalMusicPlaylist>? _loadedPlaylists;
+  String? _addingPlaylistTargetKey;
+  List<MusicTrackPlaylistTarget>? _loadedPlaylistTargets;
   bool _loadingPlaylists = false;
 
   @override
@@ -71,21 +106,36 @@ class _MusicTrackHoverCardState extends State<MusicTrackHoverCard> {
         oldWidget.previewController.stopIf(oldWidget.data.previewTrack.key),
       );
       _showPlaylistPicker = false;
-      _addingPlaylistId = null;
+      _addingPlaylistTargetKey = null;
     }
-    if (oldWidget.loadPlaylists != widget.loadPlaylists) {
-      _loadedPlaylists = null;
+    final keyedLoader = widget.playlistTargetsLoadKey != null;
+    final loaderChanged = keyedLoader
+        ? oldWidget.playlistTargetsLoadKey != widget.playlistTargetsLoadKey
+        : oldWidget.loadPlaylists != widget.loadPlaylists ||
+              oldWidget.loadPlaylistTargets != widget.loadPlaylistTargets;
+    if (loaderChanged) {
+      _loadedPlaylistTargets = null;
       _loadingPlaylists = false;
     }
   }
 
   Future<void> _ensurePlaylistsLoaded() async {
-    final load = widget.loadPlaylists;
-    if (load == null || _loadedPlaylists != null || _loadingPlaylists) return;
+    final loadTargets = widget.loadPlaylistTargets;
+    final loadLegacy = widget.loadPlaylists;
+    if ((loadTargets == null && loadLegacy == null) ||
+        _loadedPlaylistTargets != null ||
+        _loadingPlaylists) {
+      return;
+    }
     setState(() => _loadingPlaylists = true);
     try {
-      final playlists = await load();
-      if (mounted) setState(() => _loadedPlaylists = playlists);
+      final targets = loadTargets != null
+          ? await loadTargets()
+          : [
+              for (final playlist in await loadLegacy!())
+                _legacyPlaylistTarget(playlist),
+            ];
+      if (mounted) setState(() => _loadedPlaylistTargets = targets);
     } catch (error) {
       if (mounted) {
         showFloatingErrorNotice(
@@ -96,6 +146,23 @@ class _MusicTrackHoverCardState extends State<MusicTrackHoverCard> {
     } finally {
       if (mounted) setState(() => _loadingPlaylists = false);
     }
+  }
+
+  MusicTrackPlaylistTarget _legacyPlaylistTarget(
+    PersonalMusicPlaylist playlist,
+  ) {
+    return widget.playlistsRoomScoped
+        ? MusicTrackPlaylistTarget.room(playlist: playlist, roomId: '')
+        : MusicTrackPlaylistTarget.personal(playlist);
+  }
+
+  List<MusicTrackPlaylistTarget> get _playlistTargets {
+    final loaded = _loadedPlaylistTargets;
+    if (loaded != null) return loaded;
+    if (widget.playlistTargets.isNotEmpty) return widget.playlistTargets;
+    return [
+      for (final playlist in widget.playlists) _legacyPlaylistTarget(playlist),
+    ];
   }
 
   @override
@@ -117,15 +184,23 @@ class _MusicTrackHoverCardState extends State<MusicTrackHoverCard> {
     }
   }
 
-  Future<void> _addToPlaylist(PersonalMusicPlaylist playlist) async {
-    final add = widget.onAddToPlaylist;
-    if (add == null || _addingPlaylistId != null) return;
-    setState(() => _addingPlaylistId = playlist.id);
+  Future<void> _addToPlaylist(MusicTrackPlaylistTarget target) async {
+    final addTarget = widget.onAddToPlaylistTarget;
+    final addLegacy = widget.onAddToPlaylist;
+    if ((addTarget == null && addLegacy == null) ||
+        _addingPlaylistTargetKey != null) {
+      return;
+    }
+    setState(() => _addingPlaylistTargetKey = target.key);
     try {
-      await add(playlist);
+      if (addTarget != null) {
+        await addTarget(target);
+      } else {
+        await addLegacy!(target.playlist);
+      }
       if (!mounted) return;
       setState(() => _showPlaylistPicker = false);
-      showFloatingSuccessNotice(context, '已添加到「${playlist.name}」');
+      showFloatingSuccessNotice(context, '已添加到「${target.playlist.name}」');
     } catch (error) {
       if (mounted) {
         showFloatingErrorNotice(
@@ -134,7 +209,7 @@ class _MusicTrackHoverCardState extends State<MusicTrackHoverCard> {
         );
       }
     } finally {
-      if (mounted) setState(() => _addingPlaylistId = null);
+      if (mounted) setState(() => _addingPlaylistTargetKey = null);
     }
   }
 
@@ -163,17 +238,18 @@ class _MusicTrackHoverCardState extends State<MusicTrackHoverCard> {
             loading: preview.isLoading(trackKey),
             playing: preview.isPlaying(trackKey),
             onTogglePreview: _togglePreview,
-            playlists: _loadedPlaylists ?? widget.playlists,
+            playlistTargets: _playlistTargets,
             loadingPlaylists: _loadingPlaylists,
-            playlistsRoomScoped: widget.playlistsRoomScoped,
             showPlaylistPicker: _showPlaylistPicker,
-            addingPlaylistId: _addingPlaylistId,
-            onOpenPlaylistPicker: widget.onAddToPlaylist == null
+            addingPlaylistTargetKey: _addingPlaylistTargetKey,
+            onOpenPlaylistPicker:
+                widget.onAddToPlaylist == null &&
+                    widget.onAddToPlaylistTarget == null
                 ? null
                 : () => setState(() => _showPlaylistPicker = true),
             onClosePlaylistPicker: () =>
                 setState(() => _showPlaylistPicker = false),
-            onAddToPlaylist: _addToPlaylist,
+            onAddToPlaylistTarget: _addToPlaylist,
           );
         },
       ),
@@ -188,28 +264,26 @@ class _MusicTrackProfileCard extends StatelessWidget {
     required this.loading,
     required this.playing,
     required this.onTogglePreview,
-    required this.playlists,
+    required this.playlistTargets,
     required this.loadingPlaylists,
-    required this.playlistsRoomScoped,
     required this.showPlaylistPicker,
-    required this.addingPlaylistId,
+    required this.addingPlaylistTargetKey,
     required this.onOpenPlaylistPicker,
     required this.onClosePlaylistPicker,
-    required this.onAddToPlaylist,
+    required this.onAddToPlaylistTarget,
   });
 
   final MusicTrackCardData data;
   final bool loading;
   final bool playing;
   final VoidCallback onTogglePreview;
-  final List<PersonalMusicPlaylist> playlists;
+  final List<MusicTrackPlaylistTarget> playlistTargets;
   final bool loadingPlaylists;
-  final bool playlistsRoomScoped;
   final bool showPlaylistPicker;
-  final String? addingPlaylistId;
+  final String? addingPlaylistTargetKey;
   final VoidCallback? onOpenPlaylistPicker;
   final VoidCallback onClosePlaylistPicker;
-  final ValueChanged<PersonalMusicPlaylist> onAddToPlaylist;
+  final ValueChanged<MusicTrackPlaylistTarget> onAddToPlaylistTarget;
 
   @override
   Widget build(BuildContext context) {
@@ -296,7 +370,7 @@ class _MusicTrackProfileCard extends StatelessWidget {
                   icon: const Icon(Icons.arrow_back),
                   tooltip: '返回歌曲信息',
                   size: 30,
-                  onPressed: addingPlaylistId == null
+                  onPressed: addingPlaylistTargetKey == null
                       ? onClosePlaylistPicker
                       : null,
                 ),
@@ -310,7 +384,7 @@ class _MusicTrackProfileCard extends StatelessWidget {
                 height: 54,
                 child: Center(child: CircularProgressIndicator()),
               )
-            else if (playlists.isEmpty)
+            else if (playlistTargets.isEmpty)
               const SizedBox(
                 height: 54,
                 child: Center(
@@ -326,17 +400,16 @@ class _MusicTrackProfileCard extends StatelessWidget {
                 child: ListView.separated(
                   padding: EdgeInsets.zero,
                   shrinkWrap: true,
-                  itemCount: playlists.length,
+                  itemCount: playlistTargets.length,
                   separatorBuilder: (_, _) =>
                       const SizedBox(height: UiSpacing.sm),
                   itemBuilder: (context, index) {
-                    final playlist = playlists[index];
+                    final target = playlistTargets[index];
                     return _MusicTrackPlaylistTargetButton(
-                      playlist: playlist,
-                      roomScoped: playlistsRoomScoped,
-                      loading: addingPlaylistId == playlist.id,
-                      enabled: addingPlaylistId == null,
-                      onAdd: () => onAddToPlaylist(playlist),
+                      target: target,
+                      loading: addingPlaylistTargetKey == target.key,
+                      enabled: addingPlaylistTargetKey == null,
+                      onAdd: () => onAddToPlaylistTarget(target),
                     );
                   },
                 ),
@@ -350,21 +423,20 @@ class _MusicTrackProfileCard extends StatelessWidget {
 
 class _MusicTrackPlaylistTargetButton extends StatelessWidget {
   const _MusicTrackPlaylistTargetButton({
-    required this.playlist,
-    required this.roomScoped,
+    required this.target,
     required this.loading,
     required this.enabled,
     required this.onAdd,
   });
 
-  final PersonalMusicPlaylist playlist;
-  final bool roomScoped;
+  final MusicTrackPlaylistTarget target;
   final bool loading;
   final bool enabled;
   final VoidCallback onAdd;
 
   @override
   Widget build(BuildContext context) {
+    final playlist = target.playlist;
     return LayoutBuilder(
       builder: (context, constraints) {
         const style = TextStyle(
@@ -395,7 +467,7 @@ class _MusicTrackPlaylistTargetButton extends StatelessWidget {
           child: Row(
             children: [
               Icon(
-                roomScoped ? Icons.meeting_room : Icons.person,
+                target.roomScoped ? Icons.meeting_room : Icons.person,
                 color: UiColors.accent,
                 size: 17,
               ),
@@ -406,7 +478,7 @@ class _MusicTrackPlaylistTargetButton extends StatelessWidget {
               const SizedBox(width: 8),
               ButtonIcon(
                 key: ValueKey<String>(
-                  'music-track-playlist-target-add:${playlist.id}',
+                  'music-track-playlist-target-add:${target.roomScoped ? target.key : playlist.id}',
                 ),
                 icon: const Icon(Icons.add),
                 tooltip: '添加到歌单',

@@ -144,11 +144,11 @@ class ChatMessageActions {
   )
   onViewSharedPlaylist;
   final MusicTrackPreviewController? sharedTrackPreviewController;
-  final Future<List<PersonalMusicPlaylist>> Function()?
+  final Future<List<MusicTrackPlaylistTarget>> Function(String roomId)?
   loadSharedTrackPlaylists;
   final Future<void> Function(
     SharedMusicTrack track,
-    PersonalMusicPlaylist playlist,
+    MusicTrackPlaylistTarget target,
   )?
   onAddSharedTrackToPlaylist;
 
@@ -2418,11 +2418,11 @@ class ChatMessageContent extends StatelessWidget {
   )?
   onViewSharedPlaylist;
   final MusicTrackPreviewController? sharedTrackPreviewController;
-  final Future<List<PersonalMusicPlaylist>> Function()?
+  final Future<List<MusicTrackPlaylistTarget>> Function(String roomId)?
   loadSharedTrackPlaylists;
   final Future<void> Function(
     SharedMusicTrack track,
-    PersonalMusicPlaylist playlist,
+    MusicTrackPlaylistTarget target,
   )?
   onAddSharedTrackToPlaylist;
 
@@ -2477,6 +2477,7 @@ class ChatMessageContent extends StatelessWidget {
             userProfileActionBuilder: profileActionBuilder,
           ),
           message_display.MessageContentKind.musicTrack => _MusicTrackShareBody(
+            roomId: message.roomId,
             track: message.musicTrackAttachment!.track!,
             previewController: sharedTrackPreviewController,
             loadPlaylists: loadSharedTrackPlaylists,
@@ -2530,18 +2531,21 @@ class ChatMessageContent extends StatelessWidget {
 
 class _MusicTrackShareBody extends StatelessWidget {
   const _MusicTrackShareBody({
+    required this.roomId,
     required this.track,
     required this.previewController,
     required this.loadPlaylists,
     required this.onAddToPlaylist,
   });
 
+  final String roomId;
   final SharedMusicTrack track;
   final MusicTrackPreviewController? previewController;
-  final Future<List<PersonalMusicPlaylist>> Function()? loadPlaylists;
+  final Future<List<MusicTrackPlaylistTarget>> Function(String roomId)?
+  loadPlaylists;
   final Future<void> Function(
     SharedMusicTrack track,
-    PersonalMusicPlaylist playlist,
+    MusicTrackPlaylistTarget target,
   )?
   onAddToPlaylist;
 
@@ -2608,10 +2612,13 @@ class _MusicTrackShareBody extends StatelessWidget {
     return MusicTrackHoverCard(
       data: data,
       previewController: preview,
-      loadPlaylists: loadPlaylists,
-      onAddToPlaylist: onAddToPlaylist == null
+      loadPlaylistTargets: loadPlaylists == null
           ? null
-          : (playlist) => onAddToPlaylist!(track, playlist),
+          : () => loadPlaylists!(roomId),
+      playlistTargetsLoadKey: roomId,
+      onAddToPlaylistTarget: onAddToPlaylist == null
+          ? null
+          : (target) => onAddToPlaylist!(track, target),
       child: panel,
     );
   }

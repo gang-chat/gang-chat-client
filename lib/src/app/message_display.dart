@@ -230,6 +230,22 @@ String messageClipboardText(Message message) {
   return messageCopyText(message);
 }
 
+/// Whether the current plain-text clipboard still represents [message].
+///
+/// Windows clipboard providers may expose line endings as CRLF even when the
+/// app originally wrote LF. A terminal line break may also be appended by a
+/// clipboard bridge. Normalizing only those transport differences preserves
+/// stale-copy protection without degrading a structured component to text.
+bool messageClipboardTextMatches(Message message, String? clipboardText) {
+  if (clipboardText == null) return false;
+  return _normalizedClipboardText(clipboardText) ==
+      _normalizedClipboardText(messageClipboardText(message));
+}
+
+String _normalizedClipboardText(String value) {
+  return value.replaceAll('\r\n', '\n').replaceAll('\r', '\n').trimRight();
+}
+
 String _musicPlaylistClipboardText(SharedMusicPlaylist playlist) {
   final creator = _systemUserLabel(playlist.creator);
   final createdAt = playlist.createdAt?.toLocal().toIso8601String() ?? '未知';

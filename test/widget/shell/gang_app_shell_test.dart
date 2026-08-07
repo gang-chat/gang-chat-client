@@ -6,7 +6,7 @@ import 'package:flutter/gestures.dart'
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter/services.dart'
-    show LogicalKeyboardKey, SystemUiOverlayStyle;
+    show LogicalKeyboardKey, SystemChannels, SystemUiOverlayStyle;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -233,6 +233,7 @@ AuthenticatedAppContext _homeTestAppContext({
   int alphaRoomUnreadCount = 3,
   bool alphaRoomHasPendingJoinRequests = false,
   bool alphaRoomAiVoiceAnnouncementsEnabled = false,
+  bool includeSharedMusicTrackMessage = false,
   Future<void> Function(String roomId)? beforeRoomDetailResponse,
   Future<void> Function(Map<String, Object?> update)? beforeLiveStateResponse,
 }) {
@@ -291,6 +292,7 @@ AuthenticatedAppContext _homeTestAppContext({
       alphaRoomHasPendingJoinRequests: alphaRoomHasPendingJoinRequests,
       initialAlphaRoomAiVoiceAnnouncementsEnabled:
           alphaRoomAiVoiceAnnouncementsEnabled,
+      includeSharedMusicTrackMessage: includeSharedMusicTrackMessage,
       beforeRoomDetailResponse: beforeRoomDetailResponse,
       beforeLiveStateResponse: beforeLiveStateResponse,
     ),
@@ -321,6 +323,7 @@ GangApi _roomsApi({
   int alphaRoomUnreadCount = 3,
   bool alphaRoomHasPendingJoinRequests = false,
   bool initialAlphaRoomAiVoiceAnnouncementsEnabled = false,
+  bool includeSharedMusicTrackMessage = false,
   Future<void> Function(String roomId)? beforeRoomDetailResponse,
   Future<void> Function(Map<String, Object?> update)? beforeLiveStateResponse,
 }) {
@@ -736,6 +739,45 @@ GangApi _roomsApi({
           'limits': {'max_playlists': 50, 'max_playlist_items': 500},
         });
       }
+      if (request.url.path == '/api/v1/me/music-box/playlists') {
+        expect(request.method, 'GET');
+        return _jsonResponse({
+          'playlists': [
+            {
+              'id': 'mbp-personal-kai',
+              'name': 'Kai 的个人歌单',
+              'description': '',
+              'revision': 1,
+              'item_count': 0,
+            },
+          ],
+          'pagination': {
+            'page': 1,
+            'page_size': 50,
+            'total': 1,
+            'has_more': false,
+          },
+          'limits': {'max_playlists': 50, 'max_playlist_items': 500},
+        });
+      }
+      if (request.url.path ==
+          '/api/v1/rooms/server-alpha/music-box/playlists/mbp-room-alpha/items') {
+        expect(request.method, 'POST');
+        final body =
+            jsonDecode(utf8.decode(request.bodyBytes)) as Map<String, Object?>;
+        return _jsonResponse({
+          'item': {
+            'id': 'mbpi-room-added',
+            'playlist_id': 'mbp-room-alpha',
+            'track_id': body['track_id'],
+            'source': body['source'],
+            'title': body['title'],
+            'artists': body['artists'],
+            'duration_ms': body['duration_ms'] ?? 0,
+            'sort_order': 10,
+          },
+        });
+      }
       if (request.url.path == '/api/v1/rooms/server-alpha') {
         if (request.method == 'PATCH') {
           final body =
@@ -1065,6 +1107,29 @@ GangApi _roomsApi({
         }
         return _jsonResponse({
           'messages': [
+            if (includeSharedMusicTrackMessage)
+              _messageJson(
+                id: 'msg-music-track',
+                roomId: 'server-alpha',
+                sender: _currentUserJson,
+                clientMessageId: 'client-msg-music-track',
+                body: '[歌曲] 分享歌曲完整名称',
+                type: 'music_track',
+                attachments: const [
+                  {
+                    'type': 'music_track',
+                    'track': {
+                      'id': 'mbpi-shared',
+                      'playlist_id': 'mbp-source',
+                      'track_id': 'BV1shared',
+                      'source': 'bilibili',
+                      'title': '分享歌曲完整名称',
+                      'artists': ['分享歌手'],
+                      'duration_ms': 180000,
+                    },
+                  },
+                ],
+              ),
             _messageJson(
               id: 'msg-1',
               roomId: 'server-alpha',

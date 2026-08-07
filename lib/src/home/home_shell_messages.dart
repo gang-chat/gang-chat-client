@@ -623,30 +623,61 @@ extension _HomeShellMessages on _HomeShellState {
     );
   }
 
-  Future<List<PersonalMusicPlaylist>> _loadSharedTrackPlaylists() async {
+  Future<List<MusicTrackPlaylistTarget>> _loadSharedTrackPlaylists(
+    String roomId,
+  ) async {
     final api = _services.api;
-    if (api is! PersonalMusicPlaylistApi) return const [];
-    final page = await (api as PersonalMusicPlaylistApi)
-        .listPersonalMusicPlaylists(pageSize: 50);
-    return page.playlists;
+    final targets = <MusicTrackPlaylistTarget>[];
+    if (api is PersonalMusicPlaylistApi) {
+      final page = await (api as PersonalMusicPlaylistApi)
+          .listPersonalMusicPlaylists(pageSize: 50);
+      targets.addAll(page.playlists.map(MusicTrackPlaylistTarget.personal));
+    }
+    if (api is RoomMusicPlaylistApi) {
+      final page = await (api as RoomMusicPlaylistApi).listRoomMusicPlaylists(
+        roomId: roomId,
+        pageSize: 50,
+      );
+      targets.addAll(
+        page.playlists.map(
+          (playlist) =>
+              MusicTrackPlaylistTarget.room(playlist: playlist, roomId: roomId),
+        ),
+      );
+    }
+    return targets;
   }
 
   Future<void> _addSharedTrackToPlaylist(
     SharedMusicTrack track,
-    PersonalMusicPlaylist playlist,
+    MusicTrackPlaylistTarget target,
   ) async {
     final api = _services.api;
+    final searchResult = MusicBoxSearchResult(
+      trackId: track.trackId,
+      name: track.title,
+      artists: track.artists,
+      source: track.source,
+    );
+    if (target.roomScoped) {
+      final roomId = target.roomId;
+      if (api is! RoomMusicPlaylistApi || roomId == null || roomId.isEmpty) {
+        throw StateError('当前版本不支持添加到房间歌单');
+      }
+      await (api as RoomMusicPlaylistApi).addRoomMusicPlaylistItem(
+        roomId: roomId,
+        playlistId: target.playlist.id,
+        track: searchResult,
+        durationMs: track.durationMs > 0 ? track.durationMs : null,
+      );
+      return;
+    }
     if (api is! PersonalMusicPlaylistApi) {
-      throw StateError('当前版本不支持添加到歌单');
+      throw StateError('当前版本不支持添加到个人歌单');
     }
     await (api as PersonalMusicPlaylistApi).addPersonalMusicPlaylistItem(
-      playlistId: playlist.id,
-      track: MusicBoxSearchResult(
-        trackId: track.trackId,
-        name: track.title,
-        artists: track.artists,
-        source: track.source,
-      ),
+      playlistId: target.playlist.id,
+      track: searchResult,
       durationMs: track.durationMs > 0 ? track.durationMs : null,
     );
   }
@@ -862,10 +893,17 @@ extension _HomeShellMessages on _HomeShellState {
       if (text.isEmpty) {
         throw Exception('这条消息没有可复制的内容');
       }
-      await _clipboardService.writeText(text);
       // Pending messages only carry a local client id and cannot be resolved
       // to the immutable server snapshot used by structured paste.
       _copiedMessageComponent = message.pending ? null : message;
+      try {
+        await _clipboardService.writeText(text);
+      } catch (_) {
+        if (identical(_copiedMessageComponent, message)) {
+          _copiedMessageComponent = null;
+        }
+        rethrow;
+      }
       return;
     }
     _copiedMessageComponent = null;
@@ -1805,7 +1843,10 @@ extension _HomeShellMessages on _HomeShellState {
     final component = _copiedMessageComponent;
     if (component == null || component.isRemoved) return false;
     final clipboardText = await _clipboardService.readText();
-    return clipboardText == message_display.messageClipboardText(component);
+    return message_display.messageClipboardTextMatches(
+      component,
+      clipboardText,
+    );
   }
 
   void _handleDroppedFiles(FileDropEvent event) {

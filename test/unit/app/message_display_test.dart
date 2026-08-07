@@ -408,6 +408,18 @@ void main() {
     expect(playlistText, contains('歌曲数量：1'));
     expect(playlistText, contains('创建人：房内 Alice'));
     expect(playlistText, contains('1. 晴天 - 周杰伦 [netease:track_1]'));
+    expect(messageClipboardTextMatches(playlistMessage, playlistText), isTrue);
+    expect(
+      messageClipboardTextMatches(
+        playlistMessage,
+        '${playlistText.replaceAll('\n', '\r\n')}\r\n',
+      ),
+      isTrue,
+    );
+    expect(
+      messageClipboardTextMatches(playlistMessage, '$playlistText 已修改'),
+      isFalse,
+    );
 
     final trackText = messageClipboardText(
       _message(
