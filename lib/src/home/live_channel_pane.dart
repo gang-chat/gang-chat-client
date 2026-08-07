@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show KeyDownEvent, LogicalKeyboardKey;
 
 import '../app/audio_levels.dart';
+import '../app/error_display.dart';
 import '../app/live_display.dart' as live_display;
 import '../app/music_box_controller.dart';
 import '../app/music_box_display.dart' as music_box_display;

@@ -230,6 +230,8 @@ extension _HomeShellMusicBox on _HomeShellState {
       switch (error.code) {
         case 'music_box_unavailable':
           return '音乐盒当前不可用';
+        case 'music_box_item_already_queued':
+          return '已在队列中';
       }
     }
     return '操作失败，请重试';

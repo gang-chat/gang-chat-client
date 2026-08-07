@@ -163,7 +163,10 @@ Content-Type: application/json
 ```
 
 点歌人只取认证会话，不能由请求体指定。无论当前播放什么来源，新点歌曲目都进入
-`temporary_queue`；当前正在播放已保存歌单时不会修改其播放快照。
+`temporary_queue`；当前正在播放已保存歌单时不会修改其播放快照。同一房间的点歌队列已含有相同
+`source + track_id` 时返回 `409 music_box_item_already_queued`，客户端显示“已在队列中”并保留服务端权威快照。
+
+个人歌单和房间歌单的单首添加同样以 `source + track_id` 作为具体链接身份，目标歌单已包含该链接时返回 `409 playlist_item_already_exists`。检查和写入在锁定目标歌单的同一事务内完成，不依赖客户端的分页预查结果。
 
 ## 播放控制
 

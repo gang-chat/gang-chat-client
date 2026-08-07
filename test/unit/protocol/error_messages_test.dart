@@ -62,4 +62,23 @@ void main() {
       '账号已被封禁',
     );
   });
+
+  test('localizes duplicate music queue and playlist conflicts', () {
+    expect(
+      localizedServerErrorMessage(
+        code: 'music_box_item_already_queued',
+        statusCode: 409,
+        message: 'music box item is already queued',
+      ),
+      '已在队列中',
+    );
+    expect(
+      localizedServerErrorMessage(
+        code: 'playlist_item_already_exists',
+        statusCode: 409,
+        message: 'music playlist item already exists',
+      ),
+      '已在歌单内，不可重复添加',
+    );
+  });
 }

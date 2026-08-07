@@ -57,6 +57,28 @@ MusicBoxTransportAction musicBoxPrimaryTransport(MusicBoxState state) {
 /// rolling server deployments, while every UI surface uses the product name.
 const String musicBoxRequestQueueLabel = '点歌队列';
 
+/// Stable identity for a concrete catalog track. Sources are protocol enums
+/// and therefore case-insensitive; external track ids keep their original case
+/// because providers may treat them as case-sensitive.
+String musicBoxTrackLinkKey({required String source, required String trackId}) {
+  return '${source.trim().toLowerCase()}:${trackId.trim()}';
+}
+
+/// Whether [source]/[trackId] already exists in the room's direct-request
+/// queue. Saved-playlist snapshots deliberately do not count as requests.
+bool musicBoxRequestQueueContainsTrack(
+  List<MusicBoxQueueItem> queue, {
+  required String source,
+  required String trackId,
+}) {
+  final target = musicBoxTrackLinkKey(source: source, trackId: trackId);
+  return queue.any(
+    (item) =>
+        musicBoxTrackLinkKey(source: item.source, trackId: item.trackId) ==
+        target,
+  );
+}
+
 String musicBoxActiveSourceLabel(MusicBoxActiveSource source) {
   if (source.type == MusicBoxActiveSourceType.temporary) {
     return musicBoxRequestQueueLabel;

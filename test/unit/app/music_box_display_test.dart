@@ -28,6 +28,41 @@ void main() {
     });
   });
 
+  group('music box request queue identity', () {
+    test('matches the same provider link and preserves track id case', () {
+      const queued = MusicBoxQueueItem(
+        id: 'queued-1',
+        source: 'bilibili',
+        trackId: 'BV1AbC',
+        title: 'Song',
+        artist: 'Artist',
+        durationMs: 0,
+        status: MusicBoxQueueItemStatus.ready,
+        fileSizeBytes: 0,
+        error: '',
+        addedByUserId: 'user-1',
+        createdAt: null,
+      );
+
+      expect(
+        musicBoxRequestQueueContainsTrack(
+          const [queued],
+          source: ' BILIBILI ',
+          trackId: ' BV1AbC ',
+        ),
+        isTrue,
+      );
+      expect(
+        musicBoxRequestQueueContainsTrack(
+          const [queued],
+          source: 'bilibili',
+          trackId: 'bv1abc',
+        ),
+        isFalse,
+      );
+    });
+  });
+
   group('music box active source labels', () {
     test('uses 点歌队列 for temporary sources from old servers', () {
       final parsed = MusicBoxState.fromJson({

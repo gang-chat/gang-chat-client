@@ -1313,6 +1313,7 @@ void main() {
           findsNothing,
         );
         expect(addButton, findsOneWidget);
+        expect(tester.widget<ButtonIcon>(addButton).tooltip, '加入点歌队列');
 
         await tester.tap(addButton);
         await tester.pump();
@@ -1341,6 +1342,92 @@ void main() {
         await tester.tap(find.text('点歌队列'));
         await tester.pump();
         expect(queued, const [result, result]);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  for (final platform in const [
+    TargetPlatform.windows,
+    TargetPlatform.macOS,
+    TargetPlatform.android,
+  ]) {
+    testWidgets(
+      '${platform.name} queued catalog track keeps plus action informative and disables the card action',
+      (tester) async {
+        final controller = TextEditingController(text: '已点歌曲');
+        final queued = <MusicBoxSearchResult>[];
+        addTearDown(controller.dispose);
+        const result = MusicBoxSearchResult(
+          trackId: 'already-queued-track',
+          name: '已点歌曲',
+          artists: ['歌手'],
+          source: 'netease',
+        );
+        const queueItem = MusicBoxQueueItem(
+          id: 'queued-item',
+          source: 'netease',
+          trackId: 'already-queued-track',
+          title: '已点歌曲',
+          artist: '歌手',
+          durationMs: 120000,
+          status: MusicBoxQueueItemStatus.ready,
+          fileSizeBytes: 0,
+          error: '',
+          addedByUserId: 'user',
+          createdAt: null,
+        );
+
+        await tester.pumpWidget(
+          _host(
+            _state(
+              playbackState: MusicBoxPlaybackState.stopped,
+              positionMs: 0,
+              temporaryQueue: const [queueItem],
+            ),
+            controller,
+            platform: platform,
+            height: 500,
+            searchResults: const [result],
+            onQueueResult: queued.add,
+          ),
+        );
+        await _toggleAddSources(tester);
+
+        final tile = find.byKey(
+          const ValueKey<String>(
+            'music-box-search-tile:netease:already-queued-track',
+          ),
+        );
+        final addButton = find.byKey(
+          const ValueKey<String>(
+            'music-box-search-add:netease:already-queued-track',
+          ),
+        );
+        expect(tester.widget<ButtonIcon>(addButton).tooltip, '加入点歌队列');
+
+        await tester.tap(addButton);
+        await tester.pump();
+        expect(queued, isEmpty);
+        expect(find.text('已在队列中'), findsOneWidget);
+
+        await tester.tap(tile);
+        await tester.pump();
+        final card = find.byKey(
+          const ValueKey<String>(
+            'music-box-song-card:search:netease:already-queued-track',
+          ),
+        );
+        expect(card, findsOneWidget);
+        expect(
+          find.descendant(of: card, matching: find.text('已在队列中')),
+          findsOneWidget,
+        );
+        final queuedButton = find.descendant(
+          of: card,
+          matching: find.widgetWithText(Button, '已在队列中'),
+        );
+        expect(tester.widget<Button>(queuedButton).onPressed, isNull);
         expect(tester.takeException(), isNull);
       },
     );
@@ -1471,6 +1558,7 @@ void main() {
           findsNothing,
         );
         expect(addButton, findsOneWidget);
+        expect(tester.widget<ButtonIcon>(addButton).tooltip, '加入点歌队列');
 
         await tester.tap(addButton);
         await tester.pump();

@@ -1123,6 +1123,7 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
                       controller: widget.controller,
                       roomId: widget.roomId,
                       roomScoped: true,
+                      temporaryQueue: widget.state.temporaryQueue,
                       onQueueResult: widget.onQueueResult,
                       onStateChanged: _handleActivatedState,
                       initialPlaylist: _requestedPlaylistRoomScoped == true
@@ -1135,6 +1136,7 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
                       controller: widget.controller,
                       roomId: widget.roomId,
                       roomScoped: false,
+                      temporaryQueue: widget.state.temporaryQueue,
                       onQueueResult: widget.onQueueResult,
                       onStateChanged: _handleActivatedState,
                       initialPlaylist: _requestedPlaylistRoomScoped == false
@@ -1152,6 +1154,7 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
                       hasQuery: hasQuery,
                       controller: widget.controller,
                       roomId: widget.roomId,
+                      temporaryQueue: widget.state.temporaryQueue,
                       onQueueResult: widget.onQueueResult,
                     ),
                   },
@@ -1544,6 +1547,7 @@ class _MusicBoxPlaylistBrowser extends StatefulWidget {
     required this.controller,
     required this.roomId,
     required this.roomScoped,
+    required this.temporaryQueue,
     required this.onQueueResult,
     required this.onStateChanged,
     required this.initialPlaylist,
@@ -1554,6 +1558,7 @@ class _MusicBoxPlaylistBrowser extends StatefulWidget {
   final MusicBoxController? controller;
   final String? roomId;
   final bool roomScoped;
+  final List<MusicBoxQueueItem> temporaryQueue;
   final ValueChanged<MusicBoxSearchResult> onQueueResult;
   final ValueChanged<MusicBoxState>? onStateChanged;
   final PersonalMusicPlaylist? initialPlaylist;
@@ -1832,6 +1837,12 @@ class _MusicBoxPlaylistBrowserState extends State<_MusicBoxPlaylistBrowser> {
                         durationMs: item.durationMs,
                         controller: widget.controller,
                         roomId: widget.roomId,
+                        alreadyInRequestQueue: music_box_display
+                            .musicBoxRequestQueueContainsTrack(
+                              widget.temporaryQueue,
+                              source: item.source,
+                              trackId: item.trackId,
+                            ),
                         onQueue: () => widget.onQueueResult(
                           MusicBoxSearchResult(
                             trackId: item.trackId,
@@ -2483,6 +2494,7 @@ class _MusicBoxSongCard extends StatefulWidget {
     required this.userProfileActionBuilder,
   }) : result = null,
        catalogDurationMs = null,
+       alreadyInRequestQueue = false,
        onQueueResult = null;
 
   const _MusicBoxSongCard.search({
@@ -2490,6 +2502,7 @@ class _MusicBoxSongCard extends StatefulWidget {
     required this.controller,
     required this.roomId,
     required this.onQueueResult,
+    required this.alreadyInRequestQueue,
     this.catalogDurationMs,
   }) : item = null,
        isCurrent = false,
@@ -2512,6 +2525,7 @@ class _MusicBoxSongCard extends StatefulWidget {
   final MusicBoxActiveSource? activeSource;
   final ValueChanged<MusicBoxState>? onStateChanged;
   final ValueChanged<MusicBoxSearchResult>? onQueueResult;
+  final bool alreadyInRequestQueue;
   final CurrentUser? currentUser;
   final UserProfileResolver? onResolveUserProfile;
   final RoomProfileResolver? onResolveRoomProfile;
@@ -2637,9 +2651,12 @@ class _MusicBoxSongCardState extends State<_MusicBoxSongCard> {
       if (!mounted) return;
       setState(() => _showPlaylistPicker = false);
       showFloatingSuccessNotice(context, '已添加到「${target.playlist.name}」');
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
-        showFloatingErrorNotice(context, '添加失败，请检查歌单权限');
+        showFloatingErrorNotice(
+          context,
+          userFacingErrorMessage(error, fallback: '添加失败，请检查歌单权限'),
+        );
       }
     } finally {
       if (mounted) setState(() => _addingPlaylistId = null);
@@ -2735,11 +2752,21 @@ class _MusicBoxSongCardState extends State<_MusicBoxSongCard> {
                   if (isSearchResult) ...[
                     Expanded(
                       child: Button(
-                        icon: const Icon(Icons.playlist_add),
-                        tone: ButtonTone.primary,
+                        icon: Icon(
+                          widget.alreadyInRequestQueue
+                              ? Icons.playlist_add_check
+                              : Icons.playlist_add,
+                        ),
+                        tone: widget.alreadyInRequestQueue
+                            ? ButtonTone.neutral
+                            : ButtonTone.primary,
                         height: 34,
-                        onPressed: () => widget.onQueueResult?.call(result),
-                        child: const Text('点歌队列'),
+                        onPressed: widget.alreadyInRequestQueue
+                            ? null
+                            : () => widget.onQueueResult?.call(result),
+                        child: Text(
+                          widget.alreadyInRequestQueue ? '已在队列中' : '点歌队列',
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -3419,6 +3446,7 @@ class _MusicBoxSearchList extends StatelessWidget {
     required this.hasQuery,
     required this.controller,
     required this.roomId,
+    required this.temporaryQueue,
     required this.onQueueResult,
   });
 
@@ -3429,6 +3457,7 @@ class _MusicBoxSearchList extends StatelessWidget {
   final bool hasQuery;
   final MusicBoxController? controller;
   final String? roomId;
+  final List<MusicBoxQueueItem> temporaryQueue;
   final ValueChanged<MusicBoxSearchResult> onQueueResult;
 
   @override
@@ -3468,12 +3497,19 @@ class _MusicBoxSearchList extends StatelessWidget {
       separatorBuilder: (_, _) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
         final result = results[index];
+        final alreadyInRequestQueue = music_box_display
+            .musicBoxRequestQueueContainsTrack(
+              temporaryQueue,
+              source: result.source,
+              trackId: result.trackId,
+            );
         return _MusicBoxTrackTile(
           keyScope: 'search',
           result: result,
           query: query,
           controller: controller,
           roomId: roomId,
+          alreadyInRequestQueue: alreadyInRequestQueue,
           onQueue: () => onQueueResult(result),
         );
       },
@@ -3488,6 +3524,7 @@ class _MusicBoxTrackTile extends StatelessWidget {
     required this.query,
     required this.controller,
     required this.roomId,
+    required this.alreadyInRequestQueue,
     required this.onQueue,
     this.durationMs,
   });
@@ -3497,8 +3534,17 @@ class _MusicBoxTrackTile extends StatelessWidget {
   final String query;
   final MusicBoxController? controller;
   final String? roomId;
+  final bool alreadyInRequestQueue;
   final VoidCallback onQueue;
   final int? durationMs;
+
+  void _queue(BuildContext context) {
+    if (alreadyInRequestQueue) {
+      showFloatingNotice(context, '已在队列中');
+      return;
+    }
+    onQueue();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3550,13 +3596,14 @@ class _MusicBoxTrackTile extends StatelessWidget {
             children: [
               Expanded(
                 child: HoverCardAnchor(
-                  resetKey: identity,
+                  resetKey: '$identity:$alreadyInRequestQueue',
                   cardWidth: 310,
                   cardBuilder: (_) => _MusicBoxSongCard.search(
                     result: result,
                     controller: controller,
                     roomId: roomId,
-                    onQueueResult: (_) => onQueue(),
+                    onQueueResult: (_) => _queue(context),
+                    alreadyInRequestQueue: alreadyInRequestQueue,
                     catalogDurationMs: durationMs,
                   ),
                   child: SizedBox(
@@ -3597,9 +3644,9 @@ class _MusicBoxTrackTile extends StatelessWidget {
               ButtonIcon(
                 key: ValueKey<String>('music-box-$keyScope-add:$identity'),
                 icon: const Icon(Icons.add),
-                tooltip: '点歌队列',
+                tooltip: '加入点歌队列',
                 tone: ButtonTone.primary,
-                onPressed: onQueue,
+                onPressed: () => _queue(context),
                 size: 28,
               ),
             ],
