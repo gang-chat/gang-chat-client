@@ -1326,110 +1326,31 @@ class _ActiveMusicPlaylistDialogState
                 separatorBuilder: (_, _) => const SizedBox(height: 10),
                 itemBuilder: (context, index) {
                   final item = widget.items[index];
-                  return _ActiveMusicPlaylistTrackTile(
-                    item: item,
+                  final artists = item.artist
+                      .split(RegExp(r'[、,，]'))
+                      .map((value) => value.trim())
+                      .where((value) => value.isNotEmpty)
+                      .toList(growable: false);
+                  return MusicPlaylistSnapshotTrackTile(
+                    track: MusicTrackCardData(
+                      id: item.id,
+                      source: item.source,
+                      trackId: item.trackId,
+                      title: item.title,
+                      artists: artists,
+                      durationMs: item.durationMs,
+                    ),
                     previewController: _previewController,
                     playlists: _myPlaylists,
                     onAddToPlaylist: (playlist) =>
                         _addToPlaylist(item, playlist),
+                    surfaceKey: ValueKey<String>(
+                      'active-music-playlist-track:${item.id}',
+                    ),
                   );
                 },
               ),
       ),
-    );
-  }
-}
-
-class _ActiveMusicPlaylistTrackTile extends StatelessWidget {
-  const _ActiveMusicPlaylistTrackTile({
-    required this.item,
-    required this.previewController,
-    required this.playlists,
-    required this.onAddToPlaylist,
-  });
-
-  final MusicBoxQueueItem item;
-  final MusicTrackPreviewController? previewController;
-  final List<PersonalMusicPlaylist> playlists;
-  final Future<void> Function(PersonalMusicPlaylist playlist) onAddToPlaylist;
-
-  @override
-  Widget build(BuildContext context) {
-    final artists = item.artist
-        .split(RegExp(r'[、,，]'))
-        .map((value) => value.trim())
-        .where((value) => value.isNotEmpty)
-        .toList(growable: false);
-    final subtitle = [
-      if (artists.isNotEmpty) artists.join('、'),
-      music_box_display.musicBoxSourceLabel(item.source),
-    ].join(' · ');
-    final surface = LayoutBuilder(
-      builder: (context, constraints) {
-        const titleStyle = TextStyle(
-          color: UiColors.text,
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-        );
-        const subtitleStyle = TextStyle(
-          color: UiColors.textMuted,
-          fontSize: 12,
-        );
-        final textWidth = (constraints.maxWidth - 58).clamp(
-          40.0,
-          double.infinity,
-        );
-        final adaptiveTitle = _musicBoxAdaptiveListTextStyle(
-          context,
-          text: item.title,
-          baseStyle: titleStyle,
-          width: textWidth,
-        );
-        final adaptiveSubtitle = _musicBoxAdaptiveListTextStyle(
-          context,
-          text: subtitle,
-          baseStyle: subtitleStyle,
-          width: textWidth,
-        );
-        return MusicPlaylistTrackSurface(
-          key: ValueKey<String>('active-music-playlist-track:${item.id}'),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              children: [
-                const Icon(Icons.music_note, size: 19, color: UiColors.accent),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(item.title, style: adaptiveTitle, softWrap: true),
-                      const SizedBox(height: 3),
-                      Text(subtitle, style: adaptiveSubtitle, softWrap: true),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-    final preview = previewController;
-    if (preview == null) return surface;
-    return MusicTrackHoverCard(
-      data: MusicTrackCardData(
-        id: item.id,
-        source: item.source,
-        trackId: item.trackId,
-        title: item.title,
-        artists: artists,
-        durationMs: item.durationMs,
-      ),
-      previewController: preview,
-      playlists: playlists,
-      onAddToPlaylist: onAddToPlaylist,
-      child: surface,
     );
   }
 }

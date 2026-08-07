@@ -122,6 +122,7 @@ class MusicPlaylistHoverCard extends StatefulWidget {
     this.userProfileActionBuilder,
     this.primaryActionLabel = '播放全部',
     this.primaryActionIcon = Icons.play_arrow,
+    this.showPrimaryActionWhenDisabled = true,
   });
 
   final MusicPlaylistCardData data;
@@ -136,6 +137,7 @@ class MusicPlaylistHoverCard extends StatefulWidget {
   final UserProfileActionBuilder? userProfileActionBuilder;
   final String primaryActionLabel;
   final IconData primaryActionIcon;
+  final bool showPrimaryActionWhenDisabled;
 
   @override
   State<MusicPlaylistHoverCard> createState() => _MusicPlaylistHoverCardState();
@@ -272,6 +274,7 @@ class _MusicPlaylistHoverCardState extends State<MusicPlaylistHoverCard> {
         onViewPlaylist: widget.onViewPlaylist == null ? null : _viewPlaylist,
         primaryActionLabel: widget.primaryActionLabel,
         primaryActionIcon: widget.primaryActionIcon,
+        showPrimaryActionWhenDisabled: widget.showPrimaryActionWhenDisabled,
       ),
       child: widget.child,
     );
@@ -292,6 +295,7 @@ class _MusicPlaylistProfileCard extends StatelessWidget {
     required this.onViewPlaylist,
     required this.primaryActionLabel,
     required this.primaryActionIcon,
+    required this.showPrimaryActionWhenDisabled,
   });
 
   final MusicPlaylistCardData data;
@@ -306,6 +310,7 @@ class _MusicPlaylistProfileCard extends StatelessWidget {
   final VoidCallback? onViewPlaylist;
   final String primaryActionLabel;
   final IconData primaryActionIcon;
+  final bool showPrimaryActionWhenDisabled;
 
   @override
   Widget build(BuildContext context) {
@@ -373,18 +378,19 @@ class _MusicPlaylistProfileCard extends StatelessWidget {
           ResponsiveDialogActionBar(
             expanded: true,
             actions: [
-              ResponsiveDialogAction(
-                buttonKey: const ValueKey<String>(
-                  'music-playlist-card-play-all',
+              if (onPlayAll != null || showPrimaryActionWhenDisabled)
+                ResponsiveDialogAction(
+                  buttonKey: const ValueKey<String>(
+                    'music-playlist-card-play-all',
+                  ),
+                  label: data.showPlayingStatus ? '正在播放' : primaryActionLabel,
+                  icon: data.showPlayingStatus
+                      ? Icons.play_arrow
+                      : primaryActionIcon,
+                  tone: ButtonTone.primary,
+                  loading: !data.showPlayingStatus && playing,
+                  onPressed: data.showPlayingStatus ? null : onPlayAll,
                 ),
-                label: data.showPlayingStatus ? '正在播放' : primaryActionLabel,
-                icon: data.showPlayingStatus
-                    ? Icons.play_arrow
-                    : primaryActionIcon,
-                tone: ButtonTone.primary,
-                loading: !data.showPlayingStatus && playing,
-                onPressed: data.showPlayingStatus ? null : onPlayAll,
-              ),
               ResponsiveDialogAction(
                 buttonKey: const ValueKey<String>('music-playlist-card-view'),
                 label: '查看歌单',

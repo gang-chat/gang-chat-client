@@ -18,6 +18,7 @@ import '../shell/full_screen_system_ui_controller.dart';
 import '../ui/ui.dart';
 import 'hover_card_anchor.dart';
 import 'music_playlist_profile_card.dart';
+import 'music_playlist_snapshot_dialog.dart';
 import 'music_track_profile_card.dart';
 import 'room_profile_card.dart';
 

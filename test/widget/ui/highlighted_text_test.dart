@@ -44,4 +44,33 @@ void main() {
     expect(text.data, 'Alpha beta');
     expect(text.textSpan, isNull);
   });
+
+  testWidgets(
+    'adaptive highlighted text wraps fully and shrinks only after its comfortable lines',
+    (tester) async {
+      const value = 'iGAYice5king-long-room-member-name';
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Center(
+            child: SizedBox(
+              width: 84,
+              child: AdaptiveHighlightedText(
+                text: value,
+                query: 'king',
+                comfortableLines: 1,
+                style: TextStyle(fontSize: 14),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final text = tester.widget<Text>(find.text(value));
+      expect(text.maxLines, isNull);
+      expect(text.overflow, isNull);
+      expect(text.softWrap, isTrue);
+      expect((text.textSpan as TextSpan).style?.fontSize, lessThan(14));
+      expect(tester.getSize(find.text(value)).height, greaterThan(20));
+    },
+  );
 }

@@ -11,6 +11,7 @@ class MusicPlaylistsPanel extends StatefulWidget {
     this.previewApi,
     this.previewPlatformFactory,
     this.shareApi,
+    this.currentUser,
   });
 
   final PersonalMusicPlaylistsController controller;
@@ -21,6 +22,7 @@ class MusicPlaylistsPanel extends StatefulWidget {
   final MusicTrackPreviewApi? previewApi;
   final MusicTrackPreviewPlatformFactory? previewPlatformFactory;
   final GangApi? shareApi;
+  final CurrentUser? currentUser;
 
   @override
   State<MusicPlaylistsPanel> createState() => _MusicPlaylistsPanelState();
@@ -684,8 +686,11 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
     }
     final room = await showDialog<RoomCard>(
       context: context,
-      builder: (context) =>
-          _MusicPlaylistShareRoomDialog(api: api, playlistName: playlist.name),
+      builder: (context) => _MusicPlaylistShareRoomDialog(
+        api: api,
+        playlistName: playlist.name,
+        currentUser: widget.currentUser,
+      ),
     );
     if (!mounted || room == null) return;
     setState(() {
@@ -2789,10 +2794,12 @@ class _MusicPlaylistShareRoomDialog extends StatefulWidget {
   const _MusicPlaylistShareRoomDialog({
     required this.api,
     required this.playlistName,
+    required this.currentUser,
   });
 
   final GangApi api;
   final String playlistName;
+  final CurrentUser? currentUser;
 
   @override
   State<_MusicPlaylistShareRoomDialog> createState() =>
@@ -2881,6 +2888,30 @@ class _MusicPlaylistShareRoomDialogState
     if (selected != null) Navigator.of(context).pop(selected);
   }
 
+  PublicRoom _roomProfile(RoomCard room) {
+    return PublicRoom(
+      id: room.id,
+      rid: room.rid,
+      name: room.displayName,
+      avatarLabel: room.name,
+      avatarUrl: room.avatarUrl,
+      defaultAvatarKey: room.defaultAvatarKey,
+      visibility: room.visibility,
+      joinPolicy: 'approval_required',
+      description: room.description,
+      memberCount: room.memberCount,
+      onlineMemberCount: room.onlineMemberCount,
+      liveParticipantCount: room.liveParticipantCount,
+      joined: true,
+      joinState: 'joined',
+    );
+  }
+
+  Future<PublicRoom> _resolveRoomProfile(PublicRoom room) async {
+    final detail = await widget.api.getRoom(room.id);
+    return room_display.publicRoomFromRoomDetail(detail);
+  }
+
   @override
   Widget build(BuildContext context) {
     final visibleRooms = _visibleRooms;
@@ -2910,7 +2941,7 @@ class _MusicPlaylistShareRoomDialogState
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              '选择要将“${widget.playlistName}”分享到的文字频道',
+              '选择要将歌单“${widget.playlistName}”分享到的文字频道',
               style: const TextStyle(color: _textMuted, fontSize: 12),
             ),
             const SizedBox(height: 10),
@@ -2943,18 +2974,29 @@ class _MusicPlaylistShareRoomDialogState
                       itemBuilder: (context, index) {
                         final room = visibleRooms[index];
                         final selected = room.id == _selectedRoomId;
-                        return UiPointerTapRegion(
-                          key: ValueKey(
-                            'music-playlist-share-room-option-${room.id}',
-                          ),
-                          onTap: () =>
-                              setState(() => _selectedRoomId = room.id),
-                          disableSelection: true,
-                          child: _SettingsSubPanel(
-                            highlighted: selected,
-                            hoverable: true,
-                            child: Row(
-                              children: [
+                        return _SettingsSubPanel(
+                          highlighted: selected,
+                          hoverable: true,
+                          child: Row(
+                            children: [
+                              if (widget.currentUser case final currentUser?)
+                                RoomHoverCard(
+                                  key: ValueKey<String>(
+                                    'music-playlist-share-room-profile-${room.id}',
+                                  ),
+                                  room: _roomProfile(room),
+                                  currentUser: currentUser,
+                                  onResolveRoom: _resolveRoomProfile,
+                                  child: Avatar(
+                                    label: room.displayName,
+                                    imageUrl: AppConfigScope.of(
+                                      context,
+                                    ).resolveAssetUrl(room.avatarUrl),
+                                    defaultAvatarKey: room.defaultAvatarKey,
+                                    size: 36,
+                                  ),
+                                )
+                              else
                                 Avatar(
                                   label: room.displayName,
                                   imageUrl: AppConfigScope.of(
@@ -2963,42 +3005,62 @@ class _MusicPlaylistShareRoomDialogState
                                   defaultAvatarKey: room.defaultAvatarKey,
                                   size: 36,
                                 ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        room.displayName,
-                                        style: const TextStyle(
-                                          color: _textPrimary,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                      if (room.rid.trim().isNotEmpty) ...[
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          'RID：${room.rid}',
-                                          style: const TextStyle(
-                                            color: _textMuted,
-                                            fontSize: 12,
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: UiPointerTapRegion(
+                                  key: ValueKey(
+                                    'music-playlist-share-room-option-${room.id}',
+                                  ),
+                                  onTap: () =>
+                                      setState(() => _selectedRoomId = room.id),
+                                  disableSelection: true,
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 4,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                room.displayName,
+                                                style: const TextStyle(
+                                                  color: _textPrimary,
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                              if (room.rid
+                                                  .trim()
+                                                  .isNotEmpty) ...[
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  'RID：${room.rid}',
+                                                  style: const TextStyle(
+                                                    color: _textMuted,
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                              ],
+                                            ],
                                           ),
                                         ),
+                                        Icon(
+                                          selected
+                                              ? Icons.radio_button_checked
+                                              : Icons.radio_button_off,
+                                          color: selected ? _cyan : _textMuted,
+                                          size: 20,
+                                        ),
                                       ],
-                                    ],
+                                    ),
                                   ),
                                 ),
-                                Icon(
-                                  selected
-                                      ? Icons.radio_button_checked
-                                      : Icons.radio_button_off,
-                                  color: selected ? _cyan : _textMuted,
-                                  size: 20,
-                                ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         );
                       },

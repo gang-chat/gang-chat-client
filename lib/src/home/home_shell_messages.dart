@@ -584,40 +584,87 @@ extension _HomeShellMessages on _HomeShellState {
       onReeditRecalledText: _reeditRecalledTextMessage,
       canReeditRecalledText: _canReeditRecalledTextMessage,
       canInspectRecalledText: _canInspectRecalledTextMessage,
-      onCloneSharedPlaylist: _cloneSharedPlaylistMessage,
+      onViewSharedPlaylist: _viewSharedPlaylistMessage,
     );
   }
 
-  Future<void> _cloneSharedPlaylistMessage(
+  Future<void> _viewSharedPlaylistMessage(
     BuildContext context,
     Message message,
     SharedMusicPlaylist playlist,
   ) async {
     final api = _services.api;
-    if (api is! SharedMusicPlaylistCloneApi) {
-      if (context.mounted) showFloatingErrorNotice(context, '当前版本暂不支持克隆歌单');
+    if (api is! PersonalMusicPlaylistApi) {
+      if (context.mounted) {
+        showFloatingErrorNotice(context, '当前版本暂不支持查看歌单');
+      }
       return;
     }
-    try {
-      final cloneApi = api as SharedMusicPlaylistCloneApi;
-      final cloned = await cloneApi.cloneSharedMusicPlaylistToPersonal(
-        roomId: message.roomId,
-        messageId: message.id,
-      );
-      if (context.mounted) {
-        showFloatingSuccessNotice(context, '已克隆到我的歌单 - ${cloned.name}');
-      }
-    } catch (error) {
-      if (!context.mounted) return;
-      final messageText = error is ApiException
-          ? switch (error.code) {
-              'playlist_limit_reached' => '克隆失败：我的歌单已达 50 个上限',
-              'not_found' => '克隆失败：该歌单消息已不可用',
-              _ => '克隆歌单失败：$error',
-            }
-          : '克隆歌单失败：$error';
-      showFloatingErrorNotice(context, messageText);
-    }
+    final personalApi = api as PersonalMusicPlaylistApi;
+    final tracks = playlist.items
+        .map(
+          (item) => MusicTrackCardData(
+            id: item.id,
+            source: item.source,
+            trackId: item.trackId,
+            title: item.title,
+            artists: item.artists,
+            durationMs: item.durationMs,
+          ),
+        )
+        .toList(growable: false);
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => MusicPlaylistSnapshotDialog(
+        title: playlist.name,
+        tracks: tracks,
+        previewApi: api is MusicTrackPreviewApi
+            ? api as MusicTrackPreviewApi
+            : null,
+        previewPlatformFactory: widget.musicTrackPreviewPlatformFactory,
+        loadPersonalPlaylists: () =>
+            personalApi.listPersonalMusicPlaylists(pageSize: 50),
+        onAddToPlaylist: (track, target) {
+          return personalApi.addPersonalMusicPlaylistItem(
+            playlistId: target.id,
+            track: MusicBoxSearchResult(
+              trackId: track.trackId,
+              name: track.title,
+              artists: track.artists,
+              source: track.source,
+            ),
+            durationMs: track.durationMs > 0 ? track.durationMs : null,
+          );
+        },
+        onClone: api is SharedMusicPlaylistCloneApi
+            ? () => (api as SharedMusicPlaylistCloneApi)
+                  .cloneSharedMusicPlaylistToPersonal(
+                    roomId: message.roomId,
+                    messageId: message.id,
+                  )
+            : null,
+        contentKey: ValueKey<String>(
+          'shared-music-playlist-view-${playlist.id}',
+        ),
+        trackListKey: ValueKey<String>(
+          'shared-music-playlist-tracks-${playlist.id}',
+        ),
+        cloneButtonKey: ValueKey<String>(
+          'shared-music-playlist-clone-${playlist.id}',
+        ),
+        doneButtonKey: ValueKey<String>(
+          'shared-music-playlist-done-${playlist.id}',
+        ),
+        cloneErrorMessage: (error) {
+          if (error is! ApiException) return '克隆歌单失败：$error';
+          return switch (error.code) {
+            'playlist_limit_reached' => '克隆失败：我的歌单已达 50 个上限',
+            'not_found' => '克隆失败：该歌单消息已不可用',
+            _ => '克隆歌单失败：$error',
+          };
+        },
+      ),
+    );
   }
 
   bool _canQuoteChatMessage(Message message) {

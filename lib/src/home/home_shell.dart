@@ -93,6 +93,8 @@ import 'home_notifications.dart';
 import 'home_sidebar.dart';
 import 'live_channel_pane.dart';
 import 'live_screen_share_picker.dart';
+import 'music_playlist_snapshot_dialog.dart';
+import 'music_track_profile_card.dart';
 import 'navigation.dart';
 import 'room_profile_card.dart';
 import 'room_management.dart';

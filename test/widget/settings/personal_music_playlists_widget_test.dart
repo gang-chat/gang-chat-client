@@ -18,6 +18,23 @@ import 'package:client/src/protocol/sticker_pack_store.dart';
 import 'package:client/src/settings/settings_page.dart';
 import 'package:client/src/ui/ui.dart' as ui;
 
+const _playlistSettingsCurrentUser = CurrentUser(
+  id: 'user_1',
+  uid: '100001',
+  username: 'tester',
+  displayName: '测试用户',
+  bio: '',
+  gender: 'secret',
+  email: null,
+  emailPublic: false,
+  phoneNumber: null,
+  phoneNumberPublic: false,
+  avatarUrl: null,
+  defaultAvatarKey: 'blue-1',
+  isSuperuser: false,
+  createdAt: null,
+);
+
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -773,8 +790,27 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('分享歌单'), findsOneWidget);
+      expect(find.text('选择要将歌单“夜晚”分享到的文字频道'), findsOneWidget);
       expect(find.text('夜晚房间'), findsOneWidget);
       expect(find.text('另一个房间'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(
+          const ValueKey<String>('music-playlist-share-room-profile-room_2'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('2 名成员'), findsOneWidget);
+      final confirmBeforeSelection = tester.widget<ui.Button>(
+        find.ancestor(of: find.text('确认分享'), matching: find.byType(ui.Button)),
+      );
+      expect(confirmBeforeSelection.onPressed, isNull);
+      await tester.tap(
+        find.byKey(
+          const ValueKey<String>('music-playlist-share-room-profile-room_2'),
+        ),
+      );
+      await tester.pumpAndSettle();
       await tester.enterText(
         find.byKey(const ValueKey('music-playlist-share-room-search')),
         '另一个',
@@ -1751,6 +1787,7 @@ Future<void> _pumpPlaylistSettings(
       stickerPackStore: StickerPackStore(),
     ),
     onClose: () {},
+    currentUser: _playlistSettingsCurrentUser,
     musicTrackPreviewPlatformFactory:
         previewPlatformFactory ??
         const DefaultMusicTrackPreviewPlatformFactory(),
@@ -2124,6 +2161,34 @@ class _FakePersonalPlaylistApi
         ),
       ],
       nextCursor: null,
+    );
+  }
+
+  @override
+  Future<RoomDetail> getRoom(String roomId) async {
+    final room = (await listRooms()).rooms.firstWhere(
+      (entry) => entry.id == roomId,
+    );
+    return RoomDetail(
+      id: room.id,
+      name: room.name,
+      rid: room.rid,
+      avatarUrl: room.avatarUrl,
+      defaultAvatarKey: room.defaultAvatarKey,
+      memberCount: room.memberCount,
+      onlineMemberCount: room.onlineMemberCount,
+      myMembership: RoomMembership(
+        joinedAt: DateTime.utc(2026, 8, 1),
+        role: 'member',
+      ),
+      live: LiveState(
+        roomId: room.id,
+        participantCount: 0,
+        participants: const [],
+        updatedAt: room.updatedAt,
+      ),
+      createdAt: DateTime.utc(2026, 8, 1),
+      updatedAt: room.updatedAt,
     );
   }
 

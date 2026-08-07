@@ -23,6 +23,7 @@ import '../app/confirmation.dart';
 import '../app/language_preference.dart';
 import '../app/password_reset_controller.dart';
 import '../app/personal_music_playlists.dart';
+import '../app/room_display.dart' as room_display;
 import '../app/settings_about.dart';
 import '../app/settings_controller.dart';
 import '../app/settings_shell_state.dart';
@@ -58,6 +59,7 @@ import '../ui/avatar_crop_dialog.dart';
 import '../ui/sticker_upload_adapter.dart';
 import '../ui/ui.dart';
 import '../home/music_track_profile_card.dart';
+import '../home/room_profile_card.dart';
 
 part 'settings_components.dart';
 part 'settings_profile_widgets.dart';
@@ -3650,6 +3652,7 @@ class _SettingsPageState extends State<SettingsPage>
           : null,
       previewPlatformFactory: widget.musicTrackPreviewPlatformFactory,
       shareApi: _isManagingUser ? null : widget.api,
+      currentUser: _user ?? widget.currentUser,
       reloadToken: _playlistReloadToken,
       unavailableMessage: _isManagingUser
           ? '管理其他账号时不能编辑个人歌单'

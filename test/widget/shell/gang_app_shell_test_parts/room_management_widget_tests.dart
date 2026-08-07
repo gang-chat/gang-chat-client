@@ -60,6 +60,13 @@ void registerShellRoomManagementWidgetTests() {
     expect(find.text('10000001'), findsNothing);
     expect(find.text('Kai'), findsWidgets);
     expect(find.text('Morgan'), findsWidgets);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('member-information-user-2')),
+        matching: find.byType(ui.AdaptiveHighlightedText),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('uid-1 · @kai'), findsNothing);
     expect(find.text('user-2 · @morgan'), findsNothing);
     expect(find.text('创建者'), findsWidgets);
@@ -499,12 +506,28 @@ void registerShellRoomManagementWidgetTests() {
       find.descendant(of: memberOption, matching: find.text('Morgan')),
     );
     expect(memberName.style?.fontWeight, FontWeight.w700);
+    expect(
+      find.descendant(
+        of: memberOption,
+        matching: find.byType(ui.AdaptiveHighlightedText),
+      ),
+      findsOneWidget,
+    );
     final allMemberOption = find.byKey(
       const ValueKey('message-history-member-all'),
     );
+    expect(tester.getSize(allMemberOption).height, greaterThanOrEqualTo(64));
     expect(
       find.descendant(of: allMemberOption, matching: find.byIcon(Icons.check)),
       findsNothing,
+    );
+    expect(
+      tester
+          .widget<Icon>(
+            find.byKey(const ValueKey('message-history-member-radio-all')),
+          )
+          .icon,
+      Icons.radio_button_checked,
     );
     expect(
       find.descendant(
@@ -517,9 +540,26 @@ void registerShellRoomManagementWidgetTests() {
       const ValueKey('message-history-member-role-user-2'),
     );
     expect(memberRole, findsOneWidget);
+    final memberRadio = find.byKey(
+      const ValueKey('message-history-member-radio-user-2'),
+    );
+    expect(memberRadio, findsOneWidget);
+    expect(tester.widget<Icon>(memberRadio).icon, Icons.radio_button_off);
     expect(
-      tester.getRect(memberOption).right - tester.getRect(memberRole).right,
-      closeTo(11, 0.01),
+      tester
+          .widget<MouseRegion>(
+            find.byKey(const ValueKey('message-history-member-hover-user-2')),
+          )
+          .cursor,
+      MouseCursor.defer,
+    );
+    expect(
+      tester.getRect(memberOption).right - tester.getRect(memberRadio).right,
+      closeTo(15, 0.01),
+    );
+    expect(
+      tester.getRect(memberRole).right,
+      lessThan(tester.getRect(memberRadio).left),
     );
     expect(
       find.descendant(of: memberRole, matching: find.text('成员')),
@@ -540,6 +580,31 @@ void registerShellRoomManagementWidgetTests() {
           .label,
       'Morgan Account',
     );
+    expect(
+      tester.getSize(
+        find.byKey(const ValueKey('message-history-member-avatar-user-2')),
+      ),
+      const Size.square(36),
+    );
+    final memberAvatar = find.byKey(
+      const ValueKey('message-history-member-avatar-user-2'),
+    );
+    await tester.tap(memberAvatar);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('user-profile-card-avatar-preview')),
+      findsOneWidget,
+    );
+    expect(tester.widget<Icon>(memberRadio).icon, Icons.radio_button_off);
+    await tester.tap(memberAvatar);
+    await tester.pumpAndSettle();
+
+    final memberOptionRect = tester.getRect(memberOption);
+    await tester.tapAt(
+      Offset(memberOptionRect.center.dx, memberOptionRect.top + 2),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.widget<Icon>(memberRadio).icon, Icons.radio_button_checked);
     final memberScrollbar = find.byKey(
       const ValueKey('message-history-member-scrollbar'),
     );
@@ -1082,7 +1147,7 @@ void registerShellRoomManagementWidgetTests() {
     },
   );
 
-  testWidgets('member names use two lines only after every action row stacks', (
+  testWidgets('member names wrap in full only after every action row stacks', (
     WidgetTester tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -1123,7 +1188,15 @@ void registerShellRoomManagementWidgetTests() {
     final taylorActions = find.byKey(
       const ValueKey('member-action-wrap-user-5'),
     );
-    expect(tester.widget<Text>(longName).maxLines, 2);
+    expect(tester.widget<Text>(longName).maxLines, isNull);
+    expect(tester.widget<Text>(longName).overflow, isNull);
+    expect(
+      find.ancestor(
+        of: longName,
+        matching: find.byType(ui.AdaptiveHighlightedText),
+      ),
+      findsOneWidget,
+    );
     expect(
       tester.renderObject<RenderParagraph>(longName).didExceedMaxLines,
       isFalse,

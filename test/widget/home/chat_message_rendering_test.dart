@@ -2360,11 +2360,11 @@ void main() {
     TargetPlatform.android,
   ]) {
     testWidgets(
-      '${platform.name} shared playlist message opens clone and view actions',
+      '${platform.name} shared playlist message exposes view-only card and direct arrow',
       (tester) async {
         final controller = TextEditingController();
         addTearDown(controller.dispose);
-        var cloned = 0;
+        var viewed = 0;
         final playlist = SharedMusicPlaylist(
           id: 'shared_playlist_1',
           name: '朋友的夜晚歌单',
@@ -2409,10 +2409,29 @@ void main() {
           onDeleteForMe: (_, _) async {},
           onRecall: (_, _) async {},
           canRecall: (_) => false,
-          onCloneSharedPlaylist: (_, clonedMessage, clonedPlaylist) async {
-            expect(clonedMessage.id, message.id);
-            expect(clonedPlaylist.id, playlist.id);
-            cloned += 1;
+          onViewSharedPlaylist: (context, viewedMessage, viewedPlaylist) async {
+            expect(viewedMessage.id, message.id);
+            expect(viewedPlaylist.id, playlist.id);
+            viewed += 1;
+            await showDialog<void>(
+              context: context,
+              builder: (context) => ui.DialogFrame(
+                title: viewedPlaylist.name,
+                adaptiveActions: [
+                  ui.ResponsiveDialogAction(
+                    label: '完成',
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+                child: SizedBox(
+                  key: ValueKey<String>(
+                    'shared-music-playlist-view-${viewedPlaylist.id}',
+                  ),
+                  height: 180,
+                  child: Center(child: Text(viewedPlaylist.items.first.title)),
+                ),
+              ),
+            );
           },
         );
 
@@ -2438,15 +2457,15 @@ void main() {
         await tester.tap(embed);
         await tester.pumpAndSettle();
 
-        final cloneAction = find.byKey(
-          const ValueKey<String>('music-playlist-card-play-all'),
-        );
         final viewAction = find.byKey(
           const ValueKey<String>('music-playlist-card-view'),
         );
-        expect(find.text('克隆'), findsOneWidget);
+        expect(find.text('克隆'), findsNothing);
         expect(find.text('查看歌单'), findsOneWidget);
-        expect(cloneAction, findsOneWidget);
+        expect(
+          find.byKey(const ValueKey<String>('music-playlist-card-play-all')),
+          findsNothing,
+        );
         expect(viewAction, findsOneWidget);
 
         await tester.tap(viewAction);
@@ -2462,14 +2481,27 @@ void main() {
           findsOneWidget,
         );
         expect(find.text('第一首歌'), findsOneWidget);
+        expect(viewed, 1);
         await tester.tap(find.text('完成'));
         await tester.pumpAndSettle();
 
-        await tester.tap(embed);
-        await tester.pumpAndSettle();
-        await tester.tap(cloneAction);
-        await tester.pumpAndSettle();
-        expect(cloned, 1);
+        await tester.tap(
+          find.byKey(
+            const ValueKey<String>(
+              'shared-music-playlist-open-shared_playlist_1',
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(viewed, 2);
+        expect(
+          find.byKey(
+            const ValueKey<String>(
+              'shared-music-playlist-view-shared_playlist_1',
+            ),
+          ),
+          findsOneWidget,
+        );
         expect(tester.takeException(), isNull);
       },
     );

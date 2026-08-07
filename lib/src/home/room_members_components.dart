@@ -263,11 +263,10 @@ class _MemberRow extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      HighlightedText(
+                      AdaptiveHighlightedText(
                         text: member_filter.roomMemberDisplayName(member),
                         query: query,
-                        maxLines: nameMaxLines,
-                        overflow: TextOverflow.ellipsis,
+                        comfortableLines: nameMaxLines,
                         style: UiTypography.body.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
