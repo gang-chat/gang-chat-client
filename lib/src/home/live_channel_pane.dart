@@ -126,6 +126,8 @@ class LiveChannelPane extends StatefulWidget {
     this.musicBoxRoom,
     this.musicTrackPreviewPlatformFactory,
     this.onMusicBoxStateChanged,
+    this.onCreateFirstRoomMusicPlaylist,
+    this.onCreateFirstPersonalMusicPlaylist,
     required this.onMusicBoxQueueResult,
     required this.onMusicBoxRemoveItem,
     required this.onMusicBoxSourceChanged,
@@ -205,6 +207,8 @@ class LiveChannelPane extends StatefulWidget {
   final PublicRoom? musicBoxRoom;
   final MusicTrackPreviewPlatformFactory? musicTrackPreviewPlatformFactory;
   final ValueChanged<MusicBoxState>? onMusicBoxStateChanged;
+  final VoidCallback? onCreateFirstRoomMusicPlaylist;
+  final VoidCallback? onCreateFirstPersonalMusicPlaylist;
   final ValueChanged<MusicBoxSearchResult> onMusicBoxQueueResult;
   final ValueChanged<MusicBoxQueueItem> onMusicBoxRemoveItem;
   final ValueChanged<String> onMusicBoxSourceChanged;
@@ -488,6 +492,10 @@ class _LiveChannelPaneState extends State<LiveChannelPane> {
                                 widget.onEnterParticipantProfileRoom,
                             userProfileActionBuilder:
                                 widget.participantProfileActionBuilder,
+                            onCreateFirstRoomPlaylist:
+                                widget.onCreateFirstRoomMusicPlaylist,
+                            onCreateFirstPersonalPlaylist:
+                                widget.onCreateFirstPersonalMusicPlaylist,
                             onQueueResult: widget.onMusicBoxQueueResult,
                             onRemoveItem: widget.onMusicBoxRemoveItem,
                             onSourceChanged: widget.onMusicBoxSourceChanged,

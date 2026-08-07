@@ -146,7 +146,7 @@ extension _HomeShellLayout on _HomeShellState {
         androidSystemService: widget.androidSystemService,
         windowController: widget.windowController,
         initialSection: _settingsAppUpdate == null
-            ? SettingsSection.profile
+            ? _settingsInitialSection
             : SettingsSection.about,
         initialAppUpdate: _settingsAppUpdate,
         stickerPackStore: widget.app.stickerPackStore,
@@ -309,6 +309,7 @@ extension _HomeShellLayout on _HomeShellState {
         controller: _roomsController,
         room: room,
         currentUser: _currentUser,
+        initialSection: _roomSettingsInitialSection,
         isInLive: _joinedLiveRoomId == room.id,
         onRoomUpdated: _applyManagedRoomUpdated,
         onLeaveLive: () async {
@@ -437,6 +438,22 @@ extension _HomeShellLayout on _HomeShellState {
         musicTrackPreviewPlatformFactory:
             widget.musicTrackPreviewPlatformFactory,
         onMusicBoxStateChanged: _applyMusicBoxSnapshot,
+        onCreateFirstRoomMusicPlaylist:
+            _selectedRoom != null &&
+                room_display
+                    .roomAccessState(
+                      room: _selectedRoom!,
+                      currentUser: _currentUser,
+                    )
+                    .canManageRoom
+            ? () => unawaited(
+                _openRoomSettings(
+                  initialSection: RoomSettingsSection.playlists,
+                ),
+              )
+            : null,
+        onCreateFirstPersonalMusicPlaylist: () =>
+            _openSettingsSection(SettingsSection.playlists, openContent: true),
         onMusicBoxQueueResult: (result) =>
             unawaited(_queueMusicBoxTrack(result)),
         onMusicBoxRemoveItem: (item) => unawaited(_removeMusicBoxItem(item)),
@@ -520,6 +537,20 @@ extension _HomeShellLayout on _HomeShellState {
       onLoadStickers: () => unawaited(_loadStickerPacks(forceReload: true)),
       onRefreshStickers: () => unawaited(_loadStickerPacks(forceReload: true)),
       onStickerSourceChanged: _changeStickerSource,
+      onUploadFirstPersonalSticker: () =>
+          _openSettingsSection(SettingsSection.stickers, openContent: true),
+      onUploadFirstRoomSticker:
+          _selectedRoom != null &&
+              room_display
+                  .roomAccessState(
+                    room: _selectedRoom!,
+                    currentUser: _currentUser,
+                  )
+                  .canManageRoom
+          ? () => unawaited(
+              _openRoomSettings(initialSection: RoomSettingsSection.stickers),
+            )
+          : null,
       onStartVoice: () => unawaited(_startVoiceRecording()),
       onSendVoice: () => unawaited(_finishAndSendVoice()),
       onCancelVoice: () => unawaited(_cancelVoiceRecording()),

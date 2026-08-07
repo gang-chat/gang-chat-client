@@ -256,6 +256,8 @@ extension _HomeShellSearch on _HomeShellState {
       _setHomeState(() {
         _superuserSettingsTarget = null;
         _settingsOpen = true;
+        _settingsInitialSection = SettingsSection.profile;
+        _settingsAppUpdate = null;
         _contentMode = _ContentMode.chat;
         _narrowContentOpen = true;
         _searchExpanded = false;

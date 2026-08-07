@@ -42,6 +42,8 @@ class _ComposerDock extends StatelessWidget {
     required this.onOpenStickers,
     required this.onRefreshStickers,
     required this.onStickerSourceChanged,
+    required this.onUploadFirstPersonalSticker,
+    required this.onUploadFirstRoomSticker,
     required this.onStartVoice,
     required this.onSendVoice,
     required this.onCancelVoice,
@@ -80,6 +82,8 @@ class _ComposerDock extends StatelessWidget {
   final VoidCallback onOpenStickers;
   final VoidCallback onRefreshStickers;
   final ValueChanged<sticker_display.StickerPanelSource> onStickerSourceChanged;
+  final VoidCallback? onUploadFirstPersonalSticker;
+  final VoidCallback? onUploadFirstRoomSticker;
   final VoidCallback onStartVoice;
   final VoidCallback onSendVoice;
   final VoidCallback onCancelVoice;
@@ -173,6 +177,9 @@ class _ComposerDock extends StatelessWidget {
                       onSendSticker: onSendSticker,
                       onRefresh: onRefreshStickers,
                       onSourceChanged: onStickerSourceChanged,
+                      onUploadFirstPersonalSticker:
+                          onUploadFirstPersonalSticker,
+                      onUploadFirstRoomSticker: onUploadFirstRoomSticker,
                     ),
                   ),
                 ),
@@ -597,12 +604,16 @@ class _StickerPanel extends StatelessWidget {
     required this.onSendSticker,
     required this.onRefresh,
     required this.onSourceChanged,
+    required this.onUploadFirstPersonalSticker,
+    required this.onUploadFirstRoomSticker,
   });
 
   final sticker_display.StickerPanelLoadState state;
   final ValueChanged<Sticker> onSendSticker;
   final VoidCallback onRefresh;
   final ValueChanged<sticker_display.StickerPanelSource> onSourceChanged;
+  final VoidCallback? onUploadFirstPersonalSticker;
+  final VoidCallback? onUploadFirstRoomSticker;
 
   @override
   Widget build(BuildContext context) {
@@ -651,11 +662,26 @@ class _StickerPanel extends StatelessWidget {
             sticker_display.StickerPanelBodyState.error => _StickerPanelMessage(
               icon: Icons.warning_amber_rounded,
               text: state.error ?? '加载表情失败',
-              onRefresh: onRefresh,
+              actionKey: const ValueKey<String>('sticker-panel-refresh'),
+              actionIcon: Icons.refresh,
+              actionLabel: '刷新',
+              onAction: onRefresh,
             ),
             sticker_display.StickerPanelBodyState.empty => _StickerPanelMessage(
               icon: Icons.emoji_emotions_outlined,
               text: sticker_display.stickerPanelEmptyText(state.source),
+              actionKey: ValueKey<String>(
+                state.source == sticker_display.StickerPanelSource.personal
+                    ? 'sticker-panel-upload-first-personal'
+                    : 'sticker-panel-upload-first-room',
+              ),
+              actionIcon: Icons.upload_file_outlined,
+              actionLabel: '上传第一个表情',
+              actionTone: ButtonTone.primary,
+              onAction:
+                  state.source == sticker_display.StickerPanelSource.personal
+                  ? onUploadFirstPersonalSticker
+                  : onUploadFirstRoomSticker,
             ),
             sticker_display.StickerPanelBodyState.results => _StickerList(
               stickers: stickers,
@@ -756,12 +782,20 @@ class _StickerPanelMessage extends StatelessWidget {
   const _StickerPanelMessage({
     required this.icon,
     required this.text,
-    this.onRefresh,
+    this.actionKey,
+    this.actionIcon,
+    this.actionLabel,
+    this.actionTone = ButtonTone.neutral,
+    this.onAction,
   });
 
   final IconData icon;
   final String text;
-  final VoidCallback? onRefresh;
+  final Key? actionKey;
+  final IconData? actionIcon;
+  final String? actionLabel;
+  final ButtonTone actionTone;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -778,12 +812,14 @@ class _StickerPanelMessage extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: UiTypography.label.copyWith(color: UiColors.textMuted),
           ),
-          if (onRefresh != null) ...[
+          if (actionLabel != null && onAction != null) ...[
             const SizedBox(height: 12),
             Button(
-              icon: const Icon(Icons.refresh),
-              onPressed: onRefresh,
-              child: const Text('刷新'),
+              key: actionKey,
+              icon: actionIcon == null ? null : Icon(actionIcon),
+              tone: actionTone,
+              onPressed: onAction,
+              child: Text(actionLabel!),
             ),
           ],
         ],
@@ -1170,12 +1206,16 @@ class StickerPanelForTest extends StatelessWidget {
     required this.onSendSticker,
     required this.onRefresh,
     required this.onSourceChanged,
+    this.onUploadFirstPersonalSticker,
+    this.onUploadFirstRoomSticker,
   });
 
   final sticker_display.StickerPanelLoadState state;
   final ValueChanged<Sticker> onSendSticker;
   final VoidCallback onRefresh;
   final ValueChanged<sticker_display.StickerPanelSource> onSourceChanged;
+  final VoidCallback? onUploadFirstPersonalSticker;
+  final VoidCallback? onUploadFirstRoomSticker;
 
   @override
   Widget build(BuildContext context) {
@@ -1184,6 +1224,8 @@ class StickerPanelForTest extends StatelessWidget {
       onSendSticker: onSendSticker,
       onRefresh: onRefresh,
       onSourceChanged: onSourceChanged,
+      onUploadFirstPersonalSticker: onUploadFirstPersonalSticker,
+      onUploadFirstRoomSticker: onUploadFirstRoomSticker,
     );
   }
 }

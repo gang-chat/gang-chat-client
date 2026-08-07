@@ -40,6 +40,8 @@ class LiveMusicBoxPanel extends StatelessWidget {
     this.onResolveRoomProfile,
     this.onEnterCommonRoom,
     this.userProfileActionBuilder,
+    this.onCreateFirstRoomPlaylist,
+    this.onCreateFirstPersonalPlaylist,
     required this.onQueueResult,
     required this.onRemoveItem,
     required this.onSourceChanged,
@@ -68,6 +70,8 @@ class LiveMusicBoxPanel extends StatelessWidget {
   final RoomProfileResolver? onResolveRoomProfile;
   final ValueChanged<PublicRoom>? onEnterCommonRoom;
   final UserProfileActionBuilder? userProfileActionBuilder;
+  final VoidCallback? onCreateFirstRoomPlaylist;
+  final VoidCallback? onCreateFirstPersonalPlaylist;
   final ValueChanged<MusicBoxSearchResult> onQueueResult;
   final ValueChanged<MusicBoxQueueItem> onRemoveItem;
   final ValueChanged<String> onSourceChanged;
@@ -104,6 +108,8 @@ class LiveMusicBoxPanel extends StatelessWidget {
       onResolveRoomProfile: onResolveRoomProfile,
       onEnterCommonRoom: onEnterCommonRoom,
       userProfileActionBuilder: userProfileActionBuilder,
+      onCreateFirstRoomPlaylist: onCreateFirstRoomPlaylist,
+      onCreateFirstPersonalPlaylist: onCreateFirstPersonalPlaylist,
     );
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -716,6 +722,8 @@ class _MusicBoxBody extends StatefulWidget {
     required this.onResolveRoomProfile,
     required this.onEnterCommonRoom,
     required this.userProfileActionBuilder,
+    required this.onCreateFirstRoomPlaylist,
+    required this.onCreateFirstPersonalPlaylist,
   });
 
   final MusicBoxState state;
@@ -737,6 +745,8 @@ class _MusicBoxBody extends StatefulWidget {
   final RoomProfileResolver? onResolveRoomProfile;
   final ValueChanged<PublicRoom>? onEnterCommonRoom;
   final UserProfileActionBuilder? userProfileActionBuilder;
+  final VoidCallback? onCreateFirstRoomPlaylist;
+  final VoidCallback? onCreateFirstPersonalPlaylist;
 
   @override
   State<_MusicBoxBody> createState() => _MusicBoxBodyState();
@@ -1119,6 +1129,7 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
                           ? _requestedPlaylist
                           : null,
                       onPlaylistClosed: _clearRequestedPlaylist,
+                      onCreateFirstPlaylist: widget.onCreateFirstRoomPlaylist,
                     ),
                     _MusicBoxSection.myPlaylists => _MusicBoxPlaylistBrowser(
                       controller: widget.controller,
@@ -1130,6 +1141,8 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
                           ? _requestedPlaylist
                           : null,
                       onPlaylistClosed: _clearRequestedPlaylist,
+                      onCreateFirstPlaylist:
+                          widget.onCreateFirstPersonalPlaylist,
                     ),
                     _MusicBoxSection.search => _MusicBoxSearchList(
                       results: widget.searchResults,
@@ -1535,6 +1548,7 @@ class _MusicBoxPlaylistBrowser extends StatefulWidget {
     required this.onStateChanged,
     required this.initialPlaylist,
     required this.onPlaylistClosed,
+    required this.onCreateFirstPlaylist,
   });
 
   final MusicBoxController? controller;
@@ -1544,6 +1558,7 @@ class _MusicBoxPlaylistBrowser extends StatefulWidget {
   final ValueChanged<MusicBoxState>? onStateChanged;
   final PersonalMusicPlaylist? initialPlaylist;
   final VoidCallback onPlaylistClosed;
+  final VoidCallback? onCreateFirstPlaylist;
 
   @override
   State<_MusicBoxPlaylistBrowser> createState() =>
@@ -1836,6 +1851,13 @@ class _MusicBoxPlaylistBrowserState extends State<_MusicBoxPlaylistBrowser> {
       return _MusicBoxEmpty(
         icon: widget.roomScoped ? Icons.meeting_room : Icons.person,
         message: widget.roomScoped ? '还没有房间歌单' : '还没有个人歌单',
+        actionKey: ValueKey<String>(
+          widget.roomScoped
+              ? 'music-box-create-first-room-playlist'
+              : 'music-box-create-first-personal-playlist',
+        ),
+        actionLabel: '新建第一个歌单',
+        onAction: widget.onCreateFirstPlaylist,
       );
     }
     return ListView.separated(
@@ -3589,10 +3611,19 @@ class _MusicBoxTrackTile extends StatelessWidget {
 }
 
 class _MusicBoxEmpty extends StatelessWidget {
-  const _MusicBoxEmpty({required this.icon, required this.message});
+  const _MusicBoxEmpty({
+    required this.icon,
+    required this.message,
+    this.actionKey,
+    this.actionLabel,
+    this.onAction,
+  });
 
   final IconData icon;
   final String message;
+  final Key? actionKey;
+  final String? actionLabel;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -3613,6 +3644,18 @@ class _MusicBoxEmpty extends StatelessWidget {
                 fontWeight: FontWeight.w600,
               ),
             ),
+            if (actionLabel != null && onAction != null) ...[
+              const SizedBox(height: 14),
+              Button(
+                key: actionKey,
+                icon: const Icon(Icons.add),
+                tone: ButtonTone.primary,
+                height: 34,
+                padding: const EdgeInsets.symmetric(horizontal: 13),
+                onPressed: onAction,
+                child: Text(actionLabel!),
+              ),
+            ],
           ],
         ),
       ),

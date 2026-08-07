@@ -582,7 +582,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('取消管理'), findsOneWidget);
-      expect(find.text('添加'), findsOneWidget);
+      expect(find.text('添加到歌单'), findsOneWidget);
       expect(find.text('置顶'), findsOneWidget);
       expect(find.text('全选已加载'), findsOneWidget);
       expect(

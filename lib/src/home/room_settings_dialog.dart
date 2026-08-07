@@ -3,7 +3,7 @@ part of 'room_management.dart';
 enum _RoomSettingsDialogMode { create, edit }
 
 /// 房间设置的分段:房间信息、个人偏好与房间资源管理。
-enum _RoomSettingsSection {
+enum RoomSettingsSection {
   info,
   preferences,
   messageHistory,
@@ -26,6 +26,7 @@ class RoomSettingsDialog extends StatefulWidget {
     this.stickerImagePreviewOpener,
     this.messageHistoryBuilder,
     this.musicPlaylistsBuilder,
+    this.initialSection = RoomSettingsSection.info,
     bool createMode = false,
   }) : _mode = createMode
            ? _RoomSettingsDialogMode.create
@@ -68,6 +69,7 @@ class RoomSettingsDialog extends StatefulWidget {
   final StickerImagePreviewOpener? stickerImagePreviewOpener;
   final WidgetBuilder? messageHistoryBuilder;
   final WidgetBuilder? musicPlaylistsBuilder;
+  final RoomSettingsSection initialSection;
   final _RoomSettingsDialogMode _mode;
 
   @override
@@ -105,7 +107,7 @@ class _RoomSettingsDialogState extends State<RoomSettingsDialog> {
 
   bool get _creating => widget._mode == _RoomSettingsDialogMode.create;
 
-  _RoomSettingsSection _section = _RoomSettingsSection.info;
+  late RoomSettingsSection _section;
 
   bool get _canManageRoom =>
       _creating ||
@@ -177,7 +179,7 @@ class _RoomSettingsDialogState extends State<RoomSettingsDialog> {
     _leaving = false;
     _deleting = false;
     _changed = false;
-    _section = _RoomSettingsSection.info;
+    _section = _creating ? RoomSettingsSection.info : widget.initialSection;
     if (clearTransientFeedback) {
       _error = null;
       _notice = null;
@@ -658,35 +660,35 @@ class _RoomSettingsDialogState extends State<RoomSettingsDialog> {
               ),
         pinned: _creating
             ? null
-            : SegmentedControl<_RoomSettingsSection>(
+            : SegmentedControl<RoomSettingsSection>(
                 expanded: true,
                 value: _section,
                 onChanged: (section) => setState(() => _section = section),
                 segments: [
                   const Segment(
-                    value: _RoomSettingsSection.info,
+                    value: RoomSettingsSection.info,
                     label: '房间信息',
                     icon: Icons.info_outline,
                   ),
                   const Segment(
-                    value: _RoomSettingsSection.preferences,
+                    value: RoomSettingsSection.preferences,
                     label: '个人偏好',
                     icon: Icons.tune_outlined,
                   ),
                   if (widget.messageHistoryBuilder != null)
                     const Segment(
-                      value: _RoomSettingsSection.messageHistory,
+                      value: RoomSettingsSection.messageHistory,
                       label: '消息记录',
                       icon: Icons.history_outlined,
                     ),
                   const Segment(
-                    value: _RoomSettingsSection.stickers,
+                    value: RoomSettingsSection.stickers,
                     label: '表情包',
                     icon: Icons.emoji_emotions_outlined,
                   ),
                   if (widget.musicPlaylistsBuilder != null)
                     const Segment(
-                      value: _RoomSettingsSection.playlists,
+                      value: RoomSettingsSection.playlists,
                       label: '歌单',
                       icon: Icons.queue_music_outlined,
                     ),
@@ -695,12 +697,12 @@ class _RoomSettingsDialogState extends State<RoomSettingsDialog> {
         child: _creating
             ? _buildSettingsBody(context)
             : switch (_section) {
-                _RoomSettingsSection.info => _buildSettingsBody(context),
-                _RoomSettingsSection.preferences => _buildPreferencesBody(),
-                _RoomSettingsSection.messageHistory =>
+                RoomSettingsSection.info => _buildSettingsBody(context),
+                RoomSettingsSection.preferences => _buildPreferencesBody(),
+                RoomSettingsSection.messageHistory =>
                   widget.messageHistoryBuilder?.call(context) ??
                       _buildPreferencesBody(),
-                _RoomSettingsSection.stickers => StickerManagerPanel(
+                RoomSettingsSection.stickers => StickerManagerPanel(
                   backend: _RoomStickerBackend(
                     controller: widget.controller,
                     roomId: _room.id,
@@ -710,7 +712,7 @@ class _RoomSettingsDialogState extends State<RoomSettingsDialog> {
                   title: '房间表情包',
                   unavailableText: '房间表情包需要登录后从服务端读取',
                 ),
-                _RoomSettingsSection.playlists =>
+                RoomSettingsSection.playlists =>
                   widget.musicPlaylistsBuilder?.call(context) ??
                       const Center(
                         child: Text(

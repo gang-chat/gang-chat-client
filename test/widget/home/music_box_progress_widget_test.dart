@@ -69,6 +69,8 @@ Widget _host(
   RoomProfileResolver? onResolveRoomProfile,
   UserProfileActionBuilder? userProfileActionBuilder,
   MusicTrackPreviewPlatformFactory? previewPlatformFactory,
+  VoidCallback? onCreateFirstRoomPlaylist,
+  VoidCallback? onCreateFirstPersonalPlaylist,
 }) {
   return MaterialApp(
     theme: uiTheme().copyWith(platform: platform),
@@ -92,6 +94,8 @@ Widget _host(
           onResolveUserProfile: onResolveUserProfile,
           onResolveRoomProfile: onResolveRoomProfile,
           userProfileActionBuilder: userProfileActionBuilder,
+          onCreateFirstRoomPlaylist: onCreateFirstRoomPlaylist,
+          onCreateFirstPersonalPlaylist: onCreateFirstPersonalPlaylist,
           previewPlatformFactory: previewPlatformFactory,
           onTogglePlayback: () {},
           onSkip: () {},
@@ -212,6 +216,36 @@ class _RoomPlaylistApiFake extends _MusicBoxApiFake
       maxPlaylistItems: 500,
     );
   }
+}
+
+class _EmptyPlaylistApiFake extends _MusicBoxApiFake
+    implements RoomMusicPlaylistApi, PersonalMusicPlaylistApi {
+  _EmptyPlaylistApiFake(super.state);
+
+  PersonalMusicPlaylistPage _emptyPage(int page, int pageSize) {
+    return PersonalMusicPlaylistPage(
+      playlists: const [],
+      page: page,
+      pageSize: pageSize,
+      total: 0,
+      hasMore: false,
+      maxPlaylists: 50,
+      maxPlaylistItems: 500,
+    );
+  }
+
+  @override
+  Future<PersonalMusicPlaylistPage> listRoomMusicPlaylists({
+    required String roomId,
+    int page = 1,
+    int pageSize = 50,
+  }) async => _emptyPage(page, pageSize);
+
+  @override
+  Future<PersonalMusicPlaylistPage> listPersonalMusicPlaylists({
+    int page = 1,
+    int pageSize = 50,
+  }) async => _emptyPage(page, pageSize);
 }
 
 class _CloneablePlaylistApiFake extends _RoomPlaylistApiFake
@@ -578,6 +612,96 @@ void main() {
             )
             .value,
         'netease',
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'empty room and personal playlists expose their create-first actions',
+    (tester) async {
+      final searchController = TextEditingController();
+      addTearDown(searchController.dispose);
+      final state = _state(
+        playbackState: MusicBoxPlaybackState.stopped,
+        positionMs: 0,
+      );
+      final api = _EmptyPlaylistApiFake(state);
+      var roomCreateCount = 0;
+      var personalCreateCount = 0;
+
+      await tester.pumpWidget(
+        _host(
+          state,
+          searchController,
+          height: 500,
+          roomId: 'room-1',
+          musicBoxController: MusicBoxController(api: api),
+          onCreateFirstRoomPlaylist: () => roomCreateCount += 1,
+          onCreateFirstPersonalPlaylist: () => personalCreateCount += 1,
+        ),
+      );
+      await _toggleAddSources(tester);
+
+      await tester.tap(find.text('房间歌单'));
+      await tester.pumpAndSettle();
+      expect(find.text('还没有房间歌单'), findsOneWidget);
+      final roomAction = find.byKey(
+        const ValueKey<String>('music-box-create-first-room-playlist'),
+      );
+      expect(roomAction, findsOneWidget);
+      expect(find.text('新建第一个歌单'), findsOneWidget);
+      await tester.tap(roomAction);
+      expect(roomCreateCount, 1);
+      expect(personalCreateCount, 0);
+
+      await tester.tap(find.text('我的歌单'));
+      await tester.pumpAndSettle();
+      expect(find.text('还没有个人歌单'), findsOneWidget);
+      final personalAction = find.byKey(
+        const ValueKey<String>('music-box-create-first-personal-playlist'),
+      );
+      expect(personalAction, findsOneWidget);
+      await tester.tap(personalAction);
+      expect(roomCreateCount, 1);
+      expect(personalCreateCount, 1);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'room create-first playlist action stays hidden without permission',
+    (tester) async {
+      final searchController = TextEditingController();
+      addTearDown(searchController.dispose);
+      final state = _state(
+        playbackState: MusicBoxPlaybackState.stopped,
+        positionMs: 0,
+      );
+
+      await tester.pumpWidget(
+        _host(
+          state,
+          searchController,
+          height: 500,
+          roomId: 'room-1',
+          musicBoxController: MusicBoxController(
+            api: _EmptyPlaylistApiFake(state),
+          ),
+          onCreateFirstPersonalPlaylist: () {},
+        ),
+      );
+      await _toggleAddSources(tester);
+      await tester.tap(find.text('房间歌单'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('还没有房间歌单'), findsOneWidget);
+      expect(find.text('新建第一个歌单'), findsNothing);
+      expect(
+        find.byKey(
+          const ValueKey<String>('music-box-create-first-room-playlist'),
+        ),
+        findsNothing,
       );
       expect(tester.takeException(), isNull);
     },

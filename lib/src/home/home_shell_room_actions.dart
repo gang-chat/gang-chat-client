@@ -194,6 +194,7 @@ extension _HomeShellRoomActions on _HomeShellState {
       final opening = !_settingsOpen;
       _settingsOpen = opening;
       if (opening) {
+        _settingsInitialSection = SettingsSection.profile;
         _contentMode = _ContentMode.chat;
         _settingsAppUpdate = null;
       }
@@ -201,6 +202,21 @@ extension _HomeShellRoomActions on _HomeShellState {
       if (openContent) {
         _narrowContentOpen = opening;
       }
+    });
+  }
+
+  void _openSettingsSection(
+    SettingsSection section, {
+    required bool openContent,
+  }) {
+    _setHomeState(() {
+      _clearDeferredRoomNotificationVisualMarkersInState();
+      _settingsOpen = true;
+      _settingsInitialSection = section;
+      _settingsAppUpdate = null;
+      _contentMode = _ContentMode.chat;
+      _auxiliaryOpenedFromNarrowSidebar = openContent;
+      if (openContent) _narrowContentOpen = true;
     });
   }
 
@@ -757,11 +773,14 @@ extension _HomeShellRoomActions on _HomeShellState {
     );
   }
 
-  Future<void> _openRoomSettings() async {
+  Future<void> _openRoomSettings({
+    RoomSettingsSection initialSection = RoomSettingsSection.info,
+  }) async {
     final room = _selectedRoom;
     if (room == null) return;
     _setHomeState(() {
       _settingsOpen = false;
+      _roomSettingsInitialSection = initialSection;
       _contentMode = _ContentMode.roomSettings;
       _narrowContentOpen = true;
     });

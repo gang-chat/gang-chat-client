@@ -15,6 +15,85 @@ Widget _host(Widget child) {
 }
 
 void main() {
+  testWidgets('empty sticker sources expose their first-upload actions', (
+    tester,
+  ) async {
+    var personalUploads = 0;
+    var roomUploads = 0;
+
+    await tester.pumpWidget(
+      _host(
+        StickerPanelForTest(
+          state: const sticker_display.StickerPanelLoadState(loaded: true),
+          onSendSticker: (_) {},
+          onRefresh: () {},
+          onSourceChanged: (_) {},
+          onUploadFirstPersonalSticker: () => personalUploads += 1,
+          onUploadFirstRoomSticker: () => roomUploads += 1,
+        ),
+      ),
+    );
+
+    expect(find.text('暂无个人表情'), findsOneWidget);
+    final personalAction = find.byKey(
+      const ValueKey<String>('sticker-panel-upload-first-personal'),
+    );
+    expect(personalAction, findsOneWidget);
+    expect(find.text('上传第一个表情'), findsOneWidget);
+    await tester.tap(personalAction);
+    expect(personalUploads, 1);
+    expect(roomUploads, 0);
+
+    await tester.pumpWidget(
+      _host(
+        StickerPanelForTest(
+          state: const sticker_display.StickerPanelLoadState(
+            source: sticker_display.StickerPanelSource.room,
+            loaded: true,
+          ),
+          onSendSticker: (_) {},
+          onRefresh: () {},
+          onSourceChanged: (_) {},
+          onUploadFirstPersonalSticker: () => personalUploads += 1,
+          onUploadFirstRoomSticker: () => roomUploads += 1,
+        ),
+      ),
+    );
+
+    expect(find.text('暂无房间表情'), findsOneWidget);
+    final roomAction = find.byKey(
+      const ValueKey<String>('sticker-panel-upload-first-room'),
+    );
+    expect(roomAction, findsOneWidget);
+    await tester.tap(roomAction);
+    expect(personalUploads, 1);
+    expect(roomUploads, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('room first-upload action stays hidden without permission', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(
+        StickerPanelForTest(
+          state: const sticker_display.StickerPanelLoadState(
+            source: sticker_display.StickerPanelSource.room,
+            loaded: true,
+          ),
+          onSendSticker: (_) {},
+          onRefresh: () {},
+          onSourceChanged: (_) {},
+          onUploadFirstPersonalSticker: () {},
+        ),
+      ),
+    );
+
+    expect(find.text('暂无房间表情'), findsOneWidget);
+    expect(find.text('上传第一个表情'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('sticker panel flattens packs without pack headers', (
     tester,
   ) async {

@@ -1468,7 +1468,7 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
             ),
             if (_managingItems)
               StickerActionGridEntry(
-                label: '添加',
+                label: '添加到歌单',
                 button: Button(
                   key: const ValueKey(
                     'add-selected-personal-music-playlist-items',
@@ -1482,7 +1482,7 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
                   loading: _addingSelectedItems,
                   icon: const Icon(Icons.playlist_add),
                   width: double.infinity,
-                  child: const Text('添加'),
+                  child: const Text('添加到歌单'),
                 ),
               ),
             if (_managingItems)

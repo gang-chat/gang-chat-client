@@ -113,6 +113,8 @@ class ChatPane extends StatelessWidget {
     required this.onLoadStickers,
     required this.onRefreshStickers,
     required this.onStickerSourceChanged,
+    this.onUploadFirstPersonalSticker,
+    this.onUploadFirstRoomSticker,
     required this.onStartVoice,
     required this.onSendVoice,
     required this.onCancelVoice,
@@ -180,6 +182,8 @@ class ChatPane extends StatelessWidget {
   final VoidCallback onLoadStickers;
   final VoidCallback onRefreshStickers;
   final ValueChanged<sticker_display.StickerPanelSource> onStickerSourceChanged;
+  final VoidCallback? onUploadFirstPersonalSticker;
+  final VoidCallback? onUploadFirstRoomSticker;
   final VoidCallback onStartVoice;
   final VoidCallback onSendVoice;
   final VoidCallback onCancelVoice;
@@ -326,6 +330,8 @@ class ChatPane extends StatelessWidget {
                 onOpenStickers: onLoadStickers,
                 onRefreshStickers: onRefreshStickers,
                 onStickerSourceChanged: onStickerSourceChanged,
+                onUploadFirstPersonalSticker: onUploadFirstPersonalSticker,
+                onUploadFirstRoomSticker: onUploadFirstRoomSticker,
                 onStartVoice: onStartVoice,
                 onSendVoice: onSendVoice,
                 onCancelVoice: onCancelVoice,
