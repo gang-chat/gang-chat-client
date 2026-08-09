@@ -2616,8 +2616,12 @@ class _MusicBoxSongCardState extends State<_MusicBoxSongCard> {
                   : '未知',
             ),
             _MusicBoxSongDetailRow(
-              label: '歌手',
-              value: artist.isEmpty ? '未知艺人' : artist,
+              label: music_box_display.musicBoxArtistFieldLabel(source),
+              value: artist.isEmpty
+                  ? isBilibili
+                        ? '未知作者'
+                        : '未知艺人'
+                  : artist,
             ),
             _MusicBoxSongDetailRow(
               label: '来源',

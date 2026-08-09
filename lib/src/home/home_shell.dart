@@ -306,6 +306,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   String? _joinedLiveRoomId;
   bool _joinedLivePersonalAiVoiceAnnouncementsEnabled = false;
   final Map<String, UserSummary> _joinedLiveParticipantUsers = {};
+  Set<String> _joinedLiveAuthoritativeParticipantIds = <String>{};
+  final Set<String> _joinedLivePresenceCueParticipantIds = <String>{};
+  DateTime? _joinedLiveAuthoritativeSnapshotAt;
   bool _joiningLive = false;
   bool _leavingLive = false;
   bool _syncingLiveConnectedParticipants = false;
@@ -515,6 +518,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       _joinedLiveRoomId = null;
       _joinedLivePersonalAiVoiceAnnouncementsEnabled = false;
       _joinedLiveParticipantUsers.clear();
+      _joinedLiveAuthoritativeParticipantIds = <String>{};
+      _joinedLivePresenceCueParticipantIds.clear();
+      _joinedLiveAuthoritativeSnapshotAt = null;
       _joiningLive = false;
       _leavingLive = false;
       _micMuted = false;

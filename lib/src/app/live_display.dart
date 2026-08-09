@@ -31,6 +31,45 @@ class LiveParticipantTileState {
   final bool micActive;
 }
 
+class AuthoritativeLivePresenceChanges {
+  const AuthoritativeLivePresenceChanges({
+    required this.joined,
+    required this.left,
+  });
+
+  final Set<String> joined;
+  final Set<String> left;
+}
+
+/// User identities which the server still considers present in the voice
+/// channel. A reconnecting participant deliberately stays present during the
+/// bounded recovery window; a first-time `joining` placeholder does not become
+/// audible/visible presence until the app-level join reaches `online`.
+Set<String> authoritativeLivePresenceUserIds(LiveState live) {
+  return {
+    for (final participant in live.participants)
+      if (liveParticipantConnectionReady(participant) ||
+          participant.connectionState.trim().toLowerCase() == 'reconnecting')
+        participant.user.id,
+  };
+}
+
+/// Computes join/leave cues from two authoritative server snapshots.
+///
+/// LiveKit can emit `ParticipantDisconnectedEvent` at the start of a temporary
+/// reconnect while the server correctly keeps that person in the roster. Cues
+/// must therefore follow this snapshot transition rather than the raw media
+/// callback, otherwise users hear a leave sound while the member remains.
+AuthoritativeLivePresenceChanges authoritativeLivePresenceChanges({
+  required Set<String> before,
+  required Set<String> after,
+}) {
+  return AuthoritativeLivePresenceChanges(
+    joined: after.difference(before),
+    left: before.difference(after),
+  );
+}
+
 class LiveMicControlState {
   const LiveMicControlState({
     required this.mutedForDisplay,

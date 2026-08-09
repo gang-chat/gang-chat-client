@@ -137,7 +137,7 @@ void main() {
     MusicTrackPlaylistTarget? addedTarget;
     const personal = PersonalMusicPlaylist(
       id: 'personal-1',
-      name: '我的歌单',
+      name: '这是一个需要完整换行显示而不能省略的超长个人歌单名称',
       description: '',
       revision: 1,
       itemCount: 1,
@@ -194,15 +194,21 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey<String>('shared-track-row')));
     await tester.pumpAndSettle();
+    expect(find.text('作者'), findsOneWidget);
     await tester.tap(
       find.byKey(const ValueKey<String>('music-track-card-add-to-playlist')),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('我的歌单'), findsWidgets);
+    expect(find.text('我的歌单'), findsOneWidget);
     expect(find.text('当前房间歌单'), findsOneWidget);
-    expect(find.byIcon(Icons.person_outline), findsOneWidget);
-    expect(find.byIcon(Icons.meeting_room_outlined), findsOneWidget);
+    expect(find.text('这是一个需要完整换行显示而不能省略的超长个人歌单名称'), findsOneWidget);
+    expect(find.text('1 首歌曲'), findsOneWidget);
+    expect(find.text('2 首歌曲'), findsOneWidget);
+    expect(find.byIcon(Icons.person_outline), findsNothing);
+    expect(find.byIcon(Icons.meeting_room_outlined), findsNothing);
+    expect(find.byIcon(Icons.person), findsOneWidget);
+    expect(find.byIcon(Icons.meeting_room), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     tester.view.resetViewInsets();
@@ -227,9 +233,19 @@ void main() {
     await tester.tap(find.text('全部'));
     await tester.enterText(
       find.byKey(const ValueKey<String>('music-track-playlist-target-search')),
-      '我的',
+      '超长',
     );
     await tester.pump();
+    expect(
+      tester
+          .getSize(
+            find.byKey(
+              const ValueKey<String>('music-track-playlist-target:personal-1'),
+            ),
+          )
+          .height,
+      greaterThan(64),
+    );
     expect(
       find.byKey(
         const ValueKey<String>('music-track-playlist-target:personal-1'),

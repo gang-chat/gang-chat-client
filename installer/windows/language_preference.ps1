@@ -11,7 +11,8 @@ $ErrorActionPreference = 'Stop'
 
 $LanguageKey = 'flutter.gang.language'
 $AllowedLanguages = @('zh-Hans', 'zh-Hant', 'en')
-$PreferencesPath = Join-Path $env:APPDATA 'com.gangchat\client\shared_preferences.json'
+$PreferencesPath = Join-Path $env:APPDATA 'com.gangchat\Gang Chat\shared_preferences.json'
+$LegacyPreferencesPath = Join-Path $env:APPDATA 'com.gangchat\client\shared_preferences.json'
 
 function Normalize-Language([string] $Value) {
   if ($AllowedLanguages -contains $Value) {
@@ -24,12 +25,12 @@ function New-PreferenceObject {
   return New-Object psobject
 }
 
-function Read-Preferences {
-  if (!(Test-Path -LiteralPath $PreferencesPath)) {
+function Read-Preferences([string] $Path = $PreferencesPath) {
+  if (!(Test-Path -LiteralPath $Path)) {
     return New-PreferenceObject
   }
 
-  $raw = Get-Content -LiteralPath $PreferencesPath -Raw -Encoding UTF8
+  $raw = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
   if ([string]::IsNullOrWhiteSpace($raw)) {
     return New-PreferenceObject
   }
@@ -45,7 +46,12 @@ function Read-Preferences {
 }
 
 function Read-Language {
-  $prefs = Read-Preferences
+  $sourcePath = $PreferencesPath
+  if (!(Test-Path -LiteralPath $sourcePath) -and
+      (Test-Path -LiteralPath $LegacyPreferencesPath)) {
+    $sourcePath = $LegacyPreferencesPath
+  }
+  $prefs = Read-Preferences $sourcePath
   $property = $prefs.PSObject.Properties[$LanguageKey]
   if ($null -eq $property) {
     return ''

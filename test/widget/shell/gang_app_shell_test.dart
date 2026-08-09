@@ -1428,6 +1428,7 @@ Map<String, Object?> _liveStateJson({
   required String roomId,
   required int participantCount,
   List<Object?>? participants,
+  String updatedAt = '2026-06-05T08:00:00Z',
 }) {
   final participantList =
       participants ??
@@ -1443,7 +1444,7 @@ Map<String, Object?> _liveStateJson({
     'room_id': roomId,
     'participant_count': participantCount,
     'participants': participantList,
-    'updated_at': '2026-06-05T08:00:00Z',
+    'updated_at': updatedAt,
   };
 }
 
@@ -1458,6 +1459,7 @@ Map<String, Object?> _liveParticipantJson({
   bool cameraOn = false,
   bool cameraMirrored = false,
   bool screenSharing = false,
+  String connectionState = 'connected',
 }) {
   return {
     'live_session_id': liveSessionId,
@@ -1472,7 +1474,7 @@ Map<String, Object?> _liveParticipantJson({
     'camera_on': cameraOn,
     'camera_mirrored': cameraMirrored,
     'screen_sharing': screenSharing,
-    'connection_state': 'connected',
+    'connection_state': connectionState,
   };
 }
 

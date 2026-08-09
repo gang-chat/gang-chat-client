@@ -71,6 +71,10 @@ extension _HomeShellRealtime on _HomeShellState {
       );
       if (patch == null) return;
       _cacheJoinedLiveParticipantUsers(patch.live);
+      _applyJoinedLiveAuthoritativeSnapshot(
+        patch.live,
+        eventType: 'live_state_refreshed',
+      );
       _setHomeState(() {
         _live = patch.live;
         _servers = _roomsController.patchRoomLiveCount(
@@ -85,7 +89,7 @@ extension _HomeShellRealtime on _HomeShellState {
 
   void _onRealtimeEvent(RealtimeEvent event) {
     if (isLiveSnapshotRealtimeEventType(event.type)) {
-      _applyLiveSnapshot(event.data);
+      _applyLiveSnapshot(event.type, event.data);
       return;
     }
     switch (event.type) {
@@ -133,7 +137,7 @@ extension _HomeShellRealtime on _HomeShellState {
     await _logout();
   }
 
-  void _applyLiveSnapshot(Map<String, dynamic> data) {
+  void _applyLiveSnapshot(String eventType, Map<String, dynamic> data) {
     final eventRoomId = data['room_id'] as String?;
     final liveJson = data['live'];
     LiveState? joinedRoomSnapshot;
@@ -143,6 +147,11 @@ extension _HomeShellRealtime on _HomeShellState {
           Map<String, Object?>.from(liveJson),
         );
         _cacheJoinedLiveParticipantUsers(joinedRoomSnapshot);
+        _applyJoinedLiveAuthoritativeSnapshot(
+          joinedRoomSnapshot,
+          eventType: eventType,
+          eventData: data,
+        );
       } catch (_) {}
     }
     final patch = _roomsController.patchLiveSnapshot(

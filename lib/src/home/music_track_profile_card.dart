@@ -253,8 +253,12 @@ class _MusicTrackProfileCard extends StatelessWidget {
                 : '未知',
           ),
           _MusicTrackDetailRow(
-            label: '歌手',
-            value: artists.isEmpty ? '未知歌手' : artists,
+            label: music_box_display.musicBoxArtistFieldLabel(data.source),
+            value: artists.isEmpty
+                ? data.source.trim().toLowerCase() == 'bilibili'
+                      ? '未知作者'
+                      : '未知歌手'
+                : artists,
           ),
           _MusicTrackDetailRow(
             label: '来源',
@@ -462,17 +466,14 @@ class _MusicTrackPlaylistTargetDialogState
                 Segment(
                   value: _MusicTrackPlaylistTargetFilter.all,
                   label: '全部',
-                  icon: Icons.library_music_outlined,
                 ),
                 Segment(
                   value: _MusicTrackPlaylistTargetFilter.personal,
                   label: '我的歌单',
-                  icon: Icons.person_outline,
                 ),
                 Segment(
                   value: _MusicTrackPlaylistTargetFilter.room,
                   label: '房间歌单',
-                  icon: Icons.meeting_room_outlined,
                 ),
               ],
             ),
@@ -574,12 +575,26 @@ class _MusicTrackPlaylistTargetOption extends StatelessWidget {
               ),
               const SizedBox(width: UiSpacing.md),
               Expanded(
-                child: Text(
-                  target.playlist.name,
-                  style: UiTypography.body.copyWith(
-                    color: UiColors.text,
-                    fontWeight: FontWeight.w600,
-                  ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      target.playlist.name,
+                      softWrap: true,
+                      style: UiTypography.body.copyWith(
+                        color: UiColors.text,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${target.playlist.itemCount} 首歌曲',
+                      style: UiTypography.label.copyWith(
+                        color: UiColors.textMuted,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(width: UiSpacing.md),

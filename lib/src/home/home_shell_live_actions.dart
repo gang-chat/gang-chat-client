@@ -228,6 +228,12 @@ extension _HomeShellLiveActions on _HomeShellState {
   }
 
   void _onLiveParticipantJoined(String participantIdentity) {
+    if (participantIdentity == _currentUser.id ||
+        !_joinedLivePresenceCueParticipantIds.add(participantIdentity)) {
+      return;
+    }
+    // A media join is safe to announce immediately. The cue identity set
+    // deduplicates the authoritative snapshot that normally follows it.
     _playLivePresenceSound(
       LivePresenceSound.joined,
       participantIdentity: participantIdentity,
@@ -239,42 +245,88 @@ extension _HomeShellLiveActions on _HomeShellState {
     String participantIdentity,
     LiveParticipantDepartureKind departureKind,
   ) {
-    _playLivePresenceSound(
-      LivePresenceSound.left,
-      participantIdentity: participantIdentity,
-      announcementAction: departureKind == LiveParticipantDepartureKind.removed
-          ? LivePresenceAnnouncementAction.removed
-          : LivePresenceAnnouncementAction.left,
-    );
-    final roomId = _joinedLiveRoomId;
-    if (roomId == null || participantIdentity == _currentUser.id) return;
+    // A transient transport loss emits this callback immediately while the
+    // server intentionally keeps the participant as `reconnecting` for its
+    // recovery grace period. Removing the card or playing a leave cue here
+    // causes the exact mismatch reported in production. Track/media cleanup
+    // remains inside LiveSession; roster and cue changes follow the next
+    // authoritative server snapshot instead.
+  }
 
-    final patch = _liveController.removeUserFromLive(
-      live: _live,
-      rooms: _servers,
-      roomId: roomId,
-      userId: participantIdentity,
+  void _seedJoinedLiveAuthoritativePresence(LiveState live) {
+    _joinedLiveAuthoritativeParticipantIds = live_display
+        .authoritativeLivePresenceUserIds(live);
+    _joinedLiveAuthoritativeSnapshotAt = live.updatedAt;
+    _joinedLivePresenceCueParticipantIds.clear();
+  }
+
+  void _clearJoinedLiveAuthoritativePresence() {
+    _joinedLiveAuthoritativeParticipantIds = <String>{};
+    _joinedLivePresenceCueParticipantIds.clear();
+    _joinedLiveAuthoritativeSnapshotAt = null;
+  }
+
+  void _applyJoinedLiveAuthoritativeSnapshot(
+    LiveState live, {
+    required String eventType,
+    Map<String, dynamic> eventData = const <String, dynamic>{},
+  }) {
+    if (live.roomId != _joinedLiveRoomId) return;
+    final previousUpdatedAt = _joinedLiveAuthoritativeSnapshotAt;
+    if (previousUpdatedAt != null &&
+        live.updatedAt.isBefore(previousUpdatedAt)) {
+      return;
+    }
+    final next = live_display.authoritativeLivePresenceUserIds(live);
+    final changes = live_display.authoritativeLivePresenceChanges(
+      before: _joinedLiveAuthoritativeParticipantIds,
+      after: next,
     );
-    final selection = _liveStageSelections[roomId];
-    final clearSelection =
+    _joinedLiveAuthoritativeParticipantIds = next;
+    _joinedLiveAuthoritativeSnapshotAt = live.updatedAt;
+
+    for (final identity in changes.joined) {
+      if (identity == _currentUser.id) continue;
+      if (!_joinedLivePresenceCueParticipantIds.add(identity)) continue;
+      _playLivePresenceSound(
+        LivePresenceSound.joined,
+        participantIdentity: identity,
+        announcementAction: LivePresenceAnnouncementAction.joined,
+      );
+    }
+    final removedUserId = eventData['user_id']?.toString();
+    final removedByModerator =
+        eventType == 'live_participant_moderated' &&
+        eventData['action'] == 'kick';
+    for (final identity in changes.left) {
+      if (identity == _currentUser.id) continue;
+      _joinedLivePresenceCueParticipantIds.remove(identity);
+      _playLivePresenceSound(
+        LivePresenceSound.left,
+        participantIdentity: identity,
+        announcementAction: removedByModerator && removedUserId == identity
+            ? LivePresenceAnnouncementAction.removed
+            : LivePresenceAnnouncementAction.left,
+      );
+    }
+
+    // Keep a remote stage selection through a transient media reconnect so it
+    // can recover in place. Clear it only when the server has confirmed that
+    // participant is no longer present.
+    final roomId = _joinedLiveRoomId;
+    final selection = roomId == null ? null : _liveStageSelections[roomId];
+    final selectedParticipantLeft =
         selection?.mode == LiveStageSelectionMode.track &&
-        selection?.identity == participantIdentity;
-    final fullScreenTrack = _fullScreenLiveTrack;
-    final exitFullScreen =
-        fullScreenTrack != null &&
-        !fullScreenTrack.isLocal &&
-        fullScreenTrack.identity == participantIdentity;
-    _setHomeState(() {
-      _live = patch.live;
-      _servers = patch.rooms;
-      if (clearSelection) {
-        _liveStageSelections[roomId] = const LiveStageSelection.none();
-      }
-    });
-    if (exitFullScreen) {
-      _exitLiveFullScreen();
-    } else if (clearSelection) {
+        changes.left.contains(selection?.identity);
+    if (roomId != null && selectedParticipantLeft) {
+      _liveStageSelections[roomId] = const LiveStageSelection.none();
       _syncWatchedLiveStageSelection(const LiveStageSelection.none());
+    }
+    final fullScreenTrack = _fullScreenLiveTrack;
+    if (fullScreenTrack != null &&
+        !fullScreenTrack.isLocal &&
+        changes.left.contains(fullScreenTrack.identity)) {
+      _exitLiveFullScreen();
     }
   }
 
@@ -411,6 +463,7 @@ extension _HomeShellLiveActions on _HomeShellState {
     if (patch.joinedLiveRoomId == null) {
       _joinedLivePersonalAiVoiceAnnouncementsEnabled = false;
       _joinedLiveParticipantUsers.clear();
+      _clearJoinedLiveAuthoritativePresence();
     }
   }
 
@@ -428,6 +481,7 @@ extension _HomeShellLiveActions on _HomeShellState {
     _roomError = patch.error;
     if (departedRoomId != null && departedRoomId != patch.joinedLiveRoomId) {
       _liveStageSelections.remove(departedRoomId);
+      _clearJoinedLiveAuthoritativePresence();
     }
   }
 
@@ -452,6 +506,7 @@ extension _HomeShellLiveActions on _HomeShellState {
       }
       _joinedLivePersonalAiVoiceAnnouncementsEnabled = false;
       _joinedLiveParticipantUsers.clear();
+      _clearJoinedLiveAuthoritativePresence();
     }
   }
 
@@ -880,6 +935,16 @@ extension _HomeShellLiveActions on _HomeShellState {
         roomId: room.id,
         userId: userId,
       );
+      final wasAuthoritativelyPresent = _joinedLiveAuthoritativeParticipantIds
+          .remove(userId);
+      _joinedLivePresenceCueParticipantIds.remove(userId);
+      if (wasAuthoritativelyPresent) {
+        _playLivePresenceSound(
+          LivePresenceSound.left,
+          participantIdentity: userId,
+          announcementAction: LivePresenceAnnouncementAction.removed,
+        );
+      }
       _setHomeState(() {
         _busyLiveMemberRemovalIds.remove(userId);
         _live = patch.live;
@@ -1012,6 +1077,7 @@ extension _HomeShellLiveActions on _HomeShellState {
         for (final participant in displayResult.live.participants) {
           _joinedLiveParticipantUsers[participant.user.id] = participant.user;
         }
+        _seedJoinedLiveAuthoritativePresence(displayResult.live);
       });
       try {
         await _liveSessionController.connectWithRetry(

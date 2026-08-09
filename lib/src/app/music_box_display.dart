@@ -99,6 +99,13 @@ String musicBoxSourceLabel(String value) {
   return source.isEmpty ? '未知来源' : source;
 }
 
+/// Bilibili catalog entries describe their creator as an uploader/author,
+/// while music providers expose the same wire field as an artist. Keeping the
+/// source-specific wording here makes every song card use the same label.
+String musicBoxArtistFieldLabel(String source) {
+  return source.trim().toLowerCase() == 'bilibili' ? '作者' : '歌手';
+}
+
 String musicBoxTransportApiAction(MusicBoxTransportAction action) {
   return switch (action) {
     MusicBoxTransportAction.play => 'play',

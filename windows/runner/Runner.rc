@@ -95,6 +95,10 @@ BEGIN
             VALUE "InternalName", "Gang Chat" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.gangchat. All rights reserved." "\0"
             VALUE "OriginalFilename", "GangChat.exe" "\0"
+            // SharedPreferences and flutter_secure_storage derive their
+            // Windows application-support directory from CompanyName and
+            // ProductName. Keep both values stable across every future update;
+            // FileDescription/window title remain the user-facing branding.
             VALUE "ProductName", "Gang Chat" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END

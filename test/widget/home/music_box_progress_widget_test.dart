@@ -1336,6 +1336,7 @@ void main() {
         expect(find.text('歌单'), findsNothing);
         expect(find.text('点歌队列'), findsOneWidget);
         expect(find.text('添加到歌单'), findsOneWidget);
+        expect(find.text('作者'), findsOneWidget);
         expect(find.text('详情'), findsOneWidget);
         expect(find.text('BV1xx411c7mD'), findsOneWidget);
 
@@ -1707,7 +1708,7 @@ void main() {
     TargetPlatform.android,
   ]) {
     testWidgets(
-      '${platform.name} playlist picker shows complete adaptive names without scope copy',
+      '${platform.name} playlist picker shows complete adaptive names and scopes',
       (tester) async {
         final searchController = TextEditingController();
         addTearDown(searchController.dispose);
@@ -1766,114 +1767,59 @@ void main() {
 
         final roomTarget = find.byKey(
           const ValueKey<String>(
-            'music-box-playlist-target:room:room-playlist-long',
+            'music-track-playlist-target:room:room-1:room-playlist-long',
           ),
         );
         final personalTarget = find.byKey(
           const ValueKey<String>(
-            'music-box-playlist-target:personal:personal-playlist-long',
+            'music-track-playlist-target:personal-playlist-long',
           ),
         );
         expect(roomTarget, findsOneWidget);
         expect(personalTarget, findsOneWidget);
         expect(find.text(roomName), findsOneWidget);
         expect(find.text(personalName), findsOneWidget);
+        expect(find.text('0 首歌曲'), findsNWidgets(2));
         expect(find.textContaining('房间 ·'), findsNothing);
         expect(find.textContaining('我的 ·'), findsNothing);
-        expect(tester.getSize(roomTarget).height, greaterThan(34));
-        expect(tester.getSize(personalTarget).height, greaterThan(34));
-        final roomTargetSurface = tester.widget<PressableSurface>(roomTarget);
-        final personalTargetSurface = tester.widget<PressableSurface>(
-          personalTarget,
-        );
-        expect(personalTargetSurface.height, 50);
-        expect(roomTargetSurface.selected, isFalse);
-        expect(roomTargetSurface.backgroundColor, UiColors.surfaceLow);
+        expect(tester.getSize(roomTarget).height, greaterThan(64));
+        expect(tester.getSize(personalTarget).height, greaterThanOrEqualTo(64));
+        expect(find.byIcon(Icons.person_outline), findsNothing);
+        expect(find.byIcon(Icons.meeting_room_outlined), findsNothing);
         expect(
-          find.descendant(of: roomTarget, matching: find.byIcon(Icons.add)),
+          find.descendant(
+            of: roomTarget,
+            matching: find.byIcon(Icons.meeting_room),
+          ),
           findsOneWidget,
         );
         expect(
           find.descendant(
-            of: roomTarget,
-            matching: find.byIcon(Icons.play_arrow),
+            of: personalTarget,
+            matching: find.byIcon(Icons.person),
           ),
-          findsNothing,
-        );
-        expect(
-          find.descendant(
-            of: roomTarget,
-            matching: find.byIcon(Icons.chevron_right),
-          ),
-          findsNothing,
+          findsOneWidget,
         );
         for (final name in [roomName, personalName]) {
           final text = tester.widget<Text>(find.text(name));
           expect(text.maxLines, isNull);
           expect(text.overflow, isNull);
         }
-        final roomAddButton = find.byKey(
-          const ValueKey<String>(
-            'music-box-playlist-target-add:room-playlist-long',
-          ),
+        final confirmButton = find.ancestor(
+          of: find.text('确认添加'),
+          matching: find.byType(Button),
         );
-        await tester.tap(roomAddButton);
-        await tester.pumpAndSettle();
-        expect(
-          find.byKey(
-            const ValueKey<String>('music-playlist-card:room-playlist-long'),
-          ),
-          findsNothing,
-        );
-        await tester.tap(
-          find.descendant(of: roomTarget, matching: find.text(roomName)),
-        );
+        expect(tester.widget<Button>(confirmButton).onPressed, isNull);
+        await tester.tapAt(tester.getTopLeft(roomTarget) + const Offset(3, 3));
         await tester.pump();
-        final playlistCard = find.byKey(
-          const ValueKey<String>('music-playlist-card:room-playlist-long'),
-        );
-        expect(playlistCard, findsOneWidget);
-        final titleRow = find.descendant(
-          of: playlistCard,
-          matching: find.byKey(
-            const ValueKey<String>('music-playlist-card-title'),
-          ),
-        );
-        final titleIcon = find.descendant(
-          of: titleRow,
-          matching: find.byKey(
-            const ValueKey<String>('music-playlist-card-title-icon'),
-          ),
-        );
-        expect(
-          tester.getCenter(titleIcon).dy,
-          closeTo(tester.getCenter(titleRow).dy, 0.1),
-        );
-        expect(
-          find.descendant(of: playlistCard, matching: find.text('创建日期')),
-          findsOneWidget,
-        );
+        expect(tester.widget<Button>(confirmButton).onPressed, isNotNull);
         expect(
           find.descendant(
-            of: playlistCard,
-            matching: find.text('2026-07-30 20:34'),
+            of: roomTarget,
+            matching: find.byIcon(Icons.radio_button_checked),
           ),
           findsOneWidget,
         );
-        expect(
-          find.byKey(
-            const ValueKey<String>(
-              'music-box-playlist-target-add:room-playlist-long',
-            ),
-          ),
-          findsOneWidget,
-        );
-        await tester.tap(
-          find.descendant(of: playlistCard, matching: find.text('音乐房间')),
-        );
-        await tester.pump();
-        expect(find.text('RID: R10001'), findsOneWidget);
-        expect(playlistCard, findsOneWidget);
         expect(tester.takeException(), isNull);
       },
     );

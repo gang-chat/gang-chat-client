@@ -109,6 +109,33 @@ void main() {
     );
   });
 
+  test('authoritative presence keeps reconnecting and excludes joining', () {
+    final live = _liveWithParticipants([
+      _participant('joining', connectionState: 'joining'),
+      _participant('online', connectionState: 'online'),
+      _participant('reconnecting', connectionState: 'reconnecting'),
+      _participant('left', connectionState: 'left'),
+    ]);
+
+    expect(authoritativeLivePresenceUserIds(live), {'online', 'reconnecting'});
+  });
+
+  test('authoritative presence changes ignore a reconnect transition', () {
+    final reconnecting = authoritativeLivePresenceChanges(
+      before: {'alice', 'bob'},
+      after: {'alice', 'bob'},
+    );
+    final reconciled = authoritativeLivePresenceChanges(
+      before: {'alice', 'bob'},
+      after: {'alice'},
+    );
+
+    expect(reconnecting.joined, isEmpty);
+    expect(reconnecting.left, isEmpty);
+    expect(reconciled.joined, isEmpty);
+    expect(reconciled.left, {'bob'});
+  });
+
   test(
     'visible live participants show connected muted users after reconnect',
     () {

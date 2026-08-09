@@ -10,6 +10,7 @@ import 'src/live/android_audio_initialization.dart';
 import 'src/shell/app_orientation_controller.dart';
 import 'src/shell/desktop_window_controller.dart';
 import 'src/shell/gang_app.dart';
+import 'src/shell/local_preferences_migration.dart';
 import 'src/shell/windows_key_event_guard.dart';
 
 export 'src/shell/gang_app.dart' show GangApp;
@@ -17,6 +18,15 @@ export 'src/shell/gang_app.dart' show GangApp;
 Future<void> main(List<String> args) async {
   final binding = WidgetsFlutterBinding.ensureInitialized();
   installWindowsAltKeyEventGuard();
+
+  // Run before AppConfig, auth history, and audio settings read
+  // SharedPreferences. This is a one-time, conflict-aware migration from the
+  // historical Windows ProductName (`client`) to the stable Gang Chat domain.
+  try {
+    await const LocalPreferencesMigration().migrate();
+  } catch (_) {
+    // Local migration is best-effort and must never block application launch.
+  }
 
   // Android phones launch portrait-only. Large-screen Android devices keep the
   // platform's normal rotation behavior and naturally use the wide app layout.

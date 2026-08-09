@@ -26,6 +26,13 @@ void main() {
       expect(musicBoxSourceLabel('future-source'), 'future-source');
       expect(musicBoxSourceLabel(''), '未知来源');
     });
+
+    test('uses author for Bilibili and artist for music providers', () {
+      expect(musicBoxArtistFieldLabel('bilibili'), '作者');
+      expect(musicBoxArtistFieldLabel(' BILIBILI '), '作者');
+      expect(musicBoxArtistFieldLabel('netease'), '歌手');
+      expect(musicBoxArtistFieldLabel('future-source'), '歌手');
+    });
   });
 
   group('music box request queue identity', () {

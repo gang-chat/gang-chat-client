@@ -3131,53 +3131,116 @@ void registerShellHomeWidgetTests() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-    'participant departure immediately removes the stale live roster entry',
-    (WidgetTester tester) async {
-      final liveSession = _FakeLiveSession();
-      final liveSessionController = _FakeLiveSessionController(
-        session: liveSession,
-      );
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: ui.uiTheme(),
-          home: HomePage(
-            app: _homeTestAppContext(),
-            audioDeviceStore: const _FakeAudioDeviceStore(),
-            liveSessionController: liveSessionController,
-            livePresenceSoundPlayer: _RecordingLivePresenceSoundPlayer(),
-            livePresenceSpeechPlayer: _RecordingLivePresenceSpeechPlayer(),
-            realtime: _NoopRealtimeService(),
-          ),
+  testWidgets('participant departure waits for authoritative reconciliation', (
+    WidgetTester tester,
+  ) async {
+    final realtime = _FakeRealtimeService();
+    final liveSession = _FakeLiveSession();
+    final liveSessionController = _FakeLiveSessionController(
+      session: liveSession,
+    );
+    final presenceSounds = _RecordingLivePresenceSoundPlayer();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ui.uiTheme(),
+        home: HomePage(
+          app: _homeTestAppContext(),
+          audioDeviceStore: const _FakeAudioDeviceStore(),
+          liveSessionController: liveSessionController,
+          livePresenceSoundPlayer: presenceSounds,
+          livePresenceSpeechPlayer: _RecordingLivePresenceSpeechPlayer(),
+          realtime: realtime,
         ),
-      );
-      await tester.pumpAndSettle();
+      ),
+    );
+    await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Alpha Room'));
-      await tester.pumpAndSettle();
-      await _openLiveChannelFromHeader(tester);
-      await tester.tap(find.widgetWithText(ui.Button, '加入'));
-      await tester.pumpAndSettle();
+    await tester.tap(find.text('Alpha Room'));
+    await tester.pumpAndSettle();
+    await _openLiveChannelFromHeader(tester);
+    await tester.tap(find.widgetWithText(ui.Button, '加入'));
+    await tester.pumpAndSettle();
 
-      expect(
-        find.byKey(const ValueKey<String>('live-member-status:mic:user-2')),
-        findsOneWidget,
-      );
+    expect(
+      find.byKey(const ValueKey<String>('live-member-status:mic:user-2')),
+      findsOneWidget,
+    );
+    final soundCountBeforeDisconnect = presenceSounds.sounds.length;
 
-      liveSession.emitParticipantLeft();
-      await tester.pump();
+    liveSession.emitParticipantLeft();
+    await tester.pump();
 
-      expect(
-        find.byKey(const ValueKey<String>('live-member-status:mic:user-2')),
-        findsNothing,
-      );
-      expect(find.text('Morgan'), findsNothing);
-      for (var index = 0; index < 3; index += 1) {
-        await tester.pump(const Duration(milliseconds: 500));
-      }
-      expect(tester.takeException(), isNull);
-    },
-  );
+    expect(
+      find.byKey(const ValueKey<String>('live-member-status:mic:user-2')),
+      findsOneWidget,
+    );
+    expect(presenceSounds.sounds, hasLength(soundCountBeforeDisconnect));
+
+    realtime.add(
+      RealtimeEvent(
+        type: 'live_participant_reconnecting',
+        data: {
+          'room_id': 'server-alpha',
+          'live': _liveStateJson(
+            roomId: 'server-alpha',
+            participantCount: 2,
+            updatedAt: '2026-06-05T08:01:00Z',
+            participants: [
+              _liveParticipantJson(
+                user: _currentUserJson,
+                liveSessionId: 'live-session-joined',
+              ),
+              _liveParticipantJson(
+                user: _userJson(
+                  id: 'user-2',
+                  username: 'morgan',
+                  displayName: 'Morgan',
+                ),
+                liveSessionId: 'live-session-morgan',
+                connectionState: 'reconnecting',
+              ),
+            ],
+          ),
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('live-member-status:mic:user-2')),
+      findsOneWidget,
+    );
+    expect(presenceSounds.sounds, hasLength(soundCountBeforeDisconnect));
+
+    realtime.add(
+      RealtimeEvent(
+        type: 'live_participants_reconciled',
+        data: {
+          'room_id': 'server-alpha',
+          'live': _liveStateJson(
+            roomId: 'server-alpha',
+            participantCount: 1,
+            updatedAt: '2026-06-05T08:02:00Z',
+            participants: [
+              _liveParticipantJson(
+                user: _currentUserJson,
+                liveSessionId: 'live-session-joined',
+              ),
+            ],
+          ),
+        },
+      ),
+    );
+    for (var index = 0; index < 4; index += 1) {
+      await tester.pump(const Duration(milliseconds: 500));
+    }
+    await tester.pumpAndSettle();
+
+    expect(find.text('Morgan'), findsNothing);
+    expect(presenceSounds.sounds, hasLength(soundCountBeforeDisconnect + 1));
+    expect(presenceSounds.sounds.last, LivePresenceSound.left);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'disabling personal AI announcements keeps participant join and leave cues',
@@ -3230,6 +3293,25 @@ void registerShellHomeWidgetTests() {
       final initialCueCount = presenceSounds.sounds.length;
       liveSession.emitParticipantJoined();
       liveSession.emitParticipantLeft();
+      realtime.add(
+        RealtimeEvent(
+          type: 'live_participants_reconciled',
+          data: {
+            'room_id': 'server-alpha',
+            'live': _liveStateJson(
+              roomId: 'server-alpha',
+              participantCount: 1,
+              updatedAt: '2026-06-05T08:01:00Z',
+              participants: [
+                _liveParticipantJson(
+                  user: _currentUserJson,
+                  liveSessionId: 'live-session-joined',
+                ),
+              ],
+            ),
+          },
+        ),
+      );
       for (var index = 0; index < 4; index += 1) {
         await tester.pump(const Duration(milliseconds: 500));
       }
