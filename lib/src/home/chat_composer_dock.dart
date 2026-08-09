@@ -892,6 +892,14 @@ class _StickerPanelMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final actionWidth = actionLabel == null
+        ? null
+        : Button.minimumWidthForLabel(
+            context,
+            label: actionLabel!,
+            hasIcon: actionIcon != null,
+          );
+
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -911,6 +919,7 @@ class _StickerPanelMessage extends StatelessWidget {
               key: actionKey,
               icon: actionIcon == null ? null : Icon(actionIcon),
               tone: actionTone,
+              width: actionWidth,
               onPressed: onAction,
               child: Text(actionLabel!),
             ),

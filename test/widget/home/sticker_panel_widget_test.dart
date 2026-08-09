@@ -40,6 +40,16 @@ void main() {
     );
     expect(personalAction, findsOneWidget);
     expect(find.text('上传第一个表情'), findsOneWidget);
+    final expectedActionWidth = ui.Button.minimumWidthForLabel(
+      tester.element(personalAction),
+      label: '上传第一个表情',
+      hasIcon: true,
+    );
+    expect(
+      tester.getSize(personalAction).width,
+      closeTo(expectedActionWidth, 0.1),
+    );
+    expect(tester.getSize(personalAction).width, lessThan(560));
     await tester.tap(personalAction);
     expect(personalUploads, 1);
     expect(roomUploads, 0);
