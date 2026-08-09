@@ -2459,10 +2459,6 @@ class _MusicBoxSongCard extends StatefulWidget {
 
 class _MusicBoxSongCardState extends State<_MusicBoxSongCard> {
   bool _playingNow = false;
-  bool _showPlaylistPicker = false;
-  bool _loadingPlaylists = false;
-  String? _addingPlaylistId;
-  List<_MusicBoxPlaylistTarget> _playlistTargets = const [];
 
   Future<void> _playNow() async {
     final controller = widget.controller;
@@ -2488,99 +2484,83 @@ class _MusicBoxSongCardState extends State<_MusicBoxSongCard> {
     }
   }
 
-  Future<void> _openPlaylistPicker() async {
+  Future<List<MusicTrackPlaylistTarget>> _loadPlaylistTargets() async {
     final controller = widget.controller;
-    if (controller == null || _loadingPlaylists) return;
-    setState(() {
-      _showPlaylistPicker = true;
-      _loadingPlaylists = true;
-      _playlistTargets = const [];
-    });
-    final targets = <_MusicBoxPlaylistTarget>[];
-    var failed = false;
-    try {
-      final roomId = widget.roomId;
-      if (roomId != null) {
+    if (controller == null) return const [];
+    final targets = <MusicTrackPlaylistTarget>[];
+    final roomId = widget.roomId;
+    Object? roomError;
+    Object? personalError;
+    if (roomId != null) {
+      try {
         final page = await controller.loadRoomPlaylists(roomId: roomId);
         targets.addAll(
           page.playlists.map(
-            (playlist) =>
-                _MusicBoxPlaylistTarget(playlist: playlist, roomScoped: true),
+            (playlist) => MusicTrackPlaylistTarget.room(
+              playlist: playlist,
+              roomId: roomId,
+            ),
           ),
         );
+      } catch (error) {
+        roomError = error;
       }
-    } catch (_) {
-      failed = true;
     }
     try {
       final page = await controller.loadMyPlaylists();
-      targets.addAll(
-        page.playlists.map(
-          (playlist) =>
-              _MusicBoxPlaylistTarget(playlist: playlist, roomScoped: false),
-        ),
-      );
-    } catch (_) {
-      failed = true;
+      targets.addAll(page.playlists.map(MusicTrackPlaylistTarget.personal));
+    } catch (error) {
+      personalError = error;
     }
-    if (!mounted) return;
-    setState(() {
-      _loadingPlaylists = false;
-      _playlistTargets = targets;
-    });
-    if (targets.isEmpty && failed) {
-      showFloatingErrorNotice(context, '加载歌单失败，请重试');
+    if (targets.isEmpty && (roomError != null || personalError != null)) {
+      throw roomError ?? personalError!;
     }
+    return targets;
   }
 
-  Future<void> _addToPlaylist(_MusicBoxPlaylistTarget target) async {
+  Future<void> _openPlaylistPicker() async {
+    final target = await showMusicTrackPlaylistTargetDialog(
+      context,
+      loadTargets: _loadPlaylistTargets,
+      onAdd: _addToPlaylist,
+    );
+    if (!mounted || target == null) return;
+    showFloatingSuccessNotice(context, '已添加到「${target.playlist.name}」');
+  }
+
+  Future<void> _addToPlaylist(MusicTrackPlaylistTarget target) async {
     final controller = widget.controller;
-    if (controller == null || _addingPlaylistId != null) return;
-    setState(() => _addingPlaylistId = target.playlist.id);
-    try {
-      if (target.roomScoped) {
-        final roomId = widget.roomId;
-        if (roomId == null) return;
-        final item = widget.item;
-        if (item != null) {
-          await controller.addQueueItemToRoomPlaylist(
-            roomId: roomId,
-            playlistId: target.playlist.id,
-            item: item,
-          );
-        } else {
-          await controller.addSearchResultToRoomPlaylist(
-            roomId: roomId,
-            playlistId: target.playlist.id,
-            result: widget.result!,
-          );
-        }
+    if (controller == null) return;
+    if (target.roomScoped) {
+      final roomId = target.roomId ?? widget.roomId;
+      if (roomId == null) return;
+      final item = widget.item;
+      if (item != null) {
+        await controller.addQueueItemToRoomPlaylist(
+          roomId: roomId,
+          playlistId: target.playlist.id,
+          item: item,
+        );
       } else {
-        final item = widget.item;
-        if (item != null) {
-          await controller.addQueueItemToMyPlaylist(
-            playlistId: target.playlist.id,
-            item: item,
-          );
-        } else {
-          await controller.addSearchResultToMyPlaylist(
-            playlistId: target.playlist.id,
-            result: widget.result!,
-          );
-        }
-      }
-      if (!mounted) return;
-      setState(() => _showPlaylistPicker = false);
-      showFloatingSuccessNotice(context, '已添加到「${target.playlist.name}」');
-    } catch (error) {
-      if (mounted) {
-        showFloatingErrorNotice(
-          context,
-          userFacingErrorMessage(error, fallback: '添加失败，请检查歌单权限'),
+        await controller.addSearchResultToRoomPlaylist(
+          roomId: roomId,
+          playlistId: target.playlist.id,
+          result: widget.result!,
         );
       }
-    } finally {
-      if (mounted) setState(() => _addingPlaylistId = null);
+    } else {
+      final item = widget.item;
+      if (item != null) {
+        await controller.addQueueItemToMyPlaylist(
+          playlistId: target.playlist.id,
+          item: item,
+        );
+      } else {
+        await controller.addSearchResultToMyPlaylist(
+          playlistId: target.playlist.id,
+          result: widget.result!,
+        );
+      }
     }
   }
 
@@ -2667,117 +2647,57 @@ class _MusicBoxSongCardState extends State<_MusicBoxSongCard> {
               ),
             ],
             const SizedBox(height: UiSpacing.md),
-            if (!_showPlaylistPicker)
-              Row(
-                children: [
-                  if (isSearchResult) ...[
-                    Expanded(
-                      child: Button(
-                        icon: Icon(
-                          widget.alreadyInRequestQueue
-                              ? Icons.playlist_add_check
-                              : Icons.playlist_add,
-                        ),
-                        tone: widget.alreadyInRequestQueue
-                            ? ButtonTone.neutral
-                            : ButtonTone.primary,
-                        height: 34,
-                        onPressed: widget.alreadyInRequestQueue
-                            ? null
-                            : () => widget.onQueueResult?.call(result),
-                        child: Text(
-                          widget.alreadyInRequestQueue ? '已在队列中' : '点歌队列',
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                  ],
-                  if (canPlayNow) ...[
-                    Expanded(
-                      child: Button(
-                        icon: const Icon(Icons.play_arrow),
-                        height: 34,
-                        loading: _playingNow,
-                        onPressed: widget.isCurrent
-                            ? null
-                            : () => unawaited(_playNow()),
-                        child: Text(widget.isCurrent ? '正在播放' : '优先播放'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                  ],
+            Row(
+              children: [
+                if (isSearchResult) ...[
                   Expanded(
                     child: Button(
-                      icon: const Icon(Icons.playlist_add),
-                      tone: ButtonTone.primary,
+                      icon: Icon(
+                        widget.alreadyInRequestQueue
+                            ? Icons.playlist_add_check
+                            : Icons.playlist_add,
+                      ),
+                      tone: widget.alreadyInRequestQueue
+                          ? ButtonTone.neutral
+                          : ButtonTone.primary,
                       height: 34,
-                      onPressed: widget.controller == null
+                      onPressed: widget.alreadyInRequestQueue
                           ? null
-                          : () => unawaited(_openPlaylistPicker()),
-                      child: const Text('添加到歌单'),
+                          : () => widget.onQueueResult?.call(result),
+                      child: Text(
+                        widget.alreadyInRequestQueue ? '已在队列中' : '点歌队列',
+                      ),
                     ),
-                  ),
-                ],
-              )
-            else ...[
-              Row(
-                children: [
-                  ButtonIcon(
-                    icon: const Icon(Icons.arrow_back),
-                    size: 28,
-                    onPressed: () =>
-                        setState(() => _showPlaylistPicker = false),
                   ),
                   const SizedBox(width: 8),
-                  const Text(
-                    '选择歌单',
-                    style: TextStyle(
-                      color: UiColors.text,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
                 ],
-              ),
-              const SizedBox(height: 8),
-              if (_loadingPlaylists)
-                const SizedBox(
-                  height: 72,
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (_playlistTargets.isEmpty)
-                const SizedBox(
-                  height: 54,
-                  child: Center(
-                    child: Text(
-                      '还没有可用歌单',
-                      style: TextStyle(color: UiColors.textMuted, fontSize: 11),
+                if (canPlayNow) ...[
+                  Expanded(
+                    child: Button(
+                      icon: const Icon(Icons.play_arrow),
+                      height: 34,
+                      loading: _playingNow,
+                      onPressed: widget.isCurrent
+                          ? null
+                          : () => unawaited(_playNow()),
+                      child: Text(widget.isCurrent ? '正在播放' : '优先播放'),
                     ),
                   ),
-                )
-              else
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 160),
-                  child: ListView.separated(
-                    padding: EdgeInsets.zero,
-                    shrinkWrap: true,
-                    itemCount: _playlistTargets.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 6),
-                    itemBuilder: (context, index) {
-                      final target = _playlistTargets[index];
-                      return _MusicBoxPlaylistTargetButton(
-                        target: target,
-                        controller: widget.controller,
-                        roomId: widget.roomId,
-                        loading: _addingPlaylistId == target.playlist.id,
-                        onAdd: _addingPlaylistId == null
-                            ? () => unawaited(_addToPlaylist(target))
-                            : null,
-                      );
-                    },
+                  const SizedBox(width: 8),
+                ],
+                Expanded(
+                  child: Button(
+                    icon: const Icon(Icons.playlist_add),
+                    tone: ButtonTone.primary,
+                    height: 34,
+                    onPressed: widget.controller == null
+                        ? null
+                        : () => unawaited(_openPlaylistPicker()),
+                    child: const Text('添加到歌单'),
                   ),
                 ),
-            ],
+              ],
+            ),
           ],
         ),
       ),
@@ -3165,175 +3085,6 @@ class _MusicBoxAdaptiveFullText extends StatelessWidget {
           value: text,
           style: style.copyWith(fontSize: fontSize),
           maxLines: lineCount < 1 ? 1 : lineCount,
-        );
-      },
-    );
-  }
-}
-
-class _MusicBoxPlaylistTarget {
-  const _MusicBoxPlaylistTarget({
-    required this.playlist,
-    required this.roomScoped,
-  });
-
-  final PersonalMusicPlaylist playlist;
-  final bool roomScoped;
-}
-
-class _MusicBoxPlaylistTargetButton extends StatelessWidget {
-  const _MusicBoxPlaylistTargetButton({
-    required this.target,
-    required this.controller,
-    required this.roomId,
-    required this.loading,
-    required this.onAdd,
-  });
-
-  final _MusicBoxPlaylistTarget target;
-  final MusicBoxController? controller;
-  final String? roomId;
-  final bool loading;
-  final VoidCallback? onAdd;
-
-  Future<void> _playAll(
-    BuildContext context,
-    MusicPlaylistCardHostScope? host,
-  ) async {
-    final musicController = controller;
-    final currentRoomId = roomId;
-    if (musicController == null || currentRoomId == null) return;
-    try {
-      final state = await musicController.activatePlaylist(
-        roomId: currentRoomId,
-        sourceType: target.roomScoped
-            ? MusicBoxActiveSourceType.roomPlaylist
-            : MusicBoxActiveSourceType.userPlaylist,
-        playlistId: target.playlist.id,
-      );
-      host?.onStateChanged?.call(state);
-    } catch (error) {
-      if (context.mounted) {
-        showFloatingErrorNotice(
-          context,
-          musicBoxControlErrorMessage(error, '播放歌单失败，请重试'),
-        );
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    const horizontalPadding = 10.0;
-    const iconSize = 17.0;
-    const iconGap = 8.0;
-    const baseStyle = TextStyle(
-      color: UiColors.text,
-      fontSize: 12,
-      fontWeight: FontWeight.w600,
-    );
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final host = MusicPlaylistCardHostScope.maybeOf(context);
-        const addButtonSize = 28.0;
-        const addButtonGap = 6.0;
-        final textWidth =
-            (constraints.maxWidth -
-                    horizontalPadding * 2 -
-                    iconSize -
-                    iconGap -
-                    addButtonGap -
-                    addButtonSize)
-                .clamp(24.0, double.infinity);
-        final basePainter = TextPainter(
-          text: TextSpan(text: target.playlist.name, style: baseStyle),
-          textDirection: Directionality.of(context),
-          textScaler: MediaQuery.textScalerOf(context),
-        )..layout(maxWidth: textWidth);
-        final baseLineCount = basePainter.computeLineMetrics().length;
-        final reduction = baseLineCount <= 2
-            ? 0.0
-            : (baseLineCount - 2).clamp(1, 2).toDouble();
-        final style = baseStyle.copyWith(
-          fontSize: baseStyle.fontSize! - reduction,
-        );
-        final textHeight = _musicBoxMeasureTextHeight(
-          context,
-          target.playlist.name,
-          style,
-          textWidth,
-        );
-        final height = (textHeight + _musicBoxPlaylistRowVerticalPadding).clamp(
-          _musicBoxPlaylistRowMinHeight,
-          double.infinity,
-        );
-        return MusicPlaylistHoverCard(
-          data: MusicPlaylistCardData(
-            id: target.playlist.id,
-            name: target.playlist.name,
-            songCount: target.playlist.itemCount,
-            createdAt: target.playlist.createdAt,
-            creator: target.roomScoped ? null : host?.currentUser?.toSummary(),
-            room: target.roomScoped ? host?.room : null,
-          ),
-          currentUser: host?.currentUser,
-          onResolveUserProfile: host?.onResolveUserProfile,
-          onResolveRoomProfile: host?.onResolveRoomProfile,
-          onEnterCommonRoom: host?.onEnterCommonRoom,
-          userProfileActionBuilder: host?.userProfileActionBuilder,
-          onPlayAll: controller == null || roomId == null
-              ? null
-              : () => _playAll(context, host),
-          onViewPlaylist: host == null
-              ? null
-              : () => host.onViewPlaylist(target.playlist, target.roomScoped),
-          child: PressableSurface(
-            key: ValueKey<String>(
-              'music-box-playlist-target:'
-              '${target.roomScoped ? 'room' : 'personal'}:'
-              '${target.playlist.id}',
-            ),
-            width: double.infinity,
-            height: height,
-            padding: const EdgeInsets.symmetric(horizontal: horizontalPadding),
-            hoverLift: 2,
-            baseDepth: 4,
-            backgroundColor: UiColors.surfaceLow,
-            pressedBackgroundColor: UiColors.surfacePressed,
-            borderColor: UiColors.border,
-            borderRadius: UiRadii.md,
-            child: Row(
-              children: [
-                Icon(
-                  target.roomScoped ? Icons.meeting_room : Icons.person,
-                  size: iconSize,
-                  color: UiColors.accent,
-                ),
-                const SizedBox(width: iconGap),
-                Expanded(
-                  child: Text(
-                    target.playlist.name,
-                    style: style,
-                    softWrap: true,
-                  ),
-                ),
-                const SizedBox(width: addButtonGap),
-                _MusicBoxHoverCardActionGuard(
-                  child: ButtonIcon(
-                    key: ValueKey<String>(
-                      'music-box-playlist-target-add:${target.playlist.id}',
-                    ),
-                    icon: const Icon(Icons.add),
-                    tooltip: '添加到歌单',
-                    tone: ButtonTone.primary,
-                    loading: loading,
-                    onPressed: onAdd,
-                    size: addButtonSize,
-                  ),
-                ),
-              ],
-            ),
-          ),
         );
       },
     );

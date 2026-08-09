@@ -92,11 +92,6 @@ class MusicTrackHoverCard extends StatefulWidget {
 }
 
 class _MusicTrackHoverCardState extends State<MusicTrackHoverCard> {
-  bool _showPlaylistPicker = false;
-  String? _addingPlaylistTargetKey;
-  List<MusicTrackPlaylistTarget>? _loadedPlaylistTargets;
-  bool _loadingPlaylists = false;
-
   @override
   void didUpdateWidget(covariant MusicTrackHoverCard oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -105,47 +100,23 @@ class _MusicTrackHoverCardState extends State<MusicTrackHoverCard> {
       unawaited(
         oldWidget.previewController.stopIf(oldWidget.data.previewTrack.key),
       );
-      _showPlaylistPicker = false;
-      _addingPlaylistTargetKey = null;
-    }
-    final keyedLoader = widget.playlistTargetsLoadKey != null;
-    final loaderChanged = keyedLoader
-        ? oldWidget.playlistTargetsLoadKey != widget.playlistTargetsLoadKey
-        : oldWidget.loadPlaylists != widget.loadPlaylists ||
-              oldWidget.loadPlaylistTargets != widget.loadPlaylistTargets;
-    if (loaderChanged) {
-      _loadedPlaylistTargets = null;
-      _loadingPlaylists = false;
     }
   }
 
-  Future<void> _ensurePlaylistsLoaded() async {
+  Future<List<MusicTrackPlaylistTarget>> _loadPlaylistTargets() async {
     final loadTargets = widget.loadPlaylistTargets;
     final loadLegacy = widget.loadPlaylists;
-    if ((loadTargets == null && loadLegacy == null) ||
-        _loadedPlaylistTargets != null ||
-        _loadingPlaylists) {
-      return;
+    if (loadTargets != null) return loadTargets();
+    if (loadLegacy != null) {
+      return [
+        for (final playlist in await loadLegacy())
+          _legacyPlaylistTarget(playlist),
+      ];
     }
-    setState(() => _loadingPlaylists = true);
-    try {
-      final targets = loadTargets != null
-          ? await loadTargets()
-          : [
-              for (final playlist in await loadLegacy!())
-                _legacyPlaylistTarget(playlist),
-            ];
-      if (mounted) setState(() => _loadedPlaylistTargets = targets);
-    } catch (error) {
-      if (mounted) {
-        showFloatingErrorNotice(
-          context,
-          userFacingErrorMessage(error, fallback: '加载歌单失败，请重试'),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _loadingPlaylists = false);
-    }
+    if (widget.playlistTargets.isNotEmpty) return widget.playlistTargets;
+    return [
+      for (final playlist in widget.playlists) _legacyPlaylistTarget(playlist),
+    ];
   }
 
   MusicTrackPlaylistTarget _legacyPlaylistTarget(
@@ -154,15 +125,6 @@ class _MusicTrackHoverCardState extends State<MusicTrackHoverCard> {
     return widget.playlistsRoomScoped
         ? MusicTrackPlaylistTarget.room(playlist: playlist, roomId: '')
         : MusicTrackPlaylistTarget.personal(playlist);
-  }
-
-  List<MusicTrackPlaylistTarget> get _playlistTargets {
-    final loaded = _loadedPlaylistTargets;
-    if (loaded != null) return loaded;
-    if (widget.playlistTargets.isNotEmpty) return widget.playlistTargets;
-    return [
-      for (final playlist in widget.playlists) _legacyPlaylistTarget(playlist),
-    ];
   }
 
   @override
@@ -187,30 +149,21 @@ class _MusicTrackHoverCardState extends State<MusicTrackHoverCard> {
   Future<void> _addToPlaylist(MusicTrackPlaylistTarget target) async {
     final addTarget = widget.onAddToPlaylistTarget;
     final addLegacy = widget.onAddToPlaylist;
-    if ((addTarget == null && addLegacy == null) ||
-        _addingPlaylistTargetKey != null) {
-      return;
+    if (addTarget != null) {
+      await addTarget(target);
+    } else if (addLegacy != null) {
+      await addLegacy(target.playlist);
     }
-    setState(() => _addingPlaylistTargetKey = target.key);
-    try {
-      if (addTarget != null) {
-        await addTarget(target);
-      } else {
-        await addLegacy!(target.playlist);
-      }
-      if (!mounted) return;
-      setState(() => _showPlaylistPicker = false);
-      showFloatingSuccessNotice(context, '已添加到「${target.playlist.name}」');
-    } catch (error) {
-      if (mounted) {
-        showFloatingErrorNotice(
-          context,
-          userFacingErrorMessage(error, fallback: '添加失败，请检查歌单权限'),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _addingPlaylistTargetKey = null);
-    }
+  }
+
+  Future<void> _openPlaylistPicker() async {
+    final target = await showMusicTrackPlaylistTargetDialog(
+      context,
+      loadTargets: _loadPlaylistTargets,
+      onAdd: _addToPlaylist,
+    );
+    if (!mounted || target == null) return;
+    showFloatingSuccessNotice(context, '已添加到「${target.playlist.name}」');
   }
 
   @override
@@ -220,12 +173,8 @@ class _MusicTrackHoverCardState extends State<MusicTrackHoverCard> {
       cardWidth: 304,
       resetKey: Object.hash(widget.data.id, trackKey),
       onVisibilityChanged: (visible) {
-        if (visible) unawaited(_ensurePlaylistsLoaded());
         if (!visible) {
           unawaited(widget.previewController.stopIf(trackKey));
-          if (_showPlaylistPicker && mounted) {
-            setState(() => _showPlaylistPicker = false);
-          }
         }
       },
       cardBuilder: (context) => StreamBuilder<MusicTrackPreviewSnapshot>(
@@ -238,18 +187,11 @@ class _MusicTrackHoverCardState extends State<MusicTrackHoverCard> {
             loading: preview.isLoading(trackKey),
             playing: preview.isPlaying(trackKey),
             onTogglePreview: _togglePreview,
-            playlistTargets: _playlistTargets,
-            loadingPlaylists: _loadingPlaylists,
-            showPlaylistPicker: _showPlaylistPicker,
-            addingPlaylistTargetKey: _addingPlaylistTargetKey,
             onOpenPlaylistPicker:
                 widget.onAddToPlaylist == null &&
                     widget.onAddToPlaylistTarget == null
                 ? null
-                : () => setState(() => _showPlaylistPicker = true),
-            onClosePlaylistPicker: () =>
-                setState(() => _showPlaylistPicker = false),
-            onAddToPlaylistTarget: _addToPlaylist,
+                : () => unawaited(_openPlaylistPicker()),
           );
         },
       ),
@@ -264,26 +206,14 @@ class _MusicTrackProfileCard extends StatelessWidget {
     required this.loading,
     required this.playing,
     required this.onTogglePreview,
-    required this.playlistTargets,
-    required this.loadingPlaylists,
-    required this.showPlaylistPicker,
-    required this.addingPlaylistTargetKey,
     required this.onOpenPlaylistPicker,
-    required this.onClosePlaylistPicker,
-    required this.onAddToPlaylistTarget,
   });
 
   final MusicTrackCardData data;
   final bool loading;
   final bool playing;
   final VoidCallback onTogglePreview;
-  final List<MusicTrackPlaylistTarget> playlistTargets;
-  final bool loadingPlaylists;
-  final bool showPlaylistPicker;
-  final String? addingPlaylistTargetKey;
   final VoidCallback? onOpenPlaylistPicker;
-  final VoidCallback onClosePlaylistPicker;
-  final ValueChanged<MusicTrackPlaylistTarget> onAddToPlaylistTarget;
 
   @override
   Widget build(BuildContext context) {
@@ -336,161 +266,332 @@ class _MusicTrackProfileCard extends StatelessWidget {
               value: _bilibiliTrackID(data.trackId),
             ),
           const SizedBox(height: UiSpacing.md),
-          if (!showPlaylistPicker)
-            ResponsiveDialogActionBar(
-              expanded: true,
-              actions: [
-                ResponsiveDialogAction(
-                  label: playing ? '取消试听' : '试听',
-                  buttonKey: const ValueKey<String>('music-track-card-preview'),
-                  icon: playing ? Icons.stop_rounded : Icons.play_arrow,
-                  tone: playing ? ButtonTone.danger : ButtonTone.primary,
-                  loading: loading,
-                  onPressed: loading ? null : onTogglePreview,
-                ),
-                if (onOpenPlaylistPicker != null)
-                  ResponsiveDialogAction(
-                    label: '添加到歌单',
-                    buttonKey: const ValueKey<String>(
-                      'music-track-card-add-to-playlist',
-                    ),
-                    icon: Icons.playlist_add,
-                    tone: ButtonTone.primary,
-                    onPressed: onOpenPlaylistPicker,
-                  ),
-              ],
-            )
-          else ...[
-            Row(
-              children: [
-                ButtonIcon(
-                  key: const ValueKey<String>(
-                    'music-track-card-playlist-picker-back',
-                  ),
-                  icon: const Icon(Icons.arrow_back),
-                  tooltip: '返回歌曲信息',
-                  size: 30,
-                  onPressed: addingPlaylistTargetKey == null
-                      ? onClosePlaylistPicker
-                      : null,
-                ),
-                const SizedBox(width: UiSpacing.sm),
-                const Text('选择歌单', style: UiTypography.label),
-              ],
-            ),
-            const SizedBox(height: UiSpacing.sm),
-            if (loadingPlaylists)
-              const SizedBox(
-                height: 54,
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (playlistTargets.isEmpty)
-              const SizedBox(
-                height: 54,
-                child: Center(
-                  child: Text(
-                    '还没有可用歌单',
-                    style: TextStyle(color: UiColors.textMuted, fontSize: 11),
-                  ),
-                ),
-              )
-            else
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 180),
-                child: ListView.separated(
-                  padding: EdgeInsets.zero,
-                  shrinkWrap: true,
-                  itemCount: playlistTargets.length,
-                  separatorBuilder: (_, _) =>
-                      const SizedBox(height: UiSpacing.sm),
-                  itemBuilder: (context, index) {
-                    final target = playlistTargets[index];
-                    return _MusicTrackPlaylistTargetButton(
-                      target: target,
-                      loading: addingPlaylistTargetKey == target.key,
-                      enabled: addingPlaylistTargetKey == null,
-                      onAdd: () => onAddToPlaylistTarget(target),
-                    );
-                  },
-                ),
+          ResponsiveDialogActionBar(
+            expanded: true,
+            actions: [
+              ResponsiveDialogAction(
+                label: playing ? '取消试听' : '试听',
+                buttonKey: const ValueKey<String>('music-track-card-preview'),
+                icon: playing ? Icons.stop_rounded : Icons.play_arrow,
+                tone: playing ? ButtonTone.danger : ButtonTone.primary,
+                loading: loading,
+                onPressed: loading ? null : onTogglePreview,
               ),
-          ],
+              if (onOpenPlaylistPicker != null)
+                ResponsiveDialogAction(
+                  label: '添加到歌单',
+                  buttonKey: const ValueKey<String>(
+                    'music-track-card-add-to-playlist',
+                  ),
+                  icon: Icons.playlist_add,
+                  tone: ButtonTone.primary,
+                  onPressed: onOpenPlaylistPicker,
+                ),
+            ],
+          ),
         ],
       ),
     );
   }
 }
 
-class _MusicTrackPlaylistTargetButton extends StatelessWidget {
-  const _MusicTrackPlaylistTargetButton({
-    required this.target,
-    required this.loading,
-    required this.enabled,
+enum _MusicTrackPlaylistTargetFilter { all, personal, room }
+
+Future<MusicTrackPlaylistTarget?> showMusicTrackPlaylistTargetDialog(
+  BuildContext context, {
+  required Future<List<MusicTrackPlaylistTarget>> Function() loadTargets,
+  required Future<void> Function(MusicTrackPlaylistTarget target) onAdd,
+}) {
+  return showDialog<MusicTrackPlaylistTarget>(
+    context: context,
+    builder: (context) =>
+        _MusicTrackPlaylistTargetDialog(loadTargets: loadTargets, onAdd: onAdd),
+  );
+}
+
+class _MusicTrackPlaylistTargetDialog extends StatefulWidget {
+  const _MusicTrackPlaylistTargetDialog({
+    required this.loadTargets,
     required this.onAdd,
   });
 
-  final MusicTrackPlaylistTarget target;
-  final bool loading;
-  final bool enabled;
-  final VoidCallback onAdd;
+  final Future<List<MusicTrackPlaylistTarget>> Function() loadTargets;
+  final Future<void> Function(MusicTrackPlaylistTarget target) onAdd;
+
+  @override
+  State<_MusicTrackPlaylistTargetDialog> createState() =>
+      _MusicTrackPlaylistTargetDialogState();
+}
+
+class _MusicTrackPlaylistTargetDialogState
+    extends State<_MusicTrackPlaylistTargetDialog> {
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  final ScrollController _scrollController = ScrollController();
+  List<MusicTrackPlaylistTarget> _targets = const [];
+  _MusicTrackPlaylistTargetFilter _filter = _MusicTrackPlaylistTargetFilter.all;
+  String? _selectedKey;
+  String? _error;
+  bool _loading = true;
+  bool _adding = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final targets = await widget.loadTargets();
+      if (!mounted) return;
+      setState(() {
+        _targets = targets;
+        _loading = false;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _searchFocusNode.requestFocus();
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = userFacingErrorMessage(error, fallback: '加载歌单失败，请重试');
+      });
+    }
+  }
+
+  List<MusicTrackPlaylistTarget> get _visibleTargets {
+    final query = _searchController.text.trim().toLowerCase();
+    return _targets
+        .where((target) {
+          final matchesScope = switch (_filter) {
+            _MusicTrackPlaylistTargetFilter.all => true,
+            _MusicTrackPlaylistTargetFilter.personal => !target.roomScoped,
+            _MusicTrackPlaylistTargetFilter.room => target.roomScoped,
+          };
+          return matchesScope &&
+              (query.isEmpty ||
+                  target.playlist.name.toLowerCase().contains(query));
+        })
+        .toList(growable: false);
+  }
+
+  MusicTrackPlaylistTarget? get _selectedTarget {
+    for (final target in _targets) {
+      if (target.key == _selectedKey) return target;
+    }
+    return null;
+  }
+
+  Future<void> _confirm() async {
+    final target = _selectedTarget;
+    if (target == null || _adding) return;
+    setState(() => _adding = true);
+    try {
+      await widget.onAdd(target);
+      if (mounted) Navigator.of(context).pop(target);
+    } catch (error) {
+      if (mounted) {
+        showFloatingErrorNotice(
+          context,
+          userFacingErrorMessage(error, fallback: '添加失败，请检查歌单权限'),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _adding = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final playlist = target.playlist;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        const style = TextStyle(
-          color: UiColors.text,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          height: 1.25,
-        );
-        final textWidth = (constraints.maxWidth - 76).clamp(
-          48.0,
-          double.infinity,
-        );
-        final painter = TextPainter(
-          text: TextSpan(text: playlist.name, style: style),
-          textDirection: Directionality.of(context),
-          textScaler: MediaQuery.textScalerOf(context),
-        )..layout(maxWidth: textWidth);
-        final height = (painter.height + 20).clamp(46.0, double.infinity);
-        return PressableSurface(
-          key: ValueKey<String>('music-track-playlist-target:${playlist.id}'),
-          width: double.infinity,
-          height: height,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          backgroundColor: UiColors.surfaceLow,
-          pressedBackgroundColor: UiColors.surfacePressed,
-          borderColor: UiColors.border,
-          borderRadius: UiRadii.md,
+    final visibleTargets = _visibleTargets;
+    final height = (MediaQuery.sizeOf(context).height * 0.58).clamp(
+      240.0,
+      560.0,
+    );
+    return DialogFrame(
+      title: '添加到歌单',
+      icon: Icons.playlist_add,
+      maxWidth: 620,
+      adaptiveActions: [
+        ResponsiveDialogAction(
+          label: '取消',
+          onPressed: _adding ? null : () => Navigator.of(context).pop(),
+        ),
+        ResponsiveDialogAction(
+          buttonKey: const ValueKey<String>(
+            'music-track-playlist-target-confirm',
+          ),
+          label: '确认添加',
+          icon: Icons.playlist_add,
+          tone: ButtonTone.primary,
+          loading: _adding,
+          onPressed: _selectedTarget == null || _adding ? null : _confirm,
+        ),
+      ],
+      child: SizedBox(
+        height: height,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Input(
+              key: const ValueKey<String>('music-track-playlist-target-search'),
+              controller: _searchController,
+              focusNode: _searchFocusNode,
+              prefixIcon: Icons.search,
+              hintText: '搜索歌单',
+              showClearButton: true,
+              onChanged: (_) => setState(() {}),
+              textInputAction: TextInputAction.search,
+            ),
+            const SizedBox(height: UiSpacing.sm),
+            SegmentedControl<_MusicTrackPlaylistTargetFilter>(
+              expanded: true,
+              value: _filter,
+              onChanged: (value) => setState(() => _filter = value),
+              segments: const [
+                Segment(
+                  value: _MusicTrackPlaylistTargetFilter.all,
+                  label: '全部',
+                  icon: Icons.library_music_outlined,
+                ),
+                Segment(
+                  value: _MusicTrackPlaylistTargetFilter.personal,
+                  label: '我的歌单',
+                  icon: Icons.person_outline,
+                ),
+                Segment(
+                  value: _MusicTrackPlaylistTargetFilter.room,
+                  label: '房间歌单',
+                  icon: Icons.meeting_room_outlined,
+                ),
+              ],
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: UiSpacing.sm),
+              Text(
+                _error!,
+                style: UiTypography.label.copyWith(color: UiColors.danger),
+              ),
+            ],
+            const SizedBox(height: UiSpacing.sm),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : visibleTargets.isEmpty
+                  ? Center(
+                      child: Text(
+                        _targets.isEmpty ? '还没有可用歌单' : '没有匹配的歌单',
+                        style: UiTypography.body.copyWith(
+                          color: UiColors.textMuted,
+                        ),
+                      ),
+                    )
+                  : RawScrollbar(
+                      controller: _scrollController,
+                      interactive: true,
+                      radius: const Radius.circular(999),
+                      thickness: 7,
+                      thumbColor: UiColors.textMuted.withValues(alpha: 0.82),
+                      child: ListView.separated(
+                        controller: _scrollController,
+                        primary: false,
+                        padding: const EdgeInsets.only(right: 10),
+                        itemCount: visibleTargets.length,
+                        separatorBuilder: (_, _) =>
+                            const SizedBox(height: UiSpacing.sm),
+                        itemBuilder: (context, index) {
+                          final target = visibleTargets[index];
+                          return _MusicTrackPlaylistTargetOption(
+                            target: target,
+                            selected: target.key == _selectedKey,
+                            onPressed: _adding
+                                ? null
+                                : () =>
+                                      setState(() => _selectedKey = target.key),
+                          );
+                        },
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MusicTrackPlaylistTargetOption extends StatelessWidget {
+  const _MusicTrackPlaylistTargetOption({
+    required this.target,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final MusicTrackPlaylistTarget target;
+  final bool selected;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      onTap: onPressed,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onPressed,
+        child: AnimatedContainer(
+          key: ValueKey<String>(
+            'music-track-playlist-target:'
+            '${target.roomScoped ? target.key : target.playlist.id}',
+          ),
+          duration: const Duration(milliseconds: 90),
+          constraints: const BoxConstraints(minHeight: 64),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: selected ? UiColors.selected : UiColors.surfaceLow,
+            borderRadius: BorderRadius.circular(UiRadii.md),
+            border: Border.all(
+              color: selected ? UiColors.selectedBorder : UiColors.border,
+            ),
+          ),
           child: Row(
             children: [
               Icon(
                 target.roomScoped ? Icons.meeting_room : Icons.person,
                 color: UiColors.accent,
-                size: 17,
+                size: 20,
               ),
-              const SizedBox(width: 7),
+              const SizedBox(width: UiSpacing.md),
               Expanded(
-                child: Text(playlist.name, style: style, softWrap: true),
-              ),
-              const SizedBox(width: 8),
-              ButtonIcon(
-                key: ValueKey<String>(
-                  'music-track-playlist-target-add:${target.roomScoped ? target.key : playlist.id}',
+                child: Text(
+                  target.playlist.name,
+                  style: UiTypography.body.copyWith(
+                    color: UiColors.text,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-                icon: const Icon(Icons.add),
-                tooltip: '添加到歌单',
-                tone: ButtonTone.primary,
-                loading: loading,
-                onPressed: enabled ? onAdd : null,
-                size: 32,
+              ),
+              const SizedBox(width: UiSpacing.md),
+              Icon(
+                selected ? Icons.radio_button_checked : Icons.radio_button_off,
+                color: selected ? UiColors.accent : UiColors.textMuted,
+                size: 20,
               ),
             ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

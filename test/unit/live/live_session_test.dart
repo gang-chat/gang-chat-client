@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart' as rtc;
 import 'package:livekit_client/livekit_client.dart' as lk;
 
 import 'package:client/src/live/audio_device_rebinder.dart';
@@ -15,6 +16,28 @@ void main() {
     expect(cameraFlipAvailabilityFromVideoInputCount(0), isNull);
     expect(cameraFlipAvailabilityFromVideoInputCount(1), isFalse);
     expect(cameraFlipAvailabilityFromVideoInputCount(2), isTrue);
+  });
+
+  test('Android music box keeps call routing but uses media volume', () {
+    final media = androidLiveAudioConfiguration(musicBoxActive: true);
+    expect(media.androidAudioMode, rtc.AndroidAudioMode.inCommunication);
+    expect(media.androidAudioStreamType, rtc.AndroidAudioStreamType.music);
+    expect(
+      media.androidAudioAttributesUsageType,
+      rtc.AndroidAudioAttributesUsageType.media,
+    );
+    expect(
+      media.androidAudioAttributesContentType,
+      rtc.AndroidAudioAttributesContentType.music,
+    );
+    expect(media.forceHandleAudioRouting, isTrue);
+
+    final voice = androidLiveAudioConfiguration(musicBoxActive: false);
+    expect(voice.androidAudioStreamType, rtc.AndroidAudioStreamType.voiceCall);
+    expect(
+      voice.androidAudioAttributesUsageType,
+      rtc.AndroidAudioAttributesUsageType.voiceCommunication,
+    );
   });
 
   test('participant removal maps to the kicked announcement kind', () {

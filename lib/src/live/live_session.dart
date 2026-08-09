@@ -65,6 +65,28 @@ bool isLivePresenceSoundParticipantIdentity(String identity) {
       identity != musicBoxBotIdentity;
 }
 
+/// Android WebRTC uses one native playback device for the complete room mix.
+/// Keep communication mode (microphone routing/AEC) while directing that
+/// device to the media stream whenever the music-box track is present. This
+/// makes the hardware volume keys control media volume without switching the
+/// microphone to a non-communication route.
+@visibleForTesting
+rtc.AndroidAudioConfiguration androidLiveAudioConfiguration({
+  required bool musicBoxActive,
+}) {
+  if (!musicBoxActive) return rtc.AndroidAudioConfiguration.communication;
+  return rtc.AndroidAudioConfiguration(
+    manageAudioFocus: true,
+    androidAudioMode: rtc.AndroidAudioMode.inCommunication,
+    androidAudioFocusMode: rtc.AndroidAudioFocusMode.gain,
+    androidAudioStreamType: rtc.AndroidAudioStreamType.music,
+    androidAudioAttributesUsageType: rtc.AndroidAudioAttributesUsageType.media,
+    androidAudioAttributesContentType:
+        rtc.AndroidAudioAttributesContentType.music,
+    forceHandleAudioRouting: true,
+  );
+}
+
 @visibleForTesting
 class LiveReconnectPresenceChanges {
   const LiveReconnectPresenceChanges({
@@ -531,6 +553,9 @@ class LiveSession extends ChangeNotifier {
   double _inputVolume = defaultAudioVolume;
   double _outputVolume = defaultAudioVolume;
   double _musicBoxVolume = defaultAudioVolume;
+  bool _androidMusicMediaRouteRequested = false;
+  bool? _androidMusicMediaRouteApplied;
+  Future<void> _androidAudioRouteTail = Future<void>.value();
   double _screenShareVolume = defaultAudioVolume;
   String? _watchedScreenShareIdentity;
   String? _watchedCameraIdentity;
@@ -907,6 +932,7 @@ class LiveSession extends ChangeNotifier {
       _speakingIdentities.clear();
       _micMutedByIdentity.clear();
       unawaited(_resetLocalInputVolume());
+      unawaited(_reconcileAndroidMusicBoxAudioRoute());
       notifyListeners();
       throw LiveSessionConnectException(url: url, cause: e);
     }
@@ -1839,6 +1865,7 @@ class LiveSession extends ChangeNotifier {
     _speakingIdentities.clear();
     _micMutedByIdentity.clear();
     await _resetLocalInputVolume();
+    await _reconcileAndroidMusicBoxAudioRoute();
     await _stopScreenAudioPublisher();
     if (cancel != null) {
       try {
@@ -1887,6 +1914,7 @@ class LiveSession extends ChangeNotifier {
     _speakingIdentities.clear();
     _micMutedByIdentity.clear();
     unawaited(_resetLocalInputVolume());
+    unawaited(_reconcileAndroidMusicBoxAudioRoute());
     cancel?.call();
     if (room != null) {
       // Best-effort async cleanup; swallow errors.
@@ -2013,6 +2041,7 @@ class LiveSession extends ChangeNotifier {
       }
       _micMutedByIdentity.remove(event.participant.identity);
       _speakingIdentities.remove(event.participant.identity);
+      unawaited(_reconcileAndroidMusicBoxAudioRoute());
       notifyListeners();
       if (_presenceCallbacksEnabled &&
           isLivePresenceSoundParticipantIdentity(event.participant.identity)) {
@@ -2487,6 +2516,7 @@ class LiveSession extends ChangeNotifier {
   }
 
   Future<void> _applyMusicBoxVolume() async {
+    await _reconcileAndroidMusicBoxAudioRoute();
     final room = _room;
     if (room == null) return;
     final participants = List<lk.RemoteParticipant>.of(
@@ -2502,6 +2532,35 @@ class LiveSession extends ChangeNotifier {
         } catch (_) {}
       }
     }
+  }
+
+  bool _hasActiveMusicBoxAudioTrack() {
+    final participant = _room?.remoteParticipants[musicBoxBotIdentity];
+    if (participant == null) return false;
+    return participant.audioTrackPublications.any(
+      (publication) => publication.track != null && !publication.muted,
+    );
+  }
+
+  Future<void> _reconcileAndroidMusicBoxAudioRoute() {
+    if (kIsWeb || !Platform.isAndroid) return Future<void>.value();
+    _androidMusicMediaRouteRequested = _hasActiveMusicBoxAudioTrack();
+    _androidAudioRouteTail = _androidAudioRouteTail.catchError((_) {}).then((
+      _,
+    ) async {
+      final requested = _androidMusicMediaRouteRequested;
+      if (_androidMusicMediaRouteApplied == requested) return;
+      try {
+        await rtc.Helper.setAndroidAudioConfiguration(
+          androidLiveAudioConfiguration(musicBoxActive: requested),
+        );
+        _androidMusicMediaRouteApplied = requested;
+      } catch (_) {
+        // Audio routing is best-effort. LiveKit audio remains usable when
+        // an OEM rejects a runtime stream reconfiguration.
+      }
+    });
+    return _androidAudioRouteTail;
   }
 
   Future<void> _applyScreenShareVolume() async {

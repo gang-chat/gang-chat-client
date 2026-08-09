@@ -2235,7 +2235,11 @@ class _MusicPlaylistItemTile extends StatelessWidget {
 /// from also toggling the card selection while preserving the full card's
 /// padding and layout gaps as useful selection targets.
 class _ManagementCardTapTarget extends StatelessWidget {
-  const _ManagementCardTapTarget({required this.child, required this.onTap});
+  const _ManagementCardTapTarget({
+    super.key,
+    required this.child,
+    required this.onTap,
+  });
 
   final Widget child;
   final VoidCallback? onTap;
@@ -3000,20 +3004,36 @@ class _MusicPlaylistShareRoomDialogState
                       itemBuilder: (context, index) {
                         final room = visibleRooms[index];
                         final selected = room.id == _selectedRoomId;
-                        return _SettingsSubPanel(
-                          highlighted: selected,
-                          hoverable: true,
-                          child: Row(
-                            children: [
-                              if (widget.currentUser case final currentUser?)
-                                RoomHoverCard(
-                                  key: ValueKey<String>(
-                                    '${widget.keyPrefix}-profile-${room.id}',
-                                  ),
-                                  room: _roomProfile(room),
-                                  currentUser: currentUser,
-                                  onResolveRoom: _resolveRoomProfile,
-                                  child: Avatar(
+                        return _ManagementCardTapTarget(
+                          key: ValueKey(
+                            '${widget.keyPrefix}-option-${room.id}',
+                          ),
+                          onTap: () =>
+                              setState(() => _selectedRoomId = room.id),
+                          child: _SettingsSubPanel(
+                            highlighted: selected,
+                            hoverable: true,
+                            child: Row(
+                              children: [
+                                if (widget.currentUser case final currentUser?)
+                                  RoomHoverCard(
+                                    key: ValueKey<String>(
+                                      '${widget.keyPrefix}-profile-${room.id}',
+                                    ),
+                                    room: _roomProfile(room),
+                                    currentUser: currentUser,
+                                    onResolveRoom: _resolveRoomProfile,
+                                    child: Avatar(
+                                      label: room.displayName,
+                                      imageUrl: AppConfigScope.of(
+                                        context,
+                                      ).resolveAssetUrl(room.avatarUrl),
+                                      defaultAvatarKey: room.defaultAvatarKey,
+                                      size: 36,
+                                    ),
+                                  )
+                                else
+                                  Avatar(
                                     label: room.displayName,
                                     imageUrl: AppConfigScope.of(
                                       context,
@@ -3021,72 +3041,59 @@ class _MusicPlaylistShareRoomDialogState
                                     defaultAvatarKey: room.defaultAvatarKey,
                                     size: 36,
                                   ),
-                                )
-                              else
-                                Avatar(
-                                  label: room.displayName,
-                                  imageUrl: AppConfigScope.of(
-                                    context,
-                                  ).resolveAssetUrl(room.avatarUrl),
-                                  defaultAvatarKey: room.defaultAvatarKey,
-                                  size: 36,
-                                ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: UiPointerTapRegion(
-                                  key: ValueKey(
-                                    '${widget.keyPrefix}-option-${room.id}',
-                                  ),
-                                  onTap: () =>
-                                      setState(() => _selectedRoomId = room.id),
-                                  disableSelection: true,
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 4,
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                room.displayName,
-                                                style: const TextStyle(
-                                                  color: _textPrimary,
-                                                  fontSize: 14,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                              if (room.rid
-                                                  .trim()
-                                                  .isNotEmpty) ...[
-                                                const SizedBox(height: 2),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Semantics(
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 4,
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
                                                 Text(
-                                                  'RID：${room.rid}',
+                                                  room.displayName,
                                                   style: const TextStyle(
-                                                    color: _textMuted,
-                                                    fontSize: 12,
+                                                    color: _textPrimary,
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w600,
                                                   ),
                                                 ),
+                                                if (room.rid
+                                                    .trim()
+                                                    .isNotEmpty) ...[
+                                                  const SizedBox(height: 2),
+                                                  Text(
+                                                    'RID：${room.rid}',
+                                                    style: const TextStyle(
+                                                      color: _textMuted,
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                ],
                                               ],
-                                            ],
+                                            ),
                                           ),
-                                        ),
-                                        Icon(
-                                          selected
-                                              ? Icons.radio_button_checked
-                                              : Icons.radio_button_off,
-                                          color: selected ? _cyan : _textMuted,
-                                          size: 20,
-                                        ),
-                                      ],
+                                          Icon(
+                                            selected
+                                                ? Icons.radio_button_checked
+                                                : Icons.radio_button_off,
+                                            color: selected
+                                                ? _cyan
+                                                : _textMuted,
+                                            size: 20,
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         );
                       },

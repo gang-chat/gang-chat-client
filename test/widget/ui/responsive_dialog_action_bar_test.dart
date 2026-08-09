@@ -210,4 +210,45 @@ void main() {
     expect(cancelRect.center.dy, downloadRect.center.dy);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('DialogFrame yields fixed content height to the Android IME', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(420, 700);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetViewInsets);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ui.uiTheme().copyWith(platform: TargetPlatform.android),
+        home: Scaffold(
+          body: ui.DialogFrame(
+            title: '搜索选择',
+            maxWidth: 360,
+            adaptiveActions: actions(),
+            child: const SizedBox(
+              key: ValueKey<String>('keyboard-safe-dialog-content'),
+              height: 520,
+              child: Column(
+                children: [
+                  TextField(),
+                  Expanded(child: ColoredBox(color: Colors.transparent)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    final contentRect = tester.getRect(
+      find.byKey(const ValueKey<String>('keyboard-safe-dialog-content')),
+    );
+    expect(contentRect.height, lessThan(520));
+  });
 }

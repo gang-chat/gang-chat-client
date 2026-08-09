@@ -7,6 +7,7 @@ void registerShellRoomManagementWidgetTests() {
     final requestedPaths = <String>[];
     final requestedUris = <Uri>[];
     final myRoomSettingsUpdates = <Map<String, Object?>>[];
+    addTearDown(tester.view.resetViewInsets);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -496,6 +497,11 @@ void registerShellRoomManagementWidgetTests() {
     await tester.tap(
       find.byKey(const ValueKey('room-message-history-member-filter')),
     );
+    await tester.pumpAndSettle();
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    tester.view.resetViewInsets();
     await tester.pumpAndSettle();
     final memberOption = find.byKey(
       const ValueKey('message-history-member-user-2'),

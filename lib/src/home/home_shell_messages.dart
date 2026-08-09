@@ -889,7 +889,7 @@ extension _HomeShellMessages on _HomeShellState {
         message.playlistAttachment != null ||
         message.musicTrackAttachment != null;
     if (isMusicComponent) {
-      final text = message_display.messageClipboardText(message);
+      final text = message_display.messageComponentClipboardText(message);
       if (text.isEmpty) {
         throw Exception('这条消息没有可复制的内容');
       }
@@ -1771,7 +1771,7 @@ extension _HomeShellMessages on _HomeShellState {
   Future<bool> _canPasteAttachments() async {
     if (_selectedRoom == null) return false;
     try {
-      if (await _clipboardContainsCopiedMessageComponent()) return true;
+      if (await _clipboardMessageComponent() != null) return true;
       final paths = await _clipboardService.readFilePaths();
       if (file_display.normalizedFilePaths(paths).isNotEmpty) return true;
       final image = await _clipboardService.readImageFile();
@@ -1784,7 +1784,8 @@ extension _HomeShellMessages on _HomeShellState {
   Future<bool> _pasteAttachments() async {
     if (_selectedRoom == null) return false;
     try {
-      if (await _clipboardContainsCopiedMessageComponent()) {
+      final clipboardComponent = await _clipboardMessageComponent();
+      if (clipboardComponent != null) {
         if (!mounted) return false;
         if (_composerController.text.trim().isNotEmpty) {
           _setHomeState(() => _sendError = '请先清空输入内容，再粘贴歌单或歌曲组件');
@@ -1795,11 +1796,10 @@ extension _HomeShellMessages on _HomeShellState {
           return true;
         }
         final roomId = _selectedServerId;
-        final component = _copiedMessageComponent;
-        if (roomId == null || component == null) return false;
+        if (roomId == null) return false;
         _setHomeState(() {
           final next = Map<String, Message>.of(_messageComponentDrafts);
-          next[roomId] = component;
+          next[roomId] = clipboardComponent;
           _messageComponentDrafts = Map<String, Message>.unmodifiable(next);
           _sendError = null;
           _saveDraftInState();
@@ -1839,14 +1839,36 @@ extension _HomeShellMessages on _HomeShellState {
     }
   }
 
-  Future<bool> _clipboardContainsCopiedMessageComponent() async {
-    final component = _copiedMessageComponent;
-    if (component == null || component.isRemoved) return false;
+  Future<Message?> _clipboardMessageComponent() async {
     final clipboardText = await _clipboardService.readText();
-    return message_display.messageClipboardTextMatches(
-      component,
+    final embedded = message_display.messageComponentFromClipboardText(
       clipboardText,
     );
+    if (embedded != null) {
+      _copiedMessageComponent = embedded;
+      return embedded;
+    }
+    final copied = _copiedMessageComponent;
+    if (copied != null &&
+        !copied.isRemoved &&
+        message_display.messageClipboardTextMatches(copied, clipboardText)) {
+      return copied;
+    }
+    // Compatibility for text copied with an older Gang Chat build: if the
+    // immutable source message is still loaded, recover the component from
+    // its complete human-readable clipboard representation.
+    for (final message in _messages.reversed) {
+      if (message.pending || message.isRemoved) continue;
+      if (message.playlistAttachment == null &&
+          message.musicTrackAttachment == null) {
+        continue;
+      }
+      if (message_display.messageClipboardTextMatches(message, clipboardText)) {
+        _copiedMessageComponent = message;
+        return message;
+      }
+    }
+    return null;
   }
 
   void _handleDroppedFiles(FileDropEvent event) {

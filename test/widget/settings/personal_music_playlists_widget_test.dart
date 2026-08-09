@@ -530,8 +530,12 @@ void main() {
       );
       await tester.pumpAndSettle();
       await tester.tap(
+        find.byKey(const ValueKey<String>('music-track-playlist-target:mbp_1')),
+      );
+      await tester.pump();
+      await tester.tap(
         find.byKey(
-          const ValueKey<String>('music-track-playlist-target-add:mbp_1'),
+          const ValueKey<String>('music-track-playlist-target-confirm'),
         ),
       );
       await tester.pumpAndSettle();
@@ -778,10 +782,17 @@ void main() {
     'personal playlist share searches rooms and sends a snapshot request',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(720, 800));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
+      addTearDown(() {
+        tester.binding.setSurfaceSize(null);
+        tester.view.resetViewInsets();
+      });
       final api = _FakePersonalPlaylistApi();
 
-      await _pumpPlaylistSettings(tester, api);
+      await _pumpPlaylistSettings(
+        tester,
+        api,
+        platform: TargetPlatform.android,
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text('管理'));
       await tester.pumpAndSettle();
@@ -797,6 +808,12 @@ void main() {
       expect(find.text('选择要将歌单“夜晚”分享到的文字频道'), findsOneWidget);
       expect(find.text('夜晚房间'), findsOneWidget);
       expect(find.text('另一个房间'), findsOneWidget);
+
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      tester.view.resetViewInsets();
+      await tester.pumpAndSettle();
 
       await tester.tap(
         find.byKey(
@@ -823,9 +840,10 @@ void main() {
       expect(find.text('夜晚房间'), findsNothing);
       expect(find.text('另一个房间'), findsOneWidget);
 
-      await tester.tap(
-        find.byKey(const ValueKey('music-playlist-share-room-option-room_2')),
+      final roomOption = find.byKey(
+        const ValueKey('music-playlist-share-room-option-room_2'),
       );
+      await tester.tapAt(tester.getTopLeft(roomOption) + const Offset(3, 3));
       await tester.pump();
       await tester.tap(find.text('确认分享'));
       await tester.pumpAndSettle();
@@ -863,9 +881,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('分享歌曲'), findsOneWidget);
-      await tester.tap(
-        find.byKey(const ValueKey('music-track-share-room-option-room_2')),
+      final roomOption = find.byKey(
+        const ValueKey('music-track-share-room-option-room_2'),
       );
+      await tester.tapAt(tester.getTopLeft(roomOption) + const Offset(3, 3));
       await tester.pump();
       await tester.tap(find.text('确认分享'));
       await tester.pumpAndSettle();

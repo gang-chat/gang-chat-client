@@ -117,7 +117,7 @@ void main() {
             ),
           ),
         );
-        await tester.pump();
+        await tester.pumpAndSettle();
         expect(
           find.byKey(const ValueKey<String>('music-track-card:shared-track-1')),
           findsOneWidget,
@@ -131,12 +131,16 @@ void main() {
             const ValueKey<String>('music-track-card-add-to-playlist'),
           ),
         );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(
+            const ValueKey<String>('music-track-playlist-target:personal-1'),
+          ),
+        );
         await tester.pump();
         await tester.tap(
           find.byKey(
-            const ValueKey<String>(
-              'music-track-playlist-target-add:personal-1',
-            ),
+            const ValueKey<String>('music-track-playlist-target-confirm'),
           ),
         );
         await tester.pumpAndSettle();

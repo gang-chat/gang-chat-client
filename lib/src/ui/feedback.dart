@@ -813,7 +813,11 @@ class DialogFrame extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 14),
-                child,
+                // Dialog applies the current viewInsets (including the
+                // Android IME) before laying out this frame.  Let the content
+                // yield that vertical space instead of keeping a fixed child
+                // height and overflowing below the action bar.
+                Flexible(fit: FlexFit.loose, child: child),
                 if (resolvedActions.isNotEmpty ||
                     resolvedActionBar != null) ...[
                   const SizedBox(height: 18),

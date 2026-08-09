@@ -73,7 +73,7 @@ void main() {
         await tester.tap(find.byKey(const ValueKey<String>('track-row')));
         await tester.pumpAndSettle();
         expect(find.text('试听'), findsOneWidget);
-        expect(find.text('添加到歌单'), findsOneWidget);
+        expect(find.text('添加到歌单'), findsWidgets);
         expect(find.text('3:00'), findsOneWidget);
 
         await tester.tap(
@@ -93,13 +93,19 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        expect(find.text('选择歌单'), findsOneWidget);
+        expect(find.text('添加到歌单'), findsWidgets);
+        expect(find.text('全部'), findsOneWidget);
+        expect(find.text('房间歌单'), findsOneWidget);
         expect(find.text('完整歌单名称'), findsOneWidget);
         await tester.tap(
           find.byKey(
-            const ValueKey<String>(
-              'music-track-playlist-target-add:playlist-1',
-            ),
+            const ValueKey<String>('music-track-playlist-target:playlist-1'),
+          ),
+        );
+        await tester.pump();
+        await tester.tap(
+          find.byKey(
+            const ValueKey<String>('music-track-playlist-target-confirm'),
           ),
         );
         await tester.pumpAndSettle();
@@ -117,6 +123,12 @@ void main() {
   testWidgets('shared song picker keeps personal and room playlist scopes', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(360, 720));
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    addTearDown(() {
+      tester.binding.setSurfaceSize(null);
+      tester.view.resetViewInsets();
+    });
     final controller = MusicTrackPreviewController(
       api: _PreviewApi(),
       platform: _PreviewPlatform(),
@@ -144,7 +156,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        theme: ui.uiTheme().copyWith(platform: TargetPlatform.windows),
+        theme: ui.uiTheme().copyWith(platform: TargetPlatform.android),
         home: Scaffold(
           body: Align(
             alignment: Alignment.topLeft,
@@ -187,17 +199,67 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('我的歌单'), findsOneWidget);
+    expect(find.text('我的歌单'), findsWidgets);
     expect(find.text('当前房间歌单'), findsOneWidget);
-    expect(find.byIcon(Icons.person), findsOneWidget);
-    expect(find.byIcon(Icons.meeting_room), findsOneWidget);
+    expect(find.byIcon(Icons.person_outline), findsOneWidget);
+    expect(find.byIcon(Icons.meeting_room_outlined), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    tester.view.resetViewInsets();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('房间歌单'));
+    await tester.pump();
+    expect(
+      find.byKey(
+        const ValueKey<String>('music-track-playlist-target:personal-1'),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.byKey(
+        const ValueKey<String>(
+          'music-track-playlist-target:room:room-alpha:room-1',
+        ),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('全部'));
+    await tester.enterText(
+      find.byKey(const ValueKey<String>('music-track-playlist-target-search')),
+      '我的',
+    );
+    await tester.pump();
+    expect(
+      find.byKey(
+        const ValueKey<String>('music-track-playlist-target:personal-1'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(
+        const ValueKey<String>(
+          'music-track-playlist-target:room:room-alpha:room-1',
+        ),
+      ),
+      findsNothing,
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey<String>('music-track-playlist-target-search')),
+      '',
+    );
+    await tester.pump();
 
     await tester.tap(
       find.byKey(
         const ValueKey<String>(
-          'music-track-playlist-target-add:room:room-alpha:room-1',
+          'music-track-playlist-target:room:room-alpha:room-1',
         ),
       ),
+    );
+    await tester.pump();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('music-track-playlist-target-confirm')),
     );
     await tester.pumpAndSettle();
 

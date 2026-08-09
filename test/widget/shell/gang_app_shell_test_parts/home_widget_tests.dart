@@ -2580,9 +2580,13 @@ void registerShellHomeWidgetTests() {
     await tester.tap(
       find.byKey(
         const ValueKey<String>(
-          'music-track-playlist-target-add:room:server-alpha:mbp-room-alpha',
+          'music-track-playlist-target:room:server-alpha:mbp-room-alpha',
         ),
       ),
+    );
+    await tester.pump();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('music-track-playlist-target-confirm')),
     );
     await tester.pumpAndSettle();
 

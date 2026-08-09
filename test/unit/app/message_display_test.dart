@@ -445,6 +445,18 @@ void main() {
     expect(trackText, contains('歌手：周杰伦'));
     expect(trackText, contains('时长：4:29'));
     expect(trackText, contains('链接标识：track_1'));
+
+    final encodedText = messageComponentClipboardText(playlistMessage);
+    expect(encodedText.startsWith(playlistText), isTrue);
+    expect(messageClipboardTextMatches(playlistMessage, encodedText), isTrue);
+    final restored = messageComponentFromClipboardText(encodedText);
+    expect(restored, isNotNull);
+    expect(restored!.id, playlistMessage.id);
+    expect(restored.roomId, playlistMessage.roomId);
+    expect(restored.playlistAttachment?.playlist?.name, '夜晚');
+    expect(restored.playlistAttachment?.playlist?.items, hasLength(1));
+    expect(messageComponentFromClipboardText('$playlistText 已修改'), isNull);
+    expect(messageComponentFromClipboardText('篡改的可见内容$encodedText'), isNull);
   });
 
   test('messageQuoteSnapshot omits the sender for system messages', () {

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../protocol/models.dart';
 import 'file_display.dart';
 import 'voice_message_display.dart' as voice_display;
@@ -230,6 +232,70 @@ String messageClipboardText(Message message) {
   return messageCopyText(message);
 }
 
+/// Clipboard text for a music component that remains readable in other apps
+/// while carrying an application-only immutable snapshot for Gang Chat.
+///
+/// Unicode tag characters are intentionally non-rendering. Unlike an
+/// in-memory "last copied message" cache, this envelope survives focus
+/// changes and cross-platform system-clipboard round trips. The server still
+/// validates [Message.id] when the component is sent, so the snapshot cannot
+/// grant access to a message the user may not reference.
+String messageComponentClipboardText(Message message) {
+  final visible = messageClipboardText(message);
+  if (!_isClipboardMusicComponent(message)) return visible;
+  final payload = jsonEncode({
+    'version': 1,
+    'message': {
+      'id': message.id,
+      'room_id': message.roomId,
+      'client_message_id': message.clientMessageId,
+      'type': message.type,
+      'body': message.body,
+      'created_at': message.createdAt.toUtc().toIso8601String(),
+      'sender': _clipboardUserSummaryJson(message.sender),
+      'attachments': [
+        for (final attachment in message.attachments) attachment.toJson(),
+      ],
+    },
+  });
+  final encoded = base64Url.encode(utf8.encode(payload)).replaceAll('=', '');
+  final tagRunes = <int>[
+    _clipboardEnvelopeStart,
+    for (final codeUnit in encoded.codeUnits) _clipboardTagBase + codeUnit,
+    _clipboardEnvelopeEnd,
+  ];
+  return '$visible${String.fromCharCodes(tagRunes)}';
+}
+
+/// Restores a copied music component directly from clipboard text.
+Message? messageComponentFromClipboardText(String? clipboardText) {
+  if (clipboardText == null || clipboardText.isEmpty) return null;
+  final encoded = _clipboardEnvelopePayload(clipboardText);
+  if (encoded == null || encoded.isEmpty || encoded.length > 512 * 1024) {
+    return null;
+  }
+  try {
+    final padded = encoded.padRight((encoded.length + 3) ~/ 4 * 4, '=');
+    final decoded = jsonDecode(utf8.decode(base64Url.decode(padded)));
+    if (decoded is! Map || decoded['version'] != 1) return null;
+    final messageJson = decoded['message'];
+    if (messageJson is! Map) return null;
+    final message = Message.fromJson(
+      Map<String, Object?>.from(messageJson.cast<String, Object?>()),
+    );
+    if (message.id.trim().isEmpty || !_isClipboardMusicComponent(message)) {
+      return null;
+    }
+    if (_normalizedClipboardText(_withoutClipboardEnvelope(clipboardText)) !=
+        _normalizedClipboardText(messageClipboardText(message))) {
+      return null;
+    }
+    return message;
+  } catch (_) {
+    return null;
+  }
+}
+
 /// Whether the current plain-text clipboard still represents [message].
 ///
 /// Windows clipboard providers may expose line endings as CRLF even when the
@@ -238,8 +304,60 @@ String messageClipboardText(Message message) {
 /// stale-copy protection without degrading a structured component to text.
 bool messageClipboardTextMatches(Message message, String? clipboardText) {
   if (clipboardText == null) return false;
-  return _normalizedClipboardText(clipboardText) ==
+  return _normalizedClipboardText(_withoutClipboardEnvelope(clipboardText)) ==
       _normalizedClipboardText(messageClipboardText(message));
+}
+
+const int _clipboardEnvelopeStart = 0xE0001;
+const int _clipboardEnvelopeEnd = 0xE007F;
+const int _clipboardTagBase = 0xE0000;
+
+bool _isClipboardMusicComponent(Message message) {
+  return !message.isRemoved &&
+      !message.pending &&
+      (message.playlistAttachment != null ||
+          message.musicTrackAttachment != null);
+}
+
+Map<String, Object?> _clipboardUserSummaryJson(UserSummary user) {
+  return {
+    'id': user.id,
+    'uid': user.uid,
+    'username': user.username,
+    'display_name': user.displayName,
+    'avatar_url': user.avatarUrl,
+    'default_avatar_key': user.defaultAvatarKey,
+    'room_display_name': user.roomDisplayName,
+    'room_role': user.roomRole,
+    'is_superuser': user.isSuperuser,
+    'is_online': user.isOnline,
+    'is_deleted': user.isDeleted,
+    'is_suspended': user.isSuspended,
+  };
+}
+
+String? _clipboardEnvelopePayload(String value) {
+  final runes = value.runes.toList(growable: false);
+  final start = runes.lastIndexOf(_clipboardEnvelopeStart);
+  if (start < 0) return null;
+  final end = runes.indexOf(_clipboardEnvelopeEnd, start + 1);
+  if (end <= start + 1) return null;
+  final codeUnits = <int>[];
+  for (final rune in runes.sublist(start + 1, end)) {
+    final codeUnit = rune - _clipboardTagBase;
+    if (codeUnit < 0x20 || codeUnit > 0x7E) return null;
+    codeUnits.add(codeUnit);
+  }
+  return String.fromCharCodes(codeUnits);
+}
+
+String _withoutClipboardEnvelope(String value) {
+  final runes = value.runes.toList(growable: false);
+  final start = runes.lastIndexOf(_clipboardEnvelopeStart);
+  if (start < 0) return value;
+  final end = runes.indexOf(_clipboardEnvelopeEnd, start + 1);
+  if (end < 0) return value;
+  return String.fromCharCodes([...runes.take(start), ...runes.skip(end + 1)]);
 }
 
 String _normalizedClipboardText(String value) {
