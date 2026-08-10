@@ -3163,6 +3163,7 @@ void main() {
             'source_type': 'room_playlist',
             'start_play': true,
             'playlist_id': 'playlist_1',
+            'start_item_id': 'playlist_item_2',
           });
           return http.Response(
             jsonEncode({
@@ -3188,6 +3189,7 @@ void main() {
         roomId: 'room_1',
         sourceType: MusicBoxActiveSourceType.roomPlaylist,
         playlistId: 'playlist_1',
+        startItemId: 'playlist_item_2',
       );
 
       expect(state.activeSource.type, MusicBoxActiveSourceType.roomPlaylist);

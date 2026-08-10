@@ -344,7 +344,8 @@ Content-Type: application/json
 {
   "source_type": "room_playlist",
   "playlist_id": "playlist_1",
-  "start_play": true
+  "start_play": true,
+  "start_item_id": "playlist_item_2"
 }
 ```
 
@@ -353,16 +354,23 @@ Content-Type: application/json
 ```json
 {
   "source_type": "temporary",
-  "start_play": true
+  "start_play": true,
+  "start_item_id": "mbx_ready_item"
 }
 ```
 
 已保存歌单会复制为房间本轮独立播放快照。之后编辑原歌单不会改变正在播放的顺序；
-切换来源不会清空临时歌单。
+切换来源不会清空临时歌单。`start_item_id` 可选；已保存歌单使用原歌单项 ID，点歌队列使用
+队列项 ID。提供该字段时 `start_play` 必须为 `true`，服务端在同一个激活动作中建立权威快照、
+记录目标歌曲的起播位置，并优先准备该歌曲；如果歌曲尚未缓存，权威状态可先显示下载中，准备
+完成后会直接从目标歌曲起播，不需要客户端再补发一次 `play_now`。目标不存在返回 `404`；点歌
+队列目标尚未下载完成返回 `409 music_box_item_not_ready`。
 
-客户端队列标题行在加号按钮左侧保留一个上下文按钮：当前来源不是点歌队列时用于切回
-点歌队列，原列表中的独立“切回点歌队列”按钮不再显示；当前来源是点歌队列时用于清空
-队列，队列为空时禁用。
+客户端队列标题行默认显示当前来源摘要，点击摘要展开统一歌单浏览器：当前活动歌单（若有）
+置顶，点歌队列第二，其后列出个人与房间歌单。“我的歌单”“房间歌单”筛选可再次点击取消，
+且不影响两个置顶入口。点击歌单只读取歌曲，不调用激活接口；只有点击歌曲行的播放动作才携带
+`start_item_id` 激活并起播。右侧继续只保留搜索图标按钮；展开搜索时，同一行左侧替换为搜索
+输入框，右侧替换为红色关闭按钮。`clear_temporary_playlist` 继续保留给其他受控入口及兼容客户端。
 
 ## 实时状态
 

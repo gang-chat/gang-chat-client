@@ -554,6 +554,7 @@ abstract interface class GangApi {
     required MusicBoxActiveSourceType sourceType,
     String? playlistId,
     bool startPlay = true,
+    String? startItemId,
   });
 
   void close();
@@ -3092,6 +3093,7 @@ class GangApiClient
     required MusicBoxActiveSourceType sourceType,
     String? playlistId,
     bool startPlay = true,
+    String? startItemId,
   }) async {
     final body = <String, Object?>{
       'source_type': musicBoxActiveSourceTypeValue(sourceType),
@@ -3099,6 +3101,9 @@ class GangApiClient
     };
     if (playlistId != null && playlistId.trim().isNotEmpty) {
       body['playlist_id'] = playlistId.trim();
+    }
+    if (startItemId != null && startItemId.trim().isNotEmpty) {
+      body['start_item_id'] = startItemId.trim();
     }
     final decoded = await _sendJson((token) {
       return _httpClient.post(

@@ -154,12 +154,14 @@ class MusicBoxController {
     required MusicBoxActiveSourceType sourceType,
     String? playlistId,
     bool startPlay = true,
+    String? startItemId,
   }) {
     return api.activateMusicBoxPlaylist(
       roomId: roomId,
       sourceType: sourceType,
       playlistId: playlistId,
       startPlay: startPlay,
+      startItemId: startItemId,
     );
   }
 

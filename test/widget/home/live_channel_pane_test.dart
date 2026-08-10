@@ -2700,7 +2700,7 @@ void main() {
     await tester.pump();
 
     await tester.tap(
-      find.byKey(const ValueKey<String>('music-box-add-toggle')),
+      find.byKey(const ValueKey<String>('music-box-search-toggle')),
     );
     await tester.pump();
 
