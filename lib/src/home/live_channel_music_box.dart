@@ -969,6 +969,19 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
     setState(() => _section = _MusicBoxSection.queue);
   }
 
+  Widget _sourceBrowserRegion({
+    required Widget child,
+    bool collapseOnOutside = false,
+  }) {
+    if (_section != _MusicBoxSection.sources) return child;
+    return TapRegion(
+      groupId: _sourceBrowserTapRegionGroup,
+      behavior: HitTestBehavior.translucent,
+      onTapOutside: collapseOnOutside ? (_) => _collapseSourceBrowser() : null,
+      child: child,
+    );
+  }
+
   Widget _searchInput({
     Key? key,
     required TextEditingController controller,
@@ -1275,19 +1288,18 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: searchVisible
-                    ? _searchInput(
-                        controller: widget.searchController,
-                        hintText: '搜索歌曲点歌',
-                      )
-                    : sourceBrowserVisible
-                    ? TapRegion(
-                        groupId: _sourceBrowserTapRegionGroup,
-                        onTapOutside: (_) => _collapseSourceBrowser(),
-                        child: _searchInput(
+          _sourceBrowserRegion(
+            collapseOnOutside: true,
+            child: Row(
+              children: [
+                Expanded(
+                  child: searchVisible
+                      ? _searchInput(
+                          controller: widget.searchController,
+                          hintText: '搜索歌曲点歌',
+                        )
+                      : sourceBrowserVisible
+                      ? _searchInput(
                           key: const ValueKey<String>(
                             'music-box-source-search-input',
                           ),
@@ -1295,39 +1307,41 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
                           focusNode: _sourceSearchFocusNode,
                           hintText: '搜索歌单',
                           tapRegionGroupId: _sourceBrowserTapRegionGroup,
+                        )
+                      : _MusicBoxCurrentSourceHeader(
+                          source: viewedSource,
+                          expanded: sourceBrowserVisible,
+                          leading: _currentSourceLeading(context, viewedSource),
+                          onPressed: _toggleSourceBrowser,
                         ),
-                      )
-                    : _MusicBoxCurrentSourceHeader(
-                        source: viewedSource,
-                        expanded: sourceBrowserVisible,
-                        leading: _currentSourceLeading(context, viewedSource),
-                        onPressed: _toggleSourceBrowser,
-                      ),
-              ),
-              const SizedBox(width: 8),
-              if (sourceBrowserVisible)
-                ButtonIconPlain(
-                  key: const ValueKey<String>(
-                    'music-box-source-browser-collapse',
-                  ),
-                  icon: const Icon(Icons.expand_less),
-                  tooltip: '收起歌单',
-                  width: _musicBoxSearchFieldHeight,
-                  height: _musicBoxSearchFieldHeight,
-                  iconSize: 17,
-                  onPressed: _collapseSourceBrowser,
-                )
-              else
-                ButtonIcon(
-                  key: const ValueKey<String>('music-box-search-toggle'),
-                  icon: Icon(searchVisible ? Icons.close : Icons.search),
-                  tooltip: searchVisible ? '关闭搜索' : '搜索添加',
-                  tone: searchVisible ? ButtonTone.danger : ButtonTone.neutral,
-                  toggleValue: searchVisible,
-                  onToggleChanged: _setSearchVisible,
-                  size: _musicBoxSearchFieldHeight,
                 ),
-            ],
+                const SizedBox(width: 8),
+                if (sourceBrowserVisible)
+                  ButtonIconPlain(
+                    key: const ValueKey<String>(
+                      'music-box-source-browser-collapse',
+                    ),
+                    icon: const Icon(Icons.expand_less),
+                    tooltip: '收起歌单',
+                    width: _musicBoxSearchFieldHeight,
+                    height: _musicBoxSearchFieldHeight,
+                    iconSize: 17,
+                    onPressed: _collapseSourceBrowser,
+                  )
+                else
+                  ButtonIcon(
+                    key: const ValueKey<String>('music-box-search-toggle'),
+                    icon: Icon(searchVisible ? Icons.close : Icons.search),
+                    tooltip: searchVisible ? '关闭搜索' : '搜索添加',
+                    tone: searchVisible
+                        ? ButtonTone.danger
+                        : ButtonTone.neutral,
+                    toggleValue: searchVisible,
+                    onToggleChanged: _setSearchVisible,
+                    size: _musicBoxSearchFieldHeight,
+                  ),
+              ],
+            ),
           ),
           if (searchVisible) ...[
             const SizedBox(height: 10),
@@ -1345,69 +1359,71 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
           const SizedBox(height: 12),
           Expanded(
             key: const ValueKey<String>('music-box-results-viewport'),
-            child: switch (_section) {
-              _MusicBoxSection.queue =>
-                _viewedSourceIsActive
-                    ? _currentQueueView()
-                    : _MusicBoxSourceBrowser(
-                        controller: widget.controller,
-                        roomId: widget.roomId,
-                        state: widget.state,
-                        showSourceList: false,
-                        viewedSource: viewedSource,
-                        onViewedSourceChanged: _selectViewedSource,
-                        onStateChanged: _handleActivatedState,
-                        onQueueResult: widget.onQueueResult,
-                        onCreateFirstRoomPlaylist:
-                            widget.onCreateFirstRoomPlaylist,
-                        onCreateFirstPersonalPlaylist:
-                            widget.onCreateFirstPersonalPlaylist,
-                      ),
-              _MusicBoxSection.sources => _MusicBoxSourceBrowser(
-                controller: widget.controller,
-                roomId: widget.roomId,
-                state: widget.state,
-                showSourceList: true,
-                viewedSource: viewedSource,
-                onViewedSourceChanged: _selectViewedSource,
-                onStateChanged: _handleActivatedState,
-                onQueueResult: widget.onQueueResult,
-                onCreateFirstRoomPlaylist: widget.onCreateFirstRoomPlaylist,
-                onCreateFirstPersonalPlaylist:
-                    widget.onCreateFirstPersonalPlaylist,
-                sourceQuery: _sourceSearchController.text,
-                tapRegionGroupId: _sourceBrowserTapRegionGroup,
-              ),
-              _MusicBoxSection.roomPlaylists => _MusicBoxPlaylistBrowser(
-                controller: widget.controller,
-                roomId: widget.roomId,
-                roomScoped: true,
-                temporaryQueue: widget.state.temporaryQueue,
-                onQueueResult: widget.onQueueResult,
-                onStateChanged: _handleActivatedState,
-                onCreateFirstPlaylist: widget.onCreateFirstRoomPlaylist,
-              ),
-              _MusicBoxSection.myPlaylists => _MusicBoxPlaylistBrowser(
-                controller: widget.controller,
-                roomId: widget.roomId,
-                roomScoped: false,
-                temporaryQueue: widget.state.temporaryQueue,
-                onQueueResult: widget.onQueueResult,
-                onStateChanged: _handleActivatedState,
-                onCreateFirstPlaylist: widget.onCreateFirstPersonalPlaylist,
-              ),
-              _MusicBoxSection.search => _MusicBoxSearchList(
-                results: widget.searchResults,
-                query: widget.searchController.text,
-                searching: widget.searching,
-                error: widget.searchError,
-                hasQuery: hasQuery,
-                controller: widget.controller,
-                roomId: widget.roomId,
-                temporaryQueue: widget.state.temporaryQueue,
-                onQueueResult: widget.onQueueResult,
-              ),
-            },
+            child: _sourceBrowserRegion(
+              child: switch (_section) {
+                _MusicBoxSection.queue =>
+                  _viewedSourceIsActive
+                      ? _currentQueueView()
+                      : _MusicBoxSourceBrowser(
+                          controller: widget.controller,
+                          roomId: widget.roomId,
+                          state: widget.state,
+                          showSourceList: false,
+                          viewedSource: viewedSource,
+                          onViewedSourceChanged: _selectViewedSource,
+                          onStateChanged: _handleActivatedState,
+                          onQueueResult: widget.onQueueResult,
+                          onCreateFirstRoomPlaylist:
+                              widget.onCreateFirstRoomPlaylist,
+                          onCreateFirstPersonalPlaylist:
+                              widget.onCreateFirstPersonalPlaylist,
+                        ),
+                _MusicBoxSection.sources => _MusicBoxSourceBrowser(
+                  controller: widget.controller,
+                  roomId: widget.roomId,
+                  state: widget.state,
+                  showSourceList: true,
+                  viewedSource: viewedSource,
+                  onViewedSourceChanged: _selectViewedSource,
+                  onStateChanged: _handleActivatedState,
+                  onQueueResult: widget.onQueueResult,
+                  onCreateFirstRoomPlaylist: widget.onCreateFirstRoomPlaylist,
+                  onCreateFirstPersonalPlaylist:
+                      widget.onCreateFirstPersonalPlaylist,
+                  sourceQuery: _sourceSearchController.text,
+                  tapRegionGroupId: _sourceBrowserTapRegionGroup,
+                ),
+                _MusicBoxSection.roomPlaylists => _MusicBoxPlaylistBrowser(
+                  controller: widget.controller,
+                  roomId: widget.roomId,
+                  roomScoped: true,
+                  temporaryQueue: widget.state.temporaryQueue,
+                  onQueueResult: widget.onQueueResult,
+                  onStateChanged: _handleActivatedState,
+                  onCreateFirstPlaylist: widget.onCreateFirstRoomPlaylist,
+                ),
+                _MusicBoxSection.myPlaylists => _MusicBoxPlaylistBrowser(
+                  controller: widget.controller,
+                  roomId: widget.roomId,
+                  roomScoped: false,
+                  temporaryQueue: widget.state.temporaryQueue,
+                  onQueueResult: widget.onQueueResult,
+                  onStateChanged: _handleActivatedState,
+                  onCreateFirstPlaylist: widget.onCreateFirstPersonalPlaylist,
+                ),
+                _MusicBoxSection.search => _MusicBoxSearchList(
+                  results: widget.searchResults,
+                  query: widget.searchController.text,
+                  searching: widget.searching,
+                  error: widget.searchError,
+                  hasQuery: hasQuery,
+                  controller: widget.controller,
+                  roomId: widget.roomId,
+                  temporaryQueue: widget.state.temporaryQueue,
+                  onQueueResult: widget.onQueueResult,
+                ),
+              },
+            ),
           ),
         ],
       ),
@@ -2352,7 +2368,11 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
       final groupId = widget.tapRegionGroupId;
       return groupId == null
           ? sourceList
-          : TapRegion(groupId: groupId, child: sourceList);
+          : TapRegion(
+              groupId: groupId,
+              behavior: HitTestBehavior.translucent,
+              child: sourceList,
+            );
     }
     if (_trackLoading) {
       return const Center(

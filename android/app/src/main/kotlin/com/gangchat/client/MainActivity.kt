@@ -2,6 +2,7 @@ package com.gangchat.client
 
 import android.os.Build
 import android.content.Intent
+import android.media.AudioManager
 import android.view.Surface
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -35,6 +36,23 @@ class MainActivity : FlutterActivity() {
         )
         musicPreviewPlayer = AndroidMusicPreviewPlayer(musicPreviewChannel).also { preview ->
             musicPreviewChannel.setMethodCallHandler(preview::handleMethodCall)
+        }
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "gang_chat/android_audio_route",
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "setMusicBoxActive" -> {
+                    val active = call.argument<Boolean>("active") == true
+                    volumeControlStream = if (active) {
+                        AudioManager.STREAM_MUSIC
+                    } else {
+                        AudioManager.USE_DEFAULT_STREAM_TYPE
+                    }
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
         }
         systemBridge = AndroidSystemBridge(this).also { bridge ->
             bridge.attach(

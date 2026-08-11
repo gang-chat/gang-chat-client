@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:client/src/ui/ui.dart' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -129,6 +131,47 @@ void main() {
     expect(find.text('粘贴'), findsNothing);
     expect(find.text('Ctrl+V'), findsNothing);
   });
+
+  testWidgets(
+    'chat composer context-menu paste is routed before async probe completes',
+    (tester) async {
+      _mockClipboardText('readable music component');
+      var pasteAttempts = 0;
+      final pendingProbe = Completer<bool>();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ui.uiTheme().copyWith(platform: TargetPlatform.android),
+          home: Scaffold(
+            body: ui.ChatComposer(
+              onPasteFiles: () async {
+                pasteAttempts++;
+                return true;
+              },
+              onCanPasteFiles: () => pendingProbe.future,
+              actions: const [],
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+      final editableTextState = tester.state<EditableTextState>(
+        find.byType(EditableText),
+      );
+      expect(editableTextState.showToolbar(), isTrue);
+      await tester.pump();
+
+      expect(find.text('粘贴'), findsOneWidget);
+      await tester.tap(find.text('粘贴'));
+      await tester.pumpAndSettle();
+
+      expect(pasteAttempts, 1);
+      pendingProbe.complete(false);
+      await tester.pump();
+    },
+  );
 
   testWidgets('chat composer sends focused input on Enter', (tester) async {
     final controller = TextEditingController(text: 'hello');

@@ -442,8 +442,14 @@ class _TextFieldContextMenuState extends State<_TextFieldContextMenu> {
         _clipboardStatus.value == ClipboardStatus.pasteable;
     final canPasteNonText = _canPasteNonText && widget.canPasteNonText != null;
     final canPaste = canPasteText || canPasteNonText;
-    final pasteAction = canPasteNonText
-        ? pasteItem?.onPressed ?? _pasteIntentAction()
+    // Always route editable composer paste through PasteTextIntent when it
+    // provides a non-text checker. On Android the system menu can be tapped
+    // before the asynchronous clipboard probe finishes; invoking the native
+    // paste button directly in that window inserts the readable fallback text
+    // and bypasses structured song/playlist restoration. The composer action
+    // falls back to Flutter's normal text paste when nothing was consumed.
+    final pasteAction = widget.canPasteNonText != null
+        ? _pasteIntentAction()
         : pasteItem?.onPressed;
     final selectAllItem = _itemOfType(ContextMenuButtonType.selectAll);
     final selectAllAction = selectAllItem?.onPressed ?? _selectAllFallback;

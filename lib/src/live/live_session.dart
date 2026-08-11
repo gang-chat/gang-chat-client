@@ -66,10 +66,11 @@ bool isLivePresenceSoundParticipantIdentity(String identity) {
 }
 
 /// Android WebRTC uses one native playback device for the complete room mix.
-/// Keep communication mode (microphone routing/AEC) while directing that
-/// device to the media stream whenever the music-box track is present. This
-/// makes the hardware volume keys control media volume without switching the
-/// microphone to a non-communication route.
+/// Keep communication mode (microphone routing/AEC) while directing the room
+/// renderer to the media stream whenever the music-box track is present. Some
+/// OEMs still choose the call slider for hardware keys solely from the audio
+/// mode; the Activity-side `setMusicBoxActive` hint below explicitly selects
+/// the media slider without sacrificing communication-mode voice capture.
 @visibleForTesting
 rtc.AndroidAudioConfiguration androidLiveAudioConfiguration({
   required bool musicBoxActive,
@@ -86,6 +87,10 @@ rtc.AndroidAudioConfiguration androidLiveAudioConfiguration({
     forceHandleAudioRouting: true,
   );
 }
+
+const _androidAudioRouteChannel = MethodChannel(
+  'gang_chat/android_audio_route',
+);
 
 @visibleForTesting
 class LiveReconnectPresenceChanges {
@@ -1944,6 +1949,7 @@ class LiveSession extends ChangeNotifier {
 
   void _onEvent(lk.RoomEvent event) {
     if (event is lk.ReconnectingEvent) {
+      _androidMusicMediaRouteApplied = null;
       final room = _room;
       _participantIdentitiesBeforeReconnect ??= room == null
           ? const <String>{}
@@ -2095,6 +2101,10 @@ class LiveSession extends ChangeNotifier {
         event is lk.TrackUnpublishedEvent ||
         event is lk.TrackMutedEvent ||
         event is lk.TrackUnmutedEvent) {
+      // LiveKit re-applies its communication preset as native audio tracks
+      // change. Invalidate our cache so an active music box restores the media
+      // route after the SDK has finished handling this lifecycle event.
+      _androidMusicMediaRouteApplied = null;
       if (!_suppressAutomaticMicReconcile) {
         unawaited(_applyLocalMicrophoneState());
       }
@@ -2558,6 +2568,16 @@ class LiveSession extends ChangeNotifier {
       } catch (_) {
         // Audio routing is best-effort. LiveKit audio remains usable when
         // an OEM rejects a runtime stream reconfiguration.
+      }
+      try {
+        await _androidAudioRouteChannel.invokeMethod<void>(
+          'setMusicBoxActive',
+          <String, Object?>{'active': requested},
+        );
+      } catch (_) {
+        // The WebRTC route above remains authoritative. This Activity hint is
+        // only needed for OEMs that otherwise keep hardware volume keys bound
+        // to the call stream while a media AudioTrack is active.
       }
     });
     return _androidAudioRouteTail;
