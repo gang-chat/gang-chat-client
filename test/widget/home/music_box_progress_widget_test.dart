@@ -727,6 +727,52 @@ void main() {
     );
   }
 
+  testWidgets('idle temporary queue starts from its first queue item', (
+    tester,
+  ) async {
+    final searchController = TextEditingController();
+    addTearDown(searchController.dispose);
+    const firstItem = MusicBoxQueueItem(
+      id: 'temporary-first-item',
+      source: 'netease',
+      trackId: 'temporary-first-track',
+      title: '点歌队列第一首',
+      artist: '歌手',
+      durationMs: 180000,
+      status: MusicBoxQueueItemStatus.ready,
+      fileSizeBytes: 1024,
+      error: '',
+      addedByUserId: 'requester',
+      createdAt: null,
+    );
+    final state = _state(
+      playbackState: MusicBoxPlaybackState.stopped,
+      positionMs: 0,
+      currentItemId: '',
+      queue: const [firstItem],
+      temporaryQueue: const [firstItem],
+    );
+    final api = _MusicBoxApiFake(state);
+
+    await tester.pumpWidget(
+      _host(
+        state,
+        searchController,
+        musicBoxController: MusicBoxController(api: api),
+        roomId: 'room-1',
+      ),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey<String>('music-box-primary-playback')),
+    );
+    await tester.pump();
+
+    expect(api.activatedSourceType, MusicBoxActiveSourceType.temporary);
+    expect(api.activatedPlaylistId, isNull);
+    expect(api.activatedStartItemId, 'temporary-first-item');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('priority play uses the shared floating success notice', (
     tester,
   ) async {
@@ -1280,7 +1326,7 @@ void main() {
           playbackState: MusicBoxPlaybackState.stopped,
           positionMs: 1000,
           queue: tracks,
-          currentItemId: 'snapshot-track-1',
+          currentItemId: '',
           activeSource: MusicBoxActiveSource(
             type: MusicBoxActiveSourceType.userPlaylist,
             id: 'other-playlist',
@@ -1346,6 +1392,14 @@ void main() {
         expect(api.itemId, isNull);
         expect(api.activatedSourceType, isNull);
         expect(api.clonedPlaylistId, isNull);
+
+        await tester.tap(
+          find.byKey(const ValueKey<String>('music-box-primary-playback')),
+        );
+        await tester.pump();
+        expect(api.activatedSourceType, MusicBoxActiveSourceType.userPlaylist);
+        expect(api.activatedPlaylistId, 'other-playlist');
+        expect(api.activatedStartItemId, isNull);
         expect(tester.takeException(), isNull);
       },
     );

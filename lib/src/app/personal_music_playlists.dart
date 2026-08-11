@@ -222,6 +222,27 @@ class PersonalMusicPlaylistsController {
     return _backend?.loadImportPlaylists() ?? Future.value();
   }
 
+  /// Loads the current account's writable playlists even while this
+  /// controller is managing a room-scoped playlist collection.
+  Future<PersonalMusicPlaylistPage?> loadPersonalPlaylistTargets() {
+    final client = _backend;
+    if (client is _PersonalMusicPlaylistsBackend) {
+      return client.api.listPersonalMusicPlaylists(
+        page: 1,
+        pageSize: personalMusicPlaylistPageSize,
+      );
+    }
+    if (client is _RoomMusicPlaylistsBackend) {
+      final api = client.personalApi;
+      if (api == null) return Future.value();
+      return api.listPersonalMusicPlaylists(
+        page: 1,
+        pageSize: personalMusicPlaylistPageSize,
+      );
+    }
+    return Future.value();
+  }
+
   Future<PersonalMusicPlaylist?> cloneRoomPlaylistToPersonal(
     String playlistId,
   ) {
@@ -359,6 +380,25 @@ class PersonalMusicPlaylistsController {
     final client = _backend;
     if (client == null) return Future.value();
     return client.addTrack(playlistId: playlistId, track: track);
+  }
+
+  /// Adds a track to the current account's playlist without changing the
+  /// scope currently managed by this controller.
+  Future<PersonalMusicPlaylistItem?> addTrackToPersonalPlaylist({
+    required String playlistId,
+    required MusicBoxSearchResult track,
+  }) {
+    final client = _backend;
+    final api = switch (client) {
+      _PersonalMusicPlaylistsBackend() => client.api,
+      _RoomMusicPlaylistsBackend() => client.personalApi,
+      _ => null,
+    };
+    if (api == null) return Future.value();
+    return api.addPersonalMusicPlaylistItem(
+      playlistId: playlistId,
+      track: track,
+    );
   }
 
   Future<void> deleteItems({

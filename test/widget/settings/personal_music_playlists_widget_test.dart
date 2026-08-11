@@ -1646,8 +1646,10 @@ void main() {
   ) async {
     await tester.binding.setSurfaceSize(const Size(720, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
+    final personalApi = _FakePersonalPlaylistApi();
     final controller = PersonalMusicPlaylistsController.room(
       roomApi: _FakeRoomPlaylistApi(),
+      personalApi: personalApi,
       roomId: 'room_1',
       canManage: true,
       searchTracks: ({required keyword, required source}) async => const [],
@@ -1675,6 +1677,21 @@ void main() {
 
     expect(find.text('试听'), findsOneWidget);
     expect(find.text('添加到歌单'), findsOneWidget);
+
+    await tester.tap(find.text('添加到歌单'));
+    await tester.pumpAndSettle();
+    expect(find.text('房间精选'), findsWidgets);
+    expect(find.text('夜晚'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('music-track-playlist-target:mbp_1')),
+    );
+    await tester.pump();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('music-track-playlist-target-confirm')),
+    );
+    await tester.pumpAndSettle();
+    expect(personalApi.addRequests, ['mbp_1:netease:track_room_1']);
     expect(tester.takeException(), isNull);
   });
 

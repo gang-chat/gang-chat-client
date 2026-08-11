@@ -857,16 +857,13 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
     _startingViewedSource = true;
     return () async {
       try {
-        final queueItems = source.queueItems;
         final state = await controller.activatePlaylist(
           roomId: roomId,
           sourceType: source.type,
           playlistId: source.type == MusicBoxActiveSourceType.temporary
               ? null
               : source.id,
-          startItemId: queueItems == null || queueItems.isEmpty
-              ? null
-              : queueItems.first.id,
+          startItemId: source.startItemIdFromBeginning,
         );
         widget.onStateChanged?.call(state);
       } catch (error) {
@@ -1713,6 +1710,20 @@ class _MusicBoxBrowseSource {
   final List<MusicBoxQueueItem>? queueItems;
 
   String get key => '${musicBoxActiveSourceTypeValue(type)}:$id';
+
+  /// Saved-playlist snapshots expose generated queue item IDs, but the
+  /// activation endpoint accepts original playlist item IDs. Starting a saved
+  /// playlist from its beginning must therefore omit the item ID and let the
+  /// server choose index zero. Temporary queues use their real queue item ID.
+  String? get startItemIdFromBeginning {
+    final items = queueItems;
+    if (type != MusicBoxActiveSourceType.temporary ||
+        items == null ||
+        items.isEmpty) {
+      return null;
+    }
+    return items.first.id;
+  }
 
   _MusicBoxBrowseSource copyWith({
     String? name,

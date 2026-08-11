@@ -264,10 +264,60 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
     });
   }
 
-  Future<void> _addPlaylistItemToPlaylist(
+  Future<List<MusicTrackPlaylistTarget>> _loadTrackPlaylistTargets() async {
+    if (!widget.controller.roomScoped) {
+      return [
+        for (final playlist in _playlists)
+          MusicTrackPlaylistTarget.personal(playlist),
+      ];
+    }
+
+    final roomId = widget.controller.sourceRoomId;
+    final targets = <MusicTrackPlaylistTarget>[
+      if (roomId != null)
+        for (final playlist in _playlists)
+          MusicTrackPlaylistTarget.room(playlist: playlist, roomId: roomId),
+    ];
+    Object? personalError;
+    try {
+      final page = await widget.controller.loadPersonalPlaylistTargets();
+      if (page != null) {
+        targets.addAll(page.playlists.map(MusicTrackPlaylistTarget.personal));
+      }
+    } catch (error) {
+      personalError = error;
+    }
+    if (targets.isEmpty && personalError != null) throw personalError;
+    return targets;
+  }
+
+  Future<void> _addSearchResultToPlaylistTarget(
+    MusicBoxSearchResult track,
+    MusicTrackPlaylistTarget target,
+  ) async {
+    if (target.roomScoped) {
+      if (!widget.controller.roomScoped ||
+          target.roomId != widget.controller.sourceRoomId) {
+        throw StateError('目标房间歌单与当前房间不匹配');
+      }
+      await _addSearchResultToPlaylist(track, target.playlist);
+      return;
+    }
+    if (!widget.controller.roomScoped) {
+      await _addSearchResultToPlaylist(track, target.playlist);
+      return;
+    }
+    final added = await widget.controller.addTrackToPersonalPlaylist(
+      playlistId: target.playlist.id,
+      track: track,
+    );
+    if (added == null) throw StateError('当前个人歌单不可写');
+  }
+
+  Future<void> _addPlaylistItemToPlaylistTarget(
     PersonalMusicPlaylistItem item,
-    PersonalMusicPlaylist target,
-  ) => _addSearchResultToPlaylist(
+    MusicTrackPlaylistTarget target,
+  ) => _addSearchResultToPlaylistTarget(
     MusicBoxSearchResult(
       trackId: item.trackId,
       name: item.title,
@@ -838,9 +888,8 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
         controller: widget.controller,
         playlistId: playlist.id,
         previewController: _previewController,
-        playlists: _playlists,
-        playlistsRoomScoped: widget.controller.roomScoped,
-        onAddToPlaylist: _addSearchResultToPlaylist,
+        loadPlaylistTargets: _loadTrackPlaylistTargets,
+        onAddToPlaylistTarget: _addSearchResultToPlaylistTarget,
         onTrackAdded: _refreshAfterTrackAdded,
       ),
     );
@@ -1416,10 +1465,9 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
           onMoveUp: () => _moveItem(item, -1),
           onMoveDown: () => _moveItem(item, 1),
           previewController: _previewController,
-          playlists: _playlists,
-          playlistsRoomScoped: widget.controller.roomScoped,
-          onAddToPlaylist: _capabilities.canAddItems
-              ? (playlist) => _addPlaylistItemToPlaylist(item, playlist)
+          loadPlaylistTargets: _loadTrackPlaylistTargets,
+          onAddToPlaylistTarget: _capabilities.canAddItems
+              ? (target) => _addPlaylistItemToPlaylistTarget(item, target)
               : null,
         );
       },
@@ -1982,9 +2030,8 @@ class _MusicPlaylistSearchResultTile extends StatelessWidget {
     required this.loading,
     required this.onAdd,
     required this.previewController,
-    required this.playlists,
-    required this.playlistsRoomScoped,
-    required this.onAddToPlaylist,
+    required this.loadPlaylistTargets,
+    required this.onAddToPlaylistTarget,
   });
 
   final MusicBoxSearchResult result;
@@ -1992,13 +2039,12 @@ class _MusicPlaylistSearchResultTile extends StatelessWidget {
   final bool loading;
   final VoidCallback onAdd;
   final MusicTrackPreviewController? previewController;
-  final List<PersonalMusicPlaylist> playlists;
-  final bool playlistsRoomScoped;
+  final Future<List<MusicTrackPlaylistTarget>> Function() loadPlaylistTargets;
   final Future<void> Function(
     MusicBoxSearchResult track,
-    PersonalMusicPlaylist playlist,
+    MusicTrackPlaylistTarget target,
   )
-  onAddToPlaylist;
+  onAddToPlaylistTarget;
 
   @override
   Widget build(BuildContext context) {
@@ -2065,9 +2111,8 @@ class _MusicPlaylistSearchResultTile extends StatelessWidget {
         durationMs: 0,
       ),
       previewController: preview,
-      playlists: playlists,
-      playlistsRoomScoped: playlistsRoomScoped,
-      onAddToPlaylist: (playlist) => onAddToPlaylist(result, playlist),
+      loadPlaylistTargets: loadPlaylistTargets,
+      onAddToPlaylistTarget: (target) => onAddToPlaylistTarget(result, target),
       child: panel,
     );
   }
@@ -2087,9 +2132,8 @@ class _MusicPlaylistItemTile extends StatelessWidget {
     required this.onMoveUp,
     required this.onMoveDown,
     required this.previewController,
-    required this.playlists,
-    required this.playlistsRoomScoped,
-    required this.onAddToPlaylist,
+    required this.loadPlaylistTargets,
+    required this.onAddToPlaylistTarget,
   });
 
   final PersonalMusicPlaylistItem item;
@@ -2103,9 +2147,9 @@ class _MusicPlaylistItemTile extends StatelessWidget {
   final VoidCallback onMoveUp;
   final VoidCallback onMoveDown;
   final MusicTrackPreviewController? previewController;
-  final List<PersonalMusicPlaylist> playlists;
-  final bool playlistsRoomScoped;
-  final Future<void> Function(PersonalMusicPlaylist playlist)? onAddToPlaylist;
+  final Future<List<MusicTrackPlaylistTarget>> Function() loadPlaylistTargets;
+  final Future<void> Function(MusicTrackPlaylistTarget target)?
+  onAddToPlaylistTarget;
 
   @override
   Widget build(BuildContext context) {
@@ -2243,9 +2287,8 @@ class _MusicPlaylistItemTile extends StatelessWidget {
           durationMs: item.durationMs,
         ),
         previewController: preview,
-        playlists: playlists,
-        playlistsRoomScoped: playlistsRoomScoped,
-        onAddToPlaylist: onAddToPlaylist,
+        loadPlaylistTargets: loadPlaylistTargets,
+        onAddToPlaylistTarget: onAddToPlaylistTarget,
         child: panel,
       );
     }
@@ -2320,22 +2363,20 @@ class _MusicPlaylistTrackSearchDialog extends StatefulWidget {
     required this.controller,
     required this.playlistId,
     required this.previewController,
-    required this.playlists,
-    required this.playlistsRoomScoped,
-    required this.onAddToPlaylist,
+    required this.loadPlaylistTargets,
+    required this.onAddToPlaylistTarget,
     required this.onTrackAdded,
   });
 
   final PersonalMusicPlaylistsController controller;
   final String playlistId;
   final MusicTrackPreviewController? previewController;
-  final List<PersonalMusicPlaylist> playlists;
-  final bool playlistsRoomScoped;
+  final Future<List<MusicTrackPlaylistTarget>> Function() loadPlaylistTargets;
   final Future<void> Function(
     MusicBoxSearchResult track,
-    PersonalMusicPlaylist playlist,
+    MusicTrackPlaylistTarget target,
   )
-  onAddToPlaylist;
+  onAddToPlaylistTarget;
   final Future<void> Function() onTrackAdded;
 
   @override
@@ -2556,9 +2597,8 @@ class _MusicPlaylistTrackSearchDialogState
                           ),
                           onAdd: () => _addTrack(result),
                           previewController: widget.previewController,
-                          playlists: widget.playlists,
-                          playlistsRoomScoped: widget.playlistsRoomScoped,
-                          onAddToPlaylist: widget.onAddToPlaylist,
+                          loadPlaylistTargets: widget.loadPlaylistTargets,
+                          onAddToPlaylistTarget: widget.onAddToPlaylistTarget,
                         );
                       },
                     ),
