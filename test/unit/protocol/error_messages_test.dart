@@ -74,6 +74,22 @@ void main() {
     );
     expect(
       localizedServerErrorMessage(
+        code: 'music_box_queue_limit_reached',
+        statusCode: 409,
+        message: 'music box request queue reached its 200 item limit',
+      ),
+      '点歌队列已达 200 首上限',
+    );
+    expect(
+      localizedServerErrorMessage(
+        code: 'music_box_permission_denied',
+        statusCode: 403,
+        message: 'the current room role cannot perform this music box action',
+      ),
+      '没有权限执行此音乐盒操作',
+    );
+    expect(
+      localizedServerErrorMessage(
         code: 'playlist_item_already_exists',
         statusCode: 409,
         message: 'music playlist item already exists',

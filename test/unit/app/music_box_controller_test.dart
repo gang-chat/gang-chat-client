@@ -8,7 +8,7 @@ void main() {
     'playNow sends an idempotent item command without a stale revision',
     () async {
       final api = _RecordingMusicBoxApi(_state);
-    final controller = MusicBoxController(api: api);
+      final controller = MusicBoxController(api: api);
 
       await controller.playNow(roomId: 'room-1', item: _item);
 
@@ -33,6 +33,53 @@ void main() {
       musicBoxControlErrorMessage(Exception('offline'), '优先播放失败，请重试'),
       '优先播放失败，请重试',
     );
+  });
+
+  test('compact progress updates only its matching authoritative snapshot', () {
+    final matching = applyMusicBoxProgress(
+      _state,
+      const MusicBoxProgressEvent(
+        revision: 42,
+        currentItemId: 'priority-track',
+        positionMs: 12345,
+      ),
+    );
+
+    expect(matching, isNotNull);
+    expect(matching!.playback.positionMs, 12345);
+    expect(matching.queue, same(_state.queue));
+
+    final stale = applyMusicBoxProgress(
+      _state,
+      const MusicBoxProgressEvent(
+        revision: 41,
+        currentItemId: 'priority-track',
+        positionMs: 99999,
+      ),
+    );
+    final wrongTrack = applyMusicBoxProgress(
+      _state,
+      const MusicBoxProgressEvent(
+        revision: 42,
+        currentItemId: 'another-track',
+        positionMs: 99999,
+      ),
+    );
+
+    expect(stale, same(_state));
+    expect(wrongTrack, same(_state));
+  });
+
+  test('compact progress parser accepts the SSE payload shape', () {
+    final progress = MusicBoxProgressEvent.fromJson({
+      'revision': 7,
+      'current_item_id': 'item-7',
+      'position_ms': 4567,
+    });
+
+    expect(progress.revision, 7);
+    expect(progress.currentItemId, 'item-7');
+    expect(progress.positionMs, 4567);
   });
 }
 

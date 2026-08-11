@@ -3228,6 +3228,49 @@ void registerShellHomeWidgetTests() {
     },
   );
 
+  testWidgets(
+    'room role changes refresh actor-specific music box capabilities',
+    (WidgetTester tester) async {
+      final requestedPaths = <String>[];
+      final realtime = _FakeRealtimeService();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ui.uiTheme().copyWith(platform: TargetPlatform.windows),
+          home: HomePage(
+            app: _homeTestAppContext(
+              requestedPaths: requestedPaths,
+              musicBoxEnabled: true,
+            ),
+            realtime: realtime,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Alpha Room'));
+      await tester.pumpAndSettle();
+      final musicBoxStatePath = '/api/v1/rooms/server-alpha/music-box/state';
+      final beforeRoleChange = requestedPaths
+          .where((path) => path == musicBoxStatePath)
+          .length;
+      expect(beforeRoleChange, 1);
+
+      realtime.add(
+        const RealtimeEvent(
+          type: 'room_role_changed',
+          data: {'room_id': 'server-alpha', 'role': 'admin'},
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        requestedPaths.where((path) => path == musicBoxStatePath).length,
+        beforeRoleChange + 1,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('participant departure waits for authoritative reconciliation', (
     WidgetTester tester,
   ) async {

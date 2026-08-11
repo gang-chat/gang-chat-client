@@ -461,6 +461,9 @@ void main() {
             'can_previous': true,
             'can_next': true,
             'capabilities': {
+              'can_control': false,
+              'can_change_mode': false,
+              'can_reorder': false,
               'allowed_modes': ['sequential', 'repeat_one', 'repeat_all'],
             },
           },
@@ -470,6 +473,7 @@ void main() {
               'title': 'Saved song',
               'status': 'ready',
               'can_play_now': true,
+              'can_remove': false,
               'requested_by': <String, Object?>{
                 'user_id': 'user-1',
                 'display_name': '房间专属名',
@@ -485,7 +489,16 @@ void main() {
               'status': 'pending',
             },
           ],
-          'temporary_playlist': {'queued_count': 1},
+          'temporary_playlist': {
+            'queued_count': 1,
+            'capabilities': {
+              'can_enqueue': true,
+              'can_switch': true,
+              'can_reorder': false,
+              'can_clear': false,
+              'can_play_now': false,
+            },
+          },
           'usage': {},
         });
 
@@ -494,11 +507,20 @@ void main() {
         expect(state.activeSource.type, MusicBoxActiveSourceType.roomPlaylist);
         expect(state.activeSource.id, 'playlist-1');
         expect(state.playback.mode, MusicBoxPlaybackMode.repeatAll);
+        expect(state.playback.capabilities.canControl, isFalse);
+        expect(state.playback.capabilities.canChangeMode, isFalse);
+        expect(state.playback.capabilities.canReorder, isFalse);
         expect(state.currentItem?.canPlayNow, isTrue);
+        expect(state.currentItem?.canRemove, isFalse);
         expect(state.currentItem?.requestedBy?.displayName, '房间专属名');
         expect(state.currentItem?.requestedBy?.avatarLabel, 'Alice');
         expect(state.temporaryQueue.single.id, 'temporary-1');
         expect(state.temporaryQueuedCount, 1);
+        expect(state.canEnqueueTemporary, isTrue);
+        expect(state.canSwitchTemporary, isTrue);
+        expect(state.canReorderTemporary, isFalse);
+        expect(state.canClearTemporary, isFalse);
+        expect(state.canPlayNowTemporary, isFalse);
       },
     );
 

@@ -335,6 +335,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   // points. A live join can happen while the initial room fetch is still
   // competing for a refreshed access token, so it also acts as a safe retry.
   String? _musicBoxLoadingRoomId;
+  String? _musicBoxPendingRefreshRoomId;
   int _musicBoxRoomSerial = 0;
   int _musicBoxLoadFailures = 0;
   Timer? _musicBoxLoadRetry;

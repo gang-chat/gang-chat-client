@@ -262,3 +262,24 @@ bool shouldAcceptMusicBoxSnapshot(
   if (incoming.revision < current.revision) return false;
   return incoming.playback.currentItemId == current.playback.currentItemId;
 }
+
+/// Applies a compact progress event only to the exact authoritative snapshot
+/// it belongs to. Returning the identical instance makes stale events a cheap
+/// no-op for UI callers.
+MusicBoxState? applyMusicBoxProgress(
+  MusicBoxState? current,
+  MusicBoxProgressEvent progress,
+) {
+  if (current == null ||
+      !current.hasRevision ||
+      current.revision != progress.revision ||
+      current.playback.state != MusicBoxPlaybackState.playing ||
+      current.playback.currentItemId.isEmpty ||
+      current.playback.currentItemId != progress.currentItemId ||
+      progress.positionMs < 0) {
+    return current;
+  }
+  return current.copyWith(
+    playback: current.playback.copyWith(positionMs: progress.positionMs),
+  );
+}

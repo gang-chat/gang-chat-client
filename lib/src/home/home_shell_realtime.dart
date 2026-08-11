@@ -126,6 +126,9 @@ extension _HomeShellRealtime on _HomeShellState {
       case 'music_box_changed':
         _onMusicBoxChanged(event.data);
         break;
+      case 'music_box_progress':
+        _onMusicBoxProgress(event.data);
+        break;
       default:
         break;
     }
@@ -391,6 +394,12 @@ extension _HomeShellRealtime on _HomeShellState {
       _membersReloadToken++;
     });
     unawaited(_refreshSelectedJoinRequestBadge(patch.selectedRoom));
+    // Music-box capabilities are actor-specific and derived from the current
+    // room role. Refresh them immediately instead of waiting for the next
+    // queue/playback mutation.
+    if (patch.roomId == _selectedServerId) {
+      unawaited(_loadMusicBox(patch.roomId, refreshAfterCurrent: true));
+    }
   }
 
   /// Applies a `room_join_requests_updated` event: the pending join-request set

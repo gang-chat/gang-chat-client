@@ -2490,6 +2490,7 @@ class MusicBoxCapabilities {
   const MusicBoxCapabilities({
     this.canControl = true,
     this.canChangeMode = true,
+    this.canReorder = true,
     this.allowedModes = const <MusicBoxPlaybackMode>[
       MusicBoxPlaybackMode.sequential,
       MusicBoxPlaybackMode.repeatOne,
@@ -2500,6 +2501,7 @@ class MusicBoxCapabilities {
 
   final bool canControl;
   final bool canChangeMode;
+  final bool canReorder;
   final List<MusicBoxPlaybackMode> allowedModes;
 
   factory MusicBoxCapabilities.fromJson(Map<String, Object?>? json) {
@@ -2510,6 +2512,7 @@ class MusicBoxCapabilities {
     return MusicBoxCapabilities(
       canControl: _boolFromJson(json, const ['can_control']) ?? true,
       canChangeMode: _boolFromJson(json, const ['can_change_mode']) ?? true,
+      canReorder: _boolFromJson(json, const ['can_reorder']) ?? true,
       allowedModes: values.isEmpty
           ? const <MusicBoxPlaybackMode>[
               MusicBoxPlaybackMode.sequential,
@@ -2624,17 +2627,44 @@ class MusicBoxPlayback {
     );
   }
 
-  MusicBoxPlayback copyWith({bool? canPrevious, bool? canNext}) {
+  MusicBoxPlayback copyWith({
+    int? positionMs,
+    DateTime? updatedAt,
+    bool? canPrevious,
+    bool? canNext,
+  }) {
     return MusicBoxPlayback(
       state: state,
       currentItemId: currentItemId,
-      positionMs: positionMs,
+      positionMs: positionMs ?? this.positionMs,
       volume: volume,
-      updatedAt: updatedAt,
+      updatedAt: updatedAt ?? this.updatedAt,
       mode: mode,
       canPrevious: canPrevious ?? this.canPrevious,
       canNext: canNext ?? this.canNext,
       capabilities: capabilities,
+    );
+  }
+}
+
+/// A compact position-only SSE update. Structural changes continue to arrive
+/// as a complete [MusicBoxState] snapshot.
+class MusicBoxProgressEvent {
+  const MusicBoxProgressEvent({
+    required this.revision,
+    required this.currentItemId,
+    required this.positionMs,
+  });
+
+  final int revision;
+  final String currentItemId;
+  final int positionMs;
+
+  factory MusicBoxProgressEvent.fromJson(Map<String, Object?> json) {
+    return MusicBoxProgressEvent(
+      revision: _intFromJson(json, const ['revision']) ?? 0,
+      currentItemId: _stringFromJson(json, const ['current_item_id']) ?? '',
+      positionMs: _intFromJson(json, const ['position_ms']) ?? 0,
     );
   }
 }
@@ -2656,6 +2686,7 @@ class MusicBoxQueueItem {
     required this.addedByUserId,
     required this.createdAt,
     this.canPlayNow = false,
+    this.canRemove = true,
     this.requestedBy,
   });
 
@@ -2674,6 +2705,7 @@ class MusicBoxQueueItem {
   final String addedByUserId;
   final DateTime? createdAt;
   final bool canPlayNow;
+  final bool canRemove;
   final MusicBoxRequester? requestedBy;
 
   factory MusicBoxQueueItem.fromJson(Map<String, Object?> json) {
@@ -2690,6 +2722,9 @@ class MusicBoxQueueItem {
       addedByUserId: _stringFromJson(json, const ['added_by_user_id']) ?? '',
       createdAt: _parseDateTime(json['created_at']),
       canPlayNow: json['can_play_now'] == true,
+      canRemove: json.containsKey('can_remove')
+          ? json['can_remove'] == true
+          : true,
       requestedBy: MusicBoxRequester.fromJson(
         _nullableMap(json['requested_by']),
       ),
@@ -2764,6 +2799,11 @@ class MusicBoxState {
     this.activeSource = const MusicBoxActiveSource(),
     this.temporaryQueuedCount = 0,
     this.temporaryQueue = const <MusicBoxQueueItem>[],
+    this.canEnqueueTemporary = true,
+    this.canSwitchTemporary = true,
+    this.canReorderTemporary = true,
+    this.canClearTemporary = true,
+    this.canPlayNowTemporary = true,
   });
 
   final bool enabled;
@@ -2775,6 +2815,11 @@ class MusicBoxState {
   final MusicBoxActiveSource activeSource;
   final int temporaryQueuedCount;
   final List<MusicBoxQueueItem> temporaryQueue;
+  final bool canEnqueueTemporary;
+  final bool canSwitchTemporary;
+  final bool canReorderTemporary;
+  final bool canClearTemporary;
+  final bool canPlayNowTemporary;
 
   /// The queue item currently playing, or null when nothing is current.
   MusicBoxQueueItem? get currentItem {
@@ -2783,6 +2828,25 @@ class MusicBoxState {
       if (item.id == playback.currentItemId) return item;
     }
     return null;
+  }
+
+  MusicBoxState copyWith({MusicBoxPlayback? playback}) {
+    return MusicBoxState(
+      enabled: enabled,
+      playback: playback ?? this.playback,
+      queue: queue,
+      usage: usage,
+      revision: revision,
+      hasRevision: hasRevision,
+      activeSource: activeSource,
+      temporaryQueuedCount: temporaryQueuedCount,
+      temporaryQueue: temporaryQueue,
+      canEnqueueTemporary: canEnqueueTemporary,
+      canSwitchTemporary: canSwitchTemporary,
+      canReorderTemporary: canReorderTemporary,
+      canClearTemporary: canClearTemporary,
+      canPlayNowTemporary: canPlayNowTemporary,
+    );
   }
 
   factory MusicBoxState.fromJson(Map<String, Object?> json) {
@@ -2801,6 +2865,9 @@ class MusicBoxState {
         : activeSource.type == MusicBoxActiveSourceType.temporary
         ? queue
         : const <MusicBoxQueueItem>[];
+    final temporaryCapabilities = _nullableMap(
+      _nullableMap(json['temporary_playlist'])?['capabilities'],
+    );
     var playback = playbackJson == null
         ? const MusicBoxPlayback(
             state: MusicBoxPlaybackState.stopped,
@@ -2834,6 +2901,16 @@ class MusicBoxState {
           ]) ??
           temporaryQueue.length,
       temporaryQueue: temporaryQueue,
+      canEnqueueTemporary:
+          _boolFromJson(temporaryCapabilities, const ['can_enqueue']) ?? true,
+      canSwitchTemporary:
+          _boolFromJson(temporaryCapabilities, const ['can_switch']) ?? true,
+      canReorderTemporary:
+          _boolFromJson(temporaryCapabilities, const ['can_reorder']) ?? true,
+      canClearTemporary:
+          _boolFromJson(temporaryCapabilities, const ['can_clear']) ?? true,
+      canPlayNowTemporary:
+          _boolFromJson(temporaryCapabilities, const ['can_play_now']) ?? true,
     );
   }
 }

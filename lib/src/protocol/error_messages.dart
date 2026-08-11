@@ -37,6 +37,8 @@ String localizedServerErrorMessage({
     'music_box_revision_conflict' => '音乐盒状态已变化，请重试',
     'music_box_item_not_ready' => '歌曲尚未准备完成',
     'music_box_item_already_queued' => '已在队列中',
+    'music_box_queue_limit_reached' => '点歌队列已达 200 首上限',
+    'music_box_permission_denied' => '没有权限执行此音乐盒操作',
     'playlist_limit_reached' => '个人歌单数量已达到上限',
     'playlist_item_limit_reached' => '该歌单的歌曲数量已达到上限',
     'playlist_item_already_exists' => '已在歌单内，不可重复添加',

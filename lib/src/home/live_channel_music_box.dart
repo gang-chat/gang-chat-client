@@ -884,6 +884,7 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
     final roomId = widget.roomId;
     if (controller == null ||
         roomId == null ||
+        !widget.state.canClearTemporary ||
         widget.state.temporaryQueue.isEmpty) {
       return;
     }
@@ -1156,7 +1157,7 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
                 final start = startViewedSourceFromBeginning();
                 if (start != null) await start;
               },
-        onViewPlaylist: source.itemCount <= 0
+        onViewPlaylist: source.itemCount <= 0 || !widget.state.canClearTemporary
             ? null
             : _confirmAndClearTemporaryQueue,
         secondaryActionLabel: '清空队列',
@@ -3206,10 +3207,9 @@ class _MusicBoxQueueTile extends StatelessWidget {
     );
     return LayoutBuilder(
       builder: (context, constraints) {
-        final textWidth = (constraints.maxWidth - 20 - 20 - 8 - 4 - 28).clamp(
-          24.0,
-          double.infinity,
-        );
+        final trailingWidth = item.canRemove ? 32.0 : 0.0;
+        final textWidth = (constraints.maxWidth - 20 - 20 - 8 - trailingWidth)
+            .clamp(24.0, double.infinity);
         final adaptiveTitleStyle = _musicBoxAdaptiveListTextStyle(
           context,
           text: item.title,
@@ -3330,13 +3330,15 @@ class _MusicBoxQueueTile extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: 4),
-              ButtonIcon(
-                icon: const Icon(Icons.close),
-                tone: ButtonTone.danger,
-                onPressed: onRemove,
-                size: 28,
-              ),
+              if (item.canRemove) ...[
+                const SizedBox(width: 4),
+                ButtonIcon(
+                  icon: const Icon(Icons.close),
+                  tone: ButtonTone.danger,
+                  onPressed: onRemove,
+                  size: 28,
+                ),
+              ],
             ],
           ),
         );

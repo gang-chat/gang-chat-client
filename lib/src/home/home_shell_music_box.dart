@@ -16,6 +16,7 @@ extension _HomeShellMusicBox on _HomeShellState {
     _musicBoxSearchSerial++;
     _musicBoxRoomSerial++;
     _musicBoxLoadingRoomId = null;
+    _musicBoxPendingRefreshRoomId = null;
     _musicBox = null;
     _musicBoxOpen = false;
     _musicBoxSearchResults = const [];
@@ -32,8 +33,16 @@ extension _HomeShellMusicBox on _HomeShellState {
   /// hides the optional entry. Transient failures preserve the last valid
   /// snapshot; clearing it would make both the inline player and open panel
   /// disappear during token refreshes or brief network interruptions.
-  Future<void> _loadMusicBox(String roomId) async {
-    if (_musicBoxLoadingRoomId == roomId) return;
+  Future<void> _loadMusicBox(
+    String roomId, {
+    bool refreshAfterCurrent = false,
+  }) async {
+    if (_musicBoxLoadingRoomId == roomId) {
+      if (refreshAfterCurrent) {
+        _musicBoxPendingRefreshRoomId = roomId;
+      }
+      return;
+    }
     final roomSerial = _musicBoxRoomSerial;
     _musicBoxLoadRetry?.cancel();
     _musicBoxLoadRetry = null;
@@ -59,9 +68,22 @@ extension _HomeShellMusicBox on _HomeShellState {
       // for the rest of the room session.
       _scheduleMusicBoxLoadRetry(roomId, roomSerial);
     } finally {
+      var runPendingRefresh = false;
       if (roomSerial == _musicBoxRoomSerial &&
           _musicBoxLoadingRoomId == roomId) {
         _musicBoxLoadingRoomId = null;
+        runPendingRefresh = _musicBoxPendingRefreshRoomId == roomId;
+        if (runPendingRefresh) {
+          _musicBoxPendingRefreshRoomId = null;
+        }
+      }
+      if (runPendingRefresh &&
+          mounted &&
+          _selectedServerId == roomId &&
+          roomSerial == _musicBoxRoomSerial) {
+        scheduleMicrotask(
+          () => _loadMusicBox(roomId, refreshAfterCurrent: true),
+        );
       }
     }
   }
@@ -136,6 +158,22 @@ extension _HomeShellMusicBox on _HomeShellState {
     _applyMusicBoxSnapshot(
       MusicBoxState.fromJson(event.cast<String, Object?>()),
     );
+    // Room fan-out cannot carry one shared capability set because every
+    // subscriber may have a different room role. Refresh the actor-specific
+    // snapshot after applying the structural event; concurrent events are
+    // coalesced by _loadMusicBox.
+    unawaited(_loadMusicBox(roomId, refreshAfterCurrent: true));
+  }
+
+  void _onMusicBoxProgress(Map<String, dynamic> event) {
+    final roomId = event['room_id'] as String?;
+    if (roomId == null || roomId != _selectedServerId) return;
+    final next = applyMusicBoxProgress(
+      _musicBox,
+      MusicBoxProgressEvent.fromJson(event.cast<String, Object?>()),
+    );
+    if (next == null || identical(next, _musicBox)) return;
+    _setHomeState(() => _musicBox = next);
   }
 
   // --- Writes -----------------------------------------------------------
@@ -295,6 +333,8 @@ extension _HomeShellMusicBox on _HomeShellState {
           return '音乐盒当前不可用';
         case 'music_box_item_already_queued':
           return '已在队列中';
+        case 'music_box_queue_limit_reached':
+          return '点歌队列已达 200 首上限';
       }
     }
     return '操作失败，请重试';
