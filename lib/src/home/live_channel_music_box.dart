@@ -1358,6 +1358,10 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
                         onViewedSourceChanged: _selectViewedSource,
                         onStateChanged: _handleActivatedState,
                         onQueueResult: widget.onQueueResult,
+                        onCreateFirstRoomPlaylist:
+                            widget.onCreateFirstRoomPlaylist,
+                        onCreateFirstPersonalPlaylist:
+                            widget.onCreateFirstPersonalPlaylist,
                       ),
               _MusicBoxSection.sources => _MusicBoxSourceBrowser(
                 controller: widget.controller,
@@ -1368,6 +1372,9 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
                 onViewedSourceChanged: _selectViewedSource,
                 onStateChanged: _handleActivatedState,
                 onQueueResult: widget.onQueueResult,
+                onCreateFirstRoomPlaylist: widget.onCreateFirstRoomPlaylist,
+                onCreateFirstPersonalPlaylist:
+                    widget.onCreateFirstPersonalPlaylist,
                 sourceQuery: _sourceSearchController.text,
                 tapRegionGroupId: _sourceBrowserTapRegionGroup,
               ),
@@ -1823,6 +1830,8 @@ class _MusicBoxSourceBrowser extends StatefulWidget {
     required this.onViewedSourceChanged,
     required this.onStateChanged,
     required this.onQueueResult,
+    required this.onCreateFirstRoomPlaylist,
+    required this.onCreateFirstPersonalPlaylist,
     this.sourceQuery = '',
     this.tapRegionGroupId,
   });
@@ -1835,6 +1844,8 @@ class _MusicBoxSourceBrowser extends StatefulWidget {
   final ValueChanged<_MusicBoxBrowseSource> onViewedSourceChanged;
   final ValueChanged<MusicBoxState> onStateChanged;
   final ValueChanged<MusicBoxSearchResult> onQueueResult;
+  final VoidCallback? onCreateFirstRoomPlaylist;
+  final VoidCallback? onCreateFirstPersonalPlaylist;
   final String sourceQuery;
   final Object? tapRegionGroupId;
 
@@ -2151,7 +2162,7 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
   }
 
   Widget _filters() {
-    final filters = Row(
+    return Row(
       children: [
         Expanded(
           child: CompactCategoryButton(
@@ -2177,13 +2188,52 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
         ),
       ],
     );
-    final groupId = widget.tapRegionGroupId;
-    if (groupId == null) return filters;
-    return TapRegion(groupId: groupId, child: filters);
   }
 
   Widget _sourceList() {
     final sources = _sources();
+    final emptyScope = switch (_filter) {
+      music_box_display.MusicBoxSourceScopeFilter.personal =>
+        _personalPlaylists.isEmpty,
+      music_box_display.MusicBoxSourceScopeFilter.room =>
+        _roomPlaylists.isEmpty,
+      null => false,
+    };
+    final emptyMessage = switch (_filter) {
+      music_box_display.MusicBoxSourceScopeFilter.personal when emptyScope =>
+        '还没有个人歌单',
+      music_box_display.MusicBoxSourceScopeFilter.room when emptyScope =>
+        '还没有房间歌单',
+      _ => '没有匹配的歌单',
+    };
+    final createAction = switch (_filter) {
+      music_box_display.MusicBoxSourceScopeFilter.personal when emptyScope =>
+        widget.onCreateFirstPersonalPlaylist,
+      music_box_display.MusicBoxSourceScopeFilter.room when emptyScope =>
+        widget.onCreateFirstRoomPlaylist,
+      _ => null,
+    };
+    final createActionKey = switch (_filter) {
+      music_box_display.MusicBoxSourceScopeFilter.personal when emptyScope =>
+        const ValueKey<String>('music-box-create-first-personal-playlist'),
+      music_box_display.MusicBoxSourceScopeFilter.room when emptyScope =>
+        const ValueKey<String>('music-box-create-first-room-playlist'),
+      _ => null,
+    };
+    final emptyIcon = switch (_filter) {
+      music_box_display.MusicBoxSourceScopeFilter.personal when emptyScope =>
+        Icons.person,
+      music_box_display.MusicBoxSourceScopeFilter.room when emptyScope =>
+        Icons.meeting_room,
+      _ => Icons.search_off,
+    };
+    final emptyState = _MusicBoxEmpty(
+      icon: emptyIcon,
+      message: emptyMessage,
+      actionKey: createActionKey,
+      actionLabel: emptyScope ? '新建第一个歌单' : null,
+      onAction: createAction,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -2191,7 +2241,7 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
         const SizedBox(height: 8),
         Expanded(
           child: sources.isEmpty
-              ? const _MusicBoxEmpty(icon: Icons.search_off, message: '没有匹配的歌单')
+              ? emptyState
               : ListView.separated(
                   key: const ValueKey<String>('music-box-source-list'),
                   padding: EdgeInsets.zero,
@@ -2205,10 +2255,7 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
                       selected: source.key == widget.viewedSource.key,
                       onPressed: () => _openSource(source),
                     );
-                    final groupId = widget.tapRegionGroupId;
-                    return groupId == null
-                        ? row
-                        : TapRegion(groupId: groupId, child: row);
+                    return row;
                   },
                 ),
         ),
@@ -2300,7 +2347,13 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
         onRetry: () => unawaited(_loadPlaylists()),
       );
     }
-    if (widget.showSourceList) return _sourceList();
+    if (widget.showSourceList) {
+      final sourceList = _sourceList();
+      final groupId = widget.tapRegionGroupId;
+      return groupId == null
+          ? sourceList
+          : TapRegion(groupId: groupId, child: sourceList);
+    }
     if (_trackLoading) {
       return const Center(
         child: SizedBox.square(
@@ -3120,7 +3173,7 @@ class _MusicBoxQueueListState extends State<_MusicBoxQueueList> {
     if (widget.queue.isEmpty) {
       return const _MusicBoxEmpty(
         icon: Icons.queue_music,
-        message: '当前队列为空，点击 + 添加歌曲',
+        message: '当前队列为空，点击搜索按钮添加歌曲',
       );
     }
     return LayoutBuilder(

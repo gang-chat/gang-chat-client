@@ -98,16 +98,31 @@ class _OverflowMarqueeTextState extends State<OverflowMarqueeText>
   Widget build(BuildContext context) {
     final textDirection = Directionality.of(context);
     final textScaler = MediaQuery.textScalerOf(context);
+    final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
+    // Text merges an inheriting style with DefaultTextStyle while painting.
+    // Measure and render with that same resolved style; otherwise an inherited
+    // font family, weight or letter spacing can make the real line wider than
+    // the marquee's computed travel distance and leave its tail clipped.
+    final effectiveStyle = DefaultTextStyle.of(
+      context,
+    ).style.merge(widget.style);
     return LayoutBuilder(
       builder: (context, constraints) {
         final painter = TextPainter(
-          text: TextSpan(text: widget.text, style: widget.style),
+          text: TextSpan(text: widget.text, style: effectiveStyle),
           maxLines: 1,
           textDirection: textDirection,
           textScaler: textScaler,
+          locale: Localizations.maybeLocaleOf(context),
         )..layout();
         final viewportWidth = constraints.maxWidth;
-        final scrollDistance = (painter.width - viewportWidth)
+        // Align the text box to a physical-pixel boundary. Fractional glyph
+        // advances otherwise risk clipping the final antialiased column even
+        // when the logical widths are mathematically equal.
+        final textWidth = devicePixelRatio > 0
+            ? (painter.width * devicePixelRatio).ceil() / devicePixelRatio
+            : painter.width.ceilToDouble();
+        final scrollDistance = (textWidth - viewportWidth)
             .clamp(0.0, double.infinity)
             .toDouble();
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -119,7 +134,7 @@ class _OverflowMarqueeTextState extends State<OverflowMarqueeText>
             maxLines: 1,
             softWrap: false,
             overflow: TextOverflow.clip,
-            style: widget.style,
+            style: effectiveStyle,
           );
         }
         return SizedBox(
@@ -129,14 +144,14 @@ class _OverflowMarqueeTextState extends State<OverflowMarqueeText>
               animation: _controller,
               child: OverflowBox(
                 alignment: Alignment.centerLeft,
-                minWidth: painter.width,
-                maxWidth: painter.width,
+                minWidth: textWidth,
+                maxWidth: textWidth,
                 child: Text(
                   widget.text,
                   maxLines: 1,
                   softWrap: false,
                   overflow: TextOverflow.visible,
-                  style: widget.style,
+                  style: effectiveStyle,
                 ),
               ),
               builder: (context, child) => Transform.translate(

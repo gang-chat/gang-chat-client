@@ -100,12 +100,14 @@ class _PressableSurfaceState extends State<PressableSurface> {
       widget.enabled && (widget.interactive || widget.onPressed != null);
 
   void _setHover(bool hovered) {
+    if (!mounted) return;
     _hovered = hovered;
     if (!hovered && _pressedPointer == null) _pressed = false;
     if (mounted) setState(() {});
   }
 
   void _setPressed(bool pressed) {
+    if (!mounted) return;
     if (!_isInteractive || !widget.pressEffect) return;
     if (pressed && widget.pressRequiresHover && !_hovered) return;
     if (_pressed == pressed) return;
@@ -113,6 +115,7 @@ class _PressableSurfaceState extends State<PressableSurface> {
   }
 
   void _handleTap() {
+    if (!mounted) return;
     if (!widget.enabled || widget.loading) return;
     widget.onPressed?.call();
   }
@@ -128,6 +131,7 @@ class _PressableSurfaceState extends State<PressableSurface> {
   }
 
   void _handlePointerDown(PointerDownEvent event) {
+    if (!mounted) return;
     if (!_isInteractive || widget.loading || _pressedPointer != null) return;
     _pressedPointer = event.pointer;
     _pressGlobalOrigin = event.position;
@@ -138,6 +142,7 @@ class _PressableSurfaceState extends State<PressableSurface> {
   }
 
   void _handlePointerMove(PointerMoveEvent event) {
+    if (!mounted) return;
     if (event.pointer != _pressedPointer) return;
     final origin = _pressGlobalOrigin;
     if (_trackingTouchDrag &&
@@ -156,6 +161,7 @@ class _PressableSurfaceState extends State<PressableSurface> {
   }
 
   void _handlePointerUp(PointerUpEvent event) {
+    if (!mounted) return;
     if (event.pointer != _pressedPointer) return;
     final shouldPress =
         !_touchDragCancelled && _isInsideHitTarget(event.localPosition);
@@ -165,6 +171,7 @@ class _PressableSurfaceState extends State<PressableSurface> {
   }
 
   void _handlePointerCancel(PointerCancelEvent event) {
+    if (!mounted) return;
     if (event.pointer != _pressedPointer) return;
     _clearPointerTracking();
     _setPressed(false);

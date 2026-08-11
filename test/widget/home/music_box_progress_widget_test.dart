@@ -168,11 +168,13 @@ class _RoomPlaylistApiFake extends _MusicBoxApiFake
     super.state, {
     required this.playlist,
     required this.items,
+    this.roomPlaylists,
     this.personalPlaylists = const [],
   });
 
   final PersonalMusicPlaylist playlist;
   final List<PersonalMusicPlaylistItem> items;
+  final List<PersonalMusicPlaylist>? roomPlaylists;
   final List<PersonalMusicPlaylist> personalPlaylists;
 
   @override
@@ -181,11 +183,12 @@ class _RoomPlaylistApiFake extends _MusicBoxApiFake
     int page = 1,
     int pageSize = 50,
   }) async {
+    final playlists = roomPlaylists ?? [playlist];
     return PersonalMusicPlaylistPage(
-      playlists: [playlist],
+      playlists: playlists,
       page: page,
       pageSize: pageSize,
-      total: 1,
+      total: playlists.length,
       hasMore: false,
       maxPlaylists: 50,
       maxPlaylistItems: 500,
@@ -1225,6 +1228,19 @@ void main() {
           ),
           findsNothing,
         );
+        final resultsViewport = find.byKey(
+          const ValueKey<String>('music-box-results-viewport'),
+        );
+        final resultsRect = tester.getRect(resultsViewport);
+        await tester.tapAt(
+          Offset(resultsRect.center.dx, resultsRect.bottom - 8),
+        );
+        await tester.pump();
+        expect(sourceSearch, findsOneWidget);
+        expect(
+          find.byKey(const ValueKey<String>('music-box-current-queue-header')),
+          findsNothing,
+        );
         await tester.enterText(sourceSearch, '通勤');
         await tester.pump();
         expect(
@@ -1294,6 +1310,84 @@ void main() {
           find.byKey(const ValueKey<String>('music-box-current-queue-header')),
           findsOneWidget,
         );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      '${platform.name} offers the matching first-playlist action for an empty source filter',
+      (tester) async {
+        final searchController = TextEditingController();
+        addTearDown(searchController.dispose);
+        var personalCreateCount = 0;
+        var roomCreateCount = 0;
+        final state = _state(
+          playbackState: MusicBoxPlaybackState.stopped,
+          positionMs: 0,
+        );
+        final api = _RoomPlaylistApiFake(
+          state,
+          playlist: const PersonalMusicPlaylist(
+            id: 'unused-empty-playlist',
+            name: 'unused',
+            description: '',
+            revision: 1,
+            itemCount: 0,
+            createdAt: null,
+            updatedAt: null,
+          ),
+          items: const [],
+          roomPlaylists: const [],
+        );
+
+        await tester.pumpWidget(
+          _host(
+            state,
+            searchController,
+            platform: platform,
+            height: 500,
+            musicBoxController: MusicBoxController(api: api),
+            roomId: 'room-1',
+            currentUser: _playlistCurrentUser,
+            room: _playlistRoom,
+            onCreateFirstPersonalPlaylist: () => personalCreateCount += 1,
+            onCreateFirstRoomPlaylist: () => roomCreateCount += 1,
+          ),
+        );
+        await tester.tap(
+          find.byKey(const ValueKey<String>('music-box-current-queue-header')),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(
+          find.byKey(
+            const ValueKey<String>('music-box-source-filter-personal'),
+          ),
+        );
+        await tester.pump();
+        expect(find.text('还没有个人歌单'), findsOneWidget);
+        final personalCreate = find.byKey(
+          const ValueKey<String>('music-box-create-first-personal-playlist'),
+        );
+        expect(personalCreate, findsOneWidget);
+        await tester.tap(personalCreate);
+        await tester.pump();
+        expect(personalCreateCount, 1);
+        expect(roomCreateCount, 0);
+
+        await tester.tap(
+          find.byKey(const ValueKey<String>('music-box-source-filter-room')),
+        );
+        await tester.pump();
+        expect(find.text('还没有房间歌单'), findsOneWidget);
+        final roomCreate = find.byKey(
+          const ValueKey<String>('music-box-create-first-room-playlist'),
+        );
+        expect(roomCreate, findsOneWidget);
+        await tester.tap(roomCreate);
+        await tester.pump();
+        expect(personalCreateCount, 1);
+        expect(roomCreateCount, 1);
         expect(tester.takeException(), isNull);
       },
     );
@@ -3046,7 +3140,7 @@ void main() {
         height: 400,
       ),
     );
-    expect(find.text('当前队列为空，点击 + 添加歌曲'), findsOneWidget);
+    expect(find.text('当前队列为空，点击搜索按钮添加歌曲'), findsOneWidget);
 
     final verticalPanelScrollViews = tester
         .widgetList<SingleChildScrollView>(
