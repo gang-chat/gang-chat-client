@@ -104,6 +104,7 @@ class ChatMessageActions {
     this.canReeditRecalledText = _neverCanRecall,
     this.canInspectRecalledText = _neverCanRecall,
     this.onViewSharedPlaylist = _noopSharedPlaylist,
+    this.onEditOwnedSharedPlaylist,
     this.sharedTrackPreviewController,
     this.loadSharedTrackPlaylists,
     this.onAddSharedTrackToPlaylist,
@@ -121,6 +122,7 @@ class ChatMessageActions {
       canReeditRecalledText = _neverCanRecall,
       canInspectRecalledText = _neverCanRecall,
       onViewSharedPlaylist = _noopSharedPlaylist,
+      onEditOwnedSharedPlaylist = null,
       sharedTrackPreviewController = null,
       loadSharedTrackPlaylists = null,
       onAddSharedTrackToPlaylist = null;
@@ -143,6 +145,12 @@ class ChatMessageActions {
     SharedMusicPlaylist playlist,
   )
   onViewSharedPlaylist;
+  final Future<void> Function(
+    BuildContext context,
+    Message message,
+    SharedMusicPlaylist playlist,
+  )?
+  onEditOwnedSharedPlaylist;
   final MusicTrackPreviewController? sharedTrackPreviewController;
   final Future<List<MusicTrackPlaylistTarget>> Function(String roomId)?
   loadSharedTrackPlaylists;
@@ -2382,6 +2390,7 @@ class ChatMessageContent extends StatelessWidget {
     this.timestampNow,
     this.showDetailedTimestamps = false,
     this.onViewSharedPlaylist,
+    this.onEditOwnedSharedPlaylist,
     this.sharedTrackPreviewController,
     this.loadSharedTrackPlaylists,
     this.onAddSharedTrackToPlaylist,
@@ -2417,6 +2426,12 @@ class ChatMessageContent extends StatelessWidget {
     SharedMusicPlaylist playlist,
   )?
   onViewSharedPlaylist;
+  final Future<void> Function(
+    BuildContext context,
+    Message message,
+    SharedMusicPlaylist playlist,
+  )?
+  onEditOwnedSharedPlaylist;
   final MusicTrackPreviewController? sharedTrackPreviewController;
   final Future<List<MusicTrackPlaylistTarget>> Function(String roomId)?
   loadSharedTrackPlaylists;
@@ -2470,6 +2485,7 @@ class ChatMessageContent extends StatelessWidget {
             message: message,
             playlist: message.playlistAttachment!.playlist!,
             onView: onViewSharedPlaylist,
+            onEditOwned: onEditOwnedSharedPlaylist,
             currentUser: currentUser,
             onResolveUserProfile: onResolveSenderProfile,
             onResolveRoomProfile: onResolveRoomProfile,
@@ -2631,6 +2647,7 @@ class _PlaylistShareBody extends StatelessWidget {
     required this.message,
     required this.playlist,
     required this.onView,
+    required this.onEditOwned,
     required this.currentUser,
     required this.onResolveUserProfile,
     required this.onResolveRoomProfile,
@@ -2646,6 +2663,12 @@ class _PlaylistShareBody extends StatelessWidget {
     SharedMusicPlaylist playlist,
   )?
   onView;
+  final Future<void> Function(
+    BuildContext context,
+    Message message,
+    SharedMusicPlaylist playlist,
+  )?
+  onEditOwned;
   final CurrentUser currentUser;
   final UserProfileResolver? onResolveUserProfile;
   final RoomProfileResolver? onResolveRoomProfile;
@@ -2653,13 +2676,18 @@ class _PlaylistShareBody extends StatelessWidget {
   final UserProfileActionBuilder? userProfileActionBuilder;
 
   Future<void> _open(BuildContext context) {
+    final edit = playlist.creator.id == currentUser.id ? onEditOwned : null;
+    if (edit != null) return edit(context, message, playlist);
     final view = onView;
-    if (view == null) return Future<void>.value();
-    return view(context, message, playlist);
+    return view == null
+        ? Future<void>.value()
+        : view(context, message, playlist);
   }
 
   @override
   Widget build(BuildContext context) {
+    final canEdit =
+        playlist.creator.id == currentUser.id && onEditOwned != null;
     final cardData = MusicPlaylistCardData(
       id: playlist.id,
       name: playlist.name,
@@ -2677,6 +2705,8 @@ class _PlaylistShareBody extends StatelessWidget {
       onPlayAll: null,
       showPrimaryActionWhenDisabled: false,
       onViewPlaylist: () => _open(context),
+      secondaryActionLabel: canEdit ? '编辑歌单' : '查看歌单',
+      secondaryActionIcon: canEdit ? Icons.edit : Icons.queue_music,
       child: Container(
         key: ValueKey('shared-music-playlist-message-${playlist.id}'),
         constraints: const BoxConstraints(minWidth: 210, maxWidth: 360),
@@ -2717,8 +2747,8 @@ class _PlaylistShareBody extends StatelessWidget {
               key: ValueKey<String>(
                 'shared-music-playlist-open-${playlist.id}',
               ),
-              tooltip: '查看歌单',
-              onPressed: onView == null
+              tooltip: canEdit ? '编辑歌单' : '查看歌单',
+              onPressed: onView == null && !canEdit
                   ? null
                   : () => unawaited(_open(context)),
               padding: EdgeInsets.zero,
@@ -2921,6 +2951,8 @@ class _MessageBubbleState extends State<_MessageBubble> {
                 onOpenQuote: widget.messageActions.onOpenQuote,
                 onViewSharedPlaylist:
                     widget.messageActions.onViewSharedPlaylist,
+                onEditOwnedSharedPlaylist:
+                    widget.messageActions.onEditOwnedSharedPlaylist,
                 sharedTrackPreviewController:
                     widget.messageActions.sharedTrackPreviewController,
                 loadSharedTrackPlaylists:

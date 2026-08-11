@@ -6,6 +6,7 @@ export 'badge_dot.dart';
 export 'button.dart';
 export 'cached_asset_image.dart';
 export 'checkbox.dart';
+export 'compact_category_button.dart';
 export 'feedback.dart';
 export 'chat_composer.dart';
 export 'context_menu.dart';

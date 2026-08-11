@@ -23,6 +23,7 @@ class MusicPlaylistCardData {
     this.creator,
     this.room,
     this.showPlayingStatus = false,
+    this.showCreatedAt = true,
   });
 
   final String id;
@@ -36,6 +37,11 @@ class MusicPlaylistCardData {
   /// header. It replaces the play-all action with a disabled playing action;
   /// the same playlist listed elsewhere keeps its normal play-all action.
   final bool showPlayingStatus;
+
+  /// Whether the card should render the creation timestamp row. Temporary
+  /// queues have no creation lifecycle, so their cards omit the row instead of
+  /// presenting a misleading "unknown" value.
+  final bool showCreatedAt;
 
   MusicPlaylistCardData copyWith({
     String? name,
@@ -51,6 +57,7 @@ class MusicPlaylistCardData {
       creator: creator ?? this.creator,
       room: room,
       showPlayingStatus: showPlayingStatus,
+      showCreatedAt: showCreatedAt,
     );
   }
 }
@@ -60,6 +67,7 @@ typedef MusicPlaylistCardResolver =
 
 typedef MusicPlaylistViewCallback =
     Future<void> Function(PersonalMusicPlaylist playlist, bool roomScoped);
+typedef MusicPlaylistEditCallback = Future<void> Function(String playlistId);
 
 /// Supplies playlist identity and navigation actions to cards opened several
 /// layers below the music-box body (notably the add-to-playlist picker inside a
@@ -75,6 +83,8 @@ class MusicPlaylistCardHostScope extends InheritedWidget {
     required this.userProfileActionBuilder,
     required this.onStateChanged,
     required this.onViewPlaylist,
+    this.onEditPersonalPlaylist,
+    this.onEditRoomPlaylist,
     required super.child,
   });
 
@@ -86,6 +96,8 @@ class MusicPlaylistCardHostScope extends InheritedWidget {
   final UserProfileActionBuilder? userProfileActionBuilder;
   final ValueChanged<MusicBoxState>? onStateChanged;
   final MusicPlaylistViewCallback onViewPlaylist;
+  final MusicPlaylistEditCallback? onEditPersonalPlaylist;
+  final MusicPlaylistEditCallback? onEditRoomPlaylist;
 
   static MusicPlaylistCardHostScope? maybeOf(BuildContext context) {
     return context
@@ -101,7 +113,9 @@ class MusicPlaylistCardHostScope extends InheritedWidget {
         onEnterCommonRoom != oldWidget.onEnterCommonRoom ||
         userProfileActionBuilder != oldWidget.userProfileActionBuilder ||
         onStateChanged != oldWidget.onStateChanged ||
-        onViewPlaylist != oldWidget.onViewPlaylist;
+        onViewPlaylist != oldWidget.onViewPlaylist ||
+        onEditPersonalPlaylist != oldWidget.onEditPersonalPlaylist ||
+        onEditRoomPlaylist != oldWidget.onEditRoomPlaylist;
   }
 }
 
@@ -123,6 +137,9 @@ class MusicPlaylistHoverCard extends StatefulWidget {
     this.primaryActionLabel = '播放全部',
     this.primaryActionIcon = Icons.play_arrow,
     this.showPrimaryActionWhenDisabled = true,
+    this.secondaryActionLabel = '查看歌单',
+    this.secondaryActionIcon = Icons.queue_music,
+    this.secondaryActionTone = ButtonTone.neutral,
   });
 
   final MusicPlaylistCardData data;
@@ -138,6 +155,9 @@ class MusicPlaylistHoverCard extends StatefulWidget {
   final String primaryActionLabel;
   final IconData primaryActionIcon;
   final bool showPrimaryActionWhenDisabled;
+  final String secondaryActionLabel;
+  final IconData secondaryActionIcon;
+  final ButtonTone secondaryActionTone;
 
   @override
   State<MusicPlaylistHoverCard> createState() => _MusicPlaylistHoverCardState();
@@ -166,7 +186,8 @@ class _MusicPlaylistHoverCardState extends State<MusicPlaylistHoverCard> {
             widget.data.creator?.displayName &&
         oldWidget.data.creator?.avatarUrl == widget.data.creator?.avatarUrl &&
         oldWidget.data.room?.id == widget.data.room?.id &&
-        oldWidget.data.showPlayingStatus == widget.data.showPlayingStatus) {
+        oldWidget.data.showPlayingStatus == widget.data.showPlayingStatus &&
+        oldWidget.data.showCreatedAt == widget.data.showCreatedAt) {
       return;
     }
     _resolved = null;
@@ -275,6 +296,9 @@ class _MusicPlaylistHoverCardState extends State<MusicPlaylistHoverCard> {
         primaryActionLabel: widget.primaryActionLabel,
         primaryActionIcon: widget.primaryActionIcon,
         showPrimaryActionWhenDisabled: widget.showPrimaryActionWhenDisabled,
+        secondaryActionLabel: widget.secondaryActionLabel,
+        secondaryActionIcon: widget.secondaryActionIcon,
+        secondaryActionTone: widget.secondaryActionTone,
       ),
       child: widget.child,
     );
@@ -296,6 +320,9 @@ class _MusicPlaylistProfileCard extends StatelessWidget {
     required this.primaryActionLabel,
     required this.primaryActionIcon,
     required this.showPrimaryActionWhenDisabled,
+    required this.secondaryActionLabel,
+    required this.secondaryActionIcon,
+    required this.secondaryActionTone,
   });
 
   final MusicPlaylistCardData data;
@@ -311,6 +338,9 @@ class _MusicPlaylistProfileCard extends StatelessWidget {
   final String primaryActionLabel;
   final IconData primaryActionIcon;
   final bool showPrimaryActionWhenDisabled;
+  final String secondaryActionLabel;
+  final IconData secondaryActionIcon;
+  final ButtonTone secondaryActionTone;
 
   @override
   Widget build(BuildContext context) {
@@ -364,16 +394,18 @@ class _MusicPlaylistProfileCard extends StatelessWidget {
               userProfileActionBuilder: userProfileActionBuilder,
             ),
           ),
-          const SizedBox(height: UiSpacing.sm),
-          _MusicPlaylistDetailRow(
-            label: '创建日期',
-            child: HoverCardSelectableText(
-              value: account_display.formatDateTime(data.createdAt),
-              textAlign: TextAlign.right,
-              maxLines: 2,
-              style: UiTypography.label,
+          if (data.showCreatedAt) ...[
+            const SizedBox(height: UiSpacing.sm),
+            _MusicPlaylistDetailRow(
+              label: '创建日期',
+              child: HoverCardSelectableText(
+                value: account_display.formatDateTime(data.createdAt),
+                textAlign: TextAlign.right,
+                maxLines: 2,
+                style: UiTypography.label,
+              ),
             ),
-          ),
+          ],
           const SizedBox(height: UiSpacing.lg),
           ResponsiveDialogActionBar(
             expanded: true,
@@ -393,8 +425,9 @@ class _MusicPlaylistProfileCard extends StatelessWidget {
                 ),
               ResponsiveDialogAction(
                 buttonKey: const ValueKey<String>('music-playlist-card-view'),
-                label: '查看歌单',
-                icon: Icons.queue_music,
+                label: secondaryActionLabel,
+                icon: secondaryActionIcon,
+                tone: secondaryActionTone,
                 loading: viewing,
                 onPressed: onViewPlaylist,
               ),

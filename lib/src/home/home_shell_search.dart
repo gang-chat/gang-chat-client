@@ -257,6 +257,7 @@ extension _HomeShellSearch on _HomeShellState {
         _superuserSettingsTarget = null;
         _settingsOpen = true;
         _settingsInitialSection = SettingsSection.profile;
+        _settingsInitialMusicPlaylistId = null;
         _settingsAppUpdate = null;
         _contentMode = _ContentMode.chat;
         _narrowContentOpen = true;

@@ -24,6 +24,77 @@ bool canSendComposedMessage({
   return attachments.isNotEmpty;
 }
 
+/// One server message in the deterministic send plan produced from the
+/// composer. Rich music components remain standalone protocol messages; when
+/// text is present it follows immediately as a second plain-text message.
+class ComposerMessageSendPart {
+  const ComposerMessageSendPart({
+    required this.body,
+    required this.type,
+    required this.attachments,
+  });
+
+  final String body;
+  final String type;
+  final List<MessageAttachment> attachments;
+
+  bool get isComponent => type == 'playlist' || type == 'music_track';
+}
+
+List<ComposerMessageSendPart> composerMessageSendPlan({
+  required String body,
+  Message? component,
+}) {
+  final normalizedBody = body.trimRight();
+  final result = <ComposerMessageSendPart>[];
+  if (component != null) {
+    result.add(
+      ComposerMessageSendPart(
+        body: '',
+        type: component.type,
+        attachments: [
+          MessageAttachment(
+            type: component.type,
+            sourceMessageId: component.id,
+          ),
+        ],
+      ),
+    );
+  }
+  if (normalizedBody.trim().isNotEmpty) {
+    result.add(
+      ComposerMessageSendPart(
+        body: normalizedBody,
+        type: 'text',
+        attachments: const [],
+      ),
+    );
+  }
+  return result;
+}
+
+typedef ComposerMessagePartSender =
+    Future<bool> Function(
+      ComposerMessageSendPart part, {
+      required bool hasFollowingPart,
+    });
+
+/// Runs a composed multi-message plan in order and stops on the first failure.
+/// Already-successful parts are never replayed by this invocation.
+Future<bool> sendComposerMessagePartsSequentially({
+  required List<ComposerMessageSendPart> parts,
+  required ComposerMessagePartSender send,
+}) async {
+  for (var index = 0; index < parts.length; index++) {
+    final succeeded = await send(
+      parts[index],
+      hasFollowingPart: index < parts.length - 1,
+    );
+    if (!succeeded) return false;
+  }
+  return true;
+}
+
 class PendingMessage {
   const PendingMessage({required this.clientMessageId, required this.local});
 

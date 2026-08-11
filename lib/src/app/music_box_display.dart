@@ -57,6 +57,37 @@ MusicBoxTransportAction musicBoxPrimaryTransport(MusicBoxState state) {
 /// rolling server deployments, while every UI surface uses the product name.
 const String musicBoxRequestQueueLabel = '点歌队列';
 
+/// Optional scope applied by the music-box source browser.
+///
+/// The direct-request queue is intentionally outside both saved-playlist
+/// scopes. The current source follows its real source type instead of being
+/// pinned through a filter, so a room playlist disappears under [personal]
+/// and a personal playlist disappears under [room].
+enum MusicBoxSourceScopeFilter { personal, room }
+
+bool musicBoxSourceVisibleForFilter(
+  MusicBoxActiveSourceType sourceType,
+  MusicBoxSourceScopeFilter? filter,
+) {
+  if (filter == null) return true;
+  return switch (filter) {
+    MusicBoxSourceScopeFilter.personal =>
+      sourceType == MusicBoxActiveSourceType.userPlaylist,
+    MusicBoxSourceScopeFilter.room =>
+      sourceType == MusicBoxActiveSourceType.roomPlaylist,
+  };
+}
+
+/// Matches a source-browser entry by its user-facing name.
+///
+/// Search stays independent from the scope filter: callers first apply the
+/// personal/room scope and then this normalized, case-insensitive name match.
+bool musicBoxSourceMatchesQuery(String sourceName, String query) {
+  final normalizedQuery = query.trim().toLowerCase();
+  if (normalizedQuery.isEmpty) return true;
+  return sourceName.trim().toLowerCase().contains(normalizedQuery);
+}
+
 /// Stable identity for a concrete catalog track. Sources are protocol enums
 /// and therefore case-insensitive; external track ids keep their original case
 /// because providers may treat them as case-sensitive.

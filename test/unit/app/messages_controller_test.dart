@@ -11,6 +11,93 @@ import 'package:client/src/protocol/api_client.dart';
 import 'package:client/src/protocol/models.dart';
 
 void main() {
+  group('composerMessageSendPlan', () {
+    test('keeps a normal text message as one message', () {
+      final plan = composerMessageSendPlan(body: 'hello   ');
+
+      expect(plan, hasLength(1));
+      expect(plan.single.type, 'text');
+      expect(plan.single.body, 'hello');
+      expect(plan.single.attachments, isEmpty);
+    });
+
+    test('sends a copied component before following text', () {
+      final component = Message.local(
+        roomId: 'room_1',
+        sender: _sender,
+        clientMessageId: 'source_message_1',
+        type: 'playlist',
+        body: '[歌单] 夜晚歌单',
+      );
+
+      final plan = composerMessageSendPlan(
+        body: '紧接着发送的说明',
+        component: component,
+      );
+
+      expect(plan, hasLength(2));
+      expect(plan.first.type, 'playlist');
+      expect(plan.first.body, isEmpty);
+      expect(plan.first.attachments.single.type, 'playlist');
+      expect(plan.first.attachments.single.sourceMessageId, 'source_message_1');
+      expect(plan.last.type, 'text');
+      expect(plan.last.body, '紧接着发送的说明');
+    });
+
+    test('keeps a component-only draft as one message', () {
+      final component = Message.local(
+        roomId: 'room_1',
+        sender: _sender,
+        clientMessageId: 'source_track_1',
+        type: 'music_track',
+        body: '[歌曲] 一首歌',
+      );
+
+      final plan = composerMessageSendPlan(body: '', component: component);
+
+      expect(plan, hasLength(1));
+      expect(plan.single.type, 'music_track');
+      expect(plan.single.attachments.single.sourceMessageId, 'source_track_1');
+    });
+
+    test('sequential execution stops after the first failed part', () async {
+      final component = Message.local(
+        roomId: 'room_1',
+        sender: _sender,
+        clientMessageId: 'source_track_2',
+        type: 'music_track',
+        body: '[歌曲] 一首歌',
+      );
+      final plan = composerMessageSendPlan(body: '说明文字', component: component);
+      final attempted = <String>[];
+      final followingFlags = <bool>[];
+
+      final completed = await sendComposerMessagePartsSequentially(
+        parts: plan,
+        send: (part, {required hasFollowingPart}) async {
+          attempted.add(part.type);
+          followingFlags.add(hasFollowingPart);
+          return part.type != 'text';
+        },
+      );
+
+      expect(completed, isFalse);
+      expect(attempted, ['music_track', 'text']);
+      expect(followingFlags, [true, false]);
+
+      final firstFailureAttempts = <String>[];
+      final stoppedImmediately = await sendComposerMessagePartsSequentially(
+        parts: plan,
+        send: (part, {required hasFollowingPart}) async {
+          firstFailureAttempts.add(part.type);
+          return false;
+        },
+      );
+      expect(stoppedImmediately, isFalse);
+      expect(firstFailureAttempts, ['music_track']);
+    });
+  });
+
   test(
     'hideMessageHistory deletes large selections in server-sized batches',
     () async {

@@ -195,6 +195,7 @@ extension _HomeShellRoomActions on _HomeShellState {
       _settingsOpen = opening;
       if (opening) {
         _settingsInitialSection = SettingsSection.profile;
+        _settingsInitialMusicPlaylistId = null;
         _contentMode = _ContentMode.chat;
         _settingsAppUpdate = null;
       }
@@ -208,11 +209,13 @@ extension _HomeShellRoomActions on _HomeShellState {
   void _openSettingsSection(
     SettingsSection section, {
     required bool openContent,
+    String? initialMusicPlaylistId,
   }) {
     _setHomeState(() {
       _clearDeferredRoomNotificationVisualMarkersInState();
       _settingsOpen = true;
       _settingsInitialSection = section;
+      _settingsInitialMusicPlaylistId = initialMusicPlaylistId;
       _settingsAppUpdate = null;
       _contentMode = _ContentMode.chat;
       _auxiliaryOpenedFromNarrowSidebar = openContent;
@@ -777,12 +780,14 @@ extension _HomeShellRoomActions on _HomeShellState {
 
   Future<void> _openRoomSettings({
     RoomSettingsSection initialSection = RoomSettingsSection.info,
+    String? initialMusicPlaylistId,
   }) async {
     final room = _selectedRoom;
     if (room == null) return;
     _setHomeState(() {
       _settingsOpen = false;
       _roomSettingsInitialSection = initialSection;
+      _roomSettingsInitialMusicPlaylistId = initialMusicPlaylistId;
       _contentMode = _ContentMode.roomSettings;
       _narrowContentOpen = true;
     });

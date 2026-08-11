@@ -148,6 +148,7 @@ extension _HomeShellLayout on _HomeShellState {
         initialSection: _settingsAppUpdate == null
             ? _settingsInitialSection
             : SettingsSection.about,
+        initialMusicPlaylistId: _settingsInitialMusicPlaylistId,
         initialAppUpdate: _settingsAppUpdate,
         stickerPackStore: widget.app.stickerPackStore,
         stickerImagePreviewOpener: _openStickerManagerImagePreview,
@@ -364,6 +365,7 @@ extension _HomeShellLayout on _HomeShellState {
                   page: 1,
                 ),
           ),
+          initialPlaylistId: _roomSettingsInitialMusicPlaylistId,
           title: '房间歌单',
           unavailableMessage: '房间歌单需要登录后从服务端读取',
           previewApi: _services.api is MusicTrackPreviewApi
@@ -456,6 +458,26 @@ extension _HomeShellLayout on _HomeShellState {
             : null,
         onCreateFirstPersonalMusicPlaylist: () =>
             _openSettingsSection(SettingsSection.playlists, openContent: true),
+        onEditRoomMusicPlaylist:
+            _selectedRoom != null &&
+                room_display
+                    .roomAccessState(
+                      room: _selectedRoom!,
+                      currentUser: _currentUser,
+                    )
+                    .canManageRoom
+            ? (playlistId) => _openRoomSettings(
+                initialSection: RoomSettingsSection.playlists,
+                initialMusicPlaylistId: playlistId,
+              )
+            : null,
+        onEditPersonalMusicPlaylist: (playlistId) async {
+          _openSettingsSection(
+            SettingsSection.playlists,
+            openContent: true,
+            initialMusicPlaylistId: playlistId,
+          );
+        },
         onMusicBoxQueueResult: (result) =>
             unawaited(_queueMusicBoxTrack(result)),
         onMusicBoxRemoveItem: (item) => unawaited(_removeMusicBoxItem(item)),

@@ -42,6 +42,8 @@ class LiveMusicBoxPanel extends StatelessWidget {
     this.userProfileActionBuilder,
     this.onCreateFirstRoomPlaylist,
     this.onCreateFirstPersonalPlaylist,
+    this.onEditRoomPlaylist,
+    this.onEditPersonalPlaylist,
     required this.onQueueResult,
     required this.onRemoveItem,
     required this.onSourceChanged,
@@ -72,6 +74,8 @@ class LiveMusicBoxPanel extends StatelessWidget {
   final UserProfileActionBuilder? userProfileActionBuilder;
   final VoidCallback? onCreateFirstRoomPlaylist;
   final VoidCallback? onCreateFirstPersonalPlaylist;
+  final MusicPlaylistEditCallback? onEditRoomPlaylist;
+  final MusicPlaylistEditCallback? onEditPersonalPlaylist;
   final ValueChanged<MusicBoxSearchResult> onQueueResult;
   final ValueChanged<MusicBoxQueueItem> onRemoveItem;
   final ValueChanged<String> onSourceChanged;
@@ -83,12 +87,9 @@ class LiveMusicBoxPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final preserveAndroidSearchFocus =
-        Theme.of(context).platform == TargetPlatform.android;
+    final bodyKey = GlobalObjectKey<_MusicBoxBodyState>(searchController);
     final body = _MusicBoxBody(
-      key: preserveAndroidSearchFocus
-          ? GlobalObjectKey<_MusicBoxBodyState>(searchController)
-          : null,
+      key: bodyKey,
       state: state,
       searchController: searchController,
       searchResults: searchResults,
@@ -110,6 +111,8 @@ class LiveMusicBoxPanel extends StatelessWidget {
       userProfileActionBuilder: userProfileActionBuilder,
       onCreateFirstRoomPlaylist: onCreateFirstRoomPlaylist,
       onCreateFirstPersonalPlaylist: onCreateFirstPersonalPlaylist,
+      onEditRoomPlaylist: onEditRoomPlaylist,
+      onEditPersonalPlaylist: onEditPersonalPlaylist,
     );
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -129,7 +132,20 @@ class LiveMusicBoxPanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            ..._controls(),
+            ..._controls(
+              onPrimaryPlayback: () {
+                if (state.currentItem == null) {
+                  final start = bodyKey.currentState
+                      ?.startViewedSourceFromBeginning();
+                  if (start != null) {
+                    unawaited(start);
+                    return;
+                  }
+                }
+                onTogglePlayback();
+              },
+              canStartViewedSource: controller != null && roomId != null,
+            ),
             Expanded(child: body),
           ],
         ),
@@ -138,13 +154,17 @@ class LiveMusicBoxPanel extends StatelessWidget {
   }
 
   // The fixed control stack shared by both the roomy and compact layouts.
-  List<Widget> _controls() {
+  List<Widget> _controls({
+    required VoidCallback onPrimaryPlayback,
+    required bool canStartViewedSource,
+  }) {
     return [
       _MusicBoxHeader(onClose: onClose),
       const SizedBox(height: 8),
       _MusicBoxNowPlaying(
         state: state,
-        onTogglePlayback: onTogglePlayback,
+        onTogglePlayback: onPrimaryPlayback,
+        canStartViewedSource: canStartViewedSource,
         onSkip: onSkip,
         onPrevious: onPrevious,
         onModeChanged: onModeChanged,
@@ -189,6 +209,7 @@ class _MusicBoxNowPlaying extends StatelessWidget {
   const _MusicBoxNowPlaying({
     required this.state,
     required this.onTogglePlayback,
+    required this.canStartViewedSource,
     required this.onSkip,
     required this.onPrevious,
     required this.onModeChanged,
@@ -196,6 +217,7 @@ class _MusicBoxNowPlaying extends StatelessWidget {
 
   final MusicBoxState state;
   final VoidCallback onTogglePlayback;
+  final bool canStartViewedSource;
   final VoidCallback onSkip;
   final VoidCallback? onPrevious;
   final ValueChanged<MusicBoxPlaybackMode>? onModeChanged;
@@ -206,6 +228,8 @@ class _MusicBoxNowPlaying extends StatelessWidget {
     final spinning = music_box_display.musicBoxRecordSpinning(state);
     final transport = music_box_display.musicBoxPrimaryTransport(state);
     final hasQueue = state.queue.isNotEmpty;
+    final hasPlayableSource =
+        hasQueue || (current == null && canStartViewedSource);
     final canControl = state.playback.capabilities.canControl;
 
     return Row(
@@ -257,6 +281,7 @@ class _MusicBoxNowPlaying extends StatelessWidget {
                   ),
                   const SizedBox(width: 7),
                   ButtonIcon(
+                    key: const ValueKey<String>('music-box-primary-playback'),
                     icon: Icon(
                       transport ==
                               music_box_display.MusicBoxTransportAction.pause
@@ -264,7 +289,9 @@ class _MusicBoxNowPlaying extends StatelessWidget {
                           : Icons.play_arrow,
                     ),
                     tone: ButtonTone.primary,
-                    onPressed: canControl && hasQueue ? onTogglePlayback : null,
+                    onPressed: canControl && hasPlayableSource
+                        ? onTogglePlayback
+                        : null,
                     size: 30,
                   ),
                   const SizedBox(width: 7),
@@ -724,6 +751,8 @@ class _MusicBoxBody extends StatefulWidget {
     required this.userProfileActionBuilder,
     required this.onCreateFirstRoomPlaylist,
     required this.onCreateFirstPersonalPlaylist,
+    required this.onEditRoomPlaylist,
+    required this.onEditPersonalPlaylist,
   });
 
   final MusicBoxState state;
@@ -747,6 +776,8 @@ class _MusicBoxBody extends StatefulWidget {
   final UserProfileActionBuilder? userProfileActionBuilder;
   final VoidCallback? onCreateFirstRoomPlaylist;
   final VoidCallback? onCreateFirstPersonalPlaylist;
+  final MusicPlaylistEditCallback? onEditRoomPlaylist;
+  final MusicPlaylistEditCallback? onEditPersonalPlaylist;
 
   @override
   State<_MusicBoxBody> createState() => _MusicBoxBodyState();
@@ -754,9 +785,32 @@ class _MusicBoxBody extends StatefulWidget {
 
 class _MusicBoxBodyState extends State<_MusicBoxBody> {
   _MusicBoxSection _section = _MusicBoxSection.queue;
-  PersonalMusicPlaylist? _requestedPlaylist;
-  bool? _requestedPlaylistRoomScoped;
   _MusicBoxBrowseSource? _viewedSourceOverride;
+  late final TextEditingController _sourceSearchController;
+  late final FocusNode _sourceSearchFocusNode;
+  final Object _sourceBrowserTapRegionGroup = Object();
+  bool _startingViewedSource = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _sourceSearchController = TextEditingController()
+      ..addListener(_handleSourceSearchChanged);
+    _sourceSearchFocusNode = FocusNode();
+  }
+
+  @override
+  void dispose() {
+    _sourceSearchController
+      ..removeListener(_handleSourceSearchChanged)
+      ..dispose();
+    _sourceSearchFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _handleSourceSearchChanged() {
+    if (mounted) setState(() {});
+  }
 
   @override
   void didUpdateWidget(covariant _MusicBoxBody oldWidget) {
@@ -764,6 +818,7 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
     if (oldWidget.controller != widget.controller ||
         oldWidget.roomId != widget.roomId) {
       _viewedSourceOverride = null;
+      _sourceSearchController.clear();
     }
   }
 
@@ -789,70 +844,258 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
   bool get _viewedSourceIsActive =>
       _musicBoxBrowseSourceMatchesActive(_viewedSource, widget.state);
 
+  Future<void>? startViewedSourceFromBeginning() {
+    final controller = widget.controller;
+    final roomId = widget.roomId;
+    if (controller == null || roomId == null) return null;
+    if (_startingViewedSource) return Future<void>.value();
+    final source = _viewedSource;
+    if (source.itemCount <= 0) {
+      showFloatingErrorNotice(context, '当前所视歌单没有歌曲');
+      return Future<void>.value();
+    }
+    _startingViewedSource = true;
+    return () async {
+      try {
+        final queueItems = source.queueItems;
+        final state = await controller.activatePlaylist(
+          roomId: roomId,
+          sourceType: source.type,
+          playlistId: source.type == MusicBoxActiveSourceType.temporary
+              ? null
+              : source.id,
+          startItemId: queueItems == null || queueItems.isEmpty
+              ? null
+              : queueItems.first.id,
+        );
+        widget.onStateChanged?.call(state);
+      } catch (error) {
+        if (mounted) {
+          showFloatingErrorNotice(
+            context,
+            musicBoxControlErrorMessage(error, '播放歌单失败，请重试'),
+          );
+        }
+      } finally {
+        _startingViewedSource = false;
+      }
+    }();
+  }
+
+  Future<void> _confirmAndClearTemporaryQueue() async {
+    final controller = widget.controller;
+    final roomId = widget.roomId;
+    if (controller == null ||
+        roomId == null ||
+        widget.state.temporaryQueue.isEmpty) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => DialogFrame(
+        title: '清空点歌队列',
+        icon: Icons.delete_sweep_outlined,
+        adaptiveActions: [
+          ResponsiveDialogAction(
+            label: '取消',
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+          ),
+          ResponsiveDialogAction(
+            buttonKey: const ValueKey<String>(
+              'music-box-confirm-clear-temporary-queue',
+            ),
+            label: '清空队列',
+            icon: Icons.delete_sweep_outlined,
+            tone: ButtonTone.danger,
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+          ),
+        ],
+        child: const Text(
+          '确认清空当前点歌队列？此操作不会删除已保存的歌单。',
+          style: UiTypography.body,
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      final state = await controller.clearTemporaryQueue(
+        roomId: roomId,
+        currentState: widget.state,
+      );
+      widget.onStateChanged?.call(state);
+      if (mounted) showFloatingSuccessNotice(context, '已清空点歌队列');
+    } catch (error) {
+      if (mounted) {
+        showFloatingErrorNotice(
+          context,
+          musicBoxControlErrorMessage(error, '清空点歌队列失败，请重试'),
+        );
+      }
+    }
+  }
+
   void _toggleSourceBrowser() {
-    FocusManager.instance.primaryFocus?.unfocus();
+    final opening = _section != _MusicBoxSection.sources;
+    if (!opening) {
+      _collapseSourceBrowser();
+      return;
+    }
     setState(() {
-      _section = _section == _MusicBoxSection.sources
-          ? _MusicBoxSection.queue
-          : _MusicBoxSection.sources;
-      _requestedPlaylist = null;
-      _requestedPlaylistRoomScoped = null;
+      _section = _MusicBoxSection.sources;
     });
   }
 
+  void _collapseSourceBrowser() {
+    if (_section != _MusicBoxSection.sources) return;
+    _sourceSearchController.clear();
+    _sourceSearchFocusNode.unfocus();
+    setState(() => _section = _MusicBoxSection.queue);
+  }
+
+  Widget _searchInput({
+    Key? key,
+    required TextEditingController controller,
+    required String hintText,
+    FocusNode? focusNode,
+    TapRegionCallback? onTapOutside,
+    Object? tapRegionGroupId,
+  }) {
+    return Input(
+      key: key,
+      controller: controller,
+      focusNode: focusNode,
+      hintText: hintText,
+      prefixIcon: Icons.search,
+      showClearButton: true,
+      maxLines: 1,
+      height: _musicBoxSearchFieldHeight,
+      onTapOutside: onTapOutside,
+      tapRegionGroupId: tapRegionGroupId,
+    );
+  }
+
   void _selectViewedSource(_MusicBoxBrowseSource source) {
+    _sourceSearchController.clear();
+    _sourceSearchFocusNode.unfocus();
     setState(() {
       _viewedSourceOverride = source;
       _section = _MusicBoxSection.queue;
-      _requestedPlaylist = null;
-      _requestedPlaylistRoomScoped = null;
     });
   }
 
   void _setSearchVisible(bool value) {
     if (!value) FocusManager.instance.primaryFocus?.unfocus();
+    _sourceSearchController.clear();
+    _sourceSearchFocusNode.unfocus();
     setState(() {
       _section = value ? _MusicBoxSection.search : _MusicBoxSection.queue;
-      _requestedPlaylist = null;
-      _requestedPlaylistRoomScoped = null;
     });
   }
 
   void _handleActivatedState(MusicBoxState state) {
     widget.onStateChanged?.call(state);
     if (mounted) {
+      _sourceSearchController.clear();
+      _sourceSearchFocusNode.unfocus();
       setState(() {
         _section = _MusicBoxSection.queue;
-        _requestedPlaylist = null;
-        _requestedPlaylistRoomScoped = null;
       });
     }
   }
 
-  Future<void> _viewPlaylist(
+  Future<void> _viewPlaylistWindow(
     PersonalMusicPlaylist playlist,
     bool roomScoped,
   ) async {
     FocusManager.instance.primaryFocus?.unfocus();
-    if (!mounted) return;
-    setState(() {
-      _requestedPlaylist = playlist;
-      _requestedPlaylistRoomScoped = roomScoped;
-      _section = roomScoped
-          ? _MusicBoxSection.roomPlaylists
-          : _MusicBoxSection.myPlaylists;
-    });
-  }
-
-  void _clearRequestedPlaylist() {
-    if (_requestedPlaylist == null && _requestedPlaylistRoomScoped == null) {
+    final controller = widget.controller;
+    final roomId = widget.roomId;
+    if (controller == null || (roomScoped && roomId == null) || !mounted) {
       return;
     }
-    setState(() {
-      _requestedPlaylist = null;
-      _requestedPlaylistRoomScoped = null;
-      _section = _MusicBoxSection.queue;
-    });
+
+    final active = widget.state.activeSource;
+    final activeType = roomScoped
+        ? MusicBoxActiveSourceType.roomPlaylist
+        : MusicBoxActiveSourceType.userPlaylist;
+    if (roomId != null &&
+        active.type == activeType &&
+        active.id == playlist.id) {
+      await showDialog<void>(
+        context: context,
+        builder: (_) => _ActiveMusicPlaylistDialog(
+          source: active,
+          items: widget.state.queue,
+          controller: controller,
+          roomId: roomId,
+          previewPlatformFactory: widget.previewPlatformFactory,
+        ),
+      );
+      return;
+    }
+
+    PersonalMusicPlaylistItemsPage page;
+    try {
+      page = roomScoped
+          ? await controller.loadRoomPlaylist(
+              roomId: roomId!,
+              playlistId: playlist.id,
+            )
+          : await controller.loadMyPlaylist(playlistId: playlist.id);
+    } catch (error) {
+      if (mounted) {
+        showFloatingErrorNotice(
+          context,
+          musicBoxControlErrorMessage(error, '加载歌单失败，请重试'),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+    final tracks = [
+      for (final item in page.items)
+        MusicTrackCardData(
+          id: item.id,
+          source: item.source,
+          trackId: item.trackId,
+          title: item.title,
+          artists: item.artists,
+          durationMs: item.durationMs,
+        ),
+    ];
+    await showDialog<void>(
+      context: context,
+      builder: (_) => MusicPlaylistSnapshotDialog(
+        title: page.playlist.name,
+        tracks: tracks,
+        previewApi: controller.api is MusicTrackPreviewApi
+            ? controller.api as MusicTrackPreviewApi
+            : null,
+        previewPlatformFactory: widget.previewPlatformFactory,
+        loadPersonalPlaylists: controller.loadMyPlaylists,
+        onAddToPlaylist: (track, target) {
+          return controller.addSearchResultToMyPlaylist(
+            playlistId: target.id,
+            result: MusicBoxSearchResult(
+              trackId: track.trackId,
+              name: track.title,
+              artists: track.artists,
+              source: track.source,
+            ),
+            durationMs: track.durationMs > 0 ? track.durationMs : null,
+          );
+        },
+        contentKey: ValueKey<String>(
+          'music-playlist-window:${page.playlist.id}',
+        ),
+        trackListKey: ValueKey<String>(
+          'music-playlist-window-tracks:${page.playlist.id}',
+        ),
+        doneButtonKey: ValueKey<String>(
+          'music-playlist-window-done:${page.playlist.id}',
+        ),
+      ),
+    );
   }
 
   Widget _currentQueueView() {
@@ -871,6 +1114,130 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
     );
   }
 
+  Widget _currentSourceLeading(
+    BuildContext context,
+    _MusicBoxBrowseSource source,
+  ) {
+    final icon = Icon(
+      _musicBoxBrowseSourceIcon(source),
+      key: const ValueKey<String>('music-box-current-source-leading-icon'),
+      size: 15,
+      color: UiColors.accent,
+    );
+    final iconHitArea = SizedBox.square(
+      dimension: 22,
+      child: Center(child: icon),
+    );
+    final active = widget.state.activeSource;
+    final sourceIsActive = _musicBoxBrowseSourceMatchesActive(
+      source,
+      widget.state,
+    );
+    final playing = sourceIsActive && widget.state.currentItem != null;
+    if (source.type == MusicBoxActiveSourceType.temporary) {
+      return MusicPlaylistHoverCard(
+        key: const ValueKey<String>(
+          'music-box-current-source-playlist-card-anchor',
+        ),
+        data: MusicPlaylistCardData(
+          id: 'temporary:${source.id}',
+          name: source.name,
+          songCount: source.itemCount,
+          createdAt: null,
+          room: widget.room,
+          showPlayingStatus: playing,
+          showCreatedAt: false,
+        ),
+        currentUser: widget.currentUser,
+        onResolveUserProfile: widget.onResolveUserProfile,
+        onResolveRoomProfile: widget.onResolveRoomProfile,
+        onEnterCommonRoom: widget.onEnterCommonRoom,
+        userProfileActionBuilder: widget.userProfileActionBuilder,
+        onPlayAll: playing || source.itemCount <= 0
+            ? null
+            : () async {
+                final start = startViewedSourceFromBeginning();
+                if (start != null) await start;
+              },
+        onViewPlaylist: source.itemCount <= 0
+            ? null
+            : _confirmAndClearTemporaryQueue,
+        secondaryActionLabel: '清空队列',
+        secondaryActionIcon: Icons.delete_sweep_outlined,
+        secondaryActionTone: ButtonTone.danger,
+        child: iconHitArea,
+      );
+    }
+
+    if (source.id.isEmpty) return iconHitArea;
+
+    final playlist = source.playlist;
+    final creator = source.type == MusicBoxActiveSourceType.userPlaylist
+        ? sourceIsActive
+              ? _musicBoxActiveSourceOwner(active, widget.currentUser)
+              : widget.currentUser?.toSummary()
+        : null;
+    final ownerId = sourceIsActive
+        ? active.ownerUserId.isNotEmpty
+              ? active.ownerUserId
+              : active.owner?.userId ?? ''
+        : widget.currentUser?.id ?? '';
+    final ownedPersonalPlaylist =
+        source.type == MusicBoxActiveSourceType.userPlaylist &&
+        widget.currentUser != null &&
+        (ownerId.isEmpty || ownerId == widget.currentUser!.id);
+    final editPlaylist = source.roomScoped
+        ? widget.onEditRoomPlaylist
+        : ownedPersonalPlaylist
+        ? widget.onEditPersonalPlaylist
+        : null;
+    final playlistValue =
+        playlist ??
+        PersonalMusicPlaylist(
+          id: source.id,
+          name: source.name,
+          description: '',
+          revision: 0,
+          itemCount: source.itemCount,
+          createdAt: sourceIsActive ? active.createdAt : null,
+          updatedAt: null,
+        );
+    return MusicPlaylistHoverCard(
+      key: const ValueKey<String>(
+        'music-box-current-source-playlist-card-anchor',
+      ),
+      data: MusicPlaylistCardData(
+        id: source.id,
+        name: source.name,
+        songCount: source.itemCount,
+        createdAt:
+            playlist?.createdAt ?? (sourceIsActive ? active.createdAt : null),
+        creator: creator,
+        room: source.roomScoped ? widget.room : null,
+        showPlayingStatus: playing,
+      ),
+      currentUser: widget.currentUser,
+      onResolveUserProfile: widget.onResolveUserProfile,
+      onResolveRoomProfile: widget.onResolveRoomProfile,
+      onEnterCommonRoom: widget.onEnterCommonRoom,
+      userProfileActionBuilder: widget.userProfileActionBuilder,
+      onPlayAll: playing
+          ? null
+          : () async {
+              final start = startViewedSourceFromBeginning();
+              if (start != null) await start;
+            },
+      onViewPlaylist: editPlaylist == null
+          ? () => _viewPlaylistWindow(playlistValue, source.roomScoped)
+          : () => editPlaylist(source.id),
+      secondaryActionLabel: editPlaylist == null ? '查看歌单' : '编辑歌单',
+      secondaryActionIcon: editPlaylist == null
+          ? Icons.queue_music
+          : Icons.edit_outlined,
+      child: iconHitArea,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final hasQuery = widget.searchController.text.trim().isNotEmpty;
@@ -885,7 +1252,9 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
       onEnterCommonRoom: widget.onEnterCommonRoom,
       userProfileActionBuilder: widget.userProfileActionBuilder,
       onStateChanged: widget.onStateChanged,
-      onViewPlaylist: _viewPlaylist,
+      onViewPlaylist: _viewPlaylistWindow,
+      onEditRoomPlaylist: widget.onEditRoomPlaylist,
+      onEditPersonalPlaylist: widget.onEditPersonalPlaylist,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -893,30 +1262,54 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
             children: [
               Expanded(
                 child: searchVisible
-                    ? Input(
+                    ? _searchInput(
                         controller: widget.searchController,
                         hintText: '搜索歌曲点歌',
-                        prefixIcon: Icons.search,
-                        showClearButton: true,
-                        maxLines: 1,
-                        height: _musicBoxSearchFieldHeight,
+                      )
+                    : sourceBrowserVisible
+                    ? TapRegion(
+                        groupId: _sourceBrowserTapRegionGroup,
+                        onTapOutside: (_) => _collapseSourceBrowser(),
+                        child: _searchInput(
+                          key: const ValueKey<String>(
+                            'music-box-source-search-input',
+                          ),
+                          controller: _sourceSearchController,
+                          focusNode: _sourceSearchFocusNode,
+                          hintText: '搜索歌单',
+                          tapRegionGroupId: _sourceBrowserTapRegionGroup,
+                        ),
                       )
                     : _MusicBoxCurrentSourceHeader(
                         source: viewedSource,
                         expanded: sourceBrowserVisible,
+                        leading: _currentSourceLeading(context, viewedSource),
                         onPressed: _toggleSourceBrowser,
                       ),
               ),
               const SizedBox(width: 8),
-              ButtonIcon(
-                key: const ValueKey<String>('music-box-search-toggle'),
-                icon: Icon(searchVisible ? Icons.close : Icons.search),
-                tooltip: searchVisible ? '关闭搜索' : '搜索添加',
-                tone: searchVisible ? ButtonTone.danger : ButtonTone.neutral,
-                toggleValue: searchVisible,
-                onToggleChanged: _setSearchVisible,
-                size: _musicBoxSearchFieldHeight,
-              ),
+              if (sourceBrowserVisible)
+                ButtonIconPlain(
+                  key: const ValueKey<String>(
+                    'music-box-source-browser-collapse',
+                  ),
+                  icon: const Icon(Icons.expand_less),
+                  tooltip: '收起歌单',
+                  width: _musicBoxSearchFieldHeight,
+                  height: _musicBoxSearchFieldHeight,
+                  iconSize: 17,
+                  onPressed: _collapseSourceBrowser,
+                )
+              else
+                ButtonIcon(
+                  key: const ValueKey<String>('music-box-search-toggle'),
+                  icon: Icon(searchVisible ? Icons.close : Icons.search),
+                  tooltip: searchVisible ? '关闭搜索' : '搜索添加',
+                  tone: searchVisible ? ButtonTone.danger : ButtonTone.neutral,
+                  toggleValue: searchVisible,
+                  onToggleChanged: _setSearchVisible,
+                  size: _musicBoxSearchFieldHeight,
+                ),
             ],
           ),
           if (searchVisible) ...[
@@ -958,6 +1351,8 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
                 onViewedSourceChanged: _selectViewedSource,
                 onStateChanged: _handleActivatedState,
                 onQueueResult: widget.onQueueResult,
+                sourceQuery: _sourceSearchController.text,
+                tapRegionGroupId: _sourceBrowserTapRegionGroup,
               ),
               _MusicBoxSection.roomPlaylists => _MusicBoxPlaylistBrowser(
                 controller: widget.controller,
@@ -966,10 +1361,6 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
                 temporaryQueue: widget.state.temporaryQueue,
                 onQueueResult: widget.onQueueResult,
                 onStateChanged: _handleActivatedState,
-                initialPlaylist: _requestedPlaylistRoomScoped == true
-                    ? _requestedPlaylist
-                    : null,
-                onPlaylistClosed: _clearRequestedPlaylist,
                 onCreateFirstPlaylist: widget.onCreateFirstRoomPlaylist,
               ),
               _MusicBoxSection.myPlaylists => _MusicBoxPlaylistBrowser(
@@ -979,10 +1370,6 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
                 temporaryQueue: widget.state.temporaryQueue,
                 onQueueResult: widget.onQueueResult,
                 onStateChanged: _handleActivatedState,
-                initialPlaylist: _requestedPlaylistRoomScoped == false
-                    ? _requestedPlaylist
-                    : null,
-                onPlaylistClosed: _clearRequestedPlaylist,
                 onCreateFirstPlaylist: widget.onCreateFirstPersonalPlaylist,
               ),
               _MusicBoxSection.search => _MusicBoxSearchList(
@@ -1198,11 +1585,13 @@ class _MusicBoxCurrentSourceHeader extends StatelessWidget {
   const _MusicBoxCurrentSourceHeader({
     required this.source,
     required this.expanded,
+    required this.leading,
     required this.onPressed,
   });
 
   final _MusicBoxBrowseSource source;
   final bool expanded;
+  final Widget leading;
   final VoidCallback onPressed;
 
   @override
@@ -1215,42 +1604,52 @@ class _MusicBoxCurrentSourceHeader extends StatelessWidget {
       borderColor: UiColors.border,
       hoverEffect: false,
       pressEffect: false,
-      onPressed: onPressed,
       selected: expanded,
-      tooltip: expanded ? '收起歌单' : '切换歌单',
       child: Row(
         children: [
-          Icon(
-            _musicBoxBrowseSourceIcon(source),
-            size: 15,
-            color: UiColors.accent,
-          ),
-          const SizedBox(width: 7),
+          MouseRegion(cursor: SystemMouseCursors.click, child: leading),
           Expanded(
-            child: Text(
-              source.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: UiColors.text,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+            child: Tooltip(
+              message: expanded ? '收起歌单' : '切换歌单',
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onPressed,
+                  child: Row(
+                    children: [
+                      const SizedBox(width: 7),
+                      Expanded(
+                        child: Text(
+                          source.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: UiColors.text,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        '${source.itemCount}',
+                        style: const TextStyle(
+                          color: UiColors.textMuted,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(
+                        expanded ? Icons.expand_less : Icons.expand_more,
+                        size: 16,
+                        color: UiColors.textMuted,
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
-          ),
-          Text(
-            '${source.itemCount}',
-            style: const TextStyle(
-              color: UiColors.textMuted,
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Icon(
-            expanded ? Icons.expand_less : Icons.expand_more,
-            size: 16,
-            color: UiColors.textMuted,
           ),
         ],
       ),
@@ -1291,8 +1690,6 @@ PersonalMusicPlaylist? _musicBoxPlaylistById(
   }
   return null;
 }
-
-enum _MusicBoxSourceFilter { personal, room }
 
 class _MusicBoxBrowseSource {
   const _MusicBoxBrowseSource({
@@ -1395,6 +1792,8 @@ class _MusicBoxSourceBrowser extends StatefulWidget {
     required this.onViewedSourceChanged,
     required this.onStateChanged,
     required this.onQueueResult,
+    this.sourceQuery = '',
+    this.tapRegionGroupId,
   });
 
   final MusicBoxController? controller;
@@ -1405,6 +1804,8 @@ class _MusicBoxSourceBrowser extends StatefulWidget {
   final ValueChanged<_MusicBoxBrowseSource> onViewedSourceChanged;
   final ValueChanged<MusicBoxState> onStateChanged;
   final ValueChanged<MusicBoxSearchResult> onQueueResult;
+  final String sourceQuery;
+  final Object? tapRegionGroupId;
 
   @override
   State<_MusicBoxSourceBrowser> createState() => _MusicBoxSourceBrowserState();
@@ -1417,7 +1818,7 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
   String? _trackError;
   List<PersonalMusicPlaylist> _roomPlaylists = const [];
   List<PersonalMusicPlaylist> _personalPlaylists = const [];
-  _MusicBoxSourceFilter? _filter;
+  music_box_display.MusicBoxSourceScopeFilter? _filter;
   List<PersonalMusicPlaylistItem> _selectedItems = const [];
   String? _loadedSourceKey;
   String? _startingTrackKey;
@@ -1551,7 +1952,11 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
     final active = widget.state.activeSource;
     final result = <_MusicBoxBrowseSource>[];
     if (active.type != MusicBoxActiveSourceType.temporary &&
-        active.id.isNotEmpty) {
+        active.id.isNotEmpty &&
+        music_box_display.musicBoxSourceVisibleForFilter(
+          active.type,
+          _filter,
+        )) {
       result.add(
         _MusicBoxBrowseSource(
           type: active.type,
@@ -1564,19 +1969,27 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
         ),
       );
     }
-    result.add(
-      _MusicBoxBrowseSource(
-        type: MusicBoxActiveSourceType.temporary,
-        id: widget.roomId ?? '',
-        name: '点歌队列',
-        itemCount: widget.state.temporaryQueue.length,
-        current: active.type == MusicBoxActiveSourceType.temporary,
-        roomScoped: true,
-        queueItems: widget.state.temporaryQueue,
-      ),
-    );
+    if (music_box_display.musicBoxSourceVisibleForFilter(
+      MusicBoxActiveSourceType.temporary,
+      _filter,
+    )) {
+      result.add(
+        _MusicBoxBrowseSource(
+          type: MusicBoxActiveSourceType.temporary,
+          id: widget.roomId ?? '',
+          name: '点歌队列',
+          itemCount: widget.state.temporaryQueue.length,
+          current: active.type == MusicBoxActiveSourceType.temporary,
+          roomScoped: true,
+          queueItems: widget.state.temporaryQueue,
+        ),
+      );
+    }
 
-    if (_filter != _MusicBoxSourceFilter.personal) {
+    if (music_box_display.musicBoxSourceVisibleForFilter(
+      MusicBoxActiveSourceType.roomPlaylist,
+      _filter,
+    )) {
       for (final playlist in _roomPlaylists) {
         if (active.type == MusicBoxActiveSourceType.roomPlaylist &&
             active.id == playlist.id) {
@@ -1595,7 +2008,10 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
         );
       }
     }
-    if (_filter != _MusicBoxSourceFilter.room) {
+    if (music_box_display.musicBoxSourceVisibleForFilter(
+      MusicBoxActiveSourceType.userPlaylist,
+      _filter,
+    )) {
       for (final playlist in _personalPlaylists) {
         if (active.type == MusicBoxActiveSourceType.userPlaylist &&
             active.id == playlist.id) {
@@ -1614,10 +2030,17 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
         );
       }
     }
-    return result;
+    return result
+        .where(
+          (source) => music_box_display.musicBoxSourceMatchesQuery(
+            source.name,
+            widget.sourceQuery,
+          ),
+        )
+        .toList(growable: false);
   }
 
-  void _toggleFilter(_MusicBoxSourceFilter value) {
+  void _toggleFilter(music_box_display.MusicBoxSourceScopeFilter value) {
     setState(() => _filter = _filter == value ? null : value);
   }
 
@@ -1697,32 +2120,35 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
   }
 
   Widget _filters() {
-    return Row(
+    final filters = Row(
       children: [
         Expanded(
-          child: Button(
+          child: CompactCategoryButton(
             key: const ValueKey<String>('music-box-source-filter-personal'),
-            height: 32,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            toggleValue: _filter == _MusicBoxSourceFilter.personal,
-            onToggleChanged: (_) =>
-                _toggleFilter(_MusicBoxSourceFilter.personal),
-            child: const Text('我的歌单'),
+            label: '我的歌单',
+            selected:
+                _filter == music_box_display.MusicBoxSourceScopeFilter.personal,
+            onPressed: () => _toggleFilter(
+              music_box_display.MusicBoxSourceScopeFilter.personal,
+            ),
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 6),
         Expanded(
-          child: Button(
+          child: CompactCategoryButton(
             key: const ValueKey<String>('music-box-source-filter-room'),
-            height: 32,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            toggleValue: _filter == _MusicBoxSourceFilter.room,
-            onToggleChanged: (_) => _toggleFilter(_MusicBoxSourceFilter.room),
-            child: const Text('房间歌单'),
+            label: '房间歌单',
+            selected:
+                _filter == music_box_display.MusicBoxSourceScopeFilter.room,
+            onPressed: () =>
+                _toggleFilter(music_box_display.MusicBoxSourceScopeFilter.room),
           ),
         ),
       ],
     );
+    final groupId = widget.tapRegionGroupId;
+    if (groupId == null) return filters;
+    return TapRegion(groupId: groupId, child: filters);
   }
 
   Widget _sourceList() {
@@ -1733,69 +2159,27 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
         _filters(),
         const SizedBox(height: 8),
         Expanded(
-          child: ListView.separated(
-            key: const ValueKey<String>('music-box-source-list'),
-            padding: EdgeInsets.zero,
-            itemCount: sources.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 8),
-            itemBuilder: (context, index) {
-              final source = sources[index];
-              return PressableSurface(
-                key: ValueKey<String>('music-box-source:${source.key}'),
-                width: double.infinity,
-                height: 54,
-                onPressed: () => _openSource(source),
-                selected: source.key == widget.viewedSource.key,
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                backgroundColor: UiColors.surfaceLow,
-                borderColor: UiColors.border,
-                borderRadius: UiRadii.md,
-                child: Row(
-                  children: [
-                    Icon(
-                      _musicBoxBrowseSourceIcon(source),
-                      size: 18,
-                      color: UiColors.accent,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            source.name,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: UiColors.text,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            source.current
-                                ? '正在播放 · ${source.itemCount} 首歌曲'
-                                : '${source.itemCount} 首歌曲',
-                            style: const TextStyle(
-                              color: UiColors.textMuted,
-                              fontSize: 10,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(
-                      Icons.chevron_right,
-                      size: 18,
-                      color: UiColors.textMuted,
-                    ),
-                  ],
+          child: sources.isEmpty
+              ? const _MusicBoxEmpty(icon: Icons.search_off, message: '没有匹配的歌单')
+              : ListView.separated(
+                  key: const ValueKey<String>('music-box-source-list'),
+                  padding: EdgeInsets.zero,
+                  itemCount: sources.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 2),
+                  itemBuilder: (context, index) {
+                    final source = sources[index];
+                    final row = _MusicBoxSourceListRow(
+                      key: ValueKey<String>('music-box-source:${source.key}'),
+                      source: source,
+                      selected: source.key == widget.viewedSource.key,
+                      onPressed: () => _openSource(source),
+                    );
+                    final groupId = widget.tapRegionGroupId;
+                    return groupId == null
+                        ? row
+                        : TapRegion(groupId: groupId, child: row);
+                  },
                 ),
-              );
-            },
-          ),
         ),
       ],
     );
@@ -1904,6 +2288,124 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
   }
 }
 
+class _MusicBoxSourceListRow extends StatefulWidget {
+  const _MusicBoxSourceListRow({
+    super.key,
+    required this.source,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final _MusicBoxBrowseSource source;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  State<_MusicBoxSourceListRow> createState() => _MusicBoxSourceListRowState();
+}
+
+class _MusicBoxSourceListRowState extends State<_MusicBoxSourceListRow> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = widget.selected ? UiColors.accent : UiColors.text;
+    return Semantics(
+      button: true,
+      selected: widget.selected,
+      label: widget.source.name,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => _setHovered(true),
+        onExit: (_) => _setHovered(false),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onPressed,
+          child: AnimatedContainer(
+            key: ValueKey<String>(
+              'music-box-source-flat-row:${widget.source.key}',
+            ),
+            duration: const Duration(milliseconds: 80),
+            curve: Curves.easeOutCubic,
+            constraints: const BoxConstraints(minHeight: 48),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: widget.selected
+                  ? UiColors.selected
+                  : _hovered
+                  ? UiColors.surfaceLow
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(UiRadii.sm),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  _musicBoxBrowseSourceIcon(widget.source),
+                  size: 18,
+                  color: widget.selected
+                      ? UiColors.accent
+                      : UiColors.textSecondary,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.source.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: foreground,
+                          fontSize: 12,
+                          fontWeight: widget.selected
+                              ? FontWeight.w600
+                              : FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.source.current
+                            ? '正在播放 · ${widget.source.itemCount} 首歌曲'
+                            : '${widget.source.itemCount} 首歌曲',
+                        style: const TextStyle(
+                          color: UiColors.textMuted,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (widget.source.current) ...[
+                  const SizedBox(width: 8),
+                  Tooltip(
+                    message: '正在播放',
+                    child: Icon(
+                      Icons.graphic_eq,
+                      key: ValueKey<String>(
+                        'music-box-source-playing-indicator:${widget.source.key}',
+                      ),
+                      size: 18,
+                      color: UiColors.accent,
+                      semanticLabel: '正在播放',
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _setHovered(bool hovered) {
+    if (_hovered == hovered) return;
+    setState(() => _hovered = hovered);
+  }
+}
+
 class _MusicBoxPlaylistBrowser extends StatefulWidget {
   const _MusicBoxPlaylistBrowser({
     required this.controller,
@@ -1912,8 +2414,6 @@ class _MusicBoxPlaylistBrowser extends StatefulWidget {
     required this.temporaryQueue,
     required this.onQueueResult,
     required this.onStateChanged,
-    required this.initialPlaylist,
-    required this.onPlaylistClosed,
     required this.onCreateFirstPlaylist,
   });
 
@@ -1923,8 +2423,6 @@ class _MusicBoxPlaylistBrowser extends StatefulWidget {
   final List<MusicBoxQueueItem> temporaryQueue;
   final ValueChanged<MusicBoxSearchResult> onQueueResult;
   final ValueChanged<MusicBoxState>? onStateChanged;
-  final PersonalMusicPlaylist? initialPlaylist;
-  final VoidCallback onPlaylistClosed;
   final VoidCallback? onCreateFirstPlaylist;
 
   @override
@@ -1957,10 +2455,6 @@ class _MusicBoxPlaylistBrowserState extends State<_MusicBoxPlaylistBrowser> {
       unawaited(_loadPlaylists());
       return;
     }
-    if (oldWidget.initialPlaylist?.id != widget.initialPlaylist?.id &&
-        widget.initialPlaylist != null) {
-      unawaited(_openPlaylist(widget.initialPlaylist!));
-    }
   }
 
   Future<void> _loadPlaylists() async {
@@ -1988,16 +2482,6 @@ class _MusicBoxPlaylistBrowserState extends State<_MusicBoxPlaylistBrowser> {
         _loading = false;
         _playlists = page.playlists;
       });
-      final requested = widget.initialPlaylist;
-      if (requested != null) {
-        final playlist = page.playlists
-            .cast<PersonalMusicPlaylist?>()
-            .firstWhere(
-              (value) => value?.id == requested.id,
-              orElse: () => requested,
-            );
-        if (playlist != null) await _openPlaylist(playlist);
-      }
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -2068,6 +2552,9 @@ class _MusicBoxPlaylistBrowserState extends State<_MusicBoxPlaylistBrowser> {
     required Widget child,
   }) {
     final host = MusicPlaylistCardHostScope.maybeOf(context);
+    final editPlaylist = widget.roomScoped
+        ? host?.onEditRoomPlaylist
+        : host?.onEditPersonalPlaylist;
     return MusicPlaylistHoverCard(
       data: MusicPlaylistCardData(
         id: playlist.id,
@@ -2083,7 +2570,15 @@ class _MusicBoxPlaylistBrowserState extends State<_MusicBoxPlaylistBrowser> {
       onEnterCommonRoom: host?.onEnterCommonRoom,
       userProfileActionBuilder: host?.userProfileActionBuilder,
       onPlayAll: () => _activatePlaylist(playlist),
-      onViewPlaylist: () => _openPlaylist(playlist),
+      onViewPlaylist: editPlaylist == null
+          ? host == null
+                ? null
+                : () => host.onViewPlaylist(playlist, widget.roomScoped)
+          : () => editPlaylist(playlist.id),
+      secondaryActionLabel: editPlaylist == null ? '查看歌单' : '编辑歌单',
+      secondaryActionIcon: editPlaylist == null
+          ? Icons.queue_music
+          : Icons.edit_outlined,
       child: child,
     );
   }
@@ -2115,7 +2610,6 @@ class _MusicBoxPlaylistBrowserState extends State<_MusicBoxPlaylistBrowser> {
                     _selected = null;
                     _items = const [];
                   });
-                  widget.onPlaylistClosed();
                 },
                 size: 28,
               ),
@@ -3247,6 +3741,19 @@ class _MusicBoxSongAttribution extends StatelessWidget {
     final creator = isPlaylist
         ? _musicBoxActiveSourceOwner(source, currentUser)
         : null;
+    final ownerId = source.ownerUserId.isNotEmpty
+        ? source.ownerUserId
+        : source.owner?.userId ?? '';
+    final viewer = currentUser;
+    final isOwnedPersonalPlaylist =
+        source.type == MusicBoxActiveSourceType.userPlaylist &&
+        viewer != null &&
+        (ownerId.isEmpty || ownerId == viewer.id);
+    final editPlaylist = source.type == MusicBoxActiveSourceType.roomPlaylist
+        ? host?.onEditRoomPlaylist
+        : isOwnedPersonalPlaylist
+        ? host?.onEditPersonalPlaylist
+        : null;
     final playlistValue = _MusicBoxPlaylistAttributionValue(name: playlistName);
     final value = isPlaylist && source.id.isNotEmpty
         ? MusicPlaylistHoverCard(
@@ -3271,7 +3778,9 @@ class _MusicBoxSongAttribution extends StatelessWidget {
             onPlayAll: controller == null || roomId == null
                 ? null
                 : () => _playPlaylist(context),
-            onViewPlaylist: host == null
+            onViewPlaylist: editPlaylist != null
+                ? () => editPlaylist(source.id)
+                : host == null
                 ? null
                 : () => host.onViewPlaylist(
                     PersonalMusicPlaylist(
@@ -3285,6 +3794,10 @@ class _MusicBoxSongAttribution extends StatelessWidget {
                     ),
                     source.type == MusicBoxActiveSourceType.roomPlaylist,
                   ),
+            secondaryActionLabel: editPlaylist == null ? '查看歌单' : '编辑歌单',
+            secondaryActionIcon: editPlaylist == null
+                ? Icons.queue_music
+                : Icons.edit_outlined,
             child: playlistValue,
           )
         : isPlaylist

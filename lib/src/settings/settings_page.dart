@@ -100,6 +100,7 @@ class SettingsPage extends StatefulWidget {
     this.closeBehaviorStore = const LocalCloseBehaviorStore(),
     this.languageStore = const LocalLanguagePreferenceStore(),
     this.initialSection = SettingsSection.profile,
+    this.initialMusicPlaylistId,
     this.initialAppUpdate,
     this.stickerImagePreviewOpener,
     this.appVersion = gangChatClientVersion,
@@ -139,6 +140,7 @@ class SettingsPage extends StatefulWidget {
   final CloseBehaviorStore closeBehaviorStore;
   final LanguagePreferenceStore languageStore;
   final SettingsSection initialSection;
+  final String? initialMusicPlaylistId;
   final AvailableAppUpdate? initialAppUpdate;
   final StickerImagePreviewOpener? stickerImagePreviewOpener;
   final String appVersion;
@@ -3647,6 +3649,7 @@ class _SettingsPageState extends State<SettingsPage>
   Widget _buildMusicPlaylistsContent() {
     return MusicPlaylistsPanel(
       controller: _musicPlaylistsController,
+      initialPlaylistId: widget.initialMusicPlaylistId,
       previewApi: widget.api is MusicTrackPreviewApi
           ? widget.api as MusicTrackPreviewApi
           : null,

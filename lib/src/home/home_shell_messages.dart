@@ -617,6 +617,7 @@ extension _HomeShellMessages on _HomeShellState {
       canReeditRecalledText: _canReeditRecalledTextMessage,
       canInspectRecalledText: _canInspectRecalledTextMessage,
       onViewSharedPlaylist: _viewSharedPlaylistMessage,
+      onEditOwnedSharedPlaylist: _editOwnedSharedPlaylistMessage,
       sharedTrackPreviewController: _sharedMessageTrackPreviewController,
       loadSharedTrackPlaylists: _loadSharedTrackPlaylists,
       onAddSharedTrackToPlaylist: _addSharedTrackToPlaylist,
@@ -758,6 +759,22 @@ extension _HomeShellMessages on _HomeShellState {
           };
         },
       ),
+    );
+  }
+
+  Future<void> _editOwnedSharedPlaylistMessage(
+    BuildContext context,
+    Message message,
+    SharedMusicPlaylist playlist,
+  ) async {
+    if (playlist.creator.id != _currentUser.id) {
+      await _viewSharedPlaylistMessage(context, message, playlist);
+      return;
+    }
+    _openSettingsSection(
+      SettingsSection.playlists,
+      openContent: true,
+      initialMusicPlaylistId: playlist.id,
     );
   }
 
@@ -1233,20 +1250,22 @@ extension _HomeShellMessages on _HomeShellState {
     final body = value.trimRight();
     final component = _selectedComposerComponent;
     if (component != null) {
-      if (body.trim().isNotEmpty) {
-        _setHomeState(() => _sendError = '歌单或歌曲组件不能与普通文字同时发送，请先清空文字或移除组件');
-        return;
-      }
-      await _sendComposed(
-        body: '',
-        type: component.type,
-        attachments: [
-          MessageAttachment(
-            type: component.type,
-            sourceMessageId: component.id,
-          ),
-        ],
-        clearComposer: true,
+      final roomId = _selectedServerId;
+      final plan = composerMessageSendPlan(body: body, component: component);
+      await sendComposerMessagePartsSequentially(
+        parts: plan,
+        send: (part, {required hasFollowingPart}) async {
+          final sent = await _sendComposed(
+            body: part.body,
+            type: part.type,
+            attachments: part.attachments,
+            clearComposer: !hasFollowingPart,
+            clearComponent: hasFollowingPart,
+            includeQuotes: !hasFollowingPart,
+            includeMentions: !hasFollowingPart,
+          );
+          return sent && mounted && _selectedServerId == roomId;
+        },
       );
       return;
     }
@@ -1274,23 +1293,28 @@ extension _HomeShellMessages on _HomeShellState {
     );
   }
 
-  Future<void> _sendComposed({
+  Future<bool> _sendComposed({
     required String body,
     required String type,
     required List<MessageAttachment> attachments,
     required bool clearComposer,
+    bool clearComponent = false,
+    bool includeQuotes = true,
+    bool includeMentions = true,
   }) async {
     final room = _selectedRoom;
-    if (room == null || _sending) return;
+    if (room == null || _sending) return false;
     if (!canSendComposedMessage(
       body: body,
       type: type,
       attachments: attachments,
     )) {
-      return;
+      return false;
     }
 
-    final quotes = _messageQuoteDrafts[room.id] ?? const <MessageQuote>[];
+    final quotes = includeQuotes
+        ? _messageQuoteDrafts[room.id] ?? const <MessageQuote>[]
+        : const <MessageQuote>[];
     String? clientMessageId;
     _setHomeState(() {
       _sending = true;
@@ -1309,7 +1333,8 @@ extension _HomeShellMessages on _HomeShellState {
         type: type,
         attachments: attachments,
         mentions:
-            _composerMentionMembersRoomId == room.id &&
+            includeMentions &&
+                _composerMentionMembersRoomId == room.id &&
                 confirmedMentionLabels.isNotEmpty
             ? message_mentions.messageMentionDescriptors(
                 text: body,
@@ -1334,19 +1359,21 @@ extension _HomeShellMessages on _HomeShellState {
                   Map<String, List<MessageQuote>>.unmodifiable(next);
             }
           });
-          if (clearComposer) {
+          if (clearComposer || clearComponent) {
             _setHomeState(() {
               final next = Map<String, Message>.of(_messageComponentDrafts)
                 ..remove(room.id);
               _messageComponentDrafts = Map<String, Message>.unmodifiable(next);
             });
+          }
+          if (clearComposer) {
             _setComposerText('', saveDraft: true);
-          } else if (quotes.isNotEmpty) {
+          } else if (clearComponent || quotes.isNotEmpty) {
             _saveComposerDraftValue(_composerController.text);
           }
         },
       );
-      if (!mounted || _selectedServerId != room.id) return;
+      if (!mounted || _selectedServerId != room.id) return true;
       _setHomeState(() {
         _messages = _messagesController.patchSentMessage(
           messages: _messages,
@@ -1354,17 +1381,20 @@ extension _HomeShellMessages on _HomeShellState {
         );
       });
       unawaited(_loadServers());
+      return true;
     } catch (error) {
-      if (!mounted) return;
-      _setHomeState(() {
-        _sendError = userFacingErrorMessage(error);
-        if (clientMessageId != null) {
-          _messages = _messagesController.patchFailedMessage(
-            messages: _messages,
-            clientMessageId: clientMessageId!,
-          );
-        }
-      });
+      if (mounted) {
+        _setHomeState(() {
+          _sendError = userFacingErrorMessage(error);
+          if (clientMessageId != null) {
+            _messages = _messagesController.patchFailedMessage(
+              messages: _messages,
+              clientMessageId: clientMessageId!,
+            );
+          }
+        });
+      }
+      return false;
     } finally {
       if (mounted) _setHomeState(() => _sending = false);
     }

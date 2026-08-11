@@ -2556,6 +2556,96 @@ void main() {
     );
   }
 
+  for (final platform in const [
+    TargetPlatform.windows,
+    TargetPlatform.macOS,
+    TargetPlatform.android,
+  ]) {
+    testWidgets(
+      '${platform.name} owned shared playlist exposes edit instead of view',
+      (tester) async {
+        final controller = TextEditingController();
+        addTearDown(controller.dispose);
+        var viewed = 0;
+        var edited = 0;
+        final playlist = SharedMusicPlaylist(
+          id: 'owned_playlist_1',
+          name: '我的可编辑歌单',
+          description: '',
+          itemCount: 0,
+          createdAt: DateTime.utc(2026, 8, 11),
+          creator: _currentUser.toSummary(),
+          items: const [],
+        );
+        final message = _message(
+          type: 'playlist',
+          body: '[歌单] 我的可编辑歌单',
+          attachments: [
+            MessageAttachment(
+              type: 'playlist',
+              playlistId: playlist.id,
+              playlist: playlist,
+            ),
+          ],
+        );
+        final actions = ChatMessageActions(
+          onCopy: (_, _) async {},
+          onDeleteForMe: (_, _) async {},
+          onRecall: (_, _) async {},
+          canRecall: (_) => false,
+          onViewSharedPlaylist: (_, _, _) async => viewed += 1,
+          onEditOwnedSharedPlaylist: (_, editedMessage, editedPlaylist) async {
+            expect(editedMessage.id, message.id);
+            expect(editedPlaylist.id, playlist.id);
+            edited += 1;
+          },
+        );
+
+        await tester.pumpWidget(
+          _host(
+            _chatPane(
+              controller: controller,
+              messages: [message],
+              messageActions: actions,
+            ),
+            height: 520,
+            platform: platform,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(
+          find.byKey(
+            const ValueKey<String>(
+              'shared-music-playlist-message-owned_playlist_1',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('编辑歌单'), findsOneWidget);
+        expect(find.text('查看歌单'), findsNothing);
+        await tester.tap(
+          find.byKey(const ValueKey<String>('music-playlist-card-view')),
+        );
+        await tester.pumpAndSettle();
+        expect(edited, 1);
+        expect(viewed, 0);
+
+        await tester.tap(
+          find.byKey(
+            const ValueKey<String>(
+              'shared-music-playlist-open-owned_playlist_1',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(edited, 2);
+        expect(viewed, 0);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets('sticker bubble exposes the sticker name only as a tooltip', (
     tester,
   ) async {

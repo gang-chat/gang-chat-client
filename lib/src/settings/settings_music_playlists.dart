@@ -4,6 +4,7 @@ class MusicPlaylistsPanel extends StatefulWidget {
   const MusicPlaylistsPanel({
     super.key,
     required this.controller,
+    this.initialPlaylistId,
     this.reloadToken = 0,
     required this.unavailableMessage,
     this.onLoadingChanged,
@@ -15,6 +16,7 @@ class MusicPlaylistsPanel extends StatefulWidget {
   });
 
   final PersonalMusicPlaylistsController controller;
+  final String? initialPlaylistId;
   final int reloadToken;
   final String unavailableMessage;
   final ValueChanged<bool>? onLoadingChanged;
@@ -65,6 +67,7 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
   int _playlistLoadGeneration = 0;
   int _itemLoadGeneration = 0;
   MusicTrackPreviewController? _previewController;
+  String? _handledInitialPlaylistId;
 
   MusicPlaylistManagementCapabilities get _capabilities =>
       widget.controller.capabilities;
@@ -123,10 +126,15 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
     }
     if (oldWidget.reloadToken != widget.reloadToken ||
         oldWidget.controller.api != widget.controller.api) {
+      _handledInitialPlaylistId = null;
       _managingPlaylists = false;
       _managingItems = false;
       _selectedPlaylistIds = const [];
       _selectedItemIds = const {};
+      scheduleMicrotask(_loadPlaylists);
+    }
+    if (oldWidget.initialPlaylistId != widget.initialPlaylistId) {
+      _handledInitialPlaylistId = null;
       scheduleMicrotask(_loadPlaylists);
     }
   }
@@ -198,6 +206,23 @@ class _MusicPlaylistsPanelState extends State<MusicPlaylistsPanel> {
       });
       if (refreshedActive != null) {
         scheduleMicrotask(() => _loadItems(reset: true));
+      } else {
+        final initialId = widget.initialPlaylistId?.trim();
+        if (initialId != null &&
+            initialId.isNotEmpty &&
+            _handledInitialPlaylistId != initialId) {
+          _handledInitialPlaylistId = initialId;
+          PersonalMusicPlaylist? initialPlaylist;
+          for (final playlist in result.playlists) {
+            if (playlist.id == initialId) {
+              initialPlaylist = playlist;
+              break;
+            }
+          }
+          if (initialPlaylist != null) {
+            scheduleMicrotask(() => _openPlaylist(initialPlaylist!));
+          }
+        }
       }
     } catch (error) {
       if (!mounted || generation != _playlistLoadGeneration) return;

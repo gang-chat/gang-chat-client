@@ -71,6 +71,9 @@ Widget _host(
   MusicTrackPreviewPlatformFactory? previewPlatformFactory,
   VoidCallback? onCreateFirstRoomPlaylist,
   VoidCallback? onCreateFirstPersonalPlaylist,
+  MusicPlaylistEditCallback? onEditRoomPlaylist,
+  MusicPlaylistEditCallback? onEditPersonalPlaylist,
+  VoidCallback? onTogglePlayback,
 }) {
   return MaterialApp(
     theme: uiTheme().copyWith(platform: platform),
@@ -96,8 +99,10 @@ Widget _host(
           userProfileActionBuilder: userProfileActionBuilder,
           onCreateFirstRoomPlaylist: onCreateFirstRoomPlaylist,
           onCreateFirstPersonalPlaylist: onCreateFirstPersonalPlaylist,
+          onEditRoomPlaylist: onEditRoomPlaylist,
+          onEditPersonalPlaylist: onEditPersonalPlaylist,
           previewPlatformFactory: previewPlatformFactory,
-          onTogglePlayback: () {},
+          onTogglePlayback: onTogglePlayback ?? () {},
           onSkip: () {},
           onQueueResult: onQueueResult ?? (_) {},
           onRemoveItem: (_) {},
@@ -659,7 +664,7 @@ void main() {
           findsNothing,
         );
         expect(find.text('搜索添加'), findsNothing);
-        expect(find.byType(MusicPlaylistHoverCard), findsNothing);
+        expect(find.byType(MusicPlaylistHoverCard), findsOneWidget);
         expect(find.text('创建日期'), findsNothing);
         expect(
           find.byKey(const ValueKey<String>('music-box-queue-context-action')),
@@ -808,6 +813,17 @@ void main() {
         updatedAt: null,
       ),
       items: const [],
+      personalPlaylists: const [
+        PersonalMusicPlaylist(
+          id: 'personal-list',
+          name: '我的收藏',
+          description: '',
+          revision: 1,
+          itemCount: 2,
+          createdAt: null,
+          updatedAt: null,
+        ),
+      ],
     );
 
     await tester.pumpWidget(
@@ -845,16 +861,68 @@ void main() {
       lessThan(tester.getTopLeft(requestQueueSource).dy),
     );
     expect(find.text('正在播放 · 1 首歌曲'), findsOneWidget);
+    final sourceSearch = find.byKey(
+      const ValueKey<String>('music-box-source-search-input'),
+    );
+    expect(sourceSearch, findsOneWidget);
+    expect(currentHeader, findsNothing);
+    await tester.enterText(sourceSearch, '我的收藏');
+    await tester.pump();
+    expect(currentSource, findsNothing);
+    expect(requestQueueSource, findsNothing);
+    expect(
+      find.byKey(
+        const ValueKey<String>('music-box-source:user_playlist:personal-list'),
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.byTooltip('清空搜索'));
+    await tester.pump();
+    expect(currentSource, findsOneWidget);
+    expect(requestQueueSource, findsOneWidget);
 
     final personalFilter = find.byKey(
       const ValueKey<String>('music-box-source-filter-personal'),
     );
     await tester.tap(personalFilter);
     await tester.pump();
-    expect(tester.widget<Button>(personalFilter).toggleValue, isTrue);
+    expect(
+      tester.widget<CompactCategoryButton>(personalFilter).selected,
+      isTrue,
+    );
+    expect(currentSource, findsNothing);
+    expect(requestQueueSource, findsNothing);
+    expect(
+      find.byKey(
+        const ValueKey<String>('music-box-source:user_playlist:personal-list'),
+      ),
+      findsOneWidget,
+    );
+    expect(tester.getSize(personalFilter).height, 29);
     await tester.tap(personalFilter);
     await tester.pump();
-    expect(tester.widget<Button>(personalFilter).toggleValue, isFalse);
+    expect(
+      tester.widget<CompactCategoryButton>(personalFilter).selected,
+      isFalse,
+    );
+    expect(currentSource, findsOneWidget);
+    expect(requestQueueSource, findsOneWidget);
+
+    final roomFilter = find.byKey(
+      const ValueKey<String>('music-box-source-filter-room'),
+    );
+    await tester.tap(roomFilter);
+    await tester.pump();
+    expect(currentSource, findsOneWidget);
+    expect(requestQueueSource, findsNothing);
+    expect(
+      find.byKey(
+        const ValueKey<String>('music-box-source:user_playlist:personal-list'),
+      ),
+      findsNothing,
+    );
+    await tester.tap(roomFilter);
+    await tester.pump();
 
     await tester.tap(requestQueueSource);
     await tester.pumpAndSettle();
@@ -911,6 +979,270 @@ void main() {
     TargetPlatform.macOS,
     TargetPlatform.android,
   ]) {
+    testWidgets(
+      '${platform.name} replaces the expanded source header with playlist search',
+      (tester) async {
+        final searchController = TextEditingController();
+        addTearDown(searchController.dispose);
+        final state = _state(
+          playbackState: MusicBoxPlaybackState.stopped,
+          positionMs: 0,
+          activeSource: const MusicBoxActiveSource(
+            type: MusicBoxActiveSourceType.roomPlaylist,
+            id: 'room-search-list',
+            name: '房间精选',
+          ),
+        );
+        final api = _RoomPlaylistApiFake(
+          state,
+          playlist: const PersonalMusicPlaylist(
+            id: 'room-search-list',
+            name: '房间精选',
+            description: '',
+            revision: 1,
+            itemCount: 1,
+            createdAt: null,
+            updatedAt: null,
+          ),
+          items: const [],
+          personalPlaylists: const [
+            PersonalMusicPlaylist(
+              id: 'personal-search-list',
+              name: '我的通勤收藏',
+              description: '',
+              revision: 1,
+              itemCount: 3,
+              createdAt: null,
+              updatedAt: null,
+            ),
+          ],
+        );
+
+        await tester.pumpWidget(
+          _host(
+            state,
+            searchController,
+            platform: platform,
+            height: 500,
+            musicBoxController: MusicBoxController(api: api),
+            roomId: 'room-1',
+            currentUser: _playlistCurrentUser,
+            room: _playlistRoom,
+          ),
+        );
+        await tester.tap(
+          find.byKey(const ValueKey<String>('music-box-current-queue-header')),
+        );
+        await tester.pumpAndSettle();
+
+        final sourceSearch = find.byKey(
+          const ValueKey<String>('music-box-source-search-input'),
+        );
+        expect(sourceSearch, findsOneWidget);
+        final sourceInput = tester.widget<Input>(sourceSearch);
+        expect(sourceInput.showClearButton, isTrue);
+        expect(sourceInput.suffix, isNull);
+        final sourceSearchIcon = find.descendant(
+          of: sourceSearch,
+          matching: find.byIcon(Icons.search),
+        );
+        final collapseSourceBrowser = find.byKey(
+          const ValueKey<String>('music-box-source-browser-collapse'),
+        );
+        expect(sourceSearchIcon, findsOneWidget);
+        expect(collapseSourceBrowser, findsOneWidget);
+        expect(
+          tester.widget<ButtonIconPlain>(collapseSourceBrowser).tooltip,
+          '收起歌单',
+        );
+        final sourceIconOffset =
+            tester.getCenter(sourceSearchIcon).dy -
+            tester.getTopLeft(sourceSearch).dy;
+        final collapseCenterY = tester.getCenter(collapseSourceBrowser).dy;
+        final currentSource = find.byKey(
+          const ValueKey<String>(
+            'music-box-source-flat-row:room_playlist:room-search-list',
+          ),
+        );
+        final playingIndicator = find.byKey(
+          const ValueKey<String>(
+            'music-box-source-playing-indicator:room_playlist:room-search-list',
+          ),
+        );
+        expect(currentSource, findsOneWidget);
+        expect(playingIndicator, findsOneWidget);
+        expect(
+          tester.getCenter(playingIndicator).dx,
+          greaterThan(
+            tester
+                .getCenter(
+                  find.descendant(
+                    of: currentSource,
+                    matching: find.text('房间精选'),
+                  ),
+                )
+                .dx,
+          ),
+        );
+        expect(
+          find.byKey(
+            const ValueKey<String>(
+              'music-box-source-playing-indicator:temporary:room-1',
+            ),
+          ),
+          findsNothing,
+        );
+        await tester.enterText(sourceSearch, '通勤');
+        await tester.pump();
+        expect(
+          find.byKey(
+            const ValueKey<String>(
+              'music-box-source:user_playlist:personal-search-list',
+            ),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(
+            const ValueKey<String>(
+              'music-box-source:room_playlist:room-search-list',
+            ),
+          ),
+          findsNothing,
+        );
+        expect(
+          find.byKey(
+            const ValueKey<String>('music-box-source:temporary:room-1'),
+          ),
+          findsNothing,
+        );
+        await tester.tap(collapseSourceBrowser);
+        await tester.pump();
+        await tester.tap(
+          find.byKey(const ValueKey<String>('music-box-search-toggle')),
+        );
+        await tester.pump();
+        final trackSearch = find.byWidgetPredicate(
+          (widget) => widget is Input && widget.hintText == '搜索歌曲点歌',
+        );
+        final trackSearchIcon = find.descendant(
+          of: trackSearch,
+          matching: find.byIcon(Icons.search),
+        );
+        expect(trackSearch, findsOneWidget);
+        expect(tester.widget<Input>(trackSearch).showClearButton, isTrue);
+        expect(
+          tester.getCenter(trackSearchIcon).dy -
+              tester.getTopLeft(trackSearch).dy,
+          closeTo(sourceIconOffset, 0.01),
+        );
+        expect(
+          tester
+              .getCenter(
+                find.byKey(const ValueKey<String>('music-box-search-toggle')),
+              )
+              .dy,
+          closeTo(collapseCenterY, 0.01),
+        );
+        await tester.tap(
+          find.byKey(const ValueKey<String>('music-box-search-toggle')),
+        );
+        await tester.pump();
+        await tester.tap(
+          find.byKey(const ValueKey<String>('music-box-current-queue-header')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey<String>('music-box-now-playing:title')),
+        );
+        await tester.pump();
+        expect(sourceSearch, findsNothing);
+        expect(
+          find.byKey(const ValueKey<String>('music-box-current-queue-header')),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      '${platform.name} starts the viewed playlist from its first song when idle',
+      (tester) async {
+        final searchController = TextEditingController();
+        addTearDown(searchController.dispose);
+        var fallbackToggleCount = 0;
+        const playlist = PersonalMusicPlaylist(
+          id: 'viewed-first-list',
+          name: '从第一首播放',
+          description: '',
+          revision: 1,
+          itemCount: 1,
+          createdAt: null,
+          updatedAt: null,
+        );
+        const firstItem = PersonalMusicPlaylistItem(
+          id: 'viewed-first-item',
+          playlistId: 'viewed-first-list',
+          trackId: 'viewed-first-track',
+          source: 'netease',
+          title: '第一首歌',
+          artists: ['歌手'],
+          durationMs: 180000,
+          sortOrder: 0,
+          createdAt: null,
+        );
+        final state = _state(
+          playbackState: MusicBoxPlaybackState.stopped,
+          positionMs: 0,
+          currentItemId: '',
+          queue: const [],
+          activeSource: const MusicBoxActiveSource(),
+        );
+        final api = _RoomPlaylistApiFake(
+          state,
+          playlist: playlist,
+          items: const [firstItem],
+        );
+
+        await tester.pumpWidget(
+          _host(
+            state,
+            searchController,
+            platform: platform,
+            height: 500,
+            musicBoxController: MusicBoxController(api: api),
+            roomId: 'room-1',
+            currentUser: _playlistCurrentUser,
+            room: _playlistRoom,
+            onTogglePlayback: () => fallbackToggleCount += 1,
+          ),
+        );
+        await tester.tap(
+          find.byKey(const ValueKey<String>('music-box-current-queue-header')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(
+            const ValueKey<String>(
+              'music-box-source:room_playlist:viewed-first-list',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('第一首歌'), findsOneWidget);
+
+        await tester.tap(
+          find.byKey(const ValueKey<String>('music-box-primary-playback')),
+        );
+        await tester.pump();
+        expect(api.activatedSourceType, MusicBoxActiveSourceType.roomPlaylist);
+        expect(api.activatedPlaylistId, 'viewed-first-list');
+        expect(api.activatedStartItemId, isNull);
+        expect(fallbackToggleCount, 0);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
     testWidgets(
       '${platform.name} keeps an active playlist snapshot at the top level',
       (tester) async {
@@ -1315,7 +1647,7 @@ void main() {
           find.byKey(
             const ValueKey<String>('music-box-source:temporary:room-1'),
           ),
-          findsOneWidget,
+          findsNothing,
         );
         await tester.tap(personalFilter);
         await tester.pump();
@@ -1668,6 +2000,85 @@ void main() {
     TargetPlatform.android,
   ]) {
     testWidgets(
+      '${platform.name} temporary queue card omits its date and confirms clearing',
+      (tester) async {
+        final searchController = TextEditingController();
+        addTearDown(searchController.dispose);
+        const queueItem = MusicBoxQueueItem(
+          id: 'temporary-card-item',
+          source: 'netease',
+          trackId: 'temporary-card-track',
+          title: '点歌队列歌曲',
+          artist: '测试歌手',
+          durationMs: 180000,
+          status: MusicBoxQueueItemStatus.ready,
+          fileSizeBytes: 0,
+          error: '',
+          addedByUserId: 'playlist-current-user',
+          createdAt: null,
+        );
+        final state = _state(
+          playbackState: MusicBoxPlaybackState.stopped,
+          positionMs: 0,
+          currentItemId: '',
+          queue: const [],
+          temporaryQueue: const [queueItem],
+        );
+        final api = _MusicBoxApiFake(state);
+
+        await tester.pumpWidget(
+          _host(
+            state,
+            searchController,
+            platform: platform,
+            height: 500,
+            musicBoxController: MusicBoxController(api: api),
+            roomId: 'room-1',
+            currentUser: _playlistCurrentUser,
+            room: _playlistRoom,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(
+            const ValueKey<String>('music-box-current-source-leading-icon'),
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          find.byKey(
+            const ValueKey<String>('music-playlist-card:temporary:room-1'),
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('创建日期'), findsNothing);
+        expect(find.text('清空队列'), findsOneWidget);
+        expect(find.text('查看歌单'), findsNothing);
+        expect(find.text('编辑歌单'), findsNothing);
+        expect(
+          find.byKey(const ValueKey<String>('music-box-source-search-input')),
+          findsNothing,
+        );
+
+        await tester.tap(
+          find.byKey(const ValueKey<String>('music-playlist-card-view')),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(find.text('确认清空当前点歌队列？此操作不会删除已保存的歌单。'), findsOneWidget);
+        await tester.tap(
+          find.byKey(
+            const ValueKey<String>('music-box-confirm-clear-temporary-queue'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(api.action, 'clear_temporary_playlist');
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
       '${platform.name} pins the current personal playlist before the queue',
       (tester) async {
         final searchController = TextEditingController();
@@ -1721,6 +2132,30 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
+        final headerPlaylistIcon = find.byKey(
+          const ValueKey<String>(
+            'music-box-current-source-playlist-card-anchor',
+          ),
+        );
+        expect(headerPlaylistIcon, findsOneWidget);
+        await tester.tap(
+          find.byKey(
+            const ValueKey<String>('music-box-current-source-leading-icon'),
+          ),
+        );
+        await tester.pump();
+        expect(
+          find.byKey(
+            const ValueKey<String>('music-playlist-card:personal-card'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey<String>('music-box-source-search-input')),
+          findsNothing,
+        );
+        await tester.tapAt(const Offset(355, 495));
+        await tester.pump();
         await tester.tap(
           find.byKey(const ValueKey<String>('music-box-current-queue-header')),
         );
@@ -1998,6 +2433,236 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('read-only playlist card opens the window-style viewer', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    const item = MusicBoxQueueItem(
+      id: 'readonly-playlist-track',
+      source: 'netease',
+      trackId: 'readonly-track',
+      title: 'Readonly song',
+      artist: 'Artist',
+      durationMs: 180000,
+      status: MusicBoxQueueItemStatus.ready,
+      fileSizeBytes: 0,
+      error: '',
+      addedByUserId: 'other-user',
+      createdAt: null,
+    );
+    final state = _state(
+      playbackState: MusicBoxPlaybackState.stopped,
+      positionMs: 0,
+      queue: const [item],
+      activeSource: const MusicBoxActiveSource(
+        type: MusicBoxActiveSourceType.userPlaylist,
+        id: 'readonly-playlist',
+        name: 'Readonly playlist',
+        ownerUserId: 'other-user',
+        snapshotId: 'readonly-snapshot',
+      ),
+    );
+
+    await tester.pumpWidget(
+      _host(
+        state,
+        controller,
+        height: 620,
+        musicBoxController: MusicBoxController(
+          api: _CloneablePlaylistApiFake(state),
+        ),
+        roomId: 'room-1',
+        currentUser: _playlistCurrentUser,
+        room: _playlistRoom,
+        previewPlatformFactory: _MusicBoxPreviewFactory(),
+      ),
+    );
+    await tester.tap(find.text('Readonly song'));
+    await tester.pump();
+    final attribution = find.byKey(
+      const ValueKey<String>('music-box-song-playlist-attribution'),
+    );
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await gesture.addPointer(location: Offset.zero);
+    addTearDown(gesture.removePointer);
+    await gesture.moveTo(tester.getCenter(attribution));
+    await tester.pumpAndSettle();
+
+    expect(find.text('查看歌单'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey<String>('music-playlist-card-view')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('active-music-playlist-dialog')),
+      findsOneWidget,
+    );
+    expect(find.text('Readonly song'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('owned playlist card edits the exact playlist', (tester) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    String? editedPlaylistId;
+    const item = MusicBoxQueueItem(
+      id: 'owned-playlist-track',
+      source: 'netease',
+      trackId: 'owned-track',
+      title: 'Owned song',
+      artist: 'Artist',
+      durationMs: 180000,
+      status: MusicBoxQueueItemStatus.ready,
+      fileSizeBytes: 0,
+      error: '',
+      addedByUserId: 'playlist-current-user',
+      createdAt: null,
+    );
+    final state = _state(
+      playbackState: MusicBoxPlaybackState.stopped,
+      positionMs: 0,
+      queue: const [item],
+      activeSource: const MusicBoxActiveSource(
+        type: MusicBoxActiveSourceType.userPlaylist,
+        id: 'owned-playlist',
+        name: 'Owned playlist',
+        ownerUserId: 'playlist-current-user',
+      ),
+    );
+    final api = _RoomPlaylistApiFake(
+      state,
+      playlist: const PersonalMusicPlaylist(
+        id: 'owned-playlist',
+        name: 'Owned playlist',
+        description: '',
+        revision: 1,
+        itemCount: 1,
+        createdAt: null,
+        updatedAt: null,
+      ),
+      items: const [],
+    );
+
+    await tester.pumpWidget(
+      _host(
+        state,
+        controller,
+        height: 620,
+        musicBoxController: MusicBoxController(api: api),
+        roomId: 'room-1',
+        currentUser: _playlistCurrentUser,
+        room: _playlistRoom,
+        onEditPersonalPlaylist: (playlistId) async {
+          editedPlaylistId = playlistId;
+        },
+      ),
+    );
+    await tester.tap(find.text('Owned song'));
+    await tester.pump();
+    final attribution = find.byKey(
+      const ValueKey<String>('music-box-song-playlist-attribution'),
+    );
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await gesture.addPointer(location: Offset.zero);
+    addTearDown(gesture.removePointer);
+    await gesture.moveTo(tester.getCenter(attribution));
+    await tester.pumpAndSettle();
+
+    expect(find.text('编辑歌单'), findsOneWidget);
+    expect(find.text('查看歌单'), findsNothing);
+    await tester.tap(
+      find.byKey(const ValueKey<String>('music-playlist-card-view')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(editedPlaylistId, 'owned-playlist');
+    expect(
+      find.byKey(const ValueKey<String>('active-music-playlist-dialog')),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('manageable room playlist card uses the room editor', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    String? editedPlaylistId;
+    const item = MusicBoxQueueItem(
+      id: 'room-playlist-track',
+      source: 'netease',
+      trackId: 'room-track',
+      title: 'Room song',
+      artist: 'Artist',
+      durationMs: 180000,
+      status: MusicBoxQueueItemStatus.ready,
+      fileSizeBytes: 0,
+      error: '',
+      addedByUserId: 'playlist-current-user',
+      createdAt: null,
+    );
+    final state = _state(
+      playbackState: MusicBoxPlaybackState.stopped,
+      positionMs: 0,
+      queue: const [item],
+      activeSource: const MusicBoxActiveSource(
+        type: MusicBoxActiveSourceType.roomPlaylist,
+        id: 'room-playlist',
+        name: 'Room playlist',
+      ),
+    );
+    final api = _RoomPlaylistApiFake(
+      state,
+      playlist: const PersonalMusicPlaylist(
+        id: 'room-playlist',
+        name: 'Room playlist',
+        description: '',
+        revision: 1,
+        itemCount: 1,
+        createdAt: null,
+        updatedAt: null,
+      ),
+      items: const [],
+    );
+
+    await tester.pumpWidget(
+      _host(
+        state,
+        controller,
+        height: 620,
+        musicBoxController: MusicBoxController(api: api),
+        roomId: 'room-1',
+        currentUser: _playlistCurrentUser,
+        room: _playlistRoom,
+        onEditRoomPlaylist: (playlistId) async {
+          editedPlaylistId = playlistId;
+        },
+      ),
+    );
+    await tester.tap(find.text('Room song'));
+    await tester.pump();
+    final attribution = find.byKey(
+      const ValueKey<String>('music-box-song-playlist-attribution'),
+    );
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await gesture.addPointer(location: Offset.zero);
+    addTearDown(gesture.removePointer);
+    await gesture.moveTo(tester.getCenter(attribution));
+    await tester.pumpAndSettle();
+
+    expect(find.text('编辑歌单'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey<String>('music-playlist-card-view')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(editedPlaylistId, 'room-playlist');
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('long music titles wrap fully and shrink without ellipses', (
     tester,

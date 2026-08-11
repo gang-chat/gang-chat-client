@@ -2604,6 +2604,7 @@ void registerShellHomeWidgetTests() {
     WidgetTester tester,
   ) async {
     String? clipboardText;
+    final sentMessageRequests = <Map<String, Object?>>[];
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
       SystemChannels.platform,
       (call) async {
@@ -2634,7 +2635,10 @@ void registerShellHomeWidgetTests() {
       MaterialApp(
         theme: ui.uiTheme(),
         home: HomePage(
-          app: _homeTestAppContext(includeSharedMusicTrackMessage: true),
+          app: _homeTestAppContext(
+            includeSharedMusicTrackMessage: true,
+            sentMessageRequests: sentMessageRequests,
+          ),
           realtime: _NoopRealtimeService(),
         ),
       ),
@@ -2681,6 +2685,35 @@ void registerShellHomeWidgetTests() {
       find.byKey(const ValueKey('composer-message-component')),
       findsNothing,
     );
+
+    await tester.tap(composerField);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.keyV);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.keyV);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    await tester.enterText(composerField, '紧接着发送的说明');
+    await tester.tap(find.byTooltip('发送'));
+    await tester.pumpAndSettle();
+
+    expect(sentMessageRequests, hasLength(2));
+    expect(sentMessageRequests.first['type'], 'music_track');
+    final componentAttachments =
+        sentMessageRequests.first['attachments']! as List<Object?>;
+    expect(componentAttachments, hasLength(1));
+    expect(
+      (componentAttachments.single!
+          as Map<String, Object?>)['source_message_id'],
+      'msg-music-track',
+    );
+    expect(sentMessageRequests.last['type'] ?? 'text', 'text');
+    expect(sentMessageRequests.last['body'], '紧接着发送的说明');
+    expect(
+      find.byKey(const ValueKey('composer-message-component')),
+      findsNothing,
+    );
+    expect(tester.widget<TextField>(composerField).controller?.text, isEmpty);
+
     expect(tester.takeException(), isNull);
   });
 

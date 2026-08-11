@@ -1128,7 +1128,7 @@ class _SearchCategoryTabs extends StatelessWidget {
               for (final category in categories)
                 SizedBox(
                   width: itemWidth,
-                  child: _SearchCategoryButton(
+                  child: CompactCategoryButton(
                     key: ValueKey('search-category-${category.name}'),
                     label: search_display.globalSearchCategoryLabel(category),
                     count: search_display.globalSearchCategoryCount(
@@ -1142,71 +1142,6 @@ class _SearchCategoryTabs extends StatelessWidget {
             ],
           );
         },
-      ),
-    );
-  }
-}
-
-class _SearchCategoryButton extends StatefulWidget {
-  const _SearchCategoryButton({
-    super.key,
-    required this.label,
-    required this.count,
-    required this.selected,
-    required this.onPressed,
-  });
-
-  final String label;
-  final int count;
-  final bool selected;
-  final VoidCallback onPressed;
-
-  @override
-  State<_SearchCategoryButton> createState() => _SearchCategoryButtonState();
-}
-
-class _SearchCategoryButtonState extends State<_SearchCategoryButton> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final active = widget.selected || _hovered;
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onPressed,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 90),
-          height: 29,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          decoration: BoxDecoration(
-            color: widget.selected
-                ? UiColors.selected
-                : active
-                ? UiColors.surface
-                : UiColors.surfaceLow,
-            borderRadius: BorderRadius.circular(UiRadii.sm),
-            border: Border.all(
-              color: widget.selected
-                  ? UiColors.selectedBorder
-                  : UiColors.border,
-            ),
-          ),
-          child: Center(
-            child: Text(
-              '${widget.label} ${widget.count}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: UiTypography.label.copyWith(
-                color: widget.selected ? UiColors.accent : UiColors.text,
-                fontSize: 11,
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }

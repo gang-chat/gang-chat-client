@@ -220,6 +220,7 @@ AuthenticatedAppContext _homeTestAppContext({
   List<String?>? liveScreenViewUpdates,
   List<String>? liveOperationLog,
   List<String>? liveModerationActions,
+  List<Map<String, Object?>>? sentMessageRequests,
   String currentRoomRole = 'owner',
   String currentRoomJoinPolicy = 'approval_required',
   bool currentUserIsSuperuser = false,
@@ -280,6 +281,7 @@ AuthenticatedAppContext _homeTestAppContext({
       liveScreenViewUpdates: liveScreenViewUpdates,
       liveOperationLog: liveOperationLog,
       liveModerationActions: liveModerationActions,
+      sentMessageRequests: sentMessageRequests,
       currentRoomRole: currentRoomRole,
       currentRoomJoinPolicy: currentRoomJoinPolicy,
       secondaryMemberRole: secondaryMemberRole,
@@ -315,6 +317,7 @@ GangApi _roomsApi({
   List<String?>? liveScreenViewUpdates,
   List<String>? liveOperationLog,
   List<String>? liveModerationActions,
+  List<Map<String, Object?>>? sentMessageRequests,
   String currentRoomRole = 'owner',
   String currentRoomJoinPolicy = 'approval_required',
   String secondaryMemberRole = 'member',
@@ -348,6 +351,7 @@ GangApi _roomsApi({
   var liveCameraMirrored = false;
   var liveScreenSharing = false;
   var remainingMusicBoxStateFailures = musicBoxStateTransientFailures;
+  var sentMessageRequestCount = 0;
   return GangApiClient(
     baseUrl: 'http://example.test/api/v1',
     accessTokenProvider: ({bool forceRefresh = false}) async => 'access-token',
@@ -1102,13 +1106,35 @@ GangApi _roomsApi({
           final body =
               jsonDecode(utf8.decode(request.bodyBytes))
                   as Map<String, Object?>;
+          sentMessageRequestCount += 1;
+          sentMessageRequests?.add(body);
+          final type = body['type'] as String? ?? 'text';
+          final responseAttachments = switch (type) {
+            'music_track' => const <Object?>[
+              {
+                'type': 'music_track',
+                'track': {
+                  'id': 'mbpi-shared',
+                  'playlist_id': 'mbp-source',
+                  'track_id': 'BV1shared',
+                  'source': 'bilibili',
+                  'title': '分享歌曲完整名称',
+                  'artists': ['分享歌手'],
+                  'duration_ms': 180000,
+                },
+              },
+            ],
+            _ => const <Object?>[],
+          };
           return _jsonResponse({
             'message': _messageJson(
-              id: 'msg-sent',
+              id: 'msg-sent-$sentMessageRequestCount',
               roomId: 'server-alpha',
               sender: _currentUserJson,
               clientMessageId: body['client_message_id']! as String,
               body: body['body']! as String,
+              type: type,
+              attachments: responseAttachments,
             ),
           });
         }

@@ -274,6 +274,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   bool _pickingAttachments = false;
   bool _settingsOpen = false;
   SettingsSection _settingsInitialSection = SettingsSection.profile;
+  String? _settingsInitialMusicPlaylistId;
   AvailableAppUpdate? _settingsAppUpdate;
   ReleaseDownloadCancellationToken? _appUpdateDownloadCancellationToken;
   bool _logoutConfirming = false;
@@ -284,6 +285,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   bool _auxiliaryOpenedFromNarrowSidebar = false;
   _ContentMode _contentMode = _ContentMode.chat;
   RoomSettingsSection _roomSettingsInitialSection = RoomSettingsSection.info;
+  String? _roomSettingsInitialMusicPlaylistId;
   UserSummary? _superuserSettingsTarget;
   // Bumped to ask an open members panel to reload (e.g. after a
   // `room_join_requests_updated`, `room_role_changed`, or
@@ -716,6 +718,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   void _showSettingsAppUpdateInState(AvailableAppUpdate update) {
     _settingsOpen = true;
     _settingsInitialSection = SettingsSection.about;
+    _settingsInitialMusicPlaylistId = null;
     _settingsAppUpdate = update;
     _auxiliaryOpenedFromNarrowSidebar = false;
     _contentMode = _ContentMode.chat;

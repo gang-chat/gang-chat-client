@@ -93,6 +93,40 @@ void main() {
     );
   }
 
+  testWidgets('playlist settings can open an exact playlist directly', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(720, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final api = _FakePersonalPlaylistApi();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ui.uiTheme(),
+        home: SettingsPage(
+          initialSection: SettingsSection.playlists,
+          initialMusicPlaylistId: 'mbp_1',
+          api: api,
+          controller: const SettingsController(
+            api: null,
+            apiBaseUrl: '',
+            stickerPackStore: StickerPackStore(),
+          ),
+          onClose: () {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('personal-music-playlist-header')),
+      findsOneWidget,
+    );
+    expect(find.text('搜索添加'), findsOneWidget);
+    expect(find.text('晴天'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('empty playlist opens on the first tap while summaries refresh', (
     tester,
   ) async {

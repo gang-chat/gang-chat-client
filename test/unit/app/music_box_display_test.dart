@@ -33,6 +33,58 @@ void main() {
       expect(musicBoxArtistFieldLabel('netease'), '歌手');
       expect(musicBoxArtistFieldLabel('future-source'), '歌手');
     });
+
+    test('filters every source, including the current source and queue', () {
+      expect(
+        musicBoxSourceVisibleForFilter(
+          MusicBoxActiveSourceType.temporary,
+          null,
+        ),
+        isTrue,
+      );
+      expect(
+        musicBoxSourceVisibleForFilter(
+          MusicBoxActiveSourceType.temporary,
+          MusicBoxSourceScopeFilter.personal,
+        ),
+        isFalse,
+      );
+      expect(
+        musicBoxSourceVisibleForFilter(
+          MusicBoxActiveSourceType.roomPlaylist,
+          MusicBoxSourceScopeFilter.personal,
+        ),
+        isFalse,
+      );
+      expect(
+        musicBoxSourceVisibleForFilter(
+          MusicBoxActiveSourceType.userPlaylist,
+          MusicBoxSourceScopeFilter.personal,
+        ),
+        isTrue,
+      );
+      expect(
+        musicBoxSourceVisibleForFilter(
+          MusicBoxActiveSourceType.roomPlaylist,
+          MusicBoxSourceScopeFilter.room,
+        ),
+        isTrue,
+      );
+      expect(
+        musicBoxSourceVisibleForFilter(
+          MusicBoxActiveSourceType.userPlaylist,
+          MusicBoxSourceScopeFilter.room,
+        ),
+        isFalse,
+      );
+    });
+
+    test('matches source names with a normalized query', () {
+      expect(musicBoxSourceMatchesQuery(' 我的收藏 ', ''), isTrue);
+      expect(musicBoxSourceMatchesQuery('Evening Mix', ' evening '), isTrue);
+      expect(musicBoxSourceMatchesQuery('房间收藏', '收藏'), isTrue);
+      expect(musicBoxSourceMatchesQuery('点歌队列', '个人'), isFalse);
+    });
   });
 
   group('music box request queue identity', () {
