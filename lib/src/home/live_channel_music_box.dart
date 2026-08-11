@@ -698,8 +698,8 @@ class _MusicBoxProgressBar extends StatelessWidget {
 }
 
 /// Lower body that defaults to the authoritative active queue. A single plus
-/// toggle reveals search and saved-playlist sources without making the queue a
-/// peer tab, so closing the picker always returns to what is actually playing.
+/// toggle reveals search and saved-playlist sources while keeping the viewed
+/// source independent from the authoritative source that is actually playing.
 class _MusicBoxBody extends StatefulWidget {
   const _MusicBoxBody({
     super.key,
@@ -756,6 +756,38 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
   _MusicBoxSection _section = _MusicBoxSection.queue;
   PersonalMusicPlaylist? _requestedPlaylist;
   bool? _requestedPlaylistRoomScoped;
+  _MusicBoxBrowseSource? _viewedSourceOverride;
+
+  @override
+  void didUpdateWidget(covariant _MusicBoxBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller ||
+        oldWidget.roomId != widget.roomId) {
+      _viewedSourceOverride = null;
+    }
+  }
+
+  _MusicBoxBrowseSource get _viewedSource {
+    final active = _musicBoxActiveBrowseSource(widget.state, widget.roomId);
+    final override = _viewedSourceOverride;
+    if (override == null) return active;
+    if (override.type == MusicBoxActiveSourceType.temporary) {
+      return override.copyWith(
+        itemCount: widget.state.temporaryQueue.length,
+        current:
+            widget.state.activeSource.type ==
+            MusicBoxActiveSourceType.temporary,
+        queueItems: widget.state.temporaryQueue,
+      );
+    }
+    if (_musicBoxBrowseSourceMatchesActive(override, widget.state)) {
+      return active;
+    }
+    return override.copyWith(current: false);
+  }
+
+  bool get _viewedSourceIsActive =>
+      _musicBoxBrowseSourceMatchesActive(_viewedSource, widget.state);
 
   void _toggleSourceBrowser() {
     FocusManager.instance.primaryFocus?.unfocus();
@@ -763,6 +795,15 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
       _section = _section == _MusicBoxSection.sources
           ? _MusicBoxSection.queue
           : _MusicBoxSection.sources;
+      _requestedPlaylist = null;
+      _requestedPlaylistRoomScoped = null;
+    });
+  }
+
+  void _selectViewedSource(_MusicBoxBrowseSource source) {
+    setState(() {
+      _viewedSourceOverride = source;
+      _section = _MusicBoxSection.queue;
       _requestedPlaylist = null;
       _requestedPlaylistRoomScoped = null;
     });
@@ -835,6 +876,7 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
     final hasQuery = widget.searchController.text.trim().isNotEmpty;
     final searchVisible = _section == _MusicBoxSection.search;
     final sourceBrowserVisible = _section == _MusicBoxSection.sources;
+    final viewedSource = _viewedSource;
     return MusicPlaylistCardHostScope(
       currentUser: widget.currentUser,
       room: widget.room,
@@ -860,7 +902,7 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
                         height: _musicBoxSearchFieldHeight,
                       )
                     : _MusicBoxCurrentSourceHeader(
-                        state: widget.state,
+                        source: viewedSource,
                         expanded: sourceBrowserVisible,
                         onPressed: _toggleSourceBrowser,
                       ),
@@ -894,11 +936,26 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
           Expanded(
             key: const ValueKey<String>('music-box-results-viewport'),
             child: switch (_section) {
-              _MusicBoxSection.queue => _currentQueueView(),
+              _MusicBoxSection.queue =>
+                _viewedSourceIsActive
+                    ? _currentQueueView()
+                    : _MusicBoxSourceBrowser(
+                        controller: widget.controller,
+                        roomId: widget.roomId,
+                        state: widget.state,
+                        showSourceList: false,
+                        viewedSource: viewedSource,
+                        onViewedSourceChanged: _selectViewedSource,
+                        onStateChanged: _handleActivatedState,
+                        onQueueResult: widget.onQueueResult,
+                      ),
               _MusicBoxSection.sources => _MusicBoxSourceBrowser(
                 controller: widget.controller,
                 roomId: widget.roomId,
                 state: widget.state,
+                showSourceList: true,
+                viewedSource: viewedSource,
+                onViewedSourceChanged: _selectViewedSource,
                 onStateChanged: _handleActivatedState,
                 onQueueResult: widget.onQueueResult,
               ),
@@ -1139,12 +1196,12 @@ class _ActiveMusicPlaylistDialogState
 
 class _MusicBoxCurrentSourceHeader extends StatelessWidget {
   const _MusicBoxCurrentSourceHeader({
-    required this.state,
+    required this.source,
     required this.expanded,
     required this.onPressed,
   });
 
-  final MusicBoxState state;
+  final _MusicBoxBrowseSource source;
   final bool expanded;
   final VoidCallback onPressed;
 
@@ -1163,11 +1220,15 @@ class _MusicBoxCurrentSourceHeader extends StatelessWidget {
       tooltip: expanded ? '收起歌单' : '切换歌单',
       child: Row(
         children: [
-          const Icon(Icons.queue_music, size: 15, color: UiColors.accent),
+          Icon(
+            _musicBoxBrowseSourceIcon(source),
+            size: 15,
+            color: UiColors.accent,
+          ),
           const SizedBox(width: 7),
           Expanded(
             child: Text(
-              music_box_display.musicBoxActiveSourceLabel(state.activeSource),
+              source.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
@@ -1178,7 +1239,7 @@ class _MusicBoxCurrentSourceHeader extends StatelessWidget {
             ),
           ),
           Text(
-            '${state.queue.length}',
+            '${source.itemCount}',
             style: const TextStyle(
               color: UiColors.textMuted,
               fontSize: 10,
@@ -1255,16 +1316,83 @@ class _MusicBoxBrowseSource {
   final List<MusicBoxQueueItem>? queueItems;
 
   String get key => '${musicBoxActiveSourceTypeValue(type)}:$id';
+
+  _MusicBoxBrowseSource copyWith({
+    String? name,
+    int? itemCount,
+    bool? current,
+    List<MusicBoxQueueItem>? queueItems,
+  }) {
+    return _MusicBoxBrowseSource(
+      type: type,
+      id: id,
+      name: name ?? this.name,
+      itemCount: itemCount ?? this.itemCount,
+      current: current ?? this.current,
+      roomScoped: roomScoped,
+      playlist: playlist,
+      queueItems: queueItems ?? this.queueItems,
+    );
+  }
+}
+
+_MusicBoxBrowseSource _musicBoxActiveBrowseSource(
+  MusicBoxState state,
+  String? roomId,
+) {
+  final active = state.activeSource;
+  if (active.type == MusicBoxActiveSourceType.temporary) {
+    return _MusicBoxBrowseSource(
+      type: MusicBoxActiveSourceType.temporary,
+      id: roomId ?? '',
+      name: '点歌队列',
+      itemCount: state.temporaryQueue.length,
+      current: true,
+      roomScoped: true,
+      queueItems: state.temporaryQueue,
+    );
+  }
+  return _MusicBoxBrowseSource(
+    type: active.type,
+    id: active.id,
+    name: music_box_display.musicBoxActiveSourceLabel(active),
+    itemCount: state.queue.length,
+    current: true,
+    roomScoped: active.type == MusicBoxActiveSourceType.roomPlaylist,
+    queueItems: state.queue,
+  );
+}
+
+bool _musicBoxBrowseSourceMatchesActive(
+  _MusicBoxBrowseSource source,
+  MusicBoxState state,
+) {
+  final active = state.activeSource;
+  if (source.type == MusicBoxActiveSourceType.temporary) {
+    return active.type == MusicBoxActiveSourceType.temporary;
+  }
+  return active.type == source.type && active.id == source.id;
+}
+
+IconData _musicBoxBrowseSourceIcon(_MusicBoxBrowseSource source) {
+  return switch (source.type) {
+    MusicBoxActiveSourceType.temporary => Icons.queue_music,
+    MusicBoxActiveSourceType.roomPlaylist => Icons.meeting_room,
+    MusicBoxActiveSourceType.userPlaylist => Icons.person,
+  };
 }
 
 /// Unified, browse-first source picker shown by the music-box source header.
-/// Selecting a source only opens its tracks; playback changes exclusively
-/// through the per-track play action below.
+/// Selecting a source collapses the picker and replaces the current content
+/// with its tracks; playback changes exclusively through a per-track action.
 class _MusicBoxSourceBrowser extends StatefulWidget {
   const _MusicBoxSourceBrowser({
     required this.controller,
     required this.roomId,
     required this.state,
+    required this.showSourceList,
+    required this.viewedSource,
+    required this.onViewedSourceChanged,
     required this.onStateChanged,
     required this.onQueueResult,
   });
@@ -1272,6 +1400,9 @@ class _MusicBoxSourceBrowser extends StatefulWidget {
   final MusicBoxController? controller;
   final String? roomId;
   final MusicBoxState state;
+  final bool showSourceList;
+  final _MusicBoxBrowseSource viewedSource;
+  final ValueChanged<_MusicBoxBrowseSource> onViewedSourceChanged;
   final ValueChanged<MusicBoxState> onStateChanged;
   final ValueChanged<MusicBoxSearchResult> onQueueResult;
 
@@ -1280,19 +1411,24 @@ class _MusicBoxSourceBrowser extends StatefulWidget {
 }
 
 class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
-  bool _loading = true;
-  String? _error;
+  bool _sourceListLoading = true;
+  String? _sourceListError;
+  bool _trackLoading = false;
+  String? _trackError;
   List<PersonalMusicPlaylist> _roomPlaylists = const [];
   List<PersonalMusicPlaylist> _personalPlaylists = const [];
   _MusicBoxSourceFilter? _filter;
-  _MusicBoxBrowseSource? _selected;
   List<PersonalMusicPlaylistItem> _selectedItems = const [];
+  String? _loadedSourceKey;
   String? _startingTrackKey;
 
   @override
   void initState() {
     super.initState();
     unawaited(_loadPlaylists());
+    if (!widget.showSourceList && widget.viewedSource.queueItems == null) {
+      unawaited(_loadViewedSource());
+    }
   }
 
   @override
@@ -1300,9 +1436,22 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller ||
         oldWidget.roomId != widget.roomId) {
-      _selected = null;
       _selectedItems = const [];
+      _loadedSourceKey = null;
       unawaited(_loadPlaylists());
+    }
+    final viewedSourceChanged =
+        oldWidget.viewedSource.key != widget.viewedSource.key;
+    if (viewedSourceChanged) {
+      _selectedItems = const [];
+      _loadedSourceKey = null;
+      _trackError = null;
+    }
+    if (!widget.showSourceList &&
+        widget.viewedSource.queueItems == null &&
+        _loadedSourceKey != widget.viewedSource.key &&
+        !_trackLoading) {
+      unawaited(_loadViewedSource());
     }
   }
 
@@ -1311,14 +1460,14 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
     if (controller == null) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
-        _error = '歌单服务暂不可用';
+        _sourceListLoading = false;
+        _sourceListError = '歌单服务暂不可用';
       });
       return;
     }
     setState(() {
-      _loading = true;
-      _error = null;
+      _sourceListLoading = true;
+      _sourceListError = null;
     });
     try {
       final roomFuture = widget.roomId == null
@@ -1335,15 +1484,65 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
       ]);
       if (!mounted) return;
       setState(() {
-        _loading = false;
+        _sourceListLoading = false;
         _roomPlaylists = results[0];
         _personalPlaylists = results[1];
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
-        _error = '加载歌单失败';
+        _sourceListLoading = false;
+        _sourceListError = '加载歌单失败';
+      });
+    }
+  }
+
+  Future<void> _loadViewedSource() async {
+    final source = widget.viewedSource;
+    final queueItems = source.queueItems;
+    if (queueItems != null) {
+      if (!mounted) return;
+      setState(() {
+        _trackLoading = false;
+        _trackError = null;
+        _selectedItems = const [];
+        _loadedSourceKey = source.key;
+      });
+      return;
+    }
+    final controller = widget.controller;
+    final roomId = widget.roomId;
+    if (controller == null || (source.roomScoped && roomId == null)) {
+      if (!mounted) return;
+      setState(() {
+        _trackLoading = false;
+        _trackError = '歌单服务暂不可用';
+      });
+      return;
+    }
+    setState(() {
+      _trackLoading = true;
+      _trackError = null;
+      _selectedItems = const [];
+    });
+    try {
+      final page = source.roomScoped
+          ? await controller.loadRoomPlaylist(
+              roomId: roomId!,
+              playlistId: source.id,
+            )
+          : await controller.loadMyPlaylist(playlistId: source.id);
+      if (!mounted || widget.viewedSource.key != source.key) return;
+      setState(() {
+        _trackLoading = false;
+        _selectedItems = page.items;
+        _loadedSourceKey = source.key;
+      });
+    } catch (_) {
+      if (!mounted || widget.viewedSource.key != source.key) return;
+      setState(() {
+        _trackLoading = false;
+        _trackError = '加载歌曲失败';
       });
     }
   }
@@ -1422,44 +1621,8 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
     setState(() => _filter = _filter == value ? null : value);
   }
 
-  Future<void> _openSource(_MusicBoxBrowseSource source) async {
-    final queueItems = source.queueItems;
-    if (queueItems != null) {
-      setState(() {
-        _selected = source;
-        _selectedItems = const [];
-        _error = null;
-      });
-      return;
-    }
-    final controller = widget.controller;
-    final roomId = widget.roomId;
-    if (controller == null || (source.roomScoped && roomId == null)) return;
-    setState(() {
-      _selected = source;
-      _selectedItems = const [];
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final page = source.roomScoped
-          ? await controller.loadRoomPlaylist(
-              roomId: roomId!,
-              playlistId: source.id,
-            )
-          : await controller.loadMyPlaylist(playlistId: source.id);
-      if (!mounted || _selected?.key != source.key) return;
-      setState(() {
-        _loading = false;
-        _selectedItems = page.items;
-      });
-    } catch (_) {
-      if (!mounted || _selected?.key != source.key) return;
-      setState(() {
-        _loading = false;
-        _error = '加载歌曲失败';
-      });
-    }
+  void _openSource(_MusicBoxBrowseSource source) {
+    widget.onViewedSourceChanged(source);
   }
 
   bool _sourceIsActive(_MusicBoxBrowseSource source) {
@@ -1562,14 +1725,6 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
     );
   }
 
-  IconData _sourceIcon(_MusicBoxBrowseSource source) {
-    return switch (source.type) {
-      MusicBoxActiveSourceType.temporary => Icons.queue_music,
-      MusicBoxActiveSourceType.roomPlaylist => Icons.meeting_room,
-      MusicBoxActiveSourceType.userPlaylist => Icons.person,
-    };
-  }
-
   Widget _sourceList() {
     final sources = _sources();
     return Column(
@@ -1589,15 +1744,19 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
                 key: ValueKey<String>('music-box-source:${source.key}'),
                 width: double.infinity,
                 height: 54,
-                onPressed: () => unawaited(_openSource(source)),
-                selected: source.current,
+                onPressed: () => _openSource(source),
+                selected: source.key == widget.viewedSource.key,
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 backgroundColor: UiColors.surfaceLow,
                 borderColor: UiColors.border,
                 borderRadius: UiRadii.md,
                 child: Row(
                   children: [
-                    Icon(_sourceIcon(source), size: 18, color: UiColors.accent),
+                    Icon(
+                      _musicBoxBrowseSourceIcon(source),
+                      size: 18,
+                      color: UiColors.accent,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Column(
@@ -1617,7 +1776,7 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
                           const SizedBox(height: 2),
                           Text(
                             source.current
-                                ? '当前歌单 · ${source.itemCount} 首歌曲'
+                                ? '正在播放 · ${source.itemCount} 首歌曲'
                                 : '${source.itemCount} 首歌曲',
                             style: const TextStyle(
                               color: UiColors.textMuted,
@@ -1645,117 +1804,74 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
   Widget _sourceTracks(_MusicBoxBrowseSource source) {
     final queueItems = source.queueItems;
     final itemCount = queueItems?.length ?? _selectedItems.length;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            ButtonIcon(
-              key: const ValueKey<String>('music-box-source-back'),
-              icon: const Icon(Icons.arrow_back),
-              tooltip: '返回歌单列表',
-              onPressed: () {
-                setState(() {
-                  _selected = null;
-                  _selectedItems = const [];
-                  _error = null;
-                });
-              },
-              size: 28,
-            ),
-            const SizedBox(width: 8),
-            Icon(_sourceIcon(source), size: 17, color: UiColors.accent),
-            const SizedBox(width: 7),
-            Expanded(
-              child: Text(
-                source.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: UiColors.text,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Expanded(
-          child: itemCount == 0
-              ? const _MusicBoxEmpty(icon: Icons.music_off, message: '歌单里还没有歌曲')
-              : ListView.separated(
-                  key: ValueKey<String>(
-                    'music-box-source-tracks:${source.key}',
-                  ),
-                  padding: EdgeInsets.zero,
-                  itemCount: itemCount,
-                  separatorBuilder: (_, _) => const SizedBox(height: 8),
-                  itemBuilder: (context, index) {
-                    if (queueItems != null) {
-                      final item = queueItems[index];
-                      final result = MusicBoxSearchResult(
-                        trackId: item.trackId,
-                        name: item.title,
-                        artists: item.artist.trim().isEmpty
-                            ? const []
-                            : [item.artist.trim()],
-                        source: item.source,
-                      );
-                      final actionKey = '${source.key}:${item.id}';
-                      return _MusicBoxTrackTile(
-                        keyScope: 'source-queue',
-                        result: result,
-                        query: '',
-                        durationMs: item.durationMs,
-                        controller: widget.controller,
-                        roomId: widget.roomId,
-                        alreadyInRequestQueue: true,
-                        onQueue: () {},
-                        actionIcon: Icons.play_arrow,
-                        actionTooltip: '播放该歌曲',
-                        actionLoading: _startingTrackKey == actionKey,
-                        onAction: () => unawaited(_playQueueItem(source, item)),
-                      );
-                    }
-                    final item = _selectedItems[index];
-                    final result = MusicBoxSearchResult(
-                      trackId: item.trackId,
-                      name: item.title,
-                      artists: item.artists,
+    return itemCount == 0
+        ? const _MusicBoxEmpty(icon: Icons.music_off, message: '歌单里还没有歌曲')
+        : ListView.separated(
+            key: ValueKey<String>('music-box-source-tracks:${source.key}'),
+            padding: EdgeInsets.zero,
+            itemCount: itemCount,
+            separatorBuilder: (_, _) => const SizedBox(height: 8),
+            itemBuilder: (context, index) {
+              if (queueItems != null) {
+                final item = queueItems[index];
+                final result = MusicBoxSearchResult(
+                  trackId: item.trackId,
+                  name: item.title,
+                  artists: item.artist.trim().isEmpty
+                      ? const []
+                      : [item.artist.trim()],
+                  source: item.source,
+                );
+                final actionKey = '${source.key}:${item.id}';
+                return _MusicBoxTrackTile(
+                  keyScope: 'source-queue',
+                  result: result,
+                  query: '',
+                  durationMs: item.durationMs,
+                  controller: widget.controller,
+                  roomId: widget.roomId,
+                  alreadyInRequestQueue: true,
+                  onQueue: () {},
+                  actionIcon: Icons.play_arrow,
+                  actionTooltip: '播放该歌曲',
+                  actionLoading: _startingTrackKey == actionKey,
+                  onAction: () => unawaited(_playQueueItem(source, item)),
+                );
+              }
+              final item = _selectedItems[index];
+              final result = MusicBoxSearchResult(
+                trackId: item.trackId,
+                name: item.title,
+                artists: item.artists,
+                source: item.source,
+              );
+              final actionKey = '${source.key}:${item.id}';
+              return _MusicBoxTrackTile(
+                keyScope: 'source-playlist',
+                result: result,
+                query: '',
+                durationMs: item.durationMs,
+                controller: widget.controller,
+                roomId: widget.roomId,
+                alreadyInRequestQueue: music_box_display
+                    .musicBoxRequestQueueContainsTrack(
+                      widget.state.temporaryQueue,
                       source: item.source,
-                    );
-                    final actionKey = '${source.key}:${item.id}';
-                    return _MusicBoxTrackTile(
-                      keyScope: 'source-playlist',
-                      result: result,
-                      query: '',
-                      durationMs: item.durationMs,
-                      controller: widget.controller,
-                      roomId: widget.roomId,
-                      alreadyInRequestQueue: music_box_display
-                          .musicBoxRequestQueueContainsTrack(
-                            widget.state.temporaryQueue,
-                            source: item.source,
-                            trackId: item.trackId,
-                          ),
-                      onQueue: () => widget.onQueueResult(result),
-                      actionIcon: Icons.play_arrow,
-                      actionTooltip: '从这首歌开始播放歌单',
-                      actionLoading: _startingTrackKey == actionKey,
-                      onAction: () =>
-                          unawaited(_playPlaylistItem(source, item)),
-                    );
-                  },
-                ),
-        ),
-      ],
-    );
+                      trackId: item.trackId,
+                    ),
+                onQueue: () => widget.onQueueResult(result),
+                actionIcon: Icons.play_arrow,
+                actionTooltip: '从这首歌开始播放歌单',
+                actionLoading: _startingTrackKey == actionKey,
+                onAction: () => unawaited(_playPlaylistItem(source, item)),
+              );
+            },
+          );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
+    if (widget.showSourceList && _sourceListLoading) {
       return const Center(
         child: SizedBox.square(
           dimension: 22,
@@ -1763,17 +1879,28 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
         ),
       );
     }
-    if (_error != null) {
-      final selected = _selected;
+    if (widget.showSourceList && _sourceListError != null) {
       return _MusicBoxRetryState(
-        message: _error!,
-        onRetry: selected == null
-            ? () => unawaited(_loadPlaylists())
-            : () => unawaited(_openSource(selected)),
+        message: _sourceListError!,
+        onRetry: () => unawaited(_loadPlaylists()),
       );
     }
-    final selected = _selected;
-    return selected == null ? _sourceList() : _sourceTracks(selected);
+    if (widget.showSourceList) return _sourceList();
+    if (_trackLoading) {
+      return const Center(
+        child: SizedBox.square(
+          dimension: 22,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+    if (_trackError != null) {
+      return _MusicBoxRetryState(
+        message: _trackError!,
+        onRetry: () => unawaited(_loadViewedSource()),
+      );
+    }
+    return _sourceTracks(widget.viewedSource);
   }
 }
 

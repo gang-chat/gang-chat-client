@@ -1004,6 +1004,10 @@ extension _HomeShellLiveActions on _HomeShellState {
   Future<void> _joinLive(String source) async {
     final room = _selectedRoom;
     if (room == null || _joiningLive || _leavingLive) return;
+    // Opening a room normally starts this fetch already. Retrying at the live
+    // lifecycle boundary covers startup/token-refresh races without delaying
+    // the voice join itself.
+    _ensureMusicBoxLoaded(room.id);
     final desiredMicMuted = _micMuted;
     final desiredHeadphonesMuted = _headphonesMuted;
 
@@ -1139,6 +1143,7 @@ extension _HomeShellLiveActions on _HomeShellState {
 
   Future<void> _restoreLiveAfterRealtimeReconnect(String roomId) async {
     if (_joiningLive || _joinedLiveRoomId != roomId) return;
+    _ensureMusicBoxLoaded(roomId);
     if (_liveSessionController.isAttachedToRoom(roomId)) {
       await _refreshLiveSilently(roomId);
       return;

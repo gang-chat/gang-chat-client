@@ -8,9 +8,14 @@ extension _HomeShellMusicBox on _HomeShellState {
   /// Resets all music box state. Called on room switch and account change so a
   /// stale snapshot never bleeds across rooms.
   void _resetMusicBox() {
+    _musicBoxLoadRetry?.cancel();
+    _musicBoxLoadRetry = null;
+    _musicBoxLoadFailures = 0;
     _musicBoxSearchDebounce?.cancel();
     _musicBoxSearchDebounce = null;
     _musicBoxSearchSerial++;
+    _musicBoxRoomSerial++;
+    _musicBoxLoadingRoomId = null;
     _musicBox = null;
     _musicBoxOpen = false;
     _musicBoxSearchResults = const [];
@@ -23,17 +28,75 @@ extension _HomeShellMusicBox on _HomeShellState {
     _lastMusicBoxSearchText = _musicBoxSearchController.text;
   }
 
-  /// Fetches the snapshot for [roomId]. Failures are swallowed (the entry stays
-  /// hidden) since the music box is optional; a `503` simply means it's off.
+  /// Fetches the snapshot for [roomId]. A successful disabled snapshot still
+  /// hides the optional entry. Transient failures preserve the last valid
+  /// snapshot; clearing it would make both the inline player and open panel
+  /// disappear during token refreshes or brief network interruptions.
   Future<void> _loadMusicBox(String roomId) async {
+    if (_musicBoxLoadingRoomId == roomId) return;
+    final roomSerial = _musicBoxRoomSerial;
+    _musicBoxLoadRetry?.cancel();
+    _musicBoxLoadRetry = null;
+    _musicBoxLoadingRoomId = roomId;
     try {
-      final state = await _musicBoxController.getState(roomId);
-      if (!mounted || _selectedServerId != roomId) return;
+      final state = await _musicBoxController
+          .getState(roomId)
+          .timeout(const Duration(seconds: 12));
+      if (!mounted ||
+          _selectedServerId != roomId ||
+          roomSerial != _musicBoxRoomSerial) {
+        return;
+      }
+      _musicBoxLoadFailures = 0;
       _setHomeState(() => _musicBox = state);
-    } catch (_) {
-      if (!mounted || _selectedServerId != roomId) return;
-      _setHomeState(() => _musicBox = null);
+    } catch (error) {
+      assert(() {
+        debugPrint('music-box: failed to load state for $roomId: $error');
+        return true;
+      }());
+      // Keep the last authoritative snapshot. When this was the first load,
+      // schedule a bounded retry so one stalled request cannot hide the module
+      // for the rest of the room session.
+      _scheduleMusicBoxLoadRetry(roomId, roomSerial);
+    } finally {
+      if (roomSerial == _musicBoxRoomSerial &&
+          _musicBoxLoadingRoomId == roomId) {
+        _musicBoxLoadingRoomId = null;
+      }
     }
+  }
+
+  void _scheduleMusicBoxLoadRetry(String roomId, int roomSerial) {
+    if (!mounted ||
+        _selectedServerId != roomId ||
+        roomSerial != _musicBoxRoomSerial ||
+        (_musicBoxLoadRetry?.isActive ?? false)) {
+      return;
+    }
+    const retryDelays = <Duration>[
+      Duration(seconds: 2),
+      Duration(seconds: 5),
+      Duration(seconds: 15),
+      Duration(seconds: 30),
+      Duration(minutes: 1),
+    ];
+    final delay =
+        retryDelays[_musicBoxLoadFailures.clamp(0, retryDelays.length - 1)];
+    _musicBoxLoadFailures++;
+    _musicBoxLoadRetry = Timer(delay, () {
+      _musicBoxLoadRetry = null;
+      if (!mounted ||
+          _selectedServerId != roomId ||
+          roomSerial != _musicBoxRoomSerial) {
+        return;
+      }
+      unawaited(_loadMusicBox(roomId));
+    });
+  }
+
+  void _ensureMusicBoxLoaded(String roomId) {
+    if (_selectedServerId != roomId || _musicBox != null) return;
+    unawaited(_loadMusicBox(roomId));
   }
 
   void _toggleMusicBoxPanel() {

@@ -234,6 +234,8 @@ AuthenticatedAppContext _homeTestAppContext({
   bool alphaRoomHasPendingJoinRequests = false,
   bool alphaRoomAiVoiceAnnouncementsEnabled = false,
   bool includeSharedMusicTrackMessage = false,
+  bool musicBoxEnabled = false,
+  int musicBoxStateTransientFailures = 0,
   Future<void> Function(String roomId)? beforeRoomDetailResponse,
   Future<void> Function(Map<String, Object?> update)? beforeLiveStateResponse,
 }) {
@@ -293,6 +295,8 @@ AuthenticatedAppContext _homeTestAppContext({
       initialAlphaRoomAiVoiceAnnouncementsEnabled:
           alphaRoomAiVoiceAnnouncementsEnabled,
       includeSharedMusicTrackMessage: includeSharedMusicTrackMessage,
+      musicBoxEnabled: musicBoxEnabled,
+      musicBoxStateTransientFailures: musicBoxStateTransientFailures,
       beforeRoomDetailResponse: beforeRoomDetailResponse,
       beforeLiveStateResponse: beforeLiveStateResponse,
     ),
@@ -324,6 +328,8 @@ GangApi _roomsApi({
   bool alphaRoomHasPendingJoinRequests = false,
   bool initialAlphaRoomAiVoiceAnnouncementsEnabled = false,
   bool includeSharedMusicTrackMessage = false,
+  bool musicBoxEnabled = false,
+  int musicBoxStateTransientFailures = 0,
   Future<void> Function(String roomId)? beforeRoomDetailResponse,
   Future<void> Function(Map<String, Object?> update)? beforeLiveStateResponse,
 }) {
@@ -341,6 +347,7 @@ GangApi _roomsApi({
   var liveCameraOn = false;
   var liveCameraMirrored = false;
   var liveScreenSharing = false;
+  var remainingMusicBoxStateFailures = musicBoxStateTransientFailures;
   return GangApiClient(
     baseUrl: 'http://example.test/api/v1',
     accessTokenProvider: ({bool forceRefresh = false}) async => 'access-token',
@@ -1218,6 +1225,30 @@ GangApi _roomsApi({
           ),
         });
       }
+      if (request.url.path == '/api/v1/rooms/server-alpha/music-box/state') {
+        if (remainingMusicBoxStateFailures > 0) {
+          remainingMusicBoxStateFailures--;
+          return _jsonResponse({
+            'code': 'temporarily_unavailable',
+            'message': 'retry',
+          }, statusCode: 503);
+        }
+        return _jsonResponse({
+          'enabled': musicBoxEnabled,
+          'revision': 1,
+          'playback': {
+            'state': 'stopped',
+            'current_item_id': '',
+            'position_ms': 0,
+            'volume': 100,
+          },
+          'queue': <Object?>[],
+          'temporary_queue': <Object?>[],
+          'temporary_playlist': {'queued_count': 0},
+          'usage': {'used_bytes': 0, 'limit_bytes': 209715200},
+          'active_source': {'type': 'temporary', 'id': '', 'name': '点歌队列'},
+        });
+      }
       if (request.url.path == '/api/v1/rooms/server-alpha/live/join') {
         liveOperationLog?.add('join');
         final body =
@@ -1321,10 +1352,10 @@ GangApi _roomsApi({
   );
 }
 
-http.Response _jsonResponse(Object body) {
+http.Response _jsonResponse(Object body, {int statusCode = 200}) {
   return http.Response(
     jsonEncode(body),
-    200,
+    statusCode,
     headers: const {'content-type': 'application/json; charset=utf-8'},
   );
 }

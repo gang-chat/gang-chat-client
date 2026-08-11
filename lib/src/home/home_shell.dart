@@ -329,6 +329,13 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   // Overwritten wholesale from state fetches, write responses, and the
   // `music_box_changed` SSE event; never merged field by field.
   MusicBoxState? _musicBox;
+  // Guards the optional state fetch across room-open and live-join entry
+  // points. A live join can happen while the initial room fetch is still
+  // competing for a refreshed access token, so it also acts as a safe retry.
+  String? _musicBoxLoadingRoomId;
+  int _musicBoxRoomSerial = 0;
+  int _musicBoxLoadFailures = 0;
+  Timer? _musicBoxLoadRetry;
   // Whether the in-pane music box panel is expanded over the live channel.
   bool _musicBoxOpen = false;
   // Drives the music box search field; results are fetched debounced.
@@ -574,6 +581,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     widget.windowController.setCloseRequestHandler(null);
     widget.windowController.setTrayExitHandler(null);
     _voiceTicker?.cancel();
+    _musicBoxLoadRetry?.cancel();
     _musicBoxSearchDebounce?.cancel();
     _musicBoxSearchController.dispose();
     _searchDebounce?.cancel();

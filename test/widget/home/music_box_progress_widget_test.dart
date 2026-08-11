@@ -844,7 +844,7 @@ void main() {
       tester.getTopLeft(currentSource).dy,
       lessThan(tester.getTopLeft(requestQueueSource).dy),
     );
-    expect(find.text('当前歌单 · 1 首歌曲'), findsOneWidget);
+    expect(find.text('正在播放 · 1 首歌曲'), findsOneWidget);
 
     final personalFilter = find.byKey(
       const ValueKey<String>('music-box-source-filter-personal'),
@@ -857,11 +857,25 @@ void main() {
     expect(tester.widget<Button>(personalFilter).toggleValue, isFalse);
 
     await tester.tap(requestQueueSource);
-    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey<String>('music-box-source-list')),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: currentHeader, matching: find.text('点歌队列')),
+      findsOneWidget,
+    );
     expect(find.text('待点歌曲'), findsOneWidget);
     expect(api.activatedSourceType, isNull);
     await tester.tap(currentHeader);
-    await tester.pump();
+    await tester.pumpAndSettle();
+    await tester.tap(currentSource);
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(of: currentHeader, matching: find.text('房间收藏')),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const ValueKey<String>('music-box-queue-context-action')),
       findsNothing,
@@ -898,7 +912,7 @@ void main() {
     TargetPlatform.android,
   ]) {
     testWidgets(
-      '${platform.name} views and clones another user playlist snapshot',
+      '${platform.name} keeps an active playlist snapshot at the top level',
       (tester) async {
         final searchController = TextEditingController();
         addTearDown(searchController.dispose);
@@ -979,29 +993,26 @@ void main() {
             ),
           ),
         );
-        await tester.pump();
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey<String>('music-box-source-list')),
+          findsNothing,
+        );
+        expect(
+          find.descendant(of: header, matching: find.text('夜晚精选')),
+          findsOneWidget,
+        );
         expect(
           find.descendant(
-            of: find.byKey(
-              const ValueKey<String>(
-                'music-box-source-tracks:user_playlist:other-playlist',
-              ),
-            ),
+            of: find.byKey(const ValueKey<String>('music-box-queue-list')),
             matching: find.text('第一首完整歌曲'),
           ),
           findsOneWidget,
         );
         expect(find.text('第二首完整歌曲'), findsOneWidget);
-        await tester.tap(
-          find.byKey(
-            const ValueKey<String>(
-              'music-box-source-queue-add:netease:track-1',
-            ),
-          ),
-        );
-        await tester.pump();
-        expect(api.action, 'play_now');
-        expect(api.itemId, 'snapshot-track-1');
+        expect(api.action, isNull);
+        expect(api.itemId, isNull);
+        expect(api.activatedSourceType, isNull);
         expect(api.clonedPlaylistId, isNull);
         expect(tester.takeException(), isNull);
       },
@@ -1271,6 +1282,7 @@ void main() {
           playlist: playlist,
           items: const [playlistItem],
         );
+        final musicBoxController = MusicBoxController(api: api);
 
         await tester.pumpWidget(
           _host(
@@ -1278,7 +1290,7 @@ void main() {
             searchController,
             platform: platform,
             height: 500,
-            musicBoxController: MusicBoxController(api: api),
+            musicBoxController: musicBoxController,
             roomId: 'room-1',
             currentUser: _playlistCurrentUser,
             room: _playlistRoom,
@@ -1310,6 +1322,50 @@ void main() {
         expect(roomPlaylistSource, findsOneWidget);
         await tester.tap(roomPlaylistSource);
         await tester.pumpAndSettle();
+        expect(api.activatedSourceType, isNull);
+        expect(
+          find.byKey(const ValueKey<String>('music-box-source-list')),
+          findsNothing,
+        );
+        final viewedHeader = find.byKey(
+          const ValueKey<String>('music-box-current-queue-header'),
+        );
+        expect(
+          find.descendant(of: viewedHeader, matching: find.text('666')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey<String>('music-box-source-back')),
+          findsNothing,
+        );
+
+        final externallyChangedState = _state(
+          playbackState: MusicBoxPlaybackState.stopped,
+          positionMs: 0,
+          activeSource: const MusicBoxActiveSource(
+            type: MusicBoxActiveSourceType.roomPlaylist,
+            id: 'another-active-playlist',
+            name: '外部正在播放的歌单',
+          ),
+        );
+        await tester.pumpWidget(
+          _host(
+            externallyChangedState,
+            searchController,
+            platform: platform,
+            height: 500,
+            musicBoxController: musicBoxController,
+            roomId: 'room-1',
+            currentUser: _playlistCurrentUser,
+            room: _playlistRoom,
+            onQueueResult: queued.add,
+          ),
+        );
+        await tester.pump();
+        expect(
+          find.descendant(of: viewedHeader, matching: find.text('666')),
+          findsOneWidget,
+        );
         expect(api.activatedSourceType, isNull);
 
         final tile = find.byKey(

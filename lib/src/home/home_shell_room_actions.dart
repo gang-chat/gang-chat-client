@@ -658,12 +658,14 @@ extension _HomeShellRoomActions on _HomeShellState {
   }
 
   void _openLiveChannel() {
-    if (_selectedServerId == null) return;
+    final roomId = _selectedServerId;
+    if (roomId == null) return;
     _setHomeState(() {
       _settingsOpen = false;
       _contentMode = _ContentMode.live;
       _narrowContentOpen = true;
     });
+    _ensureMusicBoxLoaded(roomId);
   }
 
   Future<void> _openJoinedLiveChannel() async {

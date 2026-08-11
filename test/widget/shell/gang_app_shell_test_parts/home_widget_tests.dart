@@ -3131,6 +3131,70 @@ void registerShellHomeWidgetTests() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'transient music box load retries automatically and restores its controls',
+    (WidgetTester tester) async {
+      final requestedPaths = <String>[];
+      final liveSession = _FakeLiveSession();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ui.uiTheme().copyWith(platform: TargetPlatform.windows),
+          home: HomePage(
+            app: _homeTestAppContext(
+              requestedPaths: requestedPaths,
+              musicBoxEnabled: true,
+              // Fail the initial room-open load. The room-scoped timer must
+              // restore the module without requiring another lifecycle action.
+              musicBoxStateTransientFailures: 1,
+            ),
+            audioDeviceStore: const _FakeAudioDeviceStore(),
+            liveSessionController: _FakeLiveSessionController(
+              session: liveSession,
+            ),
+            realtime: _NoopRealtimeService(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Alpha Room'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      await _openLiveChannelFromHeader(tester);
+
+      expect(
+        requestedPaths
+            .where(
+              (path) => path == '/api/v1/rooms/server-alpha/music-box/state',
+            )
+            .length,
+        2,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('live-control:music-inline')),
+        findsNothing,
+      );
+
+      await tester.tap(find.widgetWithText(ui.Button, '加入'));
+      await tester.pumpAndSettle();
+
+      expect(
+        requestedPaths
+            .where(
+              (path) => path == '/api/v1/rooms/server-alpha/music-box/state',
+            )
+            .length,
+        2,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('live-control:music-inline')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('participant departure waits for authoritative reconciliation', (
     WidgetTester tester,
   ) async {
