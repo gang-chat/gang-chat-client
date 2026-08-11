@@ -66,11 +66,11 @@ bool isLivePresenceSoundParticipantIdentity(String identity) {
 }
 
 /// Android WebRTC uses one native playback device for the complete room mix.
-/// Keep communication mode (microphone routing/AEC) while directing the room
-/// renderer to the media stream whenever the music-box track is present. Some
-/// OEMs still choose the call slider for hardware keys solely from the audio
-/// mode; the Activity-side `setMusicBoxActive` hint below explicitly selects
-/// the media slider without sacrificing communication-mode voice capture.
+/// The device is created with media [AudioAttributes] during app startup. Use
+/// normal/media mode while the music-box track is present so Android binds the
+/// actual playback and hardware volume keys to media volume, then restore the
+/// communication preset when the track disappears. Software WebRTC AEC stays
+/// enabled in both modes.
 @visibleForTesting
 rtc.AndroidAudioConfiguration androidLiveAudioConfiguration({
   required bool musicBoxActive,
@@ -78,7 +78,7 @@ rtc.AndroidAudioConfiguration androidLiveAudioConfiguration({
   if (!musicBoxActive) return rtc.AndroidAudioConfiguration.communication;
   return rtc.AndroidAudioConfiguration(
     manageAudioFocus: true,
-    androidAudioMode: rtc.AndroidAudioMode.inCommunication,
+    androidAudioMode: rtc.AndroidAudioMode.normal,
     androidAudioFocusMode: rtc.AndroidAudioFocusMode.gain,
     androidAudioStreamType: rtc.AndroidAudioStreamType.music,
     androidAudioAttributesUsageType: rtc.AndroidAudioAttributesUsageType.media,
@@ -2572,7 +2572,10 @@ class LiveSession extends ChangeNotifier {
       try {
         await _androidAudioRouteChannel.invokeMethod<void>(
           'setMusicBoxActive',
-          <String, Object?>{'active': requested},
+          <String, Object?>{
+            'active': requested,
+            'liveSessionActive': _room != null,
+          },
         );
       } catch (_) {
         // The WebRTC route above remains authoritative. This Activity hint is

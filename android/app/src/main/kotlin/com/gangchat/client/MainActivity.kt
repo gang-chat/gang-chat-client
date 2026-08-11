@@ -44,10 +44,23 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "setMusicBoxActive" -> {
                     val active = call.argument<Boolean>("active") == true
+                    val liveSessionActive =
+                        call.argument<Boolean>("liveSessionActive") == true
                     volumeControlStream = if (active) {
                         AudioManager.STREAM_MUSIC
                     } else {
                         AudioManager.USE_DEFAULT_STREAM_TYPE
+                    }
+                    // flutter_webrtc updates AudioSwitch's desired mode at
+                    // runtime, but some OEM implementations (including OPPO)
+                    // do not apply that mode to AudioManager until a later
+                    // device-route cycle. This channel runs on Android's main
+                    // thread, so make the active system mode authoritative now.
+                    val audioManager = getSystemService(AudioManager::class.java)
+                    audioManager.mode = when {
+                        active -> AudioManager.MODE_NORMAL
+                        liveSessionActive -> AudioManager.MODE_IN_COMMUNICATION
+                        else -> AudioManager.MODE_NORMAL
                     }
                     result.success(null)
                 }

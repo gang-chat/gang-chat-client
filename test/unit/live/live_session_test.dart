@@ -18,9 +18,9 @@ void main() {
     expect(cameraFlipAvailabilityFromVideoInputCount(2), isTrue);
   });
 
-  test('Android music box keeps call routing but uses media volume', () {
+  test('Android music box switches playback to media mode and volume', () {
     final media = androidLiveAudioConfiguration(musicBoxActive: true);
-    expect(media.androidAudioMode, rtc.AndroidAudioMode.inCommunication);
+    expect(media.androidAudioMode, rtc.AndroidAudioMode.normal);
     expect(media.androidAudioStreamType, rtc.AndroidAudioStreamType.music);
     expect(
       media.androidAudioAttributesUsageType,
@@ -33,6 +33,7 @@ void main() {
     expect(media.forceHandleAudioRouting, isTrue);
 
     final voice = androidLiveAudioConfiguration(musicBoxActive: false);
+    expect(voice.androidAudioMode, rtc.AndroidAudioMode.inCommunication);
     expect(voice.androidAudioStreamType, rtc.AndroidAudioStreamType.voiceCall);
     expect(
       voice.androidAudioAttributesUsageType,
