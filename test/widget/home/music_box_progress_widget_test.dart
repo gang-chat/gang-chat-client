@@ -363,6 +363,93 @@ Future<void> _toggleSearch(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('music box icon controls expose stable hover tooltips', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    const item = MusicBoxQueueItem(
+      id: 'tooltip-track',
+      source: 'netease',
+      trackId: 'tooltip-source-track',
+      title: '提示测试歌曲',
+      artist: '测试歌手',
+      durationMs: 200000,
+      status: MusicBoxQueueItemStatus.ready,
+      fileSizeBytes: 0,
+      error: '',
+      addedByUserId: 'user',
+      createdAt: null,
+    );
+
+    await tester.pumpWidget(
+      _host(
+        _state(
+          playbackState: MusicBoxPlaybackState.playing,
+          positionMs: 1000,
+          currentItemId: item.id,
+          queue: const [item],
+          temporaryQueue: const [item],
+        ),
+        controller,
+        height: 600,
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      tester
+          .widget<ButtonIcon>(
+            find.byKey(const ValueKey<String>('music-box-transport-previous')),
+          )
+          .tooltip,
+      '上一首',
+    );
+    expect(
+      tester
+          .widget<ButtonIcon>(
+            find.byKey(const ValueKey<String>('music-box-primary-playback')),
+          )
+          .tooltip,
+      '暂停',
+    );
+    expect(
+      tester
+          .widget<ButtonIcon>(
+            find.byKey(const ValueKey<String>('music-box-transport-next')),
+          )
+          .tooltip,
+      '下一首',
+    );
+    expect(
+      tester
+          .widget<ButtonIcon>(
+            find.byKey(const ValueKey<String>('music-box-transport-mode')),
+          )
+          .tooltip,
+      '播放模式：顺序播放',
+    );
+    expect(
+      tester
+          .widget<ButtonIcon>(
+            find.byKey(
+              const ValueKey<String>('music-box-queue-remove:tooltip-track'),
+            ),
+          )
+          .tooltip,
+      '从点歌队列删除',
+    );
+    expect(
+      tester
+          .widget<ButtonIcon>(
+            find.byKey(const ValueKey<String>('music-box-close')),
+          )
+          .tooltip,
+      '关闭音乐盒',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('now playing title moves only when it overflows', (tester) async {
     const longTitle = '一首需要在音乐盒顶部左右往返显示完整内容的特别长歌曲名称';
     final controller = TextEditingController();

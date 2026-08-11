@@ -263,6 +263,41 @@ bool shouldAcceptMusicBoxSnapshot(
   return incoming.playback.currentItemId == current.playback.currentItemId;
 }
 
+/// Reduces a realtime full snapshot without letting compatibility heartbeats
+/// replace actor-specific capabilities every second.
+///
+/// Room fan-out events deliberately carry conservative capabilities because
+/// the same payload is shared by users with different roles. Current servers
+/// still emit a full snapshot for each progress tick unless compact-progress
+/// mode is enabled. When revision, track and transport state are unchanged,
+/// only the position is new; retaining the existing snapshot keeps the
+/// personalized permissions stable and avoids a redundant state fetch. A real
+/// structural change returns [incoming] unchanged so callers can refresh the
+/// actor-specific snapshot.
+MusicBoxState? applyMusicBoxRealtimeSnapshot(
+  MusicBoxState? current,
+  MusicBoxState incoming,
+) {
+  if (!shouldAcceptMusicBoxSnapshot(current, incoming)) return current;
+  if (current == null ||
+      !current.hasRevision ||
+      !incoming.hasRevision ||
+      current.revision != incoming.revision ||
+      current.playback.currentItemId != incoming.playback.currentItemId ||
+      current.playback.state != incoming.playback.state) {
+    return incoming;
+  }
+  if (current.playback.positionMs == incoming.playback.positionMs) {
+    return current;
+  }
+  return current.copyWith(
+    playback: current.playback.copyWith(
+      positionMs: incoming.playback.positionMs,
+      updatedAt: incoming.playback.updatedAt,
+    ),
+  );
+}
+
 /// Applies a compact progress event only to the exact authoritative snapshot
 /// it belongs to. Returning the identical instance makes stale events a cheap
 /// no-op for UI callers.
@@ -279,6 +314,7 @@ MusicBoxState? applyMusicBoxProgress(
       progress.positionMs < 0) {
     return current;
   }
+  if (current.playback.positionMs == progress.positionMs) return current;
   return current.copyWith(
     playback: current.playback.copyWith(positionMs: progress.positionMs),
   );

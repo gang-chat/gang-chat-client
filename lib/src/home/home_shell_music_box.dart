@@ -155,9 +155,16 @@ extension _HomeShellMusicBox on _HomeShellState {
     // The realtime client flattens the event envelope, merging the payload's
     // fields up alongside `room_id` (see LiveStreamClient._emit). The snapshot
     // therefore lives at the top level of [event], not under a `data` key.
-    _applyMusicBoxSnapshot(
-      MusicBoxState.fromJson(event.cast<String, Object?>()),
-    );
+    final incoming = MusicBoxState.fromJson(event.cast<String, Object?>());
+    final current = _musicBox;
+    final next = applyMusicBoxRealtimeSnapshot(current, incoming);
+    if (identical(next, current)) return;
+    if (next != null) _setHomeState(() => _musicBox = next);
+    // A same-revision compatibility heartbeat was reduced to a position-only
+    // update above, preserving actor-specific capabilities and avoiding a GET
+    // on every second. Only an accepted structural/legacy snapshot needs the
+    // personalized refresh.
+    if (!identical(next, incoming)) return;
     // Room fan-out cannot carry one shared capability set because every
     // subscriber may have a different room role. Refresh the actor-specific
     // snapshot after applying the structural event; concurrent events are

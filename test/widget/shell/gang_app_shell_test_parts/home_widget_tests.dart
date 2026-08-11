@@ -3271,6 +3271,68 @@ void registerShellHomeWidgetTests() {
     },
   );
 
+  testWidgets(
+    'same-revision music box heartbeat does not refetch capabilities',
+    (WidgetTester tester) async {
+      final requestedPaths = <String>[];
+      final realtime = _FakeRealtimeService();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ui.uiTheme().copyWith(platform: TargetPlatform.windows),
+          home: HomePage(
+            app: _homeTestAppContext(
+              requestedPaths: requestedPaths,
+              musicBoxEnabled: true,
+            ),
+            realtime: realtime,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Alpha Room'));
+      await tester.pumpAndSettle();
+      const musicBoxStatePath = '/api/v1/rooms/server-alpha/music-box/state';
+      final beforeHeartbeat = requestedPaths
+          .where((path) => path == musicBoxStatePath)
+          .length;
+
+      realtime.add(
+        const RealtimeEvent(
+          type: 'music_box_changed',
+          data: {
+            'room_id': 'server-alpha',
+            'enabled': true,
+            'revision': 1,
+            'playback': {
+              'state': 'stopped',
+              'current_item_id': '',
+              'position_ms': 0,
+              'volume': 100,
+              'capabilities': {
+                'can_control': false,
+                'can_change_mode': false,
+                'can_reorder': false,
+              },
+            },
+            'queue': <Object?>[],
+            'temporary_queue': <Object?>[],
+            'temporary_playlist': {'queued_count': 0},
+            'usage': {'used_bytes': 0, 'limit_bytes': 209715200},
+            'active_source': {'type': 'temporary', 'id': '', 'name': '点歌队列'},
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        requestedPaths.where((path) => path == musicBoxStatePath).length,
+        beforeHeartbeat,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('participant departure waits for authoritative reconciliation', (
     WidgetTester tester,
   ) async {

@@ -81,6 +81,61 @@ void main() {
     expect(progress.currentItemId, 'item-7');
     expect(progress.positionMs, 4567);
   });
+
+  test(
+    'same-revision full heartbeat preserves actor-specific capabilities',
+    () {
+      const capabilities = MusicBoxCapabilities(
+        canControl: true,
+        canChangeMode: true,
+      );
+      final current = _state.copyWith(
+        playback: const MusicBoxPlayback(
+          state: MusicBoxPlaybackState.playing,
+          currentItemId: 'priority-track',
+          positionMs: 1000,
+          volume: 100,
+          updatedAt: null,
+          capabilities: capabilities,
+        ),
+      );
+      final heartbeat = MusicBoxState(
+        enabled: true,
+        playback: const MusicBoxPlayback(
+          state: MusicBoxPlaybackState.playing,
+          currentItemId: 'priority-track',
+          positionMs: 2000,
+          volume: 100,
+          updatedAt: null,
+        ),
+        queue: _state.queue,
+        usage: _state.usage,
+        revision: 42,
+        hasRevision: true,
+      );
+
+      final reduced = applyMusicBoxRealtimeSnapshot(current, heartbeat);
+
+      expect(reduced, isNotNull);
+      expect(reduced, isNot(same(heartbeat)));
+      expect(reduced!.playback.positionMs, 2000);
+      expect(reduced.playback.capabilities, same(capabilities));
+      expect(applyMusicBoxRealtimeSnapshot(reduced, heartbeat), same(reduced));
+    },
+  );
+
+  test('newer structural snapshot is applied wholesale', () {
+    final incoming = MusicBoxState(
+      enabled: true,
+      playback: _state.playback,
+      queue: _state.queue,
+      usage: _state.usage,
+      revision: 43,
+      hasRevision: true,
+    );
+
+    expect(applyMusicBoxRealtimeSnapshot(_state, incoming), same(incoming));
+  });
 }
 
 const _item = MusicBoxQueueItem(

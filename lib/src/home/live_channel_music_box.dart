@@ -197,7 +197,13 @@ class _MusicBoxHeader extends StatelessWidget {
         ),
         const Spacer(),
         const SizedBox(width: 6),
-        ButtonIcon(icon: const Icon(Icons.close), onPressed: onClose, size: 26),
+        ButtonIcon(
+          key: const ValueKey<String>('music-box-close'),
+          icon: const Icon(Icons.close),
+          tooltip: '关闭音乐盒',
+          onPressed: onClose,
+          size: 26,
+        ),
       ],
     );
   }
@@ -273,7 +279,9 @@ class _MusicBoxNowPlaying extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   ButtonIcon(
+                    key: const ValueKey<String>('music-box-transport-previous'),
                     icon: const Icon(Icons.skip_previous),
+                    tooltip: '上一首',
                     onPressed: canControl && state.playback.canPrevious
                         ? onPrevious
                         : null,
@@ -288,6 +296,12 @@ class _MusicBoxNowPlaying extends StatelessWidget {
                           ? Icons.pause
                           : Icons.play_arrow,
                     ),
+                    tooltip: switch (transport) {
+                      music_box_display.MusicBoxTransportAction.pause => '暂停',
+                      music_box_display.MusicBoxTransportAction.resume =>
+                        '继续播放',
+                      music_box_display.MusicBoxTransportAction.play => '播放',
+                    },
                     tone: ButtonTone.primary,
                     onPressed: canControl && hasPlayableSource
                         ? onTogglePlayback
@@ -296,7 +310,9 @@ class _MusicBoxNowPlaying extends StatelessWidget {
                   ),
                   const SizedBox(width: 7),
                   ButtonIcon(
+                    key: const ValueKey<String>('music-box-transport-next'),
                     icon: const Icon(Icons.skip_next),
+                    tooltip: '下一首',
                     onPressed: canControl && hasQueue && state.playback.canNext
                         ? onSkip
                         : null,
@@ -305,7 +321,10 @@ class _MusicBoxNowPlaying extends StatelessWidget {
                   const SizedBox(width: 7),
                   Builder(
                     builder: (context) => ButtonIcon(
+                      key: const ValueKey<String>('music-box-transport-mode'),
                       icon: Icon(_musicBoxModeIcon(state.playback.mode)),
+                      tooltip:
+                          '播放模式：${_musicBoxModeLabel(state.playback.mode)}',
                       selected:
                           state.playback.mode !=
                           MusicBoxPlaybackMode.sequential,
@@ -3333,7 +3352,9 @@ class _MusicBoxQueueTile extends StatelessWidget {
               if (item.canRemove) ...[
                 const SizedBox(width: 4),
                 ButtonIcon(
+                  key: ValueKey<String>('music-box-queue-remove:${item.id}'),
                   icon: const Icon(Icons.close),
+                  tooltip: '从点歌队列删除',
                   tone: ButtonTone.danger,
                   onPressed: onRemove,
                   size: 28,
