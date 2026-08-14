@@ -151,6 +151,16 @@ bool musicBoxRecordSpinning(MusicBoxState state) {
   return state.playback.state == MusicBoxPlaybackState.playing;
 }
 
+/// Whether the room currently has a resumable playback context.
+///
+/// [MusicBoxActiveSource] is retained after playback stops so the user can keep
+/// browsing the last source. That source is not "playing" until the server also
+/// reports a current item and a playing/paused transport state.
+bool musicBoxHasActivePlayback(MusicBoxState state) {
+  return state.currentItem != null &&
+      state.playback.state != MusicBoxPlaybackState.stopped;
+}
+
 /// A short status label for a queue item, reflecting its download/transcode
 /// lifecycle. Returns null for [MusicBoxQueueItemStatus.ready], which renders
 /// normally with no badge.

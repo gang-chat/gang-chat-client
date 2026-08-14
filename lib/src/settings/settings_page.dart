@@ -107,6 +107,7 @@ class SettingsPage extends StatefulWidget {
     this.onAppUpdateDownloadCancellationChanged,
     this.currentUser,
     this.onUserUpdated,
+    this.onMusicPlaylistsChanged,
     this.onDeviceSelected,
     this.onVolumeChanged,
     this.onScreenShareMaxHeightChanged,
@@ -148,6 +149,7 @@ class SettingsPage extends StatefulWidget {
   onAppUpdateDownloadCancellationChanged;
   final CurrentUser? currentUser;
   final ValueChanged<CurrentUser>? onUserUpdated;
+  final VoidCallback? onMusicPlaylistsChanged;
   final void Function(String kind, String deviceId)? onDeviceSelected;
   final void Function(String kind, double volume)? onVolumeChanged;
 
@@ -300,6 +302,7 @@ class _SettingsPageState extends State<SettingsPage>
       !_isManagingUser && api is PersonalMusicPlaylistApi
           ? api as PersonalMusicPlaylistApi
           : null,
+      onChanged: widget.onMusicPlaylistsChanged,
     );
   }
 

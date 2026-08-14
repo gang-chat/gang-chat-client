@@ -5,6 +5,11 @@ part of 'home_shell.dart';
 /// not handled here — once the user has joined the room's LiveKit session the
 /// music box bot's track arrives as an ordinary remote audio track.
 extension _HomeShellMusicBox on _HomeShellState {
+  void _markMusicPlaylistsChanged() {
+    if (!mounted) return;
+    _setHomeState(() => _musicPlaylistsRevision += 1);
+  }
+
   /// Resets all music box state. Called on room switch and account change so a
   /// stale snapshot never bleeds across rooms.
   void _resetMusicBox() {

@@ -248,7 +248,11 @@ void main() {
     'item pin loads every page before submitting the complete order',
     () async {
       final api = _PagingPlaylistApi();
-      final controller = PersonalMusicPlaylistsController(api);
+      var changes = 0;
+      final controller = PersonalMusicPlaylistsController(
+        api,
+        onChanged: () => changes += 1,
+      );
 
       await controller.pinItems(
         playlistId: 'playlist',
@@ -257,6 +261,7 @@ void main() {
 
       expect(api.requestedPages, [1, 2]);
       expect(api.reorderedItemIds, ['third', 'second', 'first']);
+      expect(changes, 1);
     },
   );
 
@@ -264,7 +269,11 @@ void main() {
     'playlist merge validates input and preserves selection order',
     () async {
       final api = _MergePlaylistApi();
-      final controller = PersonalMusicPlaylistsController(api);
+      var changes = 0;
+      final controller = PersonalMusicPlaylistsController(
+        api,
+        onChanged: () => changes += 1,
+      );
 
       expect(controller.canMergePlaylists, isTrue);
       expect(
@@ -276,6 +285,7 @@ void main() {
       );
       expect(api.mergeName, '合并结果');
       expect(api.mergePlaylistIds, ['second', 'first']);
+      expect(changes, 1);
 
       api.mergeName = null;
       expect(
@@ -286,6 +296,7 @@ void main() {
         isNull,
       );
       expect(api.mergeName, isNull);
+      expect(changes, 1);
       expect(
         PersonalMusicPlaylistsController(
           _PagingPlaylistApi(),

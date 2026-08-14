@@ -124,6 +124,7 @@ class LiveChannelPane extends StatefulWidget {
     this.onMusicBoxModeChanged,
     this.musicBoxController,
     this.musicBoxRoomId,
+    this.musicPlaylistsRevision = 0,
     this.musicBoxRoom,
     this.musicTrackPreviewPlatformFactory,
     this.onMusicBoxStateChanged,
@@ -207,6 +208,7 @@ class LiveChannelPane extends StatefulWidget {
   final ValueChanged<MusicBoxPlaybackMode>? onMusicBoxModeChanged;
   final MusicBoxController? musicBoxController;
   final String? musicBoxRoomId;
+  final int musicPlaylistsRevision;
   final PublicRoom? musicBoxRoom;
   final MusicTrackPreviewPlatformFactory? musicTrackPreviewPlatformFactory;
   final ValueChanged<MusicBoxState>? onMusicBoxStateChanged;
@@ -484,6 +486,7 @@ class _LiveChannelPaneState extends State<LiveChannelPane> {
                             onModeChanged: widget.onMusicBoxModeChanged,
                             controller: widget.musicBoxController,
                             roomId: widget.musicBoxRoomId,
+                            playlistsRevision: widget.musicPlaylistsRevision,
                             room: widget.musicBoxRoom,
                             previewPlatformFactory:
                                 widget.musicTrackPreviewPlatformFactory,

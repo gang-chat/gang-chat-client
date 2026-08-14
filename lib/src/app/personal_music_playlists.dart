@@ -166,8 +166,11 @@ abstract interface class _MusicPlaylistsBackend {
 }
 
 class PersonalMusicPlaylistsController {
-  PersonalMusicPlaylistsController(PersonalMusicPlaylistApi? api)
-    : _backend = api == null ? null : _PersonalMusicPlaylistsBackend(api);
+  PersonalMusicPlaylistsController(
+    PersonalMusicPlaylistApi? api, {
+    void Function()? onChanged,
+  }) : _backend = api == null ? null : _PersonalMusicPlaylistsBackend(api),
+       _onChanged = onChanged;
 
   PersonalMusicPlaylistsController.room({
     required RoomMusicPlaylistApi? roomApi,
@@ -175,6 +178,7 @@ class PersonalMusicPlaylistsController {
     required String roomId,
     required bool canManage,
     required MusicPlaylistTrackSearch searchTracks,
+    void Function()? onChanged,
   }) : _backend = roomApi == null
            ? null
            : _RoomMusicPlaylistsBackend(
@@ -183,9 +187,13 @@ class PersonalMusicPlaylistsController {
                roomId: roomId,
                canManage: canManage,
                searchTracksCallback: searchTracks,
-             );
+             ),
+       _onChanged = onChanged;
 
   final _MusicPlaylistsBackend? _backend;
+  final void Function()? _onChanged;
+
+  void _notifyChanged() => _onChanged?.call();
 
   Object? get api => _backend?.identity;
 
@@ -245,36 +253,43 @@ class PersonalMusicPlaylistsController {
 
   Future<PersonalMusicPlaylist?> cloneRoomPlaylistToPersonal(
     String playlistId,
-  ) {
+  ) async {
     final normalized = playlistId.trim();
-    if (normalized.isEmpty) return Future.value();
-    return _backend?.cloneRoomPlaylistToPersonal(playlistId: normalized) ??
-        Future.value();
+    final client = _backend;
+    if (normalized.isEmpty || client == null) return null;
+    final result = await client.cloneRoomPlaylistToPersonal(
+      playlistId: normalized,
+    );
+    _notifyChanged();
+    return result;
   }
 
   Future<PersonalMusicPlaylistMergeResult?> mergePlaylists({
     required String name,
     required List<String> playlistIds,
-  }) {
+  }) async {
     final normalizedName = normalizedPersonalPlaylistName(name);
     final normalizedIDs = uniquePersonalPlaylistIds(playlistIds);
     if (normalizedName == null ||
         normalizedIDs.length < 2 ||
         normalizedIDs.length != playlistIds.length) {
-      return Future.value();
+      return null;
     }
-    return _backend?.mergePlaylists(
-          name: normalizedName,
-          playlistIds: normalizedIDs,
-        ) ??
-        Future.value();
+    final client = _backend;
+    if (client == null) return null;
+    final result = await client.mergePlaylists(
+      name: normalizedName,
+      playlistIds: normalizedIDs,
+    );
+    _notifyChanged();
+    return result;
   }
 
   Future<PersonalMusicPlaylistBatchAddResult?> batchAddItems({
     required String sourcePlaylistId,
     required String targetPlaylistId,
     required Iterable<String> itemIds,
-  }) {
+  }) async {
     final sourceID = sourcePlaylistId.trim();
     final targetID = targetPlaylistId.trim();
     final requestedItemIDs = itemIds.toList(growable: false);
@@ -285,62 +300,80 @@ class PersonalMusicPlaylistsController {
         normalizedItemIDs.isEmpty ||
         normalizedItemIDs.length != requestedItemIDs.length ||
         normalizedItemIDs.length > 500) {
-      return Future.value();
+      return null;
     }
-    return _backend?.batchAddItems(
-          sourcePlaylistId: sourceID,
-          targetPlaylistId: targetID,
-          itemIds: normalizedItemIDs,
-        ) ??
-        Future.value();
+    final client = _backend;
+    if (client == null) return null;
+    final result = await client.batchAddItems(
+      sourcePlaylistId: sourceID,
+      targetPlaylistId: targetID,
+      itemIds: normalizedItemIDs,
+    );
+    _notifyChanged();
+    return result;
   }
 
   Future<PersonalMusicPlaylist?> createPlaylist(
     String name, {
     String? importPlaylistId,
-  }) {
+  }) async {
     final normalized = normalizedPersonalPlaylistName(name);
-    if (normalized == null) return Future.value();
+    if (normalized == null) return null;
     final client = _backend;
-    if (client == null) return Future.value();
-    return client.createPlaylist(
+    if (client == null) return null;
+    final result = await client.createPlaylist(
       name: normalized,
       importPlaylistId: importPlaylistId?.trim(),
     );
+    _notifyChanged();
+    return result;
   }
 
   Future<PersonalMusicPlaylist?> renamePlaylist({
     required String playlistId,
     required String name,
-  }) {
+  }) async {
     final normalized = normalizedPersonalPlaylistName(name);
-    if (normalized == null) return Future.value();
+    if (normalized == null) return null;
     final client = _backend;
-    if (client == null) return Future.value();
-    return client.renamePlaylist(playlistId: playlistId, name: normalized);
+    if (client == null) return null;
+    final result = await client.renamePlaylist(
+      playlistId: playlistId,
+      name: normalized,
+    );
+    _notifyChanged();
+    return result;
   }
 
-  Future<void> deletePlaylist(String playlistId) {
-    return _backend?.deletePlaylist(playlistId) ?? Future.value();
+  Future<void> deletePlaylist(String playlistId) async {
+    final client = _backend;
+    if (client == null) return;
+    await client.deletePlaylist(playlistId);
+    _notifyChanged();
   }
 
-  Future<void> pinPlaylists(List<String> playlistIds) {
+  Future<void> pinPlaylists(List<String> playlistIds) async {
     final ids = uniquePersonalPlaylistIds(playlistIds);
-    if (ids.isEmpty) return Future.value();
-    return _backend?.pinPlaylists(playlistIds: ids) ?? Future.value();
+    final client = _backend;
+    if (ids.isEmpty || client == null) return;
+    await client.pinPlaylists(playlistIds: ids);
+    _notifyChanged();
   }
 
-  Future<void> movePlaylist({required String playlistId, required int delta}) {
+  Future<void> movePlaylist({
+    required String playlistId,
+    required int delta,
+  }) async {
     if (delta != -1 && delta != 1) {
-      return Future.error(
-        ArgumentError.value(delta, 'delta', 'must be -1 or 1'),
-      );
+      throw ArgumentError.value(delta, 'delta', 'must be -1 or 1');
     }
-    return _backend?.movePlaylist(
-          playlistId: playlistId,
-          direction: delta < 0 ? 'up' : 'down',
-        ) ??
-        Future.value();
+    final client = _backend;
+    if (client == null) return;
+    await client.movePlaylist(
+      playlistId: playlistId,
+      direction: delta < 0 ? 'up' : 'down',
+    );
+    _notifyChanged();
   }
 
   Future<PersonalMusicPlaylistItemsPage?> loadItems({
@@ -376,10 +409,12 @@ class PersonalMusicPlaylistsController {
   Future<PersonalMusicPlaylistItem?> addTrack({
     required String playlistId,
     required MusicBoxSearchResult track,
-  }) {
+  }) async {
     final client = _backend;
-    if (client == null) return Future.value();
-    return client.addTrack(playlistId: playlistId, track: track);
+    if (client == null) return null;
+    final result = await client.addTrack(playlistId: playlistId, track: track);
+    _notifyChanged();
+    return result;
   }
 
   /// Adds a track to the current account's playlist without changing the
@@ -387,46 +422,49 @@ class PersonalMusicPlaylistsController {
   Future<PersonalMusicPlaylistItem?> addTrackToPersonalPlaylist({
     required String playlistId,
     required MusicBoxSearchResult track,
-  }) {
+  }) async {
     final client = _backend;
     final api = switch (client) {
       _PersonalMusicPlaylistsBackend() => client.api,
       _RoomMusicPlaylistsBackend() => client.personalApi,
       _ => null,
     };
-    if (api == null) return Future.value();
-    return api.addPersonalMusicPlaylistItem(
+    if (api == null) return null;
+    final result = await api.addPersonalMusicPlaylistItem(
       playlistId: playlistId,
       track: track,
     );
+    _notifyChanged();
+    return result;
   }
 
   Future<void> deleteItems({
     required String playlistId,
     required List<String> itemIds,
-  }) {
+  }) async {
     final ids = uniquePersonalPlaylistItemIds(itemIds);
-    if (ids.isEmpty) return Future.value();
-    return _backend?.deleteItems(playlistId: playlistId, itemIds: ids) ??
-        Future.value();
+    final client = _backend;
+    if (ids.isEmpty || client == null) return;
+    await client.deleteItems(playlistId: playlistId, itemIds: ids);
+    _notifyChanged();
   }
 
   Future<void> moveItem({
     required String playlistId,
     required String itemId,
     required int delta,
-  }) {
+  }) async {
     if (delta != -1 && delta != 1) {
-      return Future.error(
-        ArgumentError.value(delta, 'delta', 'must be -1 or 1'),
-      );
+      throw ArgumentError.value(delta, 'delta', 'must be -1 or 1');
     }
-    return _backend?.moveItem(
-          playlistId: playlistId,
-          itemId: itemId,
-          direction: delta < 0 ? 'up' : 'down',
-        ) ??
-        Future.value();
+    final client = _backend;
+    if (client == null) return;
+    await client.moveItem(
+      playlistId: playlistId,
+      itemId: itemId,
+      direction: delta < 0 ? 'up' : 'down',
+    );
+    _notifyChanged();
   }
 
   Future<void> pinItems({
@@ -460,6 +498,7 @@ class PersonalMusicPlaylistsController {
     );
     if (order == null) return;
     await client.reorderItems(playlistId: playlistId, itemIds: order);
+    _notifyChanged();
   }
 }
 

@@ -32,6 +32,7 @@ class LiveMusicBoxPanel extends StatelessWidget {
     this.onModeChanged,
     this.controller,
     this.roomId,
+    this.playlistsRevision = 0,
     this.room,
     this.previewPlatformFactory,
     this.onStateChanged,
@@ -64,6 +65,7 @@ class LiveMusicBoxPanel extends StatelessWidget {
   final ValueChanged<MusicBoxPlaybackMode>? onModeChanged;
   final MusicBoxController? controller;
   final String? roomId;
+  final int playlistsRevision;
   final PublicRoom? room;
   final MusicTrackPreviewPlatformFactory? previewPlatformFactory;
   final ValueChanged<MusicBoxState>? onStateChanged;
@@ -101,6 +103,7 @@ class LiveMusicBoxPanel extends StatelessWidget {
       onSourceChanged: onSourceChanged,
       controller: controller,
       roomId: roomId,
+      playlistsRevision: playlistsRevision,
       room: room,
       previewPlatformFactory: previewPlatformFactory,
       onStateChanged: onStateChanged,
@@ -760,6 +763,7 @@ class _MusicBoxBody extends StatefulWidget {
     required this.onSourceChanged,
     required this.controller,
     required this.roomId,
+    required this.playlistsRevision,
     required this.room,
     required this.previewPlatformFactory,
     required this.onStateChanged,
@@ -785,6 +789,7 @@ class _MusicBoxBody extends StatefulWidget {
   final ValueChanged<String> onSourceChanged;
   final MusicBoxController? controller;
   final String? roomId;
+  final int playlistsRevision;
   final PublicRoom? room;
   final MusicTrackPreviewPlatformFactory? previewPlatformFactory;
   final ValueChanged<MusicBoxState>? onStateChanged;
@@ -855,6 +860,13 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
       );
     }
     if (_musicBoxBrowseSourceMatchesActive(override, widget.state)) {
+      // A saved playlist and its active playback snapshot deliberately share
+      // an ID, but they are different data sets. Once the user explicitly
+      // views the saved template, keep that template selected so an edit can
+      // refresh its latest revision without rewriting the playing snapshot.
+      if (override.playlist != null && override.queueItems == null) {
+        return override.copyWith(current: true);
+      }
       return active;
     }
     return override.copyWith(current: false);
@@ -1013,6 +1025,14 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
     });
   }
 
+  void _refreshViewedSource(_MusicBoxBrowseSource? source) {
+    final current = _viewedSourceOverride;
+    if (current == null) return;
+    if (source != null && source.key != current.key) return;
+    if (!mounted) return;
+    setState(() => _viewedSourceOverride = source);
+  }
+
   void _setSearchVisible(bool value) {
     if (!value) FocusManager.instance.primaryFocus?.unfocus();
     _sourceSearchController.clear();
@@ -1163,7 +1183,9 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
       source,
       widget.state,
     );
-    final playing = sourceIsActive && widget.state.currentItem != null;
+    final playing =
+        sourceIsActive &&
+        music_box_display.musicBoxHasActivePlayback(widget.state);
     if (source.type == MusicBoxActiveSourceType.temporary) {
       return MusicPlaylistHoverCard(
         key: const ValueKey<String>(
@@ -1362,15 +1384,17 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
             child: _sourceBrowserRegion(
               child: switch (_section) {
                 _MusicBoxSection.queue =>
-                  _viewedSourceIsActive
+                  _viewedSourceIsActive && viewedSource.queueItems != null
                       ? _currentQueueView()
                       : _MusicBoxSourceBrowser(
                           controller: widget.controller,
                           roomId: widget.roomId,
+                          playlistsRevision: widget.playlistsRevision,
                           state: widget.state,
                           showSourceList: false,
                           viewedSource: viewedSource,
                           onViewedSourceChanged: _selectViewedSource,
+                          onViewedSourceRefreshed: _refreshViewedSource,
                           onStateChanged: _handleActivatedState,
                           onQueueResult: widget.onQueueResult,
                           onCreateFirstRoomPlaylist:
@@ -1381,10 +1405,12 @@ class _MusicBoxBodyState extends State<_MusicBoxBody> {
                 _MusicBoxSection.sources => _MusicBoxSourceBrowser(
                   controller: widget.controller,
                   roomId: widget.roomId,
+                  playlistsRevision: widget.playlistsRevision,
                   state: widget.state,
                   showSourceList: true,
                   viewedSource: viewedSource,
                   onViewedSourceChanged: _selectViewedSource,
+                  onViewedSourceRefreshed: _refreshViewedSource,
                   onStateChanged: _handleActivatedState,
                   onQueueResult: widget.onQueueResult,
                   onCreateFirstRoomPlaylist: widget.onCreateFirstRoomPlaylist,
@@ -1840,10 +1866,12 @@ class _MusicBoxSourceBrowser extends StatefulWidget {
   const _MusicBoxSourceBrowser({
     required this.controller,
     required this.roomId,
+    required this.playlistsRevision,
     required this.state,
     required this.showSourceList,
     required this.viewedSource,
     required this.onViewedSourceChanged,
+    required this.onViewedSourceRefreshed,
     required this.onStateChanged,
     required this.onQueueResult,
     required this.onCreateFirstRoomPlaylist,
@@ -1854,10 +1882,12 @@ class _MusicBoxSourceBrowser extends StatefulWidget {
 
   final MusicBoxController? controller;
   final String? roomId;
+  final int playlistsRevision;
   final MusicBoxState state;
   final bool showSourceList;
   final _MusicBoxBrowseSource viewedSource;
   final ValueChanged<_MusicBoxBrowseSource> onViewedSourceChanged;
+  final ValueChanged<_MusicBoxBrowseSource?> onViewedSourceRefreshed;
   final ValueChanged<MusicBoxState> onStateChanged;
   final ValueChanged<MusicBoxSearchResult> onQueueResult;
   final VoidCallback? onCreateFirstRoomPlaylist;
@@ -1880,6 +1910,8 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
   List<PersonalMusicPlaylistItem> _selectedItems = const [];
   String? _loadedSourceKey;
   String? _startingTrackKey;
+  int _playlistLoadGeneration = 0;
+  int _trackLoadGeneration = 0;
 
   @override
   void initState() {
@@ -1893,8 +1925,13 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
   @override
   void didUpdateWidget(covariant _MusicBoxSourceBrowser oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.controller != widget.controller ||
-        oldWidget.roomId != widget.roomId) {
+    final sourceContextChanged =
+        oldWidget.controller != widget.controller ||
+        oldWidget.roomId != widget.roomId;
+    final playlistsInvalidated =
+        oldWidget.playlistsRevision != widget.playlistsRevision;
+    final sourceListOpened = !oldWidget.showSourceList && widget.showSourceList;
+    if (sourceContextChanged || playlistsInvalidated || sourceListOpened) {
       _selectedItems = const [];
       _loadedSourceKey = null;
       unawaited(_loadPlaylists());
@@ -1906,7 +1943,11 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
       _loadedSourceKey = null;
       _trackError = null;
     }
-    if (!widget.showSourceList &&
+    if (playlistsInvalidated &&
+        !widget.showSourceList &&
+        widget.viewedSource.queueItems == null) {
+      unawaited(_loadViewedSource());
+    } else if (!widget.showSourceList &&
         widget.viewedSource.queueItems == null &&
         _loadedSourceKey != widget.viewedSource.key &&
         !_trackLoading) {
@@ -1915,9 +1956,10 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
   }
 
   Future<void> _loadPlaylists() async {
+    final generation = ++_playlistLoadGeneration;
     final controller = widget.controller;
     if (controller == null) {
-      if (!mounted) return;
+      if (!mounted || generation != _playlistLoadGeneration) return;
       setState(() {
         _sourceListLoading = false;
         _sourceListError = '歌单服务暂不可用';
@@ -1941,14 +1983,15 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
         roomFuture,
         personalFuture,
       ]);
-      if (!mounted) return;
+      if (!mounted || generation != _playlistLoadGeneration) return;
       setState(() {
         _sourceListLoading = false;
         _roomPlaylists = results[0];
         _personalPlaylists = results[1];
       });
+      _refreshSelectedSavedSource(results[0], results[1]);
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || generation != _playlistLoadGeneration) return;
       setState(() {
         _sourceListLoading = false;
         _sourceListError = '加载歌单失败';
@@ -1957,10 +2000,11 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
   }
 
   Future<void> _loadViewedSource() async {
+    final generation = ++_trackLoadGeneration;
     final source = widget.viewedSource;
     final queueItems = source.queueItems;
     if (queueItems != null) {
-      if (!mounted) return;
+      if (!mounted || generation != _trackLoadGeneration) return;
       setState(() {
         _trackLoading = false;
         _trackError = null;
@@ -1972,7 +2016,7 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
     final controller = widget.controller;
     final roomId = widget.roomId;
     if (controller == null || (source.roomScoped && roomId == null)) {
-      if (!mounted) return;
+      if (!mounted || generation != _trackLoadGeneration) return;
       setState(() {
         _trackLoading = false;
         _trackError = '歌单服务暂不可用';
@@ -1991,14 +2035,22 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
               playlistId: source.id,
             )
           : await controller.loadMyPlaylist(playlistId: source.id);
-      if (!mounted || widget.viewedSource.key != source.key) return;
+      if (!mounted ||
+          generation != _trackLoadGeneration ||
+          widget.viewedSource.key != source.key) {
+        return;
+      }
       setState(() {
         _trackLoading = false;
         _selectedItems = page.items;
         _loadedSourceKey = source.key;
       });
     } catch (_) {
-      if (!mounted || widget.viewedSource.key != source.key) return;
+      if (!mounted ||
+          generation != _trackLoadGeneration ||
+          widget.viewedSource.key != source.key) {
+        return;
+      }
       setState(() {
         _trackLoading = false;
         _trackError = '加载歌曲失败';
@@ -2006,8 +2058,46 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
     }
   }
 
+  void _refreshSelectedSavedSource(
+    List<PersonalMusicPlaylist> roomPlaylists,
+    List<PersonalMusicPlaylist> personalPlaylists,
+  ) {
+    final source = widget.viewedSource;
+    if (source.type == MusicBoxActiveSourceType.temporary ||
+        source.playlist == null) {
+      return;
+    }
+    final playlists = source.roomScoped ? roomPlaylists : personalPlaylists;
+    final playlist = _musicBoxPlaylistById(playlists, source.id);
+    if (playlist == null) {
+      widget.onViewedSourceRefreshed(null);
+      return;
+    }
+    if (playlist.revision == source.playlist!.revision &&
+        playlist.name == source.name &&
+        playlist.itemCount == source.itemCount) {
+      return;
+    }
+    widget.onViewedSourceRefreshed(
+      _MusicBoxBrowseSource(
+        type: source.type,
+        id: playlist.id,
+        name: playlist.name,
+        itemCount: playlist.itemCount,
+        current:
+            _sourceIsActive(source) &&
+            music_box_display.musicBoxHasActivePlayback(widget.state),
+        roomScoped: source.roomScoped,
+        playlist: playlist,
+      ),
+    );
+  }
+
   List<_MusicBoxBrowseSource> _sources() {
     final active = widget.state.activeSource;
+    final hasActivePlayback = music_box_display.musicBoxHasActivePlayback(
+      widget.state,
+    );
     final result = <_MusicBoxBrowseSource>[];
     if (active.type != MusicBoxActiveSourceType.temporary &&
         active.id.isNotEmpty &&
@@ -2015,16 +2105,31 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
           active.type,
           _filter,
         )) {
+      final roomScoped = active.type == MusicBoxActiveSourceType.roomPlaylist;
+      final savedPlaylist = _musicBoxPlaylistById(
+        roomScoped ? _roomPlaylists : _personalPlaylists,
+        active.id,
+      );
       result.add(
-        _MusicBoxBrowseSource(
-          type: active.type,
-          id: active.id,
-          name: music_box_display.musicBoxActiveSourceLabel(active),
-          itemCount: widget.state.queue.length,
-          current: true,
-          roomScoped: active.type == MusicBoxActiveSourceType.roomPlaylist,
-          queueItems: widget.state.queue,
-        ),
+        savedPlaylist == null
+            ? _MusicBoxBrowseSource(
+                type: active.type,
+                id: active.id,
+                name: music_box_display.musicBoxActiveSourceLabel(active),
+                itemCount: widget.state.queue.length,
+                current: hasActivePlayback,
+                roomScoped: roomScoped,
+                queueItems: widget.state.queue,
+              )
+            : _MusicBoxBrowseSource(
+                type: active.type,
+                id: savedPlaylist.id,
+                name: savedPlaylist.name,
+                itemCount: savedPlaylist.itemCount,
+                current: hasActivePlayback,
+                roomScoped: roomScoped,
+                playlist: savedPlaylist,
+              ),
       );
     }
     if (music_box_display.musicBoxSourceVisibleForFilter(
@@ -2037,7 +2142,9 @@ class _MusicBoxSourceBrowserState extends State<_MusicBoxSourceBrowser> {
           id: widget.roomId ?? '',
           name: '点歌队列',
           itemCount: widget.state.temporaryQueue.length,
-          current: active.type == MusicBoxActiveSourceType.temporary,
+          current:
+              active.type == MusicBoxActiveSourceType.temporary &&
+              hasActivePlayback,
           roomScoped: true,
           queueItems: widget.state.temporaryQueue,
         ),

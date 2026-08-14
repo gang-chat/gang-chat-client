@@ -292,6 +292,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   // `room_member_profile_changed` SSE event). The panel watches this via
   // didUpdateWidget and re-pulls its members/requests.
   int _membersReloadToken = 0;
+  // Invalidates saved-playlist summaries and tracks cached by the open music
+  // box after a successful edit in Settings or Room Settings. Playback state
+  // remains server-authoritative and is intentionally not rewritten here.
+  int _musicPlaylistsRevision = 0;
   String _membersInitialSearchQuery = '';
   List<RoomInvite> _notificationInvites = const [];
   List<RoomApplication> _notificationApplications = const [];

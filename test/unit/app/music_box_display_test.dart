@@ -306,6 +306,49 @@ void main() {
     });
   });
 
+  group('musicBoxHasActivePlayback', () {
+    test('requires a current item and a non-stopped transport state', () {
+      final queue = [_item(id: 'item-1')];
+
+      expect(
+        musicBoxHasActivePlayback(
+          _state(
+            playbackState: MusicBoxPlaybackState.stopped,
+            currentItemId: 'item-1',
+            queue: queue,
+          ),
+        ),
+        isFalse,
+      );
+      expect(
+        musicBoxHasActivePlayback(
+          _state(
+            playbackState: MusicBoxPlaybackState.playing,
+            currentItemId: 'item-1',
+            queue: queue,
+          ),
+        ),
+        isTrue,
+      );
+      expect(
+        musicBoxHasActivePlayback(
+          _state(
+            playbackState: MusicBoxPlaybackState.paused,
+            currentItemId: 'item-1',
+            queue: queue,
+          ),
+        ),
+        isTrue,
+      );
+      expect(
+        musicBoxHasActivePlayback(
+          _state(playbackState: MusicBoxPlaybackState.playing, queue: queue),
+        ),
+        isFalse,
+      );
+    });
+  });
+
   group('musicBoxQueueStatusLabel', () {
     test('labels each lifecycle stage', () {
       expect(

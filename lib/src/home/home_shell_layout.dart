@@ -156,6 +156,7 @@ extension _HomeShellLayout on _HomeShellState {
             _handleAppUpdateDownloadCancellationChanged,
         currentUser: _currentUser,
         onUserUpdated: _handleUserUpdated,
+        onMusicPlaylistsChanged: _markMusicPlaylistsChanged,
         onAccountDeleted: _logout,
         onScreenShareMaxHeightChanged: (height) =>
             unawaited(_liveSessionController.setScreenShareMaxHeight(height)),
@@ -364,6 +365,7 @@ extension _HomeShellLayout on _HomeShellState {
                   count: 20,
                   page: 1,
                 ),
+            onChanged: _markMusicPlaylistsChanged,
           ),
           initialPlaylistId: _roomSettingsInitialMusicPlaylistId,
           title: '房间歌单',
@@ -436,6 +438,7 @@ extension _HomeShellLayout on _HomeShellState {
             unawaited(_changeMusicBoxPlaybackMode(mode)),
         musicBoxController: _musicBoxController,
         musicBoxRoomId: _selectedServerId,
+        musicPlaylistsRevision: _musicPlaylistsRevision,
         musicBoxRoom: _selectedRoom == null
             ? null
             : room_display.publicRoomFromRoomDetail(_selectedRoom!),

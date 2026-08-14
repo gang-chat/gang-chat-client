@@ -61,6 +61,7 @@ Widget _host(
   ValueChanged<double>? onVolumeChanged,
   MusicBoxController? musicBoxController,
   String? roomId,
+  int playlistsRevision = 0,
   ValueChanged<MusicBoxState>? onStateChanged,
   ValueChanged<MusicBoxSearchResult>? onQueueResult,
   CurrentUser? currentUser,
@@ -91,6 +92,7 @@ Widget _host(
           source: source,
           controller: musicBoxController,
           roomId: roomId,
+          playlistsRevision: playlistsRevision,
           room: room,
           onStateChanged: onStateChanged,
           currentUser: currentUser,
@@ -172,10 +174,10 @@ class _RoomPlaylistApiFake extends _MusicBoxApiFake
     this.personalPlaylists = const [],
   });
 
-  final PersonalMusicPlaylist playlist;
-  final List<PersonalMusicPlaylistItem> items;
-  final List<PersonalMusicPlaylist>? roomPlaylists;
-  final List<PersonalMusicPlaylist> personalPlaylists;
+  PersonalMusicPlaylist playlist;
+  List<PersonalMusicPlaylistItem> items;
+  List<PersonalMusicPlaylist>? roomPlaylists;
+  List<PersonalMusicPlaylist> personalPlaylists;
 
   @override
   Future<PersonalMusicPlaylistPage> listRoomMusicPlaylists({
@@ -908,7 +910,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('saved source keeps its queue without a context action', (
+  testWidgets('saved source opens its latest tracks without a context action', (
     tester,
   ) async {
     final controller = TextEditingController();
@@ -948,7 +950,19 @@ void main() {
         createdAt: DateTime(2026, 7, 28, 9, 15),
         updatedAt: null,
       ),
-      items: const [],
+      items: const [
+        PersonalMusicPlaylistItem(
+          id: 'room-list-item',
+          playlistId: 'room-list',
+          trackId: 'track-1',
+          source: 'netease',
+          title: 'Song',
+          artists: ['Artist'],
+          durationMs: 180000,
+          sortOrder: 0,
+          createdAt: null,
+        ),
+      ],
       personalPlaylists: const [
         PersonalMusicPlaylist(
           id: 'personal-list',
@@ -996,7 +1010,7 @@ void main() {
       tester.getTopLeft(currentSource).dy,
       lessThan(tester.getTopLeft(requestQueueSource).dy),
     );
-    expect(find.text('正在播放 · 1 首歌曲'), findsOneWidget);
+    expect(find.text('正在播放 · 1 首歌曲'), findsNothing);
     final sourceSearch = find.byKey(
       const ValueKey<String>('music-box-source-search-input'),
     );
@@ -1092,20 +1106,22 @@ void main() {
 
     await tester.tap(
       find.descendant(
-        of: find.byKey(const ValueKey<String>('music-box-queue-list')),
+        of: find.byKey(
+          const ValueKey<String>(
+            'music-box-source-tracks:room_playlist:room-list',
+          ),
+        ),
         matching: find.text('Song'),
       ),
     );
     await tester.pump();
-    expect(find.text('歌单'), findsOneWidget);
-    final playlistAttribution = find.byKey(
-      const ValueKey<String>('music-box-song-playlist-attribution'),
-    );
     expect(
-      find.descendant(of: playlistAttribution, matching: find.text('房间收藏')),
+      find.byKey(
+        const ValueKey<String>('music-box-song-card:search:netease:track-1'),
+      ),
       findsOneWidget,
     );
-    expect(find.text('房间歌单 · 房间收藏'), findsNothing);
+    expect(find.text('歌单'), findsNothing);
     expect(find.text('点歌人'), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -1206,20 +1222,7 @@ void main() {
           ),
         );
         expect(currentSource, findsOneWidget);
-        expect(playingIndicator, findsOneWidget);
-        expect(
-          tester.getCenter(playingIndicator).dx,
-          greaterThan(
-            tester
-                .getCenter(
-                  find.descendant(
-                    of: currentSource,
-                    matching: find.text('房间精选'),
-                  ),
-                )
-                .dx,
-          ),
-        );
+        expect(playingIndicator, findsNothing);
         expect(
           find.byKey(
             const ValueKey<String>(
@@ -1581,6 +1584,126 @@ void main() {
         expect(api.activatedSourceType, MusicBoxActiveSourceType.userPlaylist);
         expect(api.activatedPlaylistId, 'other-playlist');
         expect(api.activatedStartItemId, isNull);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      '${platform.name} refreshes a viewed saved playlist after editing',
+      (tester) async {
+        final searchController = TextEditingController();
+        addTearDown(searchController.dispose);
+        const snapshotItem = MusicBoxQueueItem(
+          id: 'active-snapshot-item',
+          source: 'netease',
+          trackId: 'active-snapshot-track',
+          title: '播放快照中的旧歌曲',
+          artist: '旧歌手',
+          durationMs: 180000,
+          status: MusicBoxQueueItemStatus.ready,
+          fileSizeBytes: 100,
+          error: '',
+          addedByUserId: 'playlist-current-user',
+          createdAt: null,
+        );
+        final state = _state(
+          playbackState: MusicBoxPlaybackState.paused,
+          positionMs: 0,
+          queue: const [snapshotItem],
+          currentItemId: 'active-snapshot-item',
+          activeSource: const MusicBoxActiveSource(
+            type: MusicBoxActiveSourceType.roomPlaylist,
+            id: 'edited-playlist',
+            name: '编辑前歌单',
+          ),
+        );
+        final api = _RoomPlaylistApiFake(
+          state,
+          playlist: const PersonalMusicPlaylist(
+            id: 'edited-playlist',
+            name: '编辑前歌单',
+            description: '',
+            revision: 1,
+            itemCount: 1,
+            createdAt: null,
+            updatedAt: null,
+          ),
+          items: const [
+            PersonalMusicPlaylistItem(
+              id: 'saved-item-before',
+              playlistId: 'edited-playlist',
+              trackId: 'saved-track-before',
+              source: 'netease',
+              title: '编辑前歌曲',
+              artists: ['歌手'],
+              durationMs: 180000,
+              sortOrder: 0,
+              createdAt: null,
+            ),
+          ],
+        );
+
+        final musicBoxController = MusicBoxController(api: api);
+        Widget buildHost(int revision) => _host(
+          state,
+          searchController,
+          platform: platform,
+          height: 620,
+          musicBoxController: musicBoxController,
+          roomId: 'room-1',
+          playlistsRevision: revision,
+          currentUser: _playlistCurrentUser,
+          room: _playlistRoom,
+        );
+
+        await tester.pumpWidget(buildHost(0));
+        await tester.tap(
+          find.byKey(const ValueKey<String>('music-box-current-queue-header')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(
+            const ValueKey<String>(
+              'music-box-source:room_playlist:edited-playlist',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('编辑前歌曲'), findsOneWidget);
+        expect(find.text('播放快照中的旧歌曲'), findsOneWidget);
+
+        api.playlist = const PersonalMusicPlaylist(
+          id: 'edited-playlist',
+          name: '编辑后歌单',
+          description: '',
+          revision: 2,
+          itemCount: 1,
+          createdAt: null,
+          updatedAt: null,
+        );
+        api.items = const [
+          PersonalMusicPlaylistItem(
+            id: 'saved-item-after',
+            playlistId: 'edited-playlist',
+            trackId: 'saved-track-after',
+            source: 'netease',
+            title: '编辑后歌曲',
+            artists: ['新歌手'],
+            durationMs: 200000,
+            sortOrder: 0,
+            createdAt: null,
+          ),
+        ];
+
+        await tester.pumpWidget(buildHost(1));
+        await tester.pumpAndSettle();
+
+        expect(find.text('编辑后歌单'), findsOneWidget);
+        expect(find.text('编辑后歌曲'), findsOneWidget);
+        expect(find.text('编辑前歌曲'), findsNothing);
+        expect(find.text('播放快照中的旧歌曲'), findsOneWidget);
+        expect(state.queue.single.title, '播放快照中的旧歌曲');
+        expect(api.activatedSourceType, isNull);
         expect(tester.takeException(), isNull);
       },
     );
