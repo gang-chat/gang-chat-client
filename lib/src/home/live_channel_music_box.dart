@@ -1647,7 +1647,7 @@ class _ActiveMusicPlaylistDialogState
   }
 }
 
-class _MusicBoxCurrentSourceHeader extends StatelessWidget {
+class _MusicBoxCurrentSourceHeader extends StatefulWidget {
   const _MusicBoxCurrentSourceHeader({
     required this.source,
     required this.expanded,
@@ -1661,33 +1661,70 @@ class _MusicBoxCurrentSourceHeader extends StatelessWidget {
   final VoidCallback onPressed;
 
   @override
+  State<_MusicBoxCurrentSourceHeader> createState() =>
+      _MusicBoxCurrentSourceHeaderState();
+}
+
+class _MusicBoxCurrentSourceHeaderState
+    extends State<_MusicBoxCurrentSourceHeader> {
+  final GlobalKey _leadingKey = GlobalKey();
+  bool _pointerStartedOnLeading = false;
+
+  void _handlePointerDown(PointerDownEvent event) {
+    final renderObject = _leadingKey.currentContext?.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) {
+      _pointerStartedOnLeading = false;
+      return;
+    }
+    _pointerStartedOnLeading =
+        (renderObject.localToGlobal(Offset.zero) & renderObject.size).contains(
+          event.position,
+        );
+  }
+
+  void _handleSurfacePressed() {
+    final startedOnLeading = _pointerStartedOnLeading;
+    _pointerStartedOnLeading = false;
+    if (!startedOnLeading) widget.onPressed();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return PressableSurface(
-      key: const ValueKey<String>('music-box-current-queue-header'),
-      height: _musicBoxSearchFieldHeight,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      backgroundColor: UiColors.surfaceLow,
-      borderColor: UiColors.border,
-      hoverEffect: false,
-      pressEffect: false,
-      selected: expanded,
-      child: Row(
-        children: [
-          MouseRegion(cursor: SystemMouseCursors.click, child: leading),
-          Expanded(
-            child: Tooltip(
-              message: expanded ? '收起歌单' : '切换歌单',
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: _handlePointerDown,
+      onPointerCancel: (_) => _pointerStartedOnLeading = false,
+      child: PressableSurface(
+        key: const ValueKey<String>('music-box-current-queue-header'),
+        height: _musicBoxSearchFieldHeight,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        backgroundColor: UiColors.surfaceLow,
+        borderColor: UiColors.border,
+        // The surface owns its entire visible raised/depth area, so every
+        // highlighted pixel switches sources. A press that starts on the
+        // leading playlist-card anchor remains reserved for that nested card.
+        onPressed: _handleSurfacePressed,
+        selected: widget.expanded,
+        child: Row(
+          children: [
+            KeyedSubtree(
+              key: _leadingKey,
               child: MouseRegion(
                 cursor: SystemMouseCursors.click,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: onPressed,
+                child: widget.leading,
+              ),
+            ),
+            Expanded(
+              child: Tooltip(
+                message: widget.expanded ? '收起歌单' : '切换歌单',
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
                   child: Row(
                     children: [
                       const SizedBox(width: 7),
                       Expanded(
                         child: Text(
-                          source.name,
+                          widget.source.name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -1698,7 +1735,7 @@ class _MusicBoxCurrentSourceHeader extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        '${source.itemCount}',
+                        '${widget.source.itemCount}',
                         style: const TextStyle(
                           color: UiColors.textMuted,
                           fontSize: 10,
@@ -1707,7 +1744,7 @@ class _MusicBoxCurrentSourceHeader extends StatelessWidget {
                       ),
                       const SizedBox(width: 6),
                       Icon(
-                        expanded ? Icons.expand_less : Icons.expand_more,
+                        widget.expanded ? Icons.expand_less : Icons.expand_more,
                         size: 16,
                         color: UiColors.textMuted,
                       ),
@@ -1716,8 +1753,8 @@ class _MusicBoxCurrentSourceHeader extends StatelessWidget {
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

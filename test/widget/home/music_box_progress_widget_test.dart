@@ -455,6 +455,104 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  for (final platform in const [
+    TargetPlatform.windows,
+    TargetPlatform.macOS,
+    TargetPlatform.android,
+  ]) {
+    testWidgets(
+      '${platform.name} playlist switcher uses the shared raised hover surface',
+      (tester) async {
+        final controller = TextEditingController();
+        addTearDown(controller.dispose);
+        await tester.pumpWidget(
+          _host(
+            _state(playbackState: MusicBoxPlaybackState.stopped, positionMs: 0),
+            controller,
+            platform: platform,
+            height: 600,
+          ),
+        );
+        await tester.pump();
+
+        final header = find.byKey(
+          const ValueKey<String>('music-box-current-queue-header'),
+        );
+        final surface = tester.widget<PressableSurface>(header);
+        expect(surface.onPressed, isNotNull);
+        expect(surface.hoverEffect, isTrue);
+        expect(surface.pressEffect, isTrue);
+
+        final cap = find.descendant(
+          of: header,
+          matching: find.byType(AnimatedPositioned),
+        );
+        expect(tester.widget<AnimatedPositioned>(cap).top, surface.hoverLift);
+        final mouse = await tester.createGesture(
+          pointer: 91,
+          kind: PointerDeviceKind.mouse,
+        );
+        addTearDown(mouse.removePointer);
+        await mouse.addPointer(location: Offset.zero);
+        await mouse.moveTo(tester.getCenter(header));
+        await tester.pump();
+
+        expect(tester.widget<AnimatedPositioned>(cap).top, 0);
+
+        final headerRect = tester.getRect(header);
+        await tester.tapAt(
+          Offset(headerRect.center.dx, headerRect.bottom - 0.5),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey<String>('music-box-source-search-input')),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      '${platform.name} playlist switcher keeps its leading card independent',
+      (tester) async {
+        final controller = TextEditingController();
+        addTearDown(controller.dispose);
+        await tester.pumpWidget(
+          _host(
+            _state(playbackState: MusicBoxPlaybackState.stopped, positionMs: 0),
+            controller,
+            platform: platform,
+            height: 600,
+          ),
+        );
+        await tester.pump();
+
+        await tester.tap(
+          find.byKey(
+            const ValueKey<String>(
+              'music-box-current-source-playlist-card-anchor',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey<String>('music-playlist-card-title')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey<String>('music-box-source-search-input')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey<String>('music-box-current-queue-header')),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets('now playing title moves only when it overflows', (tester) async {
     const longTitle = '一首需要在音乐盒顶部左右往返显示完整内容的特别长歌曲名称';
     final controller = TextEditingController();
