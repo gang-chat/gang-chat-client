@@ -20,6 +20,58 @@ void main() {
     },
   );
 
+  test('transport controls execute without a stale UI revision', () async {
+    const actions = [
+      'play',
+      'resume',
+      'pause',
+      'skip',
+      'next',
+      'previous',
+      'stop',
+    ];
+
+    for (final action in actions) {
+      final api = _RecordingMusicBoxApi(_state);
+      final controller = MusicBoxController(api: api);
+
+      await controller.control(
+        roomId: 'room-1',
+        action: action,
+        currentState: _state,
+      );
+
+      expect(api.expectedRevision, isNull, reason: 'action=$action');
+      expect(api.commandId, isNotEmpty, reason: 'action=$action');
+    }
+  });
+
+  test('playback mode changes retain optimistic concurrency', () async {
+    final api = _RecordingMusicBoxApi(_state);
+    final controller = MusicBoxController(api: api);
+
+    await controller.control(
+      roomId: 'room-1',
+      action: 'set_mode',
+      mode: MusicBoxPlaybackMode.repeatOne,
+      currentState: _state,
+    );
+
+    expect(api.expectedRevision, _state.revision);
+  });
+
+  test('clearing the request queue retains optimistic concurrency', () async {
+    final api = _RecordingMusicBoxApi(_state);
+    final controller = MusicBoxController(api: api);
+
+    await controller.clearTemporaryQueue(
+      roomId: 'room-1',
+      currentState: _state,
+    );
+
+    expect(api.expectedRevision, _state.revision);
+  });
+
   test('music box command errors preserve localized API feedback', () {
     final error = ApiException(
       '歌曲尚未准备完成',

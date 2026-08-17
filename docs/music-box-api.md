@@ -241,8 +241,7 @@ Content-Type: application/json
 
 {
   "action": "next",
-  "command_id": "mbx-unique-command",
-  "expected_revision": 42
+  "command_id": "mbx-unique-command"
 }
 ```
 
@@ -257,6 +256,13 @@ Content-Type: application/json
 - `set_mode`
 - `play_now`（同时传入活动队列中的 `item_id`）
 - `clear_temporary_playlist`（清空点歌队列）
+
+`play`、`pause`、`resume`、`previous`、`next` / `skip`、`stop` 和 `play_now` 都是
+执行型传输命令。客户端只发送唯一 `command_id`，不发送界面快照中的
+`expected_revision`；服务端取得房间串行控制锁后，按执行时的权威状态和权限处理。为兼容
+曾经对所有控制都附带 revision 的旧客户端，服务端会忽略这些传输动作携带的旧 revision，
+避免歌曲准备或实时状态更新把有效点击误报为 `music_box_revision_conflict`。`set_mode` 和
+`clear_temporary_playlist` 仍校验 revision，因为它们可能覆盖并发结构变更。
 
 优先播放示例：
 
@@ -295,7 +301,7 @@ track，只停止读取当前文件并从目标文件开头继续发送；不会
 }
 ```
 
-`command_id` 用于幂等去重。需要保护批量编辑或模式切换等易覆盖状态的命令可以携带
+`command_id` 用于幂等去重。需要保护批量编辑或模式切换等易覆盖状态的命令应携带
 `expected_revision`；它与当前状态不一致时返回：
 
 ```json

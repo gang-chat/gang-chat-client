@@ -62,12 +62,16 @@ class MusicBoxController {
     MusicBoxPlaybackMode? mode,
     MusicBoxState? currentState,
   }) {
+    final shouldGuardRevision = musicBoxControlRequiresExpectedRevision(action);
     return api.controlMusicBox(
       roomId: roomId,
       action: action,
       mode: mode == null ? null : musicBoxPlaybackModeValue(mode),
       commandId: _nextCommandId(),
-      expectedRevision: currentState != null && currentState.hasRevision
+      expectedRevision:
+          shouldGuardRevision &&
+              currentState != null &&
+              currentState.hasRevision
           ? currentState.revision
           : null,
     );
@@ -238,6 +242,15 @@ class MusicBoxController {
       source: item.source,
     );
   }
+}
+
+/// Only commands whose result depends on the exact snapshot being edited use
+/// optimistic concurrency. Transport commands are serialized by the server and
+/// intentionally operate on the authoritative state at execution time; adding
+/// a UI snapshot revision to them would turn harmless realtime updates into
+/// false conflicts.
+bool musicBoxControlRequiresExpectedRevision(String action) {
+  return action == 'set_mode';
 }
 
 /// Keeps actionable server feedback when a music-box command fails while still
