@@ -200,7 +200,7 @@ class _LiveChannelHeaderCard extends StatelessWidget {
             const SizedBox(width: _liveHeaderBackGap),
           ],
           Expanded(
-            child: Tooltip(
+            child: UiTooltip(
               message: '进入语音频道',
               child: Semantics(
                 button: true,

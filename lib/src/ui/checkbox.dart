@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'tooltip.dart';
+
 import 'surface.dart';
 import 'tokens.dart';
 
@@ -68,7 +70,7 @@ class UiCheckbox extends StatelessWidget {
 
     final tooltip = this.tooltip;
     if (tooltip != null && tooltip.isNotEmpty) {
-      result = Tooltip(message: tooltip, child: result);
+      result = UiTooltip(message: tooltip, child: result);
     }
 
     return Semantics(

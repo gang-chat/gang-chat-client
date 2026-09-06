@@ -586,7 +586,7 @@ class _FlatIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
+    return UiTooltip(
       message: tooltip,
       child: MouseRegion(
         cursor: SystemMouseCursors.click,

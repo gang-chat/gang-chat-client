@@ -1708,7 +1708,7 @@ class _RemovedMessageInlineButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = onPressed != null;
-    return Tooltip(
+    return UiTooltip(
       message: tooltip,
       waitDuration: const Duration(milliseconds: 350),
       child: MouseRegion(
@@ -3249,7 +3249,7 @@ class _MessageQuoteThumbnail extends StatelessWidget {
         ? thumbnailUrl
         : fullUrl;
     if (previewActions == null) return image;
-    return Tooltip(
+    return UiTooltip(
       message: '查看预览',
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
@@ -4070,7 +4070,7 @@ class _StickerBody extends StatelessWidget {
             ),
           );
 
-    return Tooltip(
+    return UiTooltip(
       message: name,
       waitDuration: const Duration(milliseconds: 350),
       child: preview,
@@ -4623,7 +4623,7 @@ class _FileAttachmentTile extends StatelessWidget {
     if (trailing.kind != file_display.FileAttachmentTrailingKind.download) {
       return tile;
     }
-    return Tooltip(
+    return UiTooltip(
       message: title,
       child: MouseRegion(
         cursor: SystemMouseCursors.click,

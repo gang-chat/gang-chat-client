@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'tooltip.dart';
+
 class LatencySignalBadge extends StatefulWidget {
   const LatencySignalBadge({
     super.key,
@@ -22,13 +24,13 @@ class _LatencySignalBadgeState extends State<LatencySignalBadge> {
   static const _hoverWaitDuration = Duration(milliseconds: 350);
   static const _pinnedExitDuration = Duration(days: 365);
 
-  final GlobalKey<TooltipState> _tooltipKey = GlobalKey<TooltipState>();
+  final GlobalKey<UiTooltipState> _tooltipKey = GlobalKey<UiTooltipState>();
   bool _pinned = false;
 
   void _togglePinned() {
     if (_pinned) {
       setState(() => _pinned = false);
-      Tooltip.dismissAllToolTips();
+      UiTooltip.dismissAllToolTips();
       return;
     }
     setState(() => _pinned = true);
@@ -41,7 +43,7 @@ class _LatencySignalBadgeState extends State<LatencySignalBadge> {
   void _handleTapOutside(PointerDownEvent event) {
     if (!_pinned) return;
     setState(() => _pinned = false);
-    Tooltip.dismissAllToolTips();
+    UiTooltip.dismissAllToolTips();
   }
 
   @override
@@ -52,7 +54,7 @@ class _LatencySignalBadgeState extends State<LatencySignalBadge> {
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
         onTap: _togglePinned,
-        child: Tooltip(
+        child: UiTooltip(
           key: _tooltipKey,
           message: widget.tooltip,
           waitDuration: _hoverWaitDuration,

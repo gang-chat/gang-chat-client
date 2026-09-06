@@ -57,35 +57,55 @@ MusicBoxTransportAction musicBoxPrimaryTransport(MusicBoxState state) {
 /// rolling server deployments, while every UI surface uses the product name.
 const String musicBoxRequestQueueLabel = '点歌队列';
 
-/// Optional scope applied by the music-box source browser.
-///
-/// The direct-request queue is intentionally outside both saved-playlist
-/// scopes. The current source follows its real source type instead of being
-/// pinned through a filter, so a room playlist disappears under [personal]
-/// and a personal playlist disappears under [room].
-enum MusicBoxSourceScopeFilter { personal, room }
+/// The sections of the flat music-box list, in display order: the request
+/// queue (always open) and the two saved-playlist groups (collapsed until
+/// opened). "What is playing" is marked on the section that owns the active
+/// source; "what is open" is the user's choice and realtime never changes it.
+enum MusicBoxSection { queue, roomPlaylists, myPlaylists }
 
-bool musicBoxSourceVisibleForFilter(
-  MusicBoxActiveSourceType sourceType,
-  MusicBoxSourceScopeFilter? filter,
-) {
-  if (filter == null) return true;
-  return switch (filter) {
-    MusicBoxSourceScopeFilter.personal =>
-      sourceType == MusicBoxActiveSourceType.userPlaylist,
-    MusicBoxSourceScopeFilter.room =>
-      sourceType == MusicBoxActiveSourceType.roomPlaylist,
+/// The section that lists [type]. A personal playlist owned by someone else
+/// is not listable by the viewer, but it still lives under 我的歌单 so the
+/// now-playing chip has a deterministic home for its snapshot view.
+MusicBoxSection musicBoxSectionForSource(MusicBoxActiveSourceType type) {
+  return switch (type) {
+    MusicBoxActiveSourceType.temporary => MusicBoxSection.queue,
+    MusicBoxActiveSourceType.roomPlaylist => MusicBoxSection.roomPlaylists,
+    MusicBoxActiveSourceType.userPlaylist => MusicBoxSection.myPlaylists,
   };
 }
 
-/// Matches a source-browser entry by its user-facing name.
-///
-/// Search stays independent from the scope filter: callers first apply the
-/// personal/room scope and then this normalized, case-insensitive name match.
-bool musicBoxSourceMatchesQuery(String sourceName, String query) {
-  final normalizedQuery = query.trim().toLowerCase();
-  if (normalizedQuery.isEmpty) return true;
-  return sourceName.trim().toLowerCase().contains(normalizedQuery);
+/// Stable key for one saved playlist inside the flat list.
+String musicBoxPlaylistKey(MusicBoxActiveSourceType type, String id) {
+  return '${musicBoxActiveSourceTypeValue(type)}:$id';
+}
+
+/// Whether the saved playlist [type]/[id] (or the request queue when [type]
+/// is temporary) is the room's active source. Activation is server-owned, so
+/// this is a pure comparison against the authoritative snapshot.
+bool musicBoxSourceIsActive(
+  MusicBoxState state,
+  MusicBoxActiveSourceType type, [
+  String id = '',
+]) {
+  final active = state.activeSource;
+  if (type == MusicBoxActiveSourceType.temporary) {
+    return active.type == MusicBoxActiveSourceType.temporary;
+  }
+  return active.type == type && active.id == id;
+}
+
+/// Whether a saved-playlist template row describes the track the room is
+/// currently playing. Template item ids differ from the activation snapshot's
+/// queue item ids, so the match is by catalog identity instead.
+bool musicBoxTrackIsCurrent(
+  MusicBoxState state, {
+  required String source,
+  required String trackId,
+}) {
+  final current = state.currentItem;
+  if (current == null) return false;
+  return musicBoxTrackLinkKey(source: current.source, trackId: current.trackId) ==
+      musicBoxTrackLinkKey(source: source, trackId: trackId);
 }
 
 /// Stable identity for a concrete catalog track. Sources are protocol enums

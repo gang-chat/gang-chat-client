@@ -5,6 +5,8 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import 'tooltip.dart';
+
 import '../app/file_display.dart' as file_display;
 import '../app/sticker_display.dart';
 import '../app/media_cache_controller.dart';
@@ -1417,7 +1419,7 @@ class _StickerGridTile extends StatelessWidget {
         final tileHeight = constraints.maxHeight.isFinite
             ? math.max(54.0, constraints.maxHeight - 6)
             : 86.0;
-        return Tooltip(
+        return UiTooltip(
           message: item.sticker.name,
           child: PressableSurface(
             onPressed: busy ? null : onTap,

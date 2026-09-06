@@ -1159,7 +1159,7 @@ class _InputValidityIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
+    return UiTooltip(
       message: message,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -1182,7 +1182,7 @@ class _InputCheckingIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
+    return UiTooltip(
       message: message,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -1340,7 +1340,7 @@ class _AccountInputClearButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
+    return UiTooltip(
       message: '清除账号',
       child: Semantics(
         button: true,
@@ -1375,7 +1375,7 @@ class _AccountHistoryToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
+    return UiTooltip(
       message: expanded ? '收起账号记录' : '展开账号记录',
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
@@ -1571,7 +1571,7 @@ class _AccountHistoryDeleteButtonState
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
+    return UiTooltip(
       message: '删除账号记录',
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
@@ -1610,7 +1610,7 @@ class _PasswordVisibilityToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = enabled ? UiColors.textSecondary : UiColors.textMuted;
-    return Tooltip(
+    return UiTooltip(
       message: obscure ? '显示密码' : '隐藏密码',
       child: Semantics(
         button: true,

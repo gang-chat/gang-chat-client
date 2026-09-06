@@ -442,8 +442,6 @@ extension _HomeShellLayout on _HomeShellState {
         musicBoxRoom: _selectedRoom == null
             ? null
             : room_display.publicRoomFromRoomDetail(_selectedRoom!),
-        musicTrackPreviewPlatformFactory:
-            widget.musicTrackPreviewPlatformFactory,
         onMusicBoxStateChanged: _applyMusicBoxSnapshot,
         onCreateFirstRoomMusicPlaylist:
             _selectedRoom != null &&

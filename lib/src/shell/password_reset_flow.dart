@@ -436,7 +436,7 @@ class _PasswordVisibilityAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
+    return UiTooltip(
       message: obscure ? '显示密码' : '隐藏密码',
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,

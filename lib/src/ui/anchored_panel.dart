@@ -103,44 +103,49 @@ class _AnchoredPanelAnchorState extends State<AnchoredPanelAnchor> {
 
   @override
   Widget build(BuildContext context) {
-    return OverlayPortal(
-      controller: _portal,
-      overlayChildBuilder: (context) {
-        return Positioned.fill(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final anchorRect = _anchorRectInOverlay();
-              if (anchorRect == null) return const SizedBox.shrink();
+    // Own semantics boundary: portal traversal identifiers must not merge
+    // with other portals' anchors (see HoverCardAnchor).
+    return Semantics(
+      container: true,
+      child: OverlayPortal(
+        controller: _portal,
+        overlayChildBuilder: (context) {
+          return Positioned.fill(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final anchorRect = _anchorRectInOverlay();
+                if (anchorRect == null) return const SizedBox.shrink();
 
-              return CustomSingleChildLayout(
-                delegate: _AnchoredPanelLayoutDelegate(
-                  anchorRect: anchorRect,
-                  gap: widget.gap,
-                  panelWidth: widget.width,
-                ),
-                child: SizedBox(
-                  width: widget.width,
-                  child: TapRegion(
-                    groupId: _tapRegionGroup,
-                    child: AnchoredPanel(
-                      width: widget.width,
-                      backgroundColor: widget.backgroundColor,
-                      borderColor: widget.borderColor,
-                      child: widget.panel,
+                return CustomSingleChildLayout(
+                  delegate: _AnchoredPanelLayoutDelegate(
+                    anchorRect: anchorRect,
+                    gap: widget.gap,
+                    panelWidth: widget.width,
+                  ),
+                  child: SizedBox(
+                    width: widget.width,
+                    child: TapRegion(
+                      groupId: _tapRegionGroup,
+                      child: AnchoredPanel(
+                        width: widget.width,
+                        backgroundColor: widget.backgroundColor,
+                        borderColor: widget.borderColor,
+                        child: widget.panel,
+                      ),
                     ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
+          );
+        },
+        child: TapRegion(
+          groupId: _tapRegionGroup,
+          onTapOutside: (_) => _close(),
+          child: KeyedSubtree(
+            key: _anchorKey,
+            child: widget.anchor(context, _open, _toggle),
           ),
-        );
-      },
-      child: TapRegion(
-        groupId: _tapRegionGroup,
-        onTapOutside: (_) => _close(),
-        child: KeyedSubtree(
-          key: _anchorKey,
-          child: widget.anchor(context, _open, _toggle),
         ),
       ),
     );

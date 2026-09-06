@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+
+import 'tooltip.dart';
 import 'package:flutter/services.dart';
 
 import 'text_context_menu.dart';
@@ -459,7 +461,7 @@ class _InputClearButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
+    return UiTooltip(
       message: tooltip,
       child: Semantics(
         button: true,

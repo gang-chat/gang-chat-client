@@ -345,7 +345,7 @@ class _HoverInfo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (message.isEmpty) return child;
-    return Tooltip(
+    return UiTooltip(
       message: message,
       preferBelow: true,
       verticalOffset: _controlHoverInfoVerticalOffset,

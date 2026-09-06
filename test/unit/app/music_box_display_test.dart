@@ -33,57 +33,141 @@ void main() {
       expect(musicBoxArtistFieldLabel('netease'), '歌手');
       expect(musicBoxArtistFieldLabel('future-source'), '歌手');
     });
+  });
 
-    test('filters every source, including the current source and queue', () {
+  group('music box flat list navigation', () {
+    test('every active source type has an owning section', () {
       expect(
-        musicBoxSourceVisibleForFilter(
+        musicBoxSectionForSource(MusicBoxActiveSourceType.temporary),
+        MusicBoxSection.queue,
+      );
+      expect(
+        musicBoxSectionForSource(MusicBoxActiveSourceType.roomPlaylist),
+        MusicBoxSection.roomPlaylists,
+      );
+      expect(
+        musicBoxSectionForSource(MusicBoxActiveSourceType.userPlaylist),
+        MusicBoxSection.myPlaylists,
+      );
+    });
+
+    test('playlist key is the wire type value plus id', () {
+      expect(
+        musicBoxPlaylistKey(MusicBoxActiveSourceType.roomPlaylist, 'pl-1'),
+        'room_playlist:pl-1',
+      );
+      expect(
+        musicBoxPlaylistKey(MusicBoxActiveSourceType.userPlaylist, 'pl-1'),
+        'user_playlist:pl-1',
+      );
+      expect(
+        musicBoxPlaylistKey(MusicBoxActiveSourceType.roomPlaylist, 'pl-1'),
+        isNot(musicBoxPlaylistKey(MusicBoxActiveSourceType.userPlaylist, 'pl-1')),
+      );
+    });
+
+    test('temporary source is active regardless of id', () {
+      final state = _state();
+      expect(
+        musicBoxSourceIsActive(state, MusicBoxActiveSourceType.temporary),
+        isTrue,
+      );
+      expect(
+        musicBoxSourceIsActive(
+          state,
           MusicBoxActiveSourceType.temporary,
-          null,
+          'ignored',
         ),
         isTrue,
       );
       expect(
-        musicBoxSourceVisibleForFilter(
-          MusicBoxActiveSourceType.temporary,
-          MusicBoxSourceScopeFilter.personal,
-        ),
-        isFalse,
-      );
-      expect(
-        musicBoxSourceVisibleForFilter(
-          MusicBoxActiveSourceType.roomPlaylist,
-          MusicBoxSourceScopeFilter.personal,
-        ),
-        isFalse,
-      );
-      expect(
-        musicBoxSourceVisibleForFilter(
-          MusicBoxActiveSourceType.userPlaylist,
-          MusicBoxSourceScopeFilter.personal,
-        ),
-        isTrue,
-      );
-      expect(
-        musicBoxSourceVisibleForFilter(
-          MusicBoxActiveSourceType.roomPlaylist,
-          MusicBoxSourceScopeFilter.room,
-        ),
-        isTrue,
-      );
-      expect(
-        musicBoxSourceVisibleForFilter(
-          MusicBoxActiveSourceType.userPlaylist,
-          MusicBoxSourceScopeFilter.room,
-        ),
+        musicBoxSourceIsActive(state, MusicBoxActiveSourceType.roomPlaylist),
         isFalse,
       );
     });
 
-    test('matches source names with a normalized query', () {
-      expect(musicBoxSourceMatchesQuery(' 我的收藏 ', ''), isTrue);
-      expect(musicBoxSourceMatchesQuery('Evening Mix', ' evening '), isTrue);
-      expect(musicBoxSourceMatchesQuery('房间收藏', '收藏'), isTrue);
-      expect(musicBoxSourceMatchesQuery('点歌队列', '个人'), isFalse);
+    test('saved playlist is active only when both type and id match', () {
+      final state = _state(
+        activeSource: const MusicBoxActiveSource(
+          type: MusicBoxActiveSourceType.roomPlaylist,
+          id: 'playlist-1',
+          name: '一起听',
+        ),
+      );
+      expect(
+        musicBoxSourceIsActive(
+          state,
+          MusicBoxActiveSourceType.roomPlaylist,
+          'playlist-1',
+        ),
+        isTrue,
+      );
+      expect(
+        musicBoxSourceIsActive(
+          state,
+          MusicBoxActiveSourceType.roomPlaylist,
+          'playlist-2',
+        ),
+        isFalse,
+      );
+      expect(
+        musicBoxSourceIsActive(
+          state,
+          MusicBoxActiveSourceType.userPlaylist,
+          'playlist-1',
+        ),
+        isFalse,
+      );
+      expect(
+        musicBoxSourceIsActive(state, MusicBoxActiveSourceType.temporary),
+        isFalse,
+      );
+    });
+
+    test('current track matches by catalog identity with link key rules', () {
+      const current = MusicBoxQueueItem(
+        id: 'snapshot-item',
+        source: 'bilibili',
+        trackId: 'BV1AbC',
+        title: 'Song',
+        artist: '',
+        durationMs: 0,
+        status: MusicBoxQueueItemStatus.ready,
+        fileSizeBytes: 0,
+        error: '',
+        addedByUserId: 'user',
+        createdAt: null,
+      );
+      final playing = _state(
+        playbackState: MusicBoxPlaybackState.playing,
+        currentItemId: 'snapshot-item',
+        queue: const [current],
+      );
+
+      expect(
+        musicBoxTrackIsCurrent(
+          playing,
+          source: ' BILIBILI ',
+          trackId: ' BV1AbC ',
+        ),
+        isTrue,
+      );
+      expect(
+        musicBoxTrackIsCurrent(playing, source: 'bilibili', trackId: 'bv1abc'),
+        isFalse,
+      );
+      expect(
+        musicBoxTrackIsCurrent(playing, source: 'netease', trackId: 'BV1AbC'),
+        isFalse,
+      );
+      expect(
+        musicBoxTrackIsCurrent(
+          _state(queue: const [current]),
+          source: 'bilibili',
+          trackId: 'BV1AbC',
+        ),
+        isFalse,
+      );
     });
   });
 
@@ -599,6 +683,7 @@ MusicBoxState _state({
   int positionMs = 0,
   DateTime? updatedAt,
   List<MusicBoxQueueItem> queue = const [],
+  MusicBoxActiveSource activeSource = const MusicBoxActiveSource(),
 }) {
   return MusicBoxState(
     enabled: enabled,
@@ -610,6 +695,7 @@ MusicBoxState _state({
       updatedAt: updatedAt,
     ),
     queue: queue,
+    activeSource: activeSource,
     usage: const MusicBoxUsage(usedBytes: 0, limitBytes: 0),
   );
 }

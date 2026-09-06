@@ -378,25 +378,30 @@ class _ComposerMentionOverlayState extends State<_ComposerMentionOverlay> {
   @override
   Widget build(BuildContext context) {
     _schedulePortalSync();
-    return OverlayPortal(
-      controller: _portal,
-      overlayChildBuilder: (context) {
-        return Positioned.fill(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final anchorRect = _anchorRectInOverlay();
-              if (anchorRect == null) return const SizedBox.shrink();
-              return CustomSingleChildLayout(
-                delegate: _ComposerMentionOverlayLayoutDelegate(
-                  anchorRect: anchorRect,
-                ),
-                child: widget.panel,
-              );
-            },
-          ),
-        );
-      },
-      child: KeyedSubtree(key: _anchorKey, child: widget.child),
+    // Own semantics boundary: portal traversal identifiers must not merge
+    // with other portals' anchors (see HoverCardAnchor).
+    return Semantics(
+      container: true,
+      child: OverlayPortal(
+        controller: _portal,
+        overlayChildBuilder: (context) {
+          return Positioned.fill(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final anchorRect = _anchorRectInOverlay();
+                if (anchorRect == null) return const SizedBox.shrink();
+                return CustomSingleChildLayout(
+                  delegate: _ComposerMentionOverlayLayoutDelegate(
+                    anchorRect: anchorRect,
+                  ),
+                  child: widget.panel,
+                );
+              },
+            ),
+          );
+        },
+        child: KeyedSubtree(key: _anchorKey, child: widget.child),
+      ),
     );
   }
 }
@@ -826,7 +831,7 @@ class _StickerTile extends StatelessWidget {
       context,
     ).resolveAssetUrl(sticker.asset.thumbnailUrl ?? sticker.asset.url);
 
-    return Tooltip(
+    return UiTooltip(
       message: sticker.name,
       child: PressableSurface(
         width: _stickerTileSize,
@@ -1006,7 +1011,7 @@ class _ComposerAttachmentChip extends StatelessWidget {
             const SizedBox(width: 8),
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 180),
-              child: Tooltip(
+              child: UiTooltip(
                 message: attachment.filename,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,

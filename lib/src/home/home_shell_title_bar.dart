@@ -447,7 +447,7 @@ class _TitleLiveRoomDock extends StatelessWidget {
         trailingInset;
     final showVolumeIcon =
         joined && (showRoomName || width >= volumeIdentityWidth);
-    final dock = Tooltip(
+    final dock = UiTooltip(
       message: joined ? '打开语音频道' : '可在加入前设置麦克风和耳机',
       preferBelow: true,
       verticalOffset: 22,
@@ -579,7 +579,7 @@ class _TitleLiveActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = onPressed != null;
-    return Tooltip(
+    return UiTooltip(
       message: tooltip,
       preferBelow: true,
       verticalOffset: 22,
@@ -731,7 +731,7 @@ class _TitleSearchFieldState extends State<_TitleSearchField> {
           ),
           if (_hasText && widget.enabled) ...[
             const SizedBox(width: 6),
-            Tooltip(
+            UiTooltip(
               message: '清空搜索',
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,

@@ -1,6 +1,8 @@
 import 'package:flutter/gestures.dart' show PointerDeviceKind, kTouchSlop;
 import 'package:flutter/material.dart';
 
+import 'tooltip.dart';
+
 import 'tokens.dart';
 
 enum SurfaceCorner { topLeft, topRight, bottomLeft, bottomRight }
@@ -324,7 +326,7 @@ class _PressableSurfaceState extends State<PressableSurface> {
 
     final tooltip = widget.tooltip;
     if (tooltip != null && tooltip.isNotEmpty) {
-      result = Tooltip(message: tooltip, child: result);
+      result = UiTooltip(message: tooltip, child: result);
     }
 
     return Semantics(

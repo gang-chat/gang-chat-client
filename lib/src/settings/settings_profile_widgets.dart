@@ -135,7 +135,7 @@ class _PasswordVisibilityToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = enabled ? _textSecondary : _textMuted;
-    return Tooltip(
+    return UiTooltip(
       message: obscure ? '显示密码' : '隐藏密码',
       child: Semantics(
         button: true,
@@ -184,7 +184,7 @@ class _UsernameValidityIndicator extends StatelessWidget {
         : _danger;
     final label = checking ? '检测中' : (valid ? '合法' : '不合法');
     final message = checking ? '正在检测登录用户名是否可用' : (valid ? '登录用户名可用' : error!);
-    return Tooltip(
+    return UiTooltip(
       message: message,
       child: Semantics(
         label: checking ? '正在检测登录用户名是否可用' : (valid ? '登录用户名可用' : '登录用户名不合法'),
@@ -224,7 +224,7 @@ class _EmailVerificationStatusIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final message = checking ? '正在检测邮箱是否可用' : '邮箱已验证';
-    return Tooltip(
+    return UiTooltip(
       message: message,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8),

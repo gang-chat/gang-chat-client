@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'tooltip.dart';
+
 import 'avatar.dart';
 import 'button.dart';
 import 'cached_asset_image.dart';
@@ -220,7 +222,7 @@ class _AvatarPickerSwatch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
+    return UiTooltip(
       message: avatarPresetLabel(keyName),
       child: InkWell(
         onTap: onTap,

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'tooltip.dart';
+
 import 'surface.dart';
 import 'tokens.dart';
 
@@ -276,7 +278,7 @@ class ButtonIconPlain extends StatelessWidget {
     );
     final message = tooltip;
     if (message != null && message.isNotEmpty) {
-      result = Tooltip(message: message, child: result);
+      result = UiTooltip(message: message, child: result);
     }
     return result;
   }

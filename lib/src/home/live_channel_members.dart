@@ -540,7 +540,7 @@ class _LiveMemberActivityTag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
+    return UiTooltip(
       message: label,
       child: Semantics(
         label: label,

@@ -137,7 +137,7 @@ class _AppWindowControlButtonState extends State<AppWindowControlButton> {
         ? UiColors.danger
         : UiColors.textSecondary;
 
-    return Tooltip(
+    return UiTooltip(
       message: widget.tooltip,
       child: MouseRegion(
         cursor: SystemMouseCursors.click,

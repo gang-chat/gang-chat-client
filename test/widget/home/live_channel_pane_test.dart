@@ -2704,7 +2704,10 @@ void main() {
     );
     await tester.pump();
 
-    final search = find.byType(TextField);
+    final search = find.descendant(
+      of: find.byKey(const ValueKey<String>('music-box-search-input')),
+      matching: find.byType(TextField),
+    );
     expect(search, findsOneWidget);
     await tester.tap(search);
     await tester.pump();

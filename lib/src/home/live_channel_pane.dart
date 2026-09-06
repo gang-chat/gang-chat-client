@@ -7,17 +7,14 @@ import '../app/audio_levels.dart';
 import '../app/live_display.dart' as live_display;
 import '../app/music_box_controller.dart';
 import '../app/music_box_display.dart' as music_box_display;
-import '../app/music_track_preview.dart';
 import '../app/room_display.dart' as room_display;
 import '../live/live_session.dart';
 import '../live/live_video_track_view.dart';
-import '../protocol/api_client.dart';
 import '../protocol/models.dart';
 import '../shell/full_screen_system_ui_controller.dart';
 import '../ui/ui.dart';
 import 'hover_card_anchor.dart';
 import 'music_playlist_profile_card.dart';
-import 'music_playlist_snapshot_dialog.dart';
 import 'music_track_profile_card.dart';
 import 'room_profile_card.dart';
 
@@ -25,13 +22,17 @@ part 'live_channel_members.dart';
 part 'live_channel_media.dart';
 part 'live_channel_controls.dart';
 part 'live_channel_music_box.dart';
+part 'live_channel_music_box_body.dart';
+part 'live_channel_music_box_rows.dart';
+part 'live_channel_music_box_song_card.dart';
 
 const _paneEdgeInset = 14.0;
 const _paneTopInset = _paneEdgeInset;
 const _liveRoomRadius = UiRadii.md;
 const _liveRoomPadding = 18.0;
-// Width of the right-docked music box panel (search + queue) when expanded.
-const _musicBoxPanelWidth = 270.0;
+// Width of the right-docked music box panel when expanded. Wide enough for a
+// song row to carry its index, title, requester, and two actions.
+const _musicBoxPanelWidth = 340.0;
 const _memberCardWidth = 154.0;
 const _memberCardMinTwoColumnWidth = 135.0;
 const _memberCardSpacing = 12.0;
@@ -126,7 +127,6 @@ class LiveChannelPane extends StatefulWidget {
     this.musicBoxRoomId,
     this.musicPlaylistsRevision = 0,
     this.musicBoxRoom,
-    this.musicTrackPreviewPlatformFactory,
     this.onMusicBoxStateChanged,
     this.onCreateFirstRoomMusicPlaylist,
     this.onCreateFirstPersonalMusicPlaylist,
@@ -210,7 +210,6 @@ class LiveChannelPane extends StatefulWidget {
   final String? musicBoxRoomId;
   final int musicPlaylistsRevision;
   final PublicRoom? musicBoxRoom;
-  final MusicTrackPreviewPlatformFactory? musicTrackPreviewPlatformFactory;
   final ValueChanged<MusicBoxState>? onMusicBoxStateChanged;
   final VoidCallback? onCreateFirstRoomMusicPlaylist;
   final VoidCallback? onCreateFirstPersonalMusicPlaylist;
@@ -488,8 +487,6 @@ class _LiveChannelPaneState extends State<LiveChannelPane> {
                             roomId: widget.musicBoxRoomId,
                             playlistsRevision: widget.musicPlaylistsRevision,
                             room: widget.musicBoxRoom,
-                            previewPlatformFactory:
-                                widget.musicTrackPreviewPlatformFactory,
                             onStateChanged: widget.onMusicBoxStateChanged,
                             currentUser: widget.currentUser,
                             onResolveUserProfile:
@@ -591,64 +588,72 @@ class _LiveChannelBodyLayoutState extends State<_LiveChannelBodyLayout> {
   @override
   Widget build(BuildContext context) {
     _schedulePortalSync();
-    return OverlayPortal(
-      controller: _musicBoxPortal,
-      overlayChildBuilder: (context) {
-        return Positioned.fill(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final bodyRect = _rectInOverlay(_bodyKey);
-              final anchorRect = _rectInOverlay(_musicBoxAnchorKey);
-              if (bodyRect == null ||
-                  anchorRect == null ||
-                  widget.musicBox == null) {
-                return const SizedBox.shrink();
-              }
-              final standardPanelHeight =
-                  bodyRect.height -
-                  _musicBoxStandardControlHeight -
-                  _liveStageControlGap -
-                  _controlHoverInfoBelowReserve;
-              final desiredPanelHeight =
-                  standardPanelHeight < _musicBoxMinComfortableHeight
-                  ? _musicBoxMinComfortableHeight
-                  : standardPanelHeight;
-              final panelHeight = desiredPanelHeight > anchorRect.top
-                  ? anchorRect.top
-                  : desiredPanelHeight;
-              final panelWidth = bodyRect.width < _musicBoxPanelWidth
-                  ? bodyRect.width
-                  : _musicBoxPanelWidth;
-              if (panelHeight <= 0 || panelWidth <= 0) {
-                return const SizedBox.shrink();
-              }
-              return Stack(
-                children: [
-                  Positioned(
-                    left: anchorRect.right - panelWidth,
-                    top: anchorRect.top - panelHeight,
-                    width: panelWidth,
-                    height: panelHeight,
-                    child: widget.musicBox!,
-                  ),
-                ],
-              );
-            },
-          ),
-        );
-      },
-      child: KeyedSubtree(
-        key: _bodyKey,
-        child: CustomMultiChildLayout(
-          delegate: _LiveChannelBodyLayoutDelegate(),
-          children: [
-            LayoutId(id: _LiveChannelBodySlot.stage, child: widget.stage),
-            LayoutId(id: _LiveChannelBodySlot.controls, child: widget.controls),
-            LayoutId(
-              id: _LiveChannelBodySlot.musicBoxAnchor,
-              child: SizedBox(key: _musicBoxAnchorKey),
+    // Own semantics boundary so this portal's traversal identifier never
+    // merges with hover-card portals inside the body (see HoverCardAnchor).
+    return Semantics(
+      container: true,
+      child: OverlayPortal(
+        controller: _musicBoxPortal,
+        overlayChildBuilder: (context) {
+          return Positioned.fill(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final bodyRect = _rectInOverlay(_bodyKey);
+                final anchorRect = _rectInOverlay(_musicBoxAnchorKey);
+                if (bodyRect == null ||
+                    anchorRect == null ||
+                    widget.musicBox == null) {
+                  return const SizedBox.shrink();
+                }
+                final standardPanelHeight =
+                    bodyRect.height -
+                    _musicBoxStandardControlHeight -
+                    _liveStageControlGap -
+                    _controlHoverInfoBelowReserve;
+                final desiredPanelHeight =
+                    standardPanelHeight < _musicBoxMinComfortableHeight
+                    ? _musicBoxMinComfortableHeight
+                    : standardPanelHeight;
+                final panelHeight = desiredPanelHeight > anchorRect.top
+                    ? anchorRect.top
+                    : desiredPanelHeight;
+                final panelWidth = bodyRect.width < _musicBoxPanelWidth
+                    ? bodyRect.width
+                    : _musicBoxPanelWidth;
+                if (panelHeight <= 0 || panelWidth <= 0) {
+                  return const SizedBox.shrink();
+                }
+                return Stack(
+                  children: [
+                    Positioned(
+                      left: anchorRect.right - panelWidth,
+                      top: anchorRect.top - panelHeight,
+                      width: panelWidth,
+                      height: panelHeight,
+                      child: widget.musicBox!,
+                    ),
+                  ],
+                );
+              },
             ),
-          ],
+          );
+        },
+        child: KeyedSubtree(
+          key: _bodyKey,
+          child: CustomMultiChildLayout(
+            delegate: _LiveChannelBodyLayoutDelegate(),
+            children: [
+              LayoutId(id: _LiveChannelBodySlot.stage, child: widget.stage),
+              LayoutId(
+                id: _LiveChannelBodySlot.controls,
+                child: widget.controls,
+              ),
+              LayoutId(
+                id: _LiveChannelBodySlot.musicBoxAnchor,
+                child: SizedBox(key: _musicBoxAnchorKey),
+              ),
+            ],
+          ),
         ),
       ),
     );

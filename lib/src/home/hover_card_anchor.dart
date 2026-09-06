@@ -499,66 +499,78 @@ class _HoverCardAnchorState extends State<HoverCardAnchor> {
 
   @override
   Widget build(BuildContext context) {
-    return OverlayPortal(
-      controller: _portal,
-      overlayChildBuilder: (context) {
-        return Positioned.fill(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final anchorRect = _anchorRectInOverlay();
-              if (anchorRect == null) return const SizedBox.shrink();
-              final safeInsets = hoverCardOverlaySafeInsets(context);
-              return CustomSingleChildLayout(
-                delegate: _HoverCardLayoutDelegate(
-                  anchorRect: anchorRect,
-                  gap: widget.gap,
-                  cardWidth: widget.cardWidth,
-                  safeInsets: safeInsets,
-                ),
-                child: TapRegion(
-                  groupId: _tapRegionGroup,
-                  onTapOutside: _handleTapOutside,
-                  onTapInside: _handleTapInside,
-                  child: MouseRegion(
-                    onEnter: (_) => _enterCard(),
-                    onExit: (_) => _exitCard(),
-                    child: AnchoredPanel(
-                      key: _cardKey,
-                      width: widget.cardWidth,
-                      child: _HoverCardChainScope(
-                        anchor: this,
-                        coordinator: _coordinator,
-                        tapRegionGroup: _tapRegionGroup,
-                        child: HoverCardTapRegionScope(
+    // OverlayPortal grafts its overlay child into the semantics tree by
+    // tagging the anchor with a `traversalParentIdentifier`. That tag lives
+    // on whichever semantics node absorbs the anchor. Without a boundary here
+    // the anchor merges into an ancestor node together with other portals
+    // (e.g. the live pane's music-box portal), and one identifier overwrites
+    // the other: the losing portal's overlay child becomes an orphan node
+    // that Flutter keeps re-sending and the Windows accessibility bridge keeps
+    // rejecting ("Failed to update ui::AXTree ... will not be in the tree").
+    // A container node of its own keeps this anchor's identifier separate.
+    return Semantics(
+      container: true,
+      child: OverlayPortal(
+        controller: _portal,
+        overlayChildBuilder: (context) {
+          return Positioned.fill(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final anchorRect = _anchorRectInOverlay();
+                if (anchorRect == null) return const SizedBox.shrink();
+                final safeInsets = hoverCardOverlaySafeInsets(context);
+                return CustomSingleChildLayout(
+                  delegate: _HoverCardLayoutDelegate(
+                    anchorRect: anchorRect,
+                    gap: widget.gap,
+                    cardWidth: widget.cardWidth,
+                    safeInsets: safeInsets,
+                  ),
+                  child: TapRegion(
+                    groupId: _tapRegionGroup,
+                    onTapOutside: _handleTapOutside,
+                    onTapInside: _handleTapInside,
+                    child: MouseRegion(
+                      onEnter: (_) => _enterCard(),
+                      onExit: (_) => _exitCard(),
+                      child: AnchoredPanel(
+                        key: _cardKey,
+                        width: widget.cardWidth,
+                        child: _HoverCardChainScope(
+                          anchor: this,
+                          coordinator: _coordinator,
                           tapRegionGroup: _tapRegionGroup,
-                          onOverlayActivityChanged:
-                              _handleOverlayActivityChanged,
-                          child: Builder(builder: widget.cardBuilder),
+                          child: HoverCardTapRegionScope(
+                            tapRegionGroup: _tapRegionGroup,
+                            onOverlayActivityChanged:
+                                _handleOverlayActivityChanged,
+                            child: Builder(builder: widget.cardBuilder),
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              );
-            },
-          ),
-        );
-      },
-      child: TapRegion(
-        groupId: _tapRegionGroup,
-        child: GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: _pinOpen,
-          // On Android a hold is reserved for the desktop-equivalent context
-          // menu. Registering it here also prevents a long hold from falling
-          // through to the tap-to-pin behavior when no context menu exists.
-          onLongPress: Theme.of(context).platform == TargetPlatform.android
-              ? () {}
-              : null,
-          child: MouseRegion(
-            onEnter: (_) => _enterAnchor(),
-            onExit: (_) => _exitAnchor(),
-            child: KeyedSubtree(key: _anchorKey, child: widget.child),
+                );
+              },
+            ),
+          );
+        },
+        child: TapRegion(
+          groupId: _tapRegionGroup,
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: _pinOpen,
+            // On Android a hold is reserved for the desktop-equivalent context
+            // menu. Registering it here also prevents a long hold from falling
+            // through to the tap-to-pin behavior when no context menu exists.
+            onLongPress: Theme.of(context).platform == TargetPlatform.android
+                ? () {}
+                : null,
+            child: MouseRegion(
+              onEnter: (_) => _enterAnchor(),
+              onExit: (_) => _exitAnchor(),
+              child: KeyedSubtree(key: _anchorKey, child: widget.child),
+            ),
           ),
         ),
       ),
