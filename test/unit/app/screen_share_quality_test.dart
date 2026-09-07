@@ -333,4 +333,31 @@ void main() {
       expect(screenShareFrameRateLabel(24), '30 FPS');
     });
   });
+
+  group('screenShareFallbackLayer', () {
+    test('is half resolution, readable frame rate, a third of the budget', () {
+      final quality = screenShareQualityForHeight(720, frameRate: 30);
+      final layer = screenShareFallbackLayer(quality);
+      expect((layer.width, layer.height), (640, 360));
+      expect(layer.maxFrameRate, 15);
+      expect(layer.maxBitrate, quality.maxBitrate ~/ 3);
+    });
+
+    test('never exceeds the selected frame rate', () {
+      final layer = screenShareFallbackLayer(
+        screenShareQualityForHeight(1080, frameRate: 15),
+      );
+      expect(layer.maxFrameRate, 15);
+      expect((layer.width, layer.height), (960, 540));
+    });
+
+    test('keeps even dimensions for odd halves', () {
+      final layer = screenShareFallbackLayer(
+        screenShareQualityForHeight(480, frameRate: 30),
+      );
+      // 854x480 halves to 427x240; encoders want even sizes.
+      expect(layer.width.isEven, isTrue);
+      expect(layer.height.isEven, isTrue);
+    });
+  });
 }

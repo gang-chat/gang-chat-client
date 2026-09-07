@@ -257,6 +257,31 @@ class LocalParticipant extends Participant<LocalTrackPublication> {
     return pub;
   }
 
+  /// Asks the publisher transport to munge `x-google-start-bitrate` into the
+  /// offer for this track. Upstream does this only for SVC codecs; screen
+  /// share needs it on every codec, otherwise libwebrtc starts the encoder at
+  /// its default ~300 kbps and a 1080p share is a smear for the first
+  /// seconds while bandwidth estimation ramps up. The highest simulcast
+  /// layer's ceiling is used as the reference.
+  void _registerStartBitrate(
+    LocalTrack track,
+    VideoPublishOptions publishOptions,
+    List<rtc.RTCRtpEncoding>? encodings,
+  ) {
+    if (encodings == null || encodings.isEmpty) return;
+    if (!isSVCCodec(publishOptions.videoCodec) && track.source != TrackSource.screenShareVideo) {
+      return;
+    }
+    var maxBitrate = 0;
+    for (final encoding in encodings) {
+      final bitrate = encoding.maxBitrate ?? 0;
+      if (bitrate > maxBitrate) maxBitrate = bitrate;
+    }
+    if (maxBitrate <= 0) return;
+    room.engine.publisher?.setTrackBitrateInfo(TrackBitrateInfo(
+        cid: track.getCid(), transceiver: track.transceiver, codec: publishOptions.videoCodec, maxbr: maxBitrate ~/ 1000));
+  }
+
   /// Publish a [LocalVideoTrack] to the [Room].
   /// For most cases, using [setCameraEnabled] would be simpler and recommended.
   Future<LocalTrackPublication<LocalVideoTrack>> publishVideoTrack(
@@ -395,12 +420,8 @@ class LocalParticipant extends Participant<LocalTrackPublication> {
 
       if (kIsWeb && lkBrowser() == BrowserType.firefox && track.kind == TrackType.AUDIO) {
         //TOOD:
-      } else if (isSVCCodec(publishOptions.videoCodec) && encodings?.first.maxBitrate != null) {
-        room.engine.publisher?.setTrackBitrateInfo(TrackBitrateInfo(
-            cid: track.getCid(),
-            transceiver: track.transceiver,
-            codec: publishOptions.videoCodec,
-            maxbr: encodings![0].maxBitrate! ~/ 1000));
+      } else {
+        _registerStartBitrate(track, publishOptions, encodings);
       }
 
       await room.engine.negotiate();
@@ -496,12 +517,8 @@ class LocalParticipant extends Participant<LocalTrackPublication> {
 
       if (kIsWeb && lkBrowser() == BrowserType.firefox && track.kind == TrackType.AUDIO) {
         //TOOD:
-      } else if (isSVCCodec(publishOptions.videoCodec) && encodings?.first.maxBitrate != null) {
-        room.engine.publisher?.setTrackBitrateInfo(TrackBitrateInfo(
-            cid: track.getCid(),
-            transceiver: track.transceiver,
-            codec: publishOptions.videoCodec,
-            maxbr: encodings![0].maxBitrate! ~/ 1000));
+      } else {
+        _registerStartBitrate(track, publishOptions, encodings);
       }
 
       await room.engine.negotiate();

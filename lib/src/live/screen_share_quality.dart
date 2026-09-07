@@ -203,6 +203,59 @@ ScreenShareQuality screenShareQualityForHeight(
   );
 }
 
+/// The single lower simulcast layer published beside the selected profile.
+///
+/// The SFU forwards this layer to every new viewer until its bandwidth
+/// estimate proves the full layer fits, and falls back to it whenever the
+/// estimate dips. LiveKit's built-in default for screen share is half
+/// resolution at 3 fps, which is what made shares start as a blurry
+/// slideshow. Half resolution at 15 fps and a third of the budget stays
+/// readable and fluid while the ramp completes.
+class ScreenShareLayer {
+  const ScreenShareLayer({
+    required this.width,
+    required this.height,
+    required this.maxFrameRate,
+    required this.maxBitrate,
+  });
+
+  final int width;
+  final int height;
+  final int maxFrameRate;
+  final int maxBitrate;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ScreenShareLayer &&
+      other.width == width &&
+      other.height == height &&
+      other.maxFrameRate == maxFrameRate &&
+      other.maxBitrate == maxBitrate;
+
+  @override
+  int get hashCode => Object.hash(width, height, maxFrameRate, maxBitrate);
+}
+
+const int screenShareFallbackLayerScale = 2;
+const int screenShareFallbackLayerMaxFrameRate = 15;
+
+ScreenShareLayer screenShareFallbackLayer(ScreenShareQuality quality) {
+  final resolution = quality.resolution;
+  var width = resolution.width ~/ screenShareFallbackLayerScale;
+  var height = resolution.height ~/ screenShareFallbackLayerScale;
+  if (width.isOdd) width += 1;
+  if (height.isOdd) height += 1;
+  final frameRate = quality.maxFrameRate < screenShareFallbackLayerMaxFrameRate
+      ? quality.maxFrameRate
+      : screenShareFallbackLayerMaxFrameRate;
+  return ScreenShareLayer(
+    width: width,
+    height: height,
+    maxFrameRate: frameRate,
+    maxBitrate: quality.maxBitrate ~/ 3,
+  );
+}
+
 /// The 16:9 target resolution for a given target [height].
 ScreenShareResolution screenShareResolutionForHeight(int height) {
   final normalized = normalizedScreenShareMaxHeight(height);

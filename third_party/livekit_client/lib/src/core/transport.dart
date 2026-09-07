@@ -201,13 +201,22 @@ class Transport extends Disposable {
             continue;
           }
 
-          for (var fmtp in media['fmtp']) {
+          final startBitrate = 'x-google-start-bitrate=${(trackbr.maxbr * startBitrateForSVC).toInt()}';
+          final fmtps = (media['fmtp'] as List?) ?? (media['fmtp'] = <dynamic>[]);
+          var found = false;
+          for (var fmtp in fmtps) {
             if (fmtp['payload'] == codecPayload) {
+              found = true;
               if (!(fmtp['config'] as String).contains('x-google-start-bitrate')) {
-                fmtp['config'] += ';x-google-start-bitrate=${(trackbr.maxbr * startBitrateForSVC).toInt()}';
+                fmtp['config'] += ';$startBitrate';
               }
               break;
             }
+          }
+          // VP8/H264 without profile parameters carry no a=fmtp line at all;
+          // add one so the start bitrate still reaches the encoder.
+          if (!found) {
+            fmtps.add(<String, dynamic>{'payload': codecPayload, 'config': startBitrate});
           }
           continue;
         }

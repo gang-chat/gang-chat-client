@@ -700,13 +700,38 @@ class LiveSession extends ChangeNotifier {
   lk.VideoPublishOptions _screenSharePublishOptions(
     ScreenShareQuality quality,
   ) {
-    final defaults = _room!.roomOptions.defaultVideoPublishOptions;
-    return defaults.copyWith(
-      screenShareEncoding: lk.VideoEncoding(
-        maxFramerate: quality.maxFrameRate,
-        maxBitrate: quality.maxBitrate,
-      ),
+    return _room!.roomOptions.defaultVideoPublishOptions.copyWith(
+      screenShareEncoding: _screenShareEncoding(quality),
+      screenShareSimulcastLayers: _screenShareSimulcastLayers(quality),
     );
+  }
+
+  /// The full-quality encoding for the selected profile. Screen share gets
+  /// bitrate priority over the camera on the same connection.
+  static lk.VideoEncoding _screenShareEncoding(ScreenShareQuality quality) {
+    return lk.VideoEncoding(
+      maxFramerate: quality.maxFrameRate,
+      maxBitrate: quality.maxBitrate,
+      bitratePriority: lk.Priority.high,
+      networkPriority: lk.Priority.high,
+    );
+  }
+
+  /// Explicit lower simulcast layer; see [screenShareFallbackLayer] for why
+  /// LiveKit's 3 fps default is replaced.
+  static List<lk.VideoParameters> _screenShareSimulcastLayers(
+    ScreenShareQuality quality,
+  ) {
+    final layer = screenShareFallbackLayer(quality);
+    return [
+      lk.VideoParameters(
+        dimensions: lk.VideoDimensions(layer.width, layer.height),
+        encoding: lk.VideoEncoding(
+          maxFramerate: layer.maxFrameRate,
+          maxBitrate: layer.maxBitrate,
+        ),
+      ),
+    ];
   }
 
   /// Whether the local microphone is effectively muted. With Option A muting
@@ -859,10 +884,11 @@ class LiveSession extends ChangeNotifier {
           // capped at 15fps. Set it explicitly so the encoder isn't the
           // bottleneck. maxBitrate must scale with the frame rate or the
           // encoder starves frames to stay under budget. The selected quality
-          // profile keeps resolution, frame-rate and bitrate in sync.
-          screenShareEncoding: lk.VideoEncoding(
-            maxFramerate: initialScreenShareQuality.maxFrameRate,
-            maxBitrate: initialScreenShareQuality.maxBitrate,
+          // profile keeps resolution, frame-rate and bitrate in sync, and the
+          // fallback simulcast layer replaces LiveKit's 3 fps default.
+          screenShareEncoding: _screenShareEncoding(initialScreenShareQuality),
+          screenShareSimulcastLayers: _screenShareSimulcastLayers(
+            initialScreenShareQuality,
           ),
         ),
       ),
@@ -1151,31 +1177,27 @@ class LiveSession extends ChangeNotifier {
           ),
         ),
       );
-      try {
-        await local.setScreenShareEnabled(
-          true,
-          // Never let livekit_client create an audio track on factory-1:
-          // that track would pull from the mic ADM (not SCK), get published
-          // alongside the video, and race the send-stream capture checker.
-          // Screen audio is published separately on factory-2 by our
-          // ScreenAudioPublisher. SCK still captures audio for the device
-          // (forced in the native getDisplayMedia), but no audio track is
-          // returned in the MediaStream.
-          captureScreenAudio: false,
-          screenShareCaptureOptions: options,
-          // Preserve the room's configured codec/simulcast choices. Only the
-          // screen-share encoding budget belongs to this setting.
-          screenSharePublishOptions: _screenSharePublishOptions(quality),
-        );
-        _screenSharing = true;
-        // Do not delay the share UI while the first outbound frame becomes
-        // available. The initial publish already has the selected FPS/bitrate;
-        // this bounded background pass discovers native source dimensions,
-        // applies scaling, then verifies the actual outbound resolution.
-        unawaited(_applyScreenShareQualityWithRetries());
-      } catch (_) {
-        rethrow;
-      }
+      await local.setScreenShareEnabled(
+        true,
+        // Never let livekit_client create an audio track on factory-1:
+        // that track would pull from the mic ADM (not SCK), get published
+        // alongside the video, and race the send-stream capture checker.
+        // Screen audio is published separately on factory-2 by our
+        // ScreenAudioPublisher. SCK still captures audio for the device
+        // (forced in the native getDisplayMedia), but no audio track is
+        // returned in the MediaStream.
+        captureScreenAudio: false,
+        screenShareCaptureOptions: options,
+        // Preserve the room's configured codec choice. The screen-share
+        // encoding budget and fallback layer belong to this setting.
+        screenSharePublishOptions: _screenSharePublishOptions(quality),
+      );
+      _screenSharing = true;
+      // Do not delay the share UI while the first outbound frame becomes
+      // available. The initial publish already has the selected FPS/bitrate;
+      // this bounded background pass discovers native source dimensions,
+      // applies scaling, then verifies the actual outbound resolution.
+      unawaited(_applyScreenShareQualityWithRetries());
       // Start the screen-audio aux publisher in the background so it never
       // blocks the screen-share video. If the aux room fails to connect (ICE,
       // token, etc.) the video share still works — just without independent
@@ -1285,9 +1307,11 @@ class LiveSession extends ChangeNotifier {
       });
       if (revision != _screenShareQualityRevision || !_screenSharing) return;
     }
+    // No attempt at zero: the SDK publishes the selected profile already, and
+    // an attempt before the first outbound frame can only churn the encoder
+    // (nothing to verify yet). The first probe lands once frames should flow.
     const delays = <Duration>[
-      Duration.zero,
-      Duration(milliseconds: 220),
+      Duration(milliseconds: 300),
       Duration(milliseconds: 450),
       Duration(milliseconds: 850),
       Duration(milliseconds: 1400),
@@ -1435,9 +1459,6 @@ class LiveSession extends ChangeNotifier {
     final currentHighQualityScale = encodings
         .map(encodingScale)
         .reduce((left, right) => left < right ? left : right);
-    final highestCurrentBitrate = encodings
-        .map((encoding) => encoding.maxBitrate ?? 0)
-        .reduce((left, right) => left > right ? left : right);
 
     // Android exposes the native capture size synchronously. Desktop tracks
     // generally do not, so outbound stats below remain the portable fallback.
@@ -1551,19 +1572,30 @@ class LiveSession extends ChangeNotifier {
             targetHeight: quality.maxHeight,
           );
 
+    // Each encoding is judged against its own layer's profile: the full
+    // layer against the selected quality, any scaled layer against the
+    // fallback layer. Forcing every layer to the full frame rate/bitrate
+    // (the old behaviour) both mismatched what the SDK published — so every
+    // attempt rewrote the encoder — and threw away the fallback layer's
+    // budget.
+    final fallbackLayer = screenShareFallbackLayer(quality);
+    final fallbackTarget = (
+      maxFrameRate: fallbackLayer.maxFrameRate,
+      maxBitrate: fallbackLayer.maxBitrate,
+    );
+    final highTarget = (
+      maxFrameRate: quality.maxFrameRate,
+      maxBitrate: quality.maxBitrate,
+    );
     var parametersMatch = true;
     for (final encoding in encodings) {
       final existingScale = encodingScale(encoding);
       final relativeScale = existingScale / currentHighQualityScale;
       final desiredScale = desiredHighQualityScale * relativeScale;
-      final currentBitrate = encoding.maxBitrate ?? highestCurrentBitrate;
-      final bitrateRatio = highestCurrentBitrate <= 0
-          ? 1.0
-          : currentBitrate / highestCurrentBitrate;
-      final desiredBitrate = (quality.maxBitrate * bitrateRatio).round();
+      final target = relativeScale <= 1.001 ? highTarget : fallbackTarget;
       if ((existingScale - desiredScale).abs() > 0.001 ||
-          encoding.maxFramerate != quality.maxFrameRate ||
-          encoding.maxBitrate != desiredBitrate) {
+          encoding.maxFramerate != target.maxFrameRate ||
+          encoding.maxBitrate != target.maxBitrate) {
         parametersMatch = false;
       }
     }
@@ -1609,13 +1641,11 @@ class LiveSession extends ChangeNotifier {
     for (final encoding in encodings) {
       final existingScale = encodingScale(encoding);
       final relativeScale = existingScale / currentHighQualityScale;
-      final currentBitrate = encoding.maxBitrate ?? highestCurrentBitrate;
-      final bitrateRatio = highestCurrentBitrate <= 0
-          ? 1.0
-          : currentBitrate / highestCurrentBitrate;
+      final target = relativeScale <= 1.001 ? highTarget : fallbackTarget;
       encoding.scaleResolutionDownBy = desiredHighQualityScale * relativeScale;
-      encoding.maxFramerate = quality.maxFrameRate;
-      encoding.maxBitrate = (quality.maxBitrate * bitrateRatio).round();
+      encoding.maxFramerate = target.maxFrameRate;
+      encoding.maxBitrate = target.maxBitrate;
+      // `active` is left as read: dynacast owns it.
     }
     params.encodings = encodings;
     final applied = await sender
