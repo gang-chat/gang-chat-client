@@ -129,14 +129,18 @@ class SignalTag extends StatelessWidget {
             Icon(icon, size: 11, color: foreground),
             const SizedBox(width: 4),
           ],
-          Text(
-            label,
-            maxLines: 1,
-            style: UiTypography.overline.copyWith(
-              color: foreground,
-              fontSize: 9.5,
-              letterSpacing: 0.9,
-              height: 1,
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              softWrap: false,
+              style: UiTypography.overline.copyWith(
+                color: foreground,
+                fontSize: 9.5,
+                letterSpacing: 0.9,
+                height: 1,
+              ),
             ),
           ),
         ],
