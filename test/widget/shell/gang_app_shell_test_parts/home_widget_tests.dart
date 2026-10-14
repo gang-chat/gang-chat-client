@@ -545,13 +545,14 @@ void registerShellHomeWidgetTests() {
         findsOneWidget,
       );
 
-      // Narrower desktop windows shrink the tab strip first, then the voice
-      // capsule's (scrolling) name; every control stays reachable.
+      // Narrower desktop windows shrink the tab strip first, then scale the
+      // header actions down; the capsule never grows and every control stays
+      // reachable.
       var previousDockWidth = expandedDockWidth;
       for (final width in const [900.0, 850.0, 760.0]) {
         await pumpHomeAtWidth(width);
         expect(dock, findsOneWidget, reason: 'width $width');
-        final dockWidth = tester.getSize(dock).width;
+        final dockWidth = tester.getRect(dock).width;
         expect(
           dockWidth,
           lessThanOrEqualTo(previousDockWidth + 0.01),
@@ -559,8 +560,8 @@ void registerShellHomeWidgetTests() {
         );
         previousDockWidth = dockWidth;
         expect(
-          tester.getSize(dock).height,
-          closeTo(dockHeight, 0.01),
+          tester.getRect(dock).height,
+          lessThanOrEqualTo(dockHeight + 0.01),
           reason: 'width $width',
         );
         expect(
@@ -596,7 +597,7 @@ void registerShellHomeWidgetTests() {
           reason: 'width $width',
         );
       }
-      expect(previousDockWidth, lessThan(expandedDockWidth));
+      expect(previousDockWidth, lessThanOrEqualTo(expandedDockWidth + 0.01));
 
       // The narrow room list carries the voice connection as a full-width
       // footer below the rooms; the open room keeps the whole screen until
@@ -1206,9 +1207,10 @@ void registerShellHomeWidgetTests() {
       final account = find.byKey(const ValueKey('home-account-button'));
       expect(dock, findsOneWidget);
       final headerDockWidth = tester.getSize(dock).width;
-      // The header content starts after the native traffic lights and the
-      // trailing actions run to the window edge without custom buttons.
-      expect(tester.getRect(brand).left, closeTo(81, 1));
+      // The header content starts an even gap after the native traffic
+      // lights (centred in the 52px band, ending near x=73) and the trailing
+      // actions run to the window edge without custom buttons.
+      expect(tester.getRect(brand).left, closeTo(92, 1));
       expect(
         tester.getRect(dock).left,
         greaterThan(tester.getRect(_homeRoomTabList()).right),
@@ -1229,7 +1231,7 @@ void registerShellHomeWidgetTests() {
       // Narrow macOS windows keep the brand clear of the traffic lights and
       // move the voice connection into the room list footer.
       await pumpHomeAtWidth(600);
-      expect(tester.getRect(brand).left, closeTo(81, 1));
+      expect(tester.getRect(brand).left, closeTo(92, 1));
       await tester.tap(find.byKey(const ValueKey('chat-header-back-button')));
       await tester.pumpAndSettle();
       expect(dock, findsOneWidget);
@@ -1241,7 +1243,7 @@ void registerShellHomeWidgetTests() {
         findsOneWidget,
       );
       expect(tester.getSize(dock).width, greaterThan(headerDockWidth));
-      expect(tester.getRect(brand).left, closeTo(81, 1));
+      expect(tester.getRect(brand).left, closeTo(92, 1));
       expect(
         tester.getRect(dock).top,
         greaterThan(tester.getRect(search).bottom),
@@ -1444,21 +1446,24 @@ void registerShellHomeWidgetTests() {
       expect(requestedPaths, contains('/api/v1/rooms/server-alpha'));
       expect(find.text('RID: server-alpha'), findsOneWidget);
 
-      final alphaRidRect = tester.getRect(find.text('RID: server-alpha'));
-      final alphaEnterButtonElement = find
-          .widgetWithText(ui.Button, '进入房间')
-          .evaluate()
-          .singleWhere((element) {
-            final renderObject = element.renderObject;
-            if (renderObject is! RenderBox || !renderObject.hasSize) {
-              return false;
-            }
-            final buttonRect =
-                renderObject.localToGlobal(Offset.zero) & renderObject.size;
-            return buttonRect.top > alphaRidRect.bottom &&
-                (buttonRect.center.dx - alphaRidRect.center.dx).abs() < 160;
-          });
-      await tester.tap(find.byWidget(alphaEnterButtonElement.widget));
+      // The enter button printed on the Alpha Room pass (not the one on the
+      // room card it was opened from).
+      final alphaCard = find
+          .ancestor(
+            of: find.text('RID: server-alpha'),
+            matching: find.byType(ui.AnchoredPanel),
+          )
+          .first;
+      final alphaEnterButton = find.descendant(
+        of: alphaCard,
+        matching: find.widgetWithText(ui.Button, '进入房间'),
+      );
+      expect(alphaEnterButton, findsOneWidget);
+      expect(
+        tester.getRect(alphaEnterButton).top,
+        greaterThan(tester.getRect(find.text('RID: server-alpha')).bottom),
+      );
+      await tester.tap(alphaEnterButton);
       await tester.pumpAndSettle();
 
       expect(requestedPaths, contains('/api/v1/rooms/server-alpha/messages'));

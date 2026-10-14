@@ -1534,7 +1534,13 @@ void registerShellRealtimeLiveWidgetTests() {
       await tester.tap(find.byTooltip('设置'));
       await tester.pumpAndSettle();
 
-      expect(find.text('用户资料'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('settings-side-navigation')),
+          matching: find.text('用户资料'),
+        ),
+        findsOneWidget,
+      );
       expect(find.byKey(const ValueKey('home-narrow-room-list')), findsNothing);
 
       await tester.binding.handlePopRoute();

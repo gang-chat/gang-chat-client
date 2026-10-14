@@ -140,12 +140,19 @@ class SettingsTileNavigation<T> extends SettingsNavigation<T> {
         ),
       );
     }
-    return ListView.separated(
+    // Only a handful of tiles: build them all so every section stays
+    // reachable (and findable) even while scrolled out of view.
+    return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-      itemCount: count,
-      separatorBuilder: (context, index) => const SizedBox(width: gap),
-      itemBuilder: (context, index) => tile(index, width: minTileWidth + 12),
+      child: Row(
+        children: [
+          for (var i = 0; i < count; i++) ...[
+            if (i > 0) const SizedBox(width: gap),
+            tile(i, width: minTileWidth + 12),
+          ],
+        ],
+      ),
     );
   }
 }

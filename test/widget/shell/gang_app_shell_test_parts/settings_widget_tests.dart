@@ -89,7 +89,8 @@ void registerShellSettingsWidgetTests() {
       expect(sideNavigation, findsOneWidget);
       Finder inSideNavigation(String text) =>
           find.descendant(of: sideNavigation, matching: find.text(text));
-      expect(inSideNavigation('目标用户 的用户设置'), findsOneWidget);
+      // The page title names the managed account in the settings header.
+      expect(find.text('目标用户 的用户设置'), findsOneWidget);
       expect(inSideNavigation('用户资料'), findsOneWidget);
       expect(inSideNavigation('偏好设置'), findsOneWidget);
       expect(inSideNavigation('隐私和安全'), findsOneWidget);
