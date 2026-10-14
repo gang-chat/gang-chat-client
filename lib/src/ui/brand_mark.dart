@@ -41,6 +41,16 @@ class _BrandMarkPainter extends CustomPainter {
 
   final Color ink;
 
+  // Geometry on a 64-unit grid. Every element keeps at least half a stroke
+  // of clear space from its neighbours so nothing overlaps at any size, and
+  // the mark's ink bounds are centred on the grid.
+  static const _strokeWidth = 4.4;
+  static const _cupTop = 30.5;
+  static const _cupWidth = 7.2;
+  static const _cupHeight = 18.0;
+  static const _leftCupX = 4.0;
+  static const _rightCupX = 52.8;
+
   @override
   void paint(Canvas canvas, Size size) {
     final scale = size.shortestSide / 64;
@@ -48,51 +58,66 @@ class _BrandMarkPainter extends CustomPainter {
     canvas.scale(scale);
     final stroke = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 4.8
+      ..strokeWidth = _strokeWidth
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..color = ink;
-    final bubble = RRect.fromRectAndRadius(
-      const Rect.fromLTWH(16, 16, 32, 30.72),
-      const Radius.circular(11.52),
-    );
-    canvas.drawRRect(bubble, stroke);
+
+    // Headband: lands exactly on the centre of each cup's top edge, so its
+    // caps merge into the cup outline instead of poking inside it.
+    const leftCupCenter = _leftCupX + _cupWidth / 2;
+    const rightCupCenter = _rightCupX + _cupWidth / 2;
     canvas.drawPath(
       Path()
-        ..moveTo(25.6, 45.44)
-        ..lineTo(25.6, 55.04)
-        ..lineTo(35.2, 46.08),
-      stroke,
-    );
-    canvas.drawPath(
-      Path()
-        ..moveTo(9.6, 28.8)
+        ..moveTo(leftCupCenter, _cupTop)
         ..arcToPoint(
-          const Offset(54.4, 28.8),
-          radius: const Radius.elliptical(22.4, 23.04),
+          const Offset(rightCupCenter, _cupTop),
+          radius: const Radius.elliptical(
+            (rightCupCenter - leftCupCenter) / 2,
+            22,
+          ),
         ),
       stroke,
     );
-    for (final left in const [4.48, 48.0]) {
+    for (final left in const [_leftCupX, _rightCupX]) {
       canvas.drawRRect(
         RRect.fromRectAndRadius(
-          Rect.fromLTWH(left, 26.88, 11.52, 19.2),
-          const Radius.circular(5.12),
+          const Rect.fromLTWH(
+            0,
+            _cupTop,
+            _cupWidth,
+            _cupHeight,
+          ).shift(Offset(left, 0)),
+          const Radius.circular(_cupWidth / 2),
         ),
         stroke,
       );
     }
-    canvas.drawLine(
-      const Offset(23.68, 29.44),
-      const Offset(23.68, 35.84),
+
+    // Speech bubble and tail as one outline: the bottom edge stops where the
+    // tail opens, so no line runs through it.
+    const r = Radius.circular(8);
+    canvas.drawPath(
+      Path()
+        ..moveTo(26, 22.5)
+        ..lineTo(38, 22.5)
+        ..arcToPoint(const Offset(46, 30.5), radius: r)
+        ..lineTo(46, 39.5)
+        ..arcToPoint(const Offset(38, 47.5), radius: r)
+        ..lineTo(34, 47.5)
+        ..lineTo(26, 55.5)
+        ..lineTo(26, 47.5)
+        ..arcToPoint(const Offset(18, 39.5), radius: r)
+        ..lineTo(18, 30.5)
+        ..arcToPoint(const Offset(26, 22.5), radius: r)
+        ..close(),
       stroke,
     );
-    canvas.drawLine(const Offset(32, 24.32), const Offset(32, 40.96), stroke);
-    canvas.drawLine(
-      const Offset(40.32, 29.44),
-      const Offset(40.32, 35.84),
-      stroke,
-    );
+
+    // Voice waveform, centred in the bubble.
+    canvas.drawLine(const Offset(25, 32), const Offset(25, 38), stroke);
+    canvas.drawLine(const Offset(32, 29), const Offset(32, 41), stroke);
+    canvas.drawLine(const Offset(39, 32), const Offset(39, 38), stroke);
     canvas.restore();
   }
 
