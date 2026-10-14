@@ -2285,10 +2285,10 @@ void registerShellHomeWidgetTests() {
       of: find.byKey(timeKey),
       matching: find.byType(Text),
     );
-    expect(tester.widgetList<Text>(timeTexts).map((text) => text.data), [
-      '2026/06/07',
-      '16:00',
-    ]);
+    expect(
+      tester.widgetList<Text>(timeTexts).map((text) => text.data),
+      _homeNotificationFixtureTimeLines(),
+    );
     final timeParagraphs = tester.renderObjectList<RenderParagraph>(timeTexts);
     expect(
       timeParagraphs.every((paragraph) => !paragraph.didExceedMaxLines),
@@ -2435,7 +2435,7 @@ void registerShellHomeWidgetTests() {
       );
       expect(
         tester.widgetList<Text>(timeTexts).map((text) => text.data),
-        ['2026/06/07', '16:00'],
+        _homeNotificationFixtureTimeLines(),
         reason: '$platform should preserve both compact timestamp lines',
       );
       expect(
@@ -3877,4 +3877,15 @@ Future<void> _homeSearchFor(WidgetTester tester, String query) async {
 Future<void> _homeOpenAccountMenu(WidgetTester tester) async {
   await tester.tap(find.byKey(const ValueKey('home-account-button')));
   await tester.pumpAndSettle();
+}
+
+/// Date and time lines of the fixture notification (created at
+/// 2026-06-07T08:00:00Z) as shown in the machine's local time zone.
+List<String> _homeNotificationFixtureTimeLines() {
+  final local = DateTime.utc(2026, 6, 7, 8).toLocal();
+  String two(int value) => value.toString().padLeft(2, '0');
+  return [
+    '${local.year}/${two(local.month)}/${two(local.day)}',
+    '${two(local.hour)}:${two(local.minute)}',
+  ];
 }
