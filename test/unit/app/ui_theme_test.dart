@@ -14,6 +14,13 @@ void main() {
     );
     expect(theme.primaryTextTheme.bodyMedium?.fontFamily, ui.kClientFontFamily);
     expect(ui.UiTypography.label.fontWeight, FontWeight.w500);
-    expect(ui.UiTypography.title.fontWeight, FontWeight.w600);
+    // Headings use the Latin display face but fall back to the client font
+    // so CJK text keeps rendering in Microsoft YaHei.
+    expect(ui.UiTypography.title.fontWeight, FontWeight.w700);
+    expect(ui.UiTypography.title.fontFamily, ui.kDisplayFontFamily);
+    expect(ui.UiTypography.title.fontFamilyFallback, [
+      ui.kClientFontFamily,
+      ...ui.kClientFontFamilyFallback,
+    ]);
   });
 }

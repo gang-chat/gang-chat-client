@@ -159,6 +159,9 @@ class _SettingsNavPill<T> extends StatelessWidget {
       height: 34,
       selected: selected,
       onPressed: onPressed,
+      // The pills live in a horizontally scrolling row: a touch swipe must
+      // scroll it instead of opening the section under the finger.
+      cancelTouchPressOnDrag: true,
       backgroundColor: UiColors.surface,
       selectedBackgroundColor: UiColors.inverse,
       borderColor: Colors.transparent,
@@ -256,8 +259,7 @@ class SettingsScaffold extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final navigation = this.navigation;
-          if (navigation != null &&
-              constraints.maxWidth >= _twoPaneMinWidth) {
+          if (navigation != null && constraints.maxWidth >= _twoPaneMinWidth) {
             return _buildTwoPane(context, navigation);
           }
           return _buildSinglePane(context, navigation);

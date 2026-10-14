@@ -65,7 +65,28 @@ void main() {
         );
         await tester.pumpAndSettle();
 
+        if (size.width < 720) {
+          // Narrow settings pages show the section navigation as a
+          // horizontally scrolling pill row; the open section stays reachable
+          // there.
+          await tester.scrollUntilVisible(
+            find.text('我的歌单'),
+            80,
+            scrollable: find
+                .byWidgetPredicate(
+                  (widget) =>
+                      widget is Scrollable &&
+                      widget.axisDirection == AxisDirection.right,
+                )
+                .first,
+          );
+        }
         expect(find.text('我的歌单'), findsWidgets);
+        expect(
+          tester.widget<Text>(find.text('我的歌单').first).style?.color,
+          ui.UiColors.onInverse,
+          reason: 'the playlists section is the selected navigation item',
+        );
         expect(find.text('歌单管理'), findsOneWidget);
         expect(find.text('夜晚'), findsOneWidget);
         expect(find.text('新建歌单'), findsOneWidget);
