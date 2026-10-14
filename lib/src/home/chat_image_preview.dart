@@ -317,11 +317,6 @@ class _ImagePreviewOverlayState extends State<_ImagePreviewOverlay>
   bool get _canSaveRoomSticker =>
       widget.stickerSource != null && widget.actions.onSaveRoomSticker != null;
 
-  // The Android route uses a semi-transparent cap over a frozen backdrop. Its
-  // base border would otherwise show through as an extra horizontal line.
-  Color? get _previewButtonBaseBorderColor =>
-      widget.frozenBackdrop == null ? null : Colors.transparent;
-
   bool get _isAndroidPreview =>
       widget.previewPlatform == TargetPlatform.android;
 

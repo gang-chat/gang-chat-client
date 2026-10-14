@@ -125,16 +125,14 @@ class _AppWindowControlButtonState extends State<AppWindowControlButton> {
     final active = _hovered || _pressed;
     final background = active
         ? widget.danger
-              ? const Color(0xFF332126)
-              : UiColors.surface
+              ? UiColors.danger
+              : UiColors.surfaceHover
         : Colors.transparent;
-    final border = active
-        ? widget.danger
-              ? UiColors.dangerBorder
-              : UiColors.border
-        : Colors.transparent;
+    const border = Colors.transparent;
     final foreground = active && widget.danger
-        ? UiColors.danger
+        ? Colors.white
+        : active
+        ? UiColors.text
         : UiColors.textSecondary;
 
     return UiTooltip(
@@ -159,7 +157,7 @@ class _AppWindowControlButtonState extends State<AppWindowControlButton> {
             height: appWindowControlHeight,
             decoration: BoxDecoration(
               color: background,
-              borderRadius: BorderRadius.circular(UiRadii.sm),
+              borderRadius: BorderRadius.circular(UiRadii.pill),
               border: Border.all(color: border),
             ),
             child: Center(

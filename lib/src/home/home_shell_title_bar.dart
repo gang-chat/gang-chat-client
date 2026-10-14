@@ -286,7 +286,7 @@ class _HeaderAccountButton extends StatelessWidget {
     final latencyQuality = network_latency.networkLatencyQuality(
       requestRoundTrip,
     );
-    return AnchoredPanelAnchor(
+    final panel = AnchoredPanelAnchor(
       width: 264,
       anchor: (context, open, toggle) => UiTooltip(
         message: user.displayName,
@@ -403,14 +403,10 @@ class _HeaderAccountButton extends StatelessWidget {
             ),
             child: Row(
               children: [
-                LatencySignalBadge(
-                  activeBars: network_latency.networkLatencySignalBars(
-                    requestRoundTrip,
-                  ),
-                  activeColor: _latencySignalColor(latencyQuality),
-                  tooltip: network_latency.networkLatencyTooltip(
-                    requestRoundTrip,
-                  ),
+                Icon(
+                  Icons.network_check_rounded,
+                  size: 15,
+                  color: _latencySignalColor(latencyQuality),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -455,6 +451,20 @@ class _HeaderAccountButton extends StatelessWidget {
           ),
         ],
       ),
+    );
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        LatencySignalBadge(
+          activeBars: network_latency.networkLatencySignalBars(
+            requestRoundTrip,
+          ),
+          activeColor: _latencySignalColor(latencyQuality),
+          tooltip: network_latency.networkLatencyTooltip(requestRoundTrip),
+        ),
+        const SizedBox(width: 8),
+        panel,
+      ],
     );
   }
 }
@@ -631,7 +641,7 @@ class _TitleLiveRoomDock extends StatelessWidget {
         height: _liveDockHeight,
         padding: const EdgeInsets.only(left: 12, right: 8),
         decoration: BoxDecoration(
-          color: joined ? const Color(0xFF13241F) : UiColors.surface,
+          color: joined ? UiColors.successSurface : UiColors.surface,
           borderRadius: BorderRadius.circular(UiRadii.lg),
           border: Border.all(
             color: joined ? UiColors.successBorder : UiColors.border,
@@ -669,7 +679,7 @@ class _TitleLiveRoomDock extends StatelessWidget {
         height: 36,
         padding: EdgeInsets.only(left: joined ? 10 : 4, right: 3),
         decoration: BoxDecoration(
-          color: joined ? const Color(0xFF13241F) : UiColors.surface,
+          color: joined ? UiColors.successSurface : UiColors.surface,
           borderRadius: BorderRadius.circular(UiRadii.pill),
           border: Border.all(
             color: joined ? UiColors.successBorder : UiColors.border,
@@ -1166,16 +1176,10 @@ class _TitleSearchResultsPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final message = error?.trim();
     final panel = DecoratedBox(
-      decoration: BoxDecoration(
-        color: UiColors.surfaceRaised,
-        borderRadius: BorderRadius.circular(UiRadii.lg),
-        border: Border.all(color: UiColors.borderStrong),
-        boxShadow: UiShadows.popover,
-      ),
+      decoration: const BoxDecoration(),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(UiRadii.lg),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 480),
+          constraints: const BoxConstraints(maxHeight: 520),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1316,6 +1320,7 @@ class _TitleSearchResultsPanel extends StatelessWidget {
               ).resolveAssetUrl(room.avatarUrl),
               defaultAvatarKey: room.defaultAvatarKey,
               size: 30,
+              rounded: true,
             ),
           ),
           titleTrailing: time.isEmpty
@@ -1363,6 +1368,7 @@ class _TitleSearchResultsPanel extends StatelessWidget {
                     ).resolveAssetUrl(candidate.room.avatarUrl),
                     defaultAvatarKey: candidate.room.defaultAvatarKey,
                     size: 30,
+                    rounded: true,
                   ),
                 ),
                 trailing: _PublicRoomJoinActivity(
@@ -1511,11 +1517,8 @@ class _SearchResultSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(2, 0, 2, 7),
-          child: Text(
-            '$title $count',
-            style: UiTypography.label.copyWith(color: UiColors.textMuted),
-          ),
+          padding: const EdgeInsets.fromLTRB(4, 2, 4, 8),
+          child: Text('$title $count', style: UiTypography.overline),
         ),
         ...children,
       ],
@@ -1722,9 +1725,9 @@ class _SearchResultTileState extends State<_SearchResultTile> {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           decoration: BoxDecoration(
             color: _hovered && interactive
-                ? UiColors.surface
+                ? UiColors.surfaceHover
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(UiRadii.sm),
+            borderRadius: BorderRadius.circular(UiRadii.md),
           ),
           child: Row(
             children: [

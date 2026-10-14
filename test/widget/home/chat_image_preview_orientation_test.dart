@@ -66,15 +66,6 @@ void main() {
       )) {
         expect(button.backgroundColor, const Color(0x66000000));
         expect(button.borderColor, isNull);
-        expect(button.baseBorderColor, Colors.transparent);
-      }
-      for (final surface in tester.widgetList<PressableSurface>(
-        find.descendant(
-          of: find.byType(ButtonIcon),
-          matching: find.byType(PressableSurface),
-        ),
-      )) {
-        expect(surface.baseBorderColor, Colors.transparent);
       }
       expect(find.byType(ButtonIcon), findsNWidgets(4));
 
@@ -160,15 +151,6 @@ void main() {
     )) {
       expect(button.backgroundColor, const Color(0x66000000));
       expect(button.borderColor, isNull);
-      expect(button.baseBorderColor, isNull);
-    }
-    for (final surface in tester.widgetList<PressableSurface>(
-      find.descendant(
-        of: find.byType(ButtonIcon),
-        matching: find.byType(PressableSurface),
-      ),
-    )) {
-      expect(surface.baseBorderColor, isNull);
     }
     expect(find.byType(ButtonIcon), findsNWidgets(4));
     expect(

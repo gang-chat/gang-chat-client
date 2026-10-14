@@ -371,7 +371,7 @@ class SettingsScaffold extends StatelessWidget {
     SettingsNavigationBase? navigation,
   ) {
     final showHeader = showTitle || onBack != null || headerAction != null;
-    return Column(
+    final column = Column(
       children: [
         if (showHeader)
           Container(
@@ -437,6 +437,29 @@ class SettingsScaffold extends StatelessWidget {
           ),
         ),
       ],
+    );
+    return navigation == null ? _ReadableWidth(child: column) : column;
+  }
+}
+
+/// Keeps single-column pages at a readable width on wide windows.
+class _ReadableWidth extends StatelessWidget {
+  const _ReadableWidth({required this.child});
+
+  static const double maxWidth = 860;
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth <= maxWidth) return child;
+        return Align(
+          alignment: Alignment.topCenter,
+          child: SizedBox(width: maxWidth, child: child),
+        );
+      },
     );
   }
 }

@@ -748,6 +748,7 @@ class _RoomSettingsDialogState extends State<RoomSettingsDialog> {
               maxLines: null,
             ),
             AvatarPicker(
+              rounded: true,
               label: '图标',
               displayName: _avatarDisplayName,
               imageUrl: _avatarPreviewUrl(AppConfigScope.of(context)),

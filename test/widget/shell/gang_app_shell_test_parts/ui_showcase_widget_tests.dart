@@ -1360,9 +1360,17 @@ void registerShellUiShowcaseWidgetTests() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('surface shadow depth follows hover lift', (
+  Color? surfaceFill(WidgetTester tester, Finder surface) {
+    final container = tester.widget<AnimatedContainer>(
+      find.descendant(of: surface, matching: find.byType(AnimatedContainer)),
+    );
+    return (container.decoration as BoxDecoration?)?.color;
+  }
+
+  testWidgets('flat surface tints on hover and occupies only its height', (
     WidgetTester tester,
   ) async {
+    const base = Color(0xFF334455);
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -1370,52 +1378,7 @@ void registerShellUiShowcaseWidgetTests() {
             child: ui.PressableSurface(
               width: 120,
               height: 40,
-              hoverLift: 4,
-              baseDepth: 8,
-              onPressed: () {},
-              child: const Text('Surface'),
-            ),
-          ),
-        ),
-      ),
-    );
-
-    final mouseRegionFinder = find.descendant(
-      of: find.byType(ui.PressableSurface),
-      matching: find.byType(MouseRegion),
-    );
-    final mouseRegion = tester.widget<MouseRegion>(mouseRegionFinder);
-    mouseRegion.onEnter?.call(const PointerEnterEvent(position: Offset.zero));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 150));
-
-    final layers = tester
-        .widgetList<Positioned>(
-          find.descendant(
-            of: find.byType(ui.PressableSurface),
-            matching: find.byType(Positioned),
-          ),
-        )
-        .toList();
-
-    expect(layers, hasLength(2));
-    expect(layers.first.top, closeTo(12, 0.01));
-    expect(layers.last.top, closeTo(0, 0.01));
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('pressed surface lands at the bottom of the base', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: ui.PressableSurface(
-              width: 120,
-              height: 40,
-              hoverLift: 4,
-              baseDepth: 8,
+              backgroundColor: base,
               onPressed: () {},
               child: const Text('Surface'),
             ),
@@ -1425,35 +1388,58 @@ void registerShellUiShowcaseWidgetTests() {
     );
 
     final surfaceFinder = find.byType(ui.PressableSurface);
+    expect(tester.getSize(surfaceFinder), const Size(120, 40));
+    expect(surfaceFill(tester, surfaceFinder), base);
+
     final mouseRegion = tester.widget<MouseRegion>(
       find.descendant(of: surfaceFinder, matching: find.byType(MouseRegion)),
     );
     mouseRegion.onEnter?.call(const PointerEnterEvent(position: Offset.zero));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 150));
 
-    final gesture = await tester.startGesture(tester.getCenter(surfaceFinder));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
-
-    final layers = tester
-        .widgetList<Positioned>(
-          find.descendant(of: surfaceFinder, matching: find.byType(Positioned)),
-        )
-        .toList();
-
-    expect(layers, hasLength(2));
-    expect(layers.first.top, closeTo(12, 0.01));
-    expect(layers.last.top, closeTo(12, 0.01));
+    expect(surfaceFill(tester, surfaceFinder), ui.UiStates.hover(base));
+    expect(tester.getSize(surfaceFinder), const Size(120, 40));
     expect(tester.takeException(), isNull);
-    await gesture.up();
   });
 
-  testWidgets('button shadows are derived from background colors', (
+  testWidgets('pressed surface darkens while held', (
     WidgetTester tester,
   ) async {
-    const customBackground = Color(0xFF334455);
+    const base = Color(0xFF334455);
+    var pressed = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: ui.PressableSurface(
+              width: 120,
+              height: 40,
+              backgroundColor: base,
+              onPressed: () => pressed += 1,
+              child: const Text('Surface'),
+            ),
+          ),
+        ),
+      ),
+    );
 
+    final surfaceFinder = find.byType(ui.PressableSurface);
+    final gesture = await tester.startGesture(tester.getCenter(surfaceFinder));
+    await tester.pump();
+
+    expect(surfaceFill(tester, surfaceFinder), ui.UiStates.pressed(base));
+
+    await gesture.up();
+    await tester.pump();
+
+    expect(pressed, 1);
+    expect(surfaceFill(tester, surfaceFinder), base);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('button tones use the signal palette', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -1469,11 +1455,10 @@ void registerShellUiShowcaseWidgetTests() {
                 onPressed: () {},
                 child: const Text('Danger'),
               ),
-              ui.PressableSurface(
-                height: 40,
-                backgroundColor: customBackground,
+              ui.Button(
+                selected: true,
                 onPressed: () {},
-                child: const Text('Custom'),
+                child: const Text('Selected'),
               ),
             ],
           ),
@@ -1481,24 +1466,17 @@ void registerShellUiShowcaseWidgetTests() {
       ),
     );
 
-    final baseColors = tester
-        .widgetList<DecoratedBox>(
-          find.descendant(
-            of: find.byType(ui.PressableSurface),
-            matching: find.byType(DecoratedBox),
-          ),
-        )
-        .where((box) => box.decoration is BoxDecoration)
-        .map((box) => (box.decoration as BoxDecoration).color);
-
-    expect(
-      baseColors,
-      containsAllInOrder([
-        _expectedShadowForBackground(const Color(0xFF1F2D27)),
-        _expectedShadowForBackground(const Color(0xFF2E1F22)),
-        _expectedShadowForBackground(customBackground),
-      ]),
+    Color? fillOf(String label) => surfaceFill(
+      tester,
+      find.ancestor(
+        of: find.text(label),
+        matching: find.byType(ui.PressableSurface),
+      ),
     );
+
+    expect(fillOf('Primary'), ui.UiColors.accentStrong);
+    expect(fillOf('Danger'), ui.UiColors.dangerSurface);
+    expect(fillOf('Selected'), ui.UiColors.inverse);
     expect(tester.takeException(), isNull);
   });
 

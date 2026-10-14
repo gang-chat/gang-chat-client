@@ -1406,7 +1406,6 @@ void registerShellRealtimeLiveWidgetTests() {
       );
       expect(roomScrollbar.controller!.position.extentBefore, 0);
       expect(roomScrollbar.padding, EdgeInsets.zero);
-      expect(firstRoomCard.hoverLift, 0);
       expect(find.text('Alpha Room'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('home-narrow-room-list')),

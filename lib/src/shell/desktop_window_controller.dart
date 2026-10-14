@@ -8,7 +8,7 @@ import 'package:window_manager/window_manager.dart';
 
 import '../lifecycle/shutdown_hooks.dart';
 
-const appWindowBackground = Color(0xFF14171D);
+const appWindowBackground = Color(0xFF060607);
 
 // The authenticated desktop shell can use the same compact navigation as a
 // phone, so its minimum width should match that layout instead of the old

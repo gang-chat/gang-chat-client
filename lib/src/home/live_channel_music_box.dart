@@ -881,19 +881,19 @@ class _VinylPainter extends CustomPainter {
     final radius = size.width / 2;
 
     // Disc body.
-    canvas.drawCircle(center, radius, Paint()..color = const Color(0xFF12151A));
+    canvas.drawCircle(center, radius, Paint()..color = const Color(0xFF0E0E10));
     canvas.drawCircle(
       center,
       radius,
       Paint()
-        ..color = const Color(0xFF2A2F38)
+        ..color = UiColors.borderStrong
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1,
     );
 
     // Grooves.
     final groovePaint = Paint()
-      ..color = const Color(0xFF20242C)
+      ..color = const Color(0xFF1C1C20)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
     for (var r = radius - 6; r > radius * 0.34; r -= 5) {
@@ -906,14 +906,14 @@ class _VinylPainter extends CustomPainter {
       center,
       radius * 0.30,
       Paint()
-        ..color = const Color(0xFF14171D)
+        ..color = UiColors.background
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1,
     );
     canvas.drawCircle(
       center,
       radius * 0.07,
-      Paint()..color = const Color(0xFF14171D),
+      Paint()..color = UiColors.background,
     );
   }
 

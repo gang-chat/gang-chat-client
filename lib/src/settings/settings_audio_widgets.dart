@@ -218,7 +218,7 @@ class _LevelMeter extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: i < activeCount
                             ? _cyan
-                            : const Color(0xFF2A2F38),
+                            : UiColors.surfaceHover,
                         borderRadius: BorderRadius.circular(3),
                       ),
                     ),

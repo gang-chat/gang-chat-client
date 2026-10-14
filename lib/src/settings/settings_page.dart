@@ -66,14 +66,14 @@ part 'settings_profile_widgets.dart';
 part 'settings_audio_widgets.dart';
 part 'settings_music_playlists.dart';
 
-const _primaryDark = Color(0xFF14171D);
-const _primaryDarkLow = Color(0xFF181C24);
-const _borderColor = Color(0xFF2A2F38);
-const _cyan = UiColors.controlAccent;
-const _textPrimary = Color(0xFFECEFF1);
-const _textSecondary = Color(0xFFB0B8C0);
-const _textMuted = Color(0xFF6F7785);
-const _danger = Color(0xFFE58383);
+const _primaryDark = UiColors.background;
+const _primaryDarkLow = UiColors.surfaceLow;
+const _borderColor = UiColors.border;
+const _cyan = UiColors.accent;
+const _textPrimary = UiColors.text;
+const _textSecondary = UiColors.textSecondary;
+const _textMuted = UiColors.textMuted;
+const _danger = UiColors.danger;
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({
