@@ -153,7 +153,7 @@ void main() {
         (widget) =>
             widget is ui.Avatar &&
             widget.label == _currentUser.displayName &&
-            widget.size == 32,
+            widget.size == 36,
       ),
     );
     expect(avatar.active, isFalse);
@@ -222,30 +222,37 @@ void main() {
           onRemoveAttachment: (_) {},
           onRetryAttachment: (_) {},
           onRetry: () {},
-          onOpenLiveChannel: () {},
-          onOpenRoomMembers: () {},
-          onOpenRoomSettings: () {},
           onViewedNewMessages: () {},
         ),
       ),
     );
 
-    expect(find.text(firstBrief), findsOneWidget);
-    expect(find.text(secondBrief), findsOneWidget);
+    expect(_timeDivider(firstBrief), findsOneWidget);
+    expect(_timeDivider(secondBrief), findsOneWidget);
     expect(find.text(firstDetailed), findsNothing);
     expect(find.text(secondDetailed), findsNothing);
 
-    await tester.tap(find.text(firstBrief));
+    await tester.tap(_timeDivider(firstBrief));
     await tester.pump();
 
-    expect(find.text(firstDetailed), findsOneWidget);
-    expect(find.text(secondDetailed), findsOneWidget);
+    expect(_timeDivider(firstDetailed), findsOneWidget);
+    expect(_timeDivider(secondDetailed), findsOneWidget);
+    expect(_timeDivider(firstBrief), findsNothing);
+    // The compact time next to each sender name stays `HH:mm`.
+    expect(
+      find.text(message_display.formatMessageTime(firstAt)),
+      findsOneWidget,
+    );
+    expect(
+      find.text(message_display.formatMessageTime(secondAt)),
+      findsOneWidget,
+    );
 
-    await tester.tap(find.text(firstDetailed));
+    await tester.tap(_timeDivider(firstDetailed));
     await tester.pump();
 
-    expect(find.text(firstBrief), findsOneWidget);
-    expect(find.text(secondBrief), findsOneWidget);
+    expect(_timeDivider(firstBrief), findsOneWidget);
+    expect(_timeDivider(secondBrief), findsOneWidget);
     expect(find.text(firstDetailed), findsNothing);
     expect(find.text(secondDetailed), findsNothing);
   });
@@ -290,7 +297,7 @@ void main() {
     expect(find.text('Quoted user  $quoteBrief'), findsOneWidget);
     expect(find.text('Quoted user  $quoteDetailed'), findsNothing);
 
-    await tester.tap(find.text(messageBrief));
+    await tester.tap(_timeDivider(messageBrief));
     await tester.pump();
 
     expect(find.text('Quoted user  $quoteBrief'), findsNothing);
@@ -440,10 +447,10 @@ void main() {
 
     expect(find.byTooltip('查看 50 条未读消息'), findsOneWidget);
     expect(find.text('查看 50 条未读消息'), findsNothing);
-    expect(find.byIcon(Icons.keyboard_arrow_up_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.arrow_upward_rounded), findsOneWidget);
     expect(
       tester.getSize(find.byKey(const ValueKey('chat-jump-to-first-new'))),
-      const Size(34, 34),
+      const Size(38, 38),
     );
 
     await tester.tap(find.byKey(const ValueKey('chat-jump-to-first-new')));
@@ -599,7 +606,8 @@ void main() {
     final latestButton = find.byKey(const ValueKey('chat-jump-to-latest'));
     expect(latestButton, findsOneWidget);
     expect(find.text('最新消息'), findsNothing);
-    expect(tester.getSize(latestButton), const Size(34, 34));
+    expect(find.byTooltip('跳到最新消息'), findsOneWidget);
+    expect(tester.getSize(latestButton), const Size(38, 38));
 
     await tester.tap(latestButton);
     await tester.pumpAndSettle();
@@ -728,9 +736,7 @@ void main() {
     expect(field.showCursor, isFalse);
   });
 
-  testWidgets('text message bubble removes trailing blank width', (
-    tester,
-  ) async {
+  testWidgets('text message row removes trailing blank width', (tester) async {
     const body = '123';
     const rawBody = '$body   \n ';
     const cases = [
@@ -811,14 +817,16 @@ void main() {
 
       final surfaceRect = tester.getRect(surface);
       final contentRect = tester.getRect(content);
+      // The flat message row only keeps its symmetric content inset around
+      // the trimmed text.
       expect(
         contentRect.left - surfaceRect.left,
-        13,
+        10,
         reason: '$platform at DPR $devicePixelRatio and scale $textScale',
       );
       expect(
         surfaceRect.right - contentRect.right,
-        13,
+        10,
         reason: '$platform at DPR $devicePixelRatio and scale $textScale',
       );
     }
@@ -1006,7 +1014,9 @@ void main() {
     expect(find.text('Loaded mention profile'), findsOneWidget);
   });
 
-  testWidgets('@me message highlights bubble background only', (tester) async {
+  testWidgets('@me message highlights the message row with an amber edge', (
+    tester,
+  ) async {
     final controller = TextEditingController();
     addTearDown(controller.dispose);
 
@@ -1032,10 +1042,11 @@ void main() {
 
     final decoration = _messageBubbleDecoration(tester);
     final contentDecoration = _messageBubbleContentDecoration(tester);
-    expect(decoration.color, isNot(ui.UiColors.surface));
+    expect(decoration.color, ui.UiColors.amber.withValues(alpha: 0.11));
     expect(decoration.color, isNot(ui.UiColors.selected));
-    expect(contentDecoration.color, decoration.color);
-    expect((decoration.border as Border).top.color, isNot(ui.UiColors.border));
+    // Only the row is tinted; the content itself stays transparent.
+    expect(contentDecoration.color, isNull);
+    expect(_hasMentionEdge(tester), isTrue);
 
     final fieldFinder = find.byType(TextField).first;
     final field = tester.widget<TextField>(fieldFinder);
@@ -1052,11 +1063,11 @@ void main() {
     await _secondaryClickAt(tester, tester.getCenter(fieldFinder));
     await tester.pumpAndSettle();
     final contextDecoration = _messageBubbleDecoration(tester);
+    // The open message menu strengthens the amber tint instead of switching
+    // to the neutral selection color.
     expect(contextDecoration.color, isNot(ui.UiColors.selected));
-    expect(
-      (contextDecoration.border as Border).top.color,
-      isNot(ui.UiColors.selectedBorder),
-    );
+    expect(contextDecoration.color, ui.UiColors.amber.withValues(alpha: 0.2));
+    expect(_hasMentionEdge(tester), isTrue);
   });
 
   testWidgets('mentioned messages wait for mention render context', (
@@ -1125,7 +1136,7 @@ void main() {
 
     final decoration = _messageBubbleDecoration(tester);
     expect(decoration.color, isNot(ui.UiColors.surface));
-    expect(decoration.color, ui.UiColors.selected.withValues(alpha: 0.86));
+    expect(decoration.color, ui.UiColors.selected);
   });
 
   testWidgets('focused system message uses the same timed highlight', (
@@ -1206,26 +1217,18 @@ void main() {
       ),
     );
 
-    final normalColor = Color.alphaBlend(
-      ui.UiColors.amber.withValues(alpha: 0.13),
-      ui.UiColors.surface,
-    );
-    final highlightedColor = Color.alphaBlend(
-      ui.UiColors.amber.withValues(alpha: 0.22),
-      ui.UiColors.surface,
-    );
-    final normalBorder = ui.UiColors.amber.withValues(alpha: 0.58);
-    final highlightedBorder = ui.UiColors.amber.withValues(alpha: 0.72);
+    final normalColor = ui.UiColors.amber.withValues(alpha: 0.11);
+    final highlightedColor = ui.UiColors.amber.withValues(alpha: 0.2);
     var decoration = _messageBubbleDecoration(tester);
     expect(decoration.color, highlightedColor);
     expect(decoration.color, isNot(normalColor));
-    expect((decoration.border as Border).top.color, highlightedBorder);
+    expect(_hasMentionEdge(tester), isTrue);
 
     await tester.pump(const Duration(milliseconds: 2700));
 
     decoration = _messageBubbleDecoration(tester);
     expect(decoration.color, normalColor);
-    expect((decoration.border as Border).top.color, normalBorder);
+    expect(_hasMentionEdge(tester), isTrue);
   });
 
   testWidgets('handled focused message does not replay after remount', (
@@ -1395,9 +1398,8 @@ void main() {
 
     var decoration = _messageBubbleDecoration(tester);
     expect(decoration.color, ui.UiColors.selected);
-    expect((decoration.border as Border).top.color, ui.UiColors.selectedBorder);
     var contentDecoration = _messageBubbleContentDecoration(tester);
-    expect(contentDecoration.color, decoration.color);
+    expect(contentDecoration.color, isNull);
     expect(find.text('复制'), findsOneWidget);
     expect(find.text('删除'), findsOneWidget);
     expect(find.text('全选'), findsNothing);
@@ -1406,9 +1408,9 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     decoration = _messageBubbleDecoration(tester);
-    expect(decoration.color, ui.UiColors.surface);
+    expect(decoration.color, Colors.transparent);
     contentDecoration = _messageBubbleContentDecoration(tester);
-    expect(contentDecoration.color, decoration.color);
+    expect(contentDecoration.color, isNull);
     expect(copied, isTrue);
     expect(deleted, isFalse);
   });
@@ -1858,7 +1860,7 @@ void main() {
       ),
     );
 
-    expect(find.text(brief), findsOneWidget);
+    expect(_timeDivider(brief), findsOneWidget);
     expect(find.text('Logan'), findsOneWidget);
     final loganText = tester.widget<Text>(find.text('Logan').first);
     expect(loganText.style?.color, ui.roleBadgeForegroundColorForLabel('管理员'));
@@ -1866,10 +1868,10 @@ void main() {
     expect(find.text('降职为'), findsOneWidget);
     expect(find.text('管理员'), findsOneWidget);
 
-    await tester.tap(find.text(brief));
+    await tester.tap(_timeDivider(brief));
     await tester.pump();
 
-    expect(find.text(detailed), findsOneWidget);
+    expect(_timeDivider(detailed), findsOneWidget);
   });
 
   testWidgets(
@@ -2255,7 +2257,8 @@ void main() {
       ),
     );
 
-    expect(find.text(brief), findsOneWidget);
+    expect(_timeDivider(brief), findsOneWidget);
+    expect(_timeDividers, findsOneWidget);
     expect(find.text('Logan'), findsWidgets);
     expect(find.text('进入了语音频道'), findsOneWidget);
     expect(find.text('hello after live join'), findsOneWidget);
@@ -3242,9 +3245,6 @@ Widget _chatPane({
     onRemoveAttachment: (_) {},
     onRetryAttachment: (_) {},
     onRetry: () {},
-    onOpenLiveChannel: () {},
-    onOpenRoomMembers: () {},
-    onOpenRoomSettings: () {},
     onViewedNewMessages: onViewedNewMessages ?? () {},
     onResolveSenderProfile: onResolveSenderProfile,
     onEnterProfileRoom: onEnterProfileRoom,
@@ -3431,6 +3431,26 @@ TextSpan? _findTextSpan(InlineSpan span, String text) {
     if (result != null) return result;
   }
   return null;
+}
+
+/// Centered, tappable time dividers of the chat stream.
+final Finder _timeDividers = find.byWidgetPredicate(
+  (widget) => '${widget.runtimeType}' == '_MessageTimeDivider',
+);
+
+/// A time divider label. Message rows also show a compact `HH:mm` next to the
+/// sender name, so divider labels are looked up inside the dividers only.
+Finder _timeDivider(String label) {
+  return find.descendant(of: _timeDividers, matching: find.text(label));
+}
+
+/// Whether the message row paints the amber @me edge on its leading side.
+bool _hasMentionEdge(WidgetTester tester, [String id = 'message_1']) {
+  final surface = tester.widget<AnimatedContainer>(
+    find.byKey(ValueKey('message-bubble-surface-$id')),
+  );
+  final edge = surface.foregroundDecoration;
+  return edge != null && '${edge.runtimeType}' == '_MentionEdgeDecoration';
 }
 
 BoxDecoration _messageBubbleDecoration(

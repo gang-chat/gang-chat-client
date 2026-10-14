@@ -1,4 +1,5 @@
 import 'package:client/src/live/audio_device_service.dart';
+import 'package:client/src/live/system_audio_devices.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -42,7 +43,11 @@ void main() {
       };
     });
 
-    const service = LiveAudioDeviceService(systemAudioOnly: true);
+    // Pin the Windows path: native system audio is the only source.
+    final service = LiveAudioDeviceService(
+      systemAudioOnly: true,
+      systemAudio: SystemAudioDevices(supported: true),
+    );
     final devices = await service.enumerateDevices();
 
     expect(calls, containsAll(['enumerateInputs', 'enumerateOutputs']));
@@ -66,7 +71,11 @@ void main() {
       };
     });
 
-    const service = LiveAudioDeviceService(systemAudioOnly: true);
+    // Pin the Windows path: native system audio is the only source.
+    final service = LiveAudioDeviceService(
+      systemAudioOnly: true,
+      systemAudio: SystemAudioDevices(supported: true),
+    );
     final changed = service.devicesChanged.first;
     await Future<void>.delayed(Duration.zero);
     await messenger.handlePlatformMessage(

@@ -99,7 +99,7 @@ void registerShellUiShowcaseWidgetTests() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('ui pressable surface lays out cap and base layers', (
+  testWidgets('ui pressable surface lays out a single flat layer', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -121,30 +121,27 @@ void registerShellUiShowcaseWidgetTests() {
     );
 
     final surfaceFinder = find.byType(ui.PressableSurface);
-    final restingLayers = tester
-        .widgetList<Positioned>(
-          find.descendant(of: surfaceFinder, matching: find.byType(Positioned)),
-        )
-        .toList();
-    expect(restingLayers, hasLength(2));
-    expect(restingLayers.first.top, closeTo(8, 0.01));
-    expect(restingLayers.last.top, closeTo(3, 0.01));
-    final decorations = tester
-        .widgetList<DecoratedBox>(
-          find.descendant(
-            of: surfaceFinder,
-            matching: find.byType(DecoratedBox),
-          ),
-        )
-        .where((box) => box.decoration is BoxDecoration)
-        .map((box) => box.decoration as BoxDecoration)
-        .toList();
-    expect(decorations, hasLength(2));
+    // No stacked cap/base layers any more: one decorated layer fills the
+    // whole surface.
     expect(
-      (decorations.first.border as Border).top.color,
-      (decorations.last.border as Border).top.color,
+      find.descendant(of: surfaceFinder, matching: find.byType(Positioned)),
+      findsNothing,
     );
-    expect((decorations.first.border as Border).top.color.a, greaterThan(0));
+    final layerFinder = find.descendant(
+      of: surfaceFinder,
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is DecoratedBox && widget.decoration is BoxDecoration,
+      ),
+    );
+    expect(layerFinder, findsOneWidget);
+    expect(tester.getSize(layerFinder), const Size(120, 40));
+    expect(tester.getSize(surfaceFinder), const Size(120, 40));
+    final decoration =
+        tester.widget<DecoratedBox>(layerFinder).decoration as BoxDecoration;
+    expect(decoration.color, ui.UiColors.surface);
+    expect((decoration.border as Border).top.color, ui.UiColors.border);
+    expect((decoration.border as Border).top.color.a, greaterThan(0));
     expect(tester.takeException(), isNull);
   });
 
@@ -178,9 +175,10 @@ void registerShellUiShowcaseWidgetTests() {
       ),
       findsNWidgets(2),
     );
+    // The selected segment sits on the inverse (white) thumb.
     expect(
       tester.widget<Text>(find.text('Chat')).style?.color,
-      ui.UiColors.accent,
+      ui.UiColors.onInverse,
     );
     expect(
       tester.widget<Text>(find.text('Forms')).style?.color,
@@ -200,7 +198,7 @@ void registerShellUiShowcaseWidgetTests() {
     );
     expect(
       tester.getSize(find.byType(ui.SegmentedControl<String>)).height,
-      closeTo(41, 0.01),
+      closeTo(36, 0.01),
     );
     expect(tester.takeException(), isNull);
   });
@@ -502,7 +500,7 @@ void registerShellUiShowcaseWidgetTests() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('ui input hover animates without changing colors', (
+  testWidgets('ui input hover and focus only restyle its flat frame', (
     WidgetTester tester,
   ) async {
     final focusNode = FocusNode();
@@ -523,94 +521,79 @@ void registerShellUiShowcaseWidgetTests() {
     );
 
     final inputFinder = find.byType(ui.Input);
-    final animatedCapFinder = find.descendant(
-      of: inputFinder,
-      matching: find.byType(AnimatedPadding),
+    // The flat input has no lifting cap; one animated frame carries the
+    // hover and focus styles.
+    expect(
+      find.descendant(of: inputFinder, matching: find.byType(AnimatedPadding)),
+      findsNothing,
     );
-    expect(animatedCapFinder, findsOneWidget);
-    final animatedCap = tester.widget<AnimatedPadding>(animatedCapFinder);
-    expect(animatedCap.duration, const Duration(milliseconds: 95));
-    expect(animatedCap.curve, Curves.easeOutCubic);
-    expect((animatedCap.padding as EdgeInsets).top, closeTo(3, 0.01));
-    expect((animatedCap.padding as EdgeInsets).bottom, closeTo(5, 0.01));
+    final frameFinder = find.descendant(
+      of: inputFinder,
+      matching: find.byType(AnimatedContainer),
+    );
+    expect(frameFinder, findsOneWidget);
+    final frame = tester.widget<AnimatedContainer>(frameFinder);
+    expect(frame.duration, ui.UiMotion.fast);
+    expect(frame.curve, ui.UiMotion.curve);
+    final restingSize = tester.getSize(inputFinder);
 
-    var inputDecorations = _inputLayerDecorations(tester, inputFinder);
-    expect(inputDecorations, hasLength(2));
-    expect(_topBorderColor(inputDecorations.first), ui.UiColors.border);
-    expect(_topBorderColor(inputDecorations.last), ui.UiColors.border);
-    expect(inputDecorations.last.color, ui.UiColors.surface);
+    BoxDecoration frameDecoration() {
+      final decorations = _inputLayerDecorations(tester, inputFinder);
+      expect(decorations, hasLength(1));
+      return decorations.single;
+    }
+
+    var decoration = frameDecoration();
+    expect(_topBorderColor(decoration), ui.UiColors.fieldBorder);
+    expect(decoration.color, ui.UiColors.fieldFill);
+    expect(decoration.boxShadow, isNull);
 
     var inputRect = tester.getRect(inputFinder);
     await tester.tapAt(inputRect.center);
     await tester.pumpAndSettle();
 
     expect(focusNode.hasFocus, isTrue);
-    expect(
-      (tester.widget<AnimatedPadding>(animatedCapFinder).padding as EdgeInsets)
-          .top,
-      closeTo(0, 0.01),
-    );
-    inputDecorations = _inputLayerDecorations(tester, inputFinder);
-    expect(_topBorderColor(inputDecorations.first), ui.UiColors.accentBorder);
-    expect(_topBorderColor(inputDecorations.last), ui.UiColors.accentBorder);
-    expect(inputDecorations.last.color, ui.UiColors.selected);
+    decoration = frameDecoration();
+    expect(_topBorderColor(decoration), ui.UiColors.accentStrong);
+    expect(decoration.color, ui.UiColors.fieldFill);
+    expect(decoration.boxShadow, isNotEmpty);
+    expect(tester.getSize(inputFinder), restingSize);
 
     focusNode.unfocus();
     await tester.pumpAndSettle();
 
-    expect(
-      (tester.widget<AnimatedPadding>(animatedCapFinder).padding as EdgeInsets)
-          .top,
-      closeTo(3, 0.01),
-    );
-    inputDecorations = _inputLayerDecorations(tester, inputFinder);
-    expect(_topBorderColor(inputDecorations.first), ui.UiColors.border);
-    expect(_topBorderColor(inputDecorations.last), ui.UiColors.border);
-    expect(inputDecorations.last.color, ui.UiColors.surface);
+    decoration = frameDecoration();
+    expect(_topBorderColor(decoration), ui.UiColors.fieldBorder);
+    expect(decoration.color, ui.UiColors.fieldFill);
+    expect(decoration.boxShadow, isNull);
 
     final hoverRegions = tester
         .widgetList<MouseRegion>(
           find.descendant(of: inputFinder, matching: find.byType(MouseRegion)),
         )
         .where((region) => region.onEnter != null);
+    expect(hoverRegions, isNotEmpty);
     for (final region in hoverRegions) {
       region.onEnter?.call(const PointerEnterEvent(position: Offset.zero));
     }
-
-    await tester.pump();
-
-    expect(
-      (tester.widget<AnimatedPadding>(animatedCapFinder).padding as EdgeInsets)
-          .top,
-      closeTo(0, 0.01),
-    );
-    expect(
-      (tester.widget<AnimatedPadding>(animatedCapFinder).padding as EdgeInsets)
-          .bottom,
-      closeTo(8, 0.01),
-    );
-
-    inputDecorations = _inputLayerDecorations(tester, inputFinder);
-    expect(_topBorderColor(inputDecorations.first), ui.UiColors.border);
-    expect(_topBorderColor(inputDecorations.last), ui.UiColors.border);
-    expect(inputDecorations.last.color, ui.UiColors.surface);
-
     await tester.pumpAndSettle();
-    expect(
-      (tester.widget<AnimatedPadding>(animatedCapFinder).padding as EdgeInsets)
-          .top,
-      closeTo(0, 0.01),
-    );
+
+    // Hover only brightens the border; fill and size stay unchanged.
+    decoration = frameDecoration();
+    expect(_topBorderColor(decoration), ui.UiColors.fieldBorderHover);
+    expect(decoration.color, ui.UiColors.fieldFill);
+    expect(decoration.boxShadow, isNull);
+    expect(tester.getSize(inputFinder), restingSize);
 
     inputRect = tester.getRect(inputFinder);
     await tester.tapAt(inputRect.center);
     await tester.pumpAndSettle();
 
     expect(focusNode.hasFocus, isTrue);
-    inputDecorations = _inputLayerDecorations(tester, inputFinder);
-    expect(_topBorderColor(inputDecorations.first), ui.UiColors.accentBorder);
-    expect(_topBorderColor(inputDecorations.last), ui.UiColors.accentBorder);
-    expect(inputDecorations.last.color, ui.UiColors.selected);
+    decoration = frameDecoration();
+    expect(_topBorderColor(decoration), ui.UiColors.accentStrong);
+    expect(decoration.color, ui.UiColors.fieldFill);
+    expect(decoration.boxShadow, isNotEmpty);
     expect(tester.takeException(), isNull);
   });
 
@@ -780,7 +763,7 @@ void registerShellUiShowcaseWidgetTests() {
       find.descendant(of: checkboxFinder, matching: find.byType(InkWell)),
       findsNothing,
     );
-    expect(tester.getSize(checkboxFinder), const Size(18, 20));
+    expect(tester.getSize(checkboxFinder), const Size(18, 18));
 
     await tester.tap(find.byTooltip('记住密码'));
     await tester.pumpAndSettle();
@@ -796,10 +779,14 @@ void registerShellUiShowcaseWidgetTests() {
         .where((box) => box.decoration is BoxDecoration)
         .map((box) => box.decoration as BoxDecoration)
         .toList();
+    // Checked boxes fill with the lime signal colour.
     expect(
-      decorations.any((decoration) => decoration.color == ui.UiColors.selected),
+      decorations.any(
+        (decoration) => decoration.color == ui.UiColors.accentStrong,
+      ),
       isTrue,
     );
+    expect(_rememberPasswordCheckIcon(tester).color, ui.UiColors.onAccent);
 
     await tester.tap(checkboxFinder);
     await tester.pumpAndSettle();
@@ -824,7 +811,7 @@ void registerShellUiShowcaseWidgetTests() {
         ),
       ),
     );
-    expect(_rememberPasswordCheckIcon(tester).color, ui.UiColors.textMuted);
+    expect(_rememberPasswordCheckIcon(tester).color, ui.UiColors.textSecondary);
 
     await tester.tap(checkboxFinder);
     await tester.pump();
@@ -862,7 +849,7 @@ void registerShellUiShowcaseWidgetTests() {
       find.descendant(of: switchFinder, matching: find.byType(InkWell)),
       findsNothing,
     );
-    expect(tester.getSize(switchFinder), const Size(56, 32));
+    expect(tester.getSize(switchFinder), const Size(42, 24));
 
     await tester.tap(switchFinder);
     await tester.pumpAndSettle();
@@ -878,8 +865,11 @@ void registerShellUiShowcaseWidgetTests() {
         .where((box) => box.decoration is BoxDecoration)
         .map((box) => box.decoration as BoxDecoration)
         .toList();
+    // The track of an enabled switch fills with the lime signal colour.
     expect(
-      decorations.any((decoration) => decoration.color == ui.UiColors.selected),
+      decorations.any(
+        (decoration) => decoration.color == ui.UiColors.accentStrong,
+      ),
       isTrue,
     );
 
@@ -998,20 +988,30 @@ void registerShellUiShowcaseWidgetTests() {
     final composerRect = tester.getRect(find.byType(ui.ChatComposer));
     final initialInputRect = tester.getRect(inputFinder);
     final stickerRect = tester.getRect(stickerSurfaceFinder);
+    final voiceRect = tester.getRect(
+      find.ancestor(
+        of: find.byIcon(Icons.mic_none),
+        matching: find.byType(ui.PressableSurface),
+      ),
+    );
     final sendRect = tester.getRect(sendSurfaceFinder);
     expect(composerRect.width, closeTo(560, 0.01));
-    // Input spans the full composer width on its own row.
-    expect(initialInputRect.left, closeTo(composerRect.left + 12, 0.01));
-    expect(initialInputRect.right, closeTo(composerRect.right - 12, 0.01));
-    // Actions sit on a row below the input: stickers pinned left, send right.
-    expect(stickerRect.top, greaterThan(initialInputRect.bottom));
-    expect(sendRect.top, greaterThan(initialInputRect.bottom));
-    expect(stickerRect.left, closeTo(composerRect.left + 12, 0.01));
-    expect(sendRect.right, closeTo(composerRect.right - 12, 0.01));
+    // One pill row: leading actions, the input filling the middle, and the
+    // trailing send button.
+    expect(stickerRect.left, closeTo(composerRect.left + 7, 0.01));
+    expect(voiceRect.left, greaterThanOrEqualTo(stickerRect.right));
+    expect(initialInputRect.left, greaterThan(voiceRect.right));
+    expect(sendRect.left, greaterThanOrEqualTo(initialInputRect.right));
+    expect(sendRect.right, closeTo(composerRect.right - 7, 0.01));
+    expect(initialInputRect.width, greaterThan(composerRect.width / 2));
+    for (final rect in [stickerRect, voiceRect, sendRect]) {
+      expect(rect.bottom, closeTo(initialInputRect.bottom, 0.01));
+    }
     expect(
       ui.Input.defaultHeight,
       tester.widget<ui.PressableSurface>(sendSurfaceFinder).height,
     );
+    expect(initialInputRect.height, closeTo(ui.Input.defaultHeight, 0.01));
     expect(
       tester.widget<TextField>(find.byType(TextField)).textAlignVertical,
       TextAlignVertical.center,
@@ -1021,25 +1021,38 @@ void registerShellUiShowcaseWidgetTests() {
       SystemMouseCursors.text,
     );
 
-    final inputMouseRegions = tester
-        .widgetList<MouseRegion>(
-          find.descendant(of: inputFinder, matching: find.byType(MouseRegion)),
-        )
-        .where(
-          (region) =>
-              region.cursor == SystemMouseCursors.text &&
-              region.onEnter != null,
-        );
-    for (final region in inputMouseRegions) {
-      region.onEnter?.call(const PointerEnterEvent(position: Offset.zero));
-    }
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 120));
-
-    final hoveredInputCap = tester.widget<AnimatedPadding>(
-      find.descendant(of: inputFinder, matching: find.byType(AnimatedPadding)),
+    // The composer input is bare: the composer pill itself is the field
+    // frame and marks focus with the accent border.
+    expect(
+      find.descendant(
+        of: inputFinder,
+        matching: find.byType(AnimatedContainer),
+      ),
+      findsNothing,
     );
-    expect((hoveredInputCap.padding as EdgeInsets).top, closeTo(0, 0.01));
+    expect(
+      find.descendant(
+        of: inputFinder,
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is MouseRegion && widget.cursor == SystemMouseCursors.text,
+        ),
+      ),
+      findsWidgets,
+    );
+    Color composerBorderColor() {
+      final frame = tester.widget<AnimatedContainer>(
+        find
+            .descendant(
+              of: find.byType(ui.ChatComposer),
+              matching: find.byType(AnimatedContainer),
+            )
+            .first,
+      );
+      return ((frame.decoration! as BoxDecoration).border! as Border).top.color;
+    }
+
+    expect(composerBorderColor(), ui.UiColors.border);
 
     final inputRect = tester.getRect(inputFinder);
     await tester.tapAt(inputRect.topLeft + const Offset(4, 4));
@@ -1049,15 +1062,22 @@ void registerShellUiShowcaseWidgetTests() {
       tester.widget<TextField>(find.byType(TextField)).focusNode?.hasFocus,
       isTrue,
     );
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(composerBorderColor(), ui.UiColors.accentBorder);
 
     await tester.enterText(find.byType(TextField), 'First line\nSecond line');
     await tester.pumpAndSettle();
 
     final multilineInputRect = tester.getRect(inputFinder);
     final multilineSendRect = tester.getRect(sendSurfaceFinder);
-    // The input grows taller while the action row (with send) stays below it.
+    // The input grows taller while send stays beside it, pinned to the
+    // bottom of the row.
     expect(multilineInputRect.height, greaterThan(multilineSendRect.height));
-    expect(multilineSendRect.top, greaterThan(multilineInputRect.bottom));
+    expect(
+      multilineSendRect.left,
+      greaterThanOrEqualTo(multilineInputRect.right),
+    );
+    expect(multilineSendRect.bottom, closeTo(multilineInputRect.bottom, 0.01));
 
     await tester.enterText(find.byType(TextField), '');
     await tester.pumpAndSettle();
@@ -1291,14 +1311,11 @@ void registerShellUiShowcaseWidgetTests() {
 
     expect(
       surfaces.map((surface) => surface.backgroundColor),
-      containsAllInOrder([const Color(0xFF1F2D27), const Color(0xFF2E1F22)]),
+      containsAllInOrder([ui.UiColors.accentStrong, ui.UiColors.dangerSurface]),
     );
     expect(
       surfaces.map((surface) => surface.borderColor),
-      containsAllInOrder([
-        ui.UiColors.selectedBorder,
-        ui.UiColors.dangerBorder,
-      ]),
+      containsAllInOrder([Colors.transparent, ui.UiColors.dangerBorder]),
     );
     expect(surfaces.map((surface) => surface.enabled), everyElement(isTrue));
     expect(surfaces.map((surface) => surface.onPressed), everyElement(isNull));
@@ -1360,9 +1377,17 @@ void registerShellUiShowcaseWidgetTests() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('surface shadow depth follows hover lift', (
+  Color? surfaceFill(WidgetTester tester, Finder surface) {
+    final container = tester.widget<AnimatedContainer>(
+      find.descendant(of: surface, matching: find.byType(AnimatedContainer)),
+    );
+    return (container.decoration as BoxDecoration?)?.color;
+  }
+
+  testWidgets('flat surface tints on hover and occupies only its height', (
     WidgetTester tester,
   ) async {
+    const base = Color(0xFF334455);
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -1370,52 +1395,7 @@ void registerShellUiShowcaseWidgetTests() {
             child: ui.PressableSurface(
               width: 120,
               height: 40,
-              hoverLift: 4,
-              baseDepth: 8,
-              onPressed: () {},
-              child: const Text('Surface'),
-            ),
-          ),
-        ),
-      ),
-    );
-
-    final mouseRegionFinder = find.descendant(
-      of: find.byType(ui.PressableSurface),
-      matching: find.byType(MouseRegion),
-    );
-    final mouseRegion = tester.widget<MouseRegion>(mouseRegionFinder);
-    mouseRegion.onEnter?.call(const PointerEnterEvent(position: Offset.zero));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 150));
-
-    final layers = tester
-        .widgetList<Positioned>(
-          find.descendant(
-            of: find.byType(ui.PressableSurface),
-            matching: find.byType(Positioned),
-          ),
-        )
-        .toList();
-
-    expect(layers, hasLength(2));
-    expect(layers.first.top, closeTo(12, 0.01));
-    expect(layers.last.top, closeTo(0, 0.01));
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('pressed surface lands at the bottom of the base', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: ui.PressableSurface(
-              width: 120,
-              height: 40,
-              hoverLift: 4,
-              baseDepth: 8,
+              backgroundColor: base,
               onPressed: () {},
               child: const Text('Surface'),
             ),
@@ -1425,35 +1405,58 @@ void registerShellUiShowcaseWidgetTests() {
     );
 
     final surfaceFinder = find.byType(ui.PressableSurface);
+    expect(tester.getSize(surfaceFinder), const Size(120, 40));
+    expect(surfaceFill(tester, surfaceFinder), base);
+
     final mouseRegion = tester.widget<MouseRegion>(
       find.descendant(of: surfaceFinder, matching: find.byType(MouseRegion)),
     );
     mouseRegion.onEnter?.call(const PointerEnterEvent(position: Offset.zero));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 150));
 
-    final gesture = await tester.startGesture(tester.getCenter(surfaceFinder));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
-
-    final layers = tester
-        .widgetList<Positioned>(
-          find.descendant(of: surfaceFinder, matching: find.byType(Positioned)),
-        )
-        .toList();
-
-    expect(layers, hasLength(2));
-    expect(layers.first.top, closeTo(12, 0.01));
-    expect(layers.last.top, closeTo(12, 0.01));
+    expect(surfaceFill(tester, surfaceFinder), ui.UiStates.hover(base));
+    expect(tester.getSize(surfaceFinder), const Size(120, 40));
     expect(tester.takeException(), isNull);
-    await gesture.up();
   });
 
-  testWidgets('button shadows are derived from background colors', (
+  testWidgets('pressed surface darkens while held', (
     WidgetTester tester,
   ) async {
-    const customBackground = Color(0xFF334455);
+    const base = Color(0xFF334455);
+    var pressed = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: ui.PressableSurface(
+              width: 120,
+              height: 40,
+              backgroundColor: base,
+              onPressed: () => pressed += 1,
+              child: const Text('Surface'),
+            ),
+          ),
+        ),
+      ),
+    );
 
+    final surfaceFinder = find.byType(ui.PressableSurface);
+    final gesture = await tester.startGesture(tester.getCenter(surfaceFinder));
+    await tester.pump();
+
+    expect(surfaceFill(tester, surfaceFinder), ui.UiStates.pressed(base));
+
+    await gesture.up();
+    await tester.pump();
+
+    expect(pressed, 1);
+    expect(surfaceFill(tester, surfaceFinder), base);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('button tones use the signal palette', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -1469,11 +1472,10 @@ void registerShellUiShowcaseWidgetTests() {
                 onPressed: () {},
                 child: const Text('Danger'),
               ),
-              ui.PressableSurface(
-                height: 40,
-                backgroundColor: customBackground,
+              ui.Button(
+                selected: true,
                 onPressed: () {},
-                child: const Text('Custom'),
+                child: const Text('Selected'),
               ),
             ],
           ),
@@ -1481,24 +1483,17 @@ void registerShellUiShowcaseWidgetTests() {
       ),
     );
 
-    final baseColors = tester
-        .widgetList<DecoratedBox>(
-          find.descendant(
-            of: find.byType(ui.PressableSurface),
-            matching: find.byType(DecoratedBox),
-          ),
-        )
-        .where((box) => box.decoration is BoxDecoration)
-        .map((box) => (box.decoration as BoxDecoration).color);
-
-    expect(
-      baseColors,
-      containsAllInOrder([
-        _expectedShadowForBackground(const Color(0xFF1F2D27)),
-        _expectedShadowForBackground(const Color(0xFF2E1F22)),
-        _expectedShadowForBackground(customBackground),
-      ]),
+    Color? fillOf(String label) => surfaceFill(
+      tester,
+      find.ancestor(
+        of: find.text(label),
+        matching: find.byType(ui.PressableSurface),
+      ),
     );
+
+    expect(fillOf('Primary'), ui.UiColors.accentStrong);
+    expect(fillOf('Danger'), ui.UiColors.dangerSurface);
+    expect(fillOf('Selected'), ui.UiColors.inverse);
     expect(tester.takeException(), isNull);
   });
 

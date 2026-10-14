@@ -2,15 +2,13 @@ import 'package:flutter/material.dart';
 
 import 'tooltip.dart';
 
-import 'surface.dart';
 import 'tokens.dart';
 
-const double _switchWidth = 56;
-const double _switchHeight = 32;
+const double _switchWidth = 42;
+const double _switchHeight = 24;
 const double _switchThumbSize = 18;
-const double _switchHorizontalInset = 7;
-const double _switchThumbDepth = 3;
-const Duration _switchDuration = Duration(milliseconds: 140);
+const double _switchHorizontalInset = 3;
+const Duration _switchDuration = Duration(milliseconds: 160);
 
 class UiSwitch extends StatefulWidget {
   const UiSwitch({
@@ -80,23 +78,22 @@ class _UiSwitchState extends State<UiSwitch> {
   Widget build(BuildContext context) {
     final active = widget.value;
     final enabled = _interactive;
-    final trackBackground = enabled
-        ? UiColors.surfacePressed
-        : UiColors.disabledSurface;
-    final borderColor = enabled ? UiColors.border : UiColors.disabledBorder;
-    final radius = BorderRadius.circular(UiRadii.md);
-    final thumbBackground = !enabled
-        ? UiColors.disabledSurface
+    final trackColor = !enabled
+        ? (active
+              ? UiColors.accentStrong.withValues(alpha: 0.35)
+              : UiColors.disabledSurface)
         : active
-        ? UiColors.selected
-        : UiColors.surface;
-    final thumbBorder = !enabled
-        ? UiColors.disabledBorder
+        ? UiColors.accentStrong
+        : const Color(0xFF2A2A2F);
+    final trackBorder = active || !enabled
+        ? Colors.transparent
+        : UiColors.borderStrong;
+    final thumbColor = !enabled
+        ? UiColors.textMuted
         : active
-        ? UiColors.selectedBorder
-        : UiColors.border;
-    final thumbTop =
-        ((_switchHeight - _switchThumbSize) / 2) - _switchThumbDepth;
+        ? UiColors.onAccent
+        : const Color(0xFF8E8E95);
+    const thumbTop = (_switchHeight - _switchThumbSize) / 2;
 
     Widget result = MouseRegion(
       cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
@@ -112,16 +109,14 @@ class _UiSwitchState extends State<UiSwitch> {
           child: Stack(
             clipBehavior: Clip.none,
             children: [
-              Positioned(
-                left: 0,
-                right: 0,
-                top: 0,
-                bottom: 0,
-                child: DecoratedBox(
+              Positioned.fill(
+                child: AnimatedContainer(
+                  duration: _switchDuration,
+                  curve: Curves.easeOutCubic,
                   decoration: BoxDecoration(
-                    color: trackBackground,
-                    borderRadius: radius,
-                    border: Border.all(color: borderColor),
+                    color: trackColor,
+                    borderRadius: BorderRadius.circular(UiRadii.pill),
+                    border: Border.all(color: trackBorder),
                   ),
                 ),
               ),
@@ -133,29 +128,15 @@ class _UiSwitchState extends State<UiSwitch> {
                     : _switchHorizontalInset,
                 top: thumbTop,
                 width: _switchThumbSize,
-                height: _switchThumbSize + _switchThumbDepth,
-                child: PressableSurface(
-                  width: _switchThumbSize,
-                  height: _switchThumbSize,
-                  enabled: enabled,
-                  interactive: enabled,
-                  hoverEffect: false,
-                  hoverLift: 0,
-                  baseDepth: _switchThumbDepth,
-                  pressDepth: _switchThumbDepth,
-                  borderRadius: UiRadii.sm,
-                  padding: EdgeInsets.zero,
-                  mouseCursor: enabled
-                      ? SystemMouseCursors.click
-                      : SystemMouseCursors.basic,
-                  backgroundColor: thumbBackground,
-                  selectedBackgroundColor: thumbBackground,
-                  pressedBackgroundColor: UiColors.surfacePressed,
-                  disabledBackgroundColor: UiColors.disabledSurface,
-                  borderColor: thumbBorder,
-                  selectedBorderColor: thumbBorder,
-                  disabledBorderColor: UiColors.disabledBorder,
-                  child: const SizedBox.expand(),
+                height: _switchThumbSize,
+                child: AnimatedContainer(
+                  duration: _switchDuration,
+                  curve: Curves.easeOutCubic,
+                  decoration: BoxDecoration(
+                    color: thumbColor,
+                    shape: BoxShape.circle,
+                    boxShadow: enabled ? UiShadows.raised : null,
+                  ),
                 ),
               ),
             ],

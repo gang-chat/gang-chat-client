@@ -317,11 +317,6 @@ class _ImagePreviewOverlayState extends State<_ImagePreviewOverlay>
   bool get _canSaveRoomSticker =>
       widget.stickerSource != null && widget.actions.onSaveRoomSticker != null;
 
-  // The Android route uses a semi-transparent cap over a frozen backdrop. Its
-  // base border would otherwise show through as an extra horizontal line.
-  Color? get _previewButtonBaseBorderColor =>
-      widget.frozenBackdrop == null ? null : Colors.transparent;
-
   bool get _isAndroidPreview =>
       widget.previewPlatform == TargetPlatform.android;
 
@@ -616,7 +611,6 @@ class _ImagePreviewOverlayState extends State<_ImagePreviewOverlay>
                             tooltip: '关闭',
                             onPressed: _close,
                             backgroundColor: const Color(0x66000000),
-                            baseBorderColor: _previewButtonBaseBorderColor,
                           ),
                         ),
                       ),
@@ -927,7 +921,6 @@ class _ImagePreviewOverlayState extends State<_ImagePreviewOverlay>
                 )
               : null,
           backgroundColor: const Color(0x66000000),
-          baseBorderColor: _previewButtonBaseBorderColor,
         ),
         const SizedBox(width: 10),
         ButtonIcon(
@@ -945,7 +938,6 @@ class _ImagePreviewOverlayState extends State<_ImagePreviewOverlay>
                 )
               : null,
           backgroundColor: const Color(0x66000000),
-          baseBorderColor: _previewButtonBaseBorderColor,
         ),
         const SizedBox(width: 10),
         ButtonIcon(
@@ -960,7 +952,6 @@ class _ImagePreviewOverlayState extends State<_ImagePreviewOverlay>
                 )
               : null,
           backgroundColor: const Color(0x66000000),
-          baseBorderColor: _previewButtonBaseBorderColor,
         ),
         if (_canSaveSticker) ...[
           const SizedBox(width: 10),
@@ -982,7 +973,6 @@ class _ImagePreviewOverlayState extends State<_ImagePreviewOverlay>
                   }
                 : null,
             backgroundColor: const Color(0x66000000),
-            baseBorderColor: _previewButtonBaseBorderColor,
           ),
         ],
         if (_canSaveRoomSticker) ...[
@@ -1005,7 +995,6 @@ class _ImagePreviewOverlayState extends State<_ImagePreviewOverlay>
                   }
                 : null,
             backgroundColor: const Color(0x66000000),
-            baseBorderColor: _previewButtonBaseBorderColor,
           ),
         ],
       ],

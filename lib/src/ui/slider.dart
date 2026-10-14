@@ -2,13 +2,12 @@ import 'package:flutter/material.dart';
 
 import 'tokens.dart';
 
-// A flat slider matching the app's recessed-groove idiom: a `surfacePressed`
-// track with a `border` outline, an `accent` fill, and a plain thin bar handle
-// (no raised square thumb). No Material Slider — that brings its own overlay
-// theme we deliberately suppress app-wide. Supports both orientations; vertical
-// fills from the bottom (min) up to the top (max).
+// A flat slider: a thin rounded rail, an iris fill, and a round white knob that
+// grows slightly while hovered or dragged. No Material Slider — that brings its
+// own overlay theme we deliberately suppress app-wide. Supports both
+// orientations; vertical fills from the bottom (min) up to the top (max).
 const double _trackThickness = 4;
-const double _handleLong = 4;
+const double _handleLong = 14;
 const double _handleShort = 14;
 const double _hoverLabelWidth = 36;
 const double _hoverLabelHeight = 18;
@@ -127,11 +126,12 @@ class _UiSliderState extends State<UiSlider> {
   Widget build(BuildContext context) {
     final enabled = _interactive;
     final grooveColor = enabled
-        ? UiColors.surfacePressed
+        ? const Color(0xFF2A2A2F)
         : UiColors.disabledSurface;
-    final grooveBorder = enabled ? UiColors.border : UiColors.disabledBorder;
-    final fillColor = enabled ? UiColors.accent : UiColors.textMuted;
-    final thumbColor = enabled ? UiColors.text : UiColors.textMuted;
+    final grooveBorder = Colors.transparent;
+    final fillColor = enabled ? UiColors.accentStrong : UiColors.textMuted;
+    final thumbColor = enabled ? UiColors.inverse : UiColors.textMuted;
+    final active = enabled && (_hovered || _pointer != null);
 
     // Center the track along the cross axis, leaving room for the handle that
     // overhangs it.
@@ -177,7 +177,7 @@ class _UiSliderState extends State<UiSlider> {
                 children: [
                   _groove(grooveColor, grooveBorder, crossInset),
                   _fill(fillColor, fillExtent, crossInset),
-                  _handle(thumbColor, handleStart),
+                  _handle(thumbColor, handleStart, active: active),
                   if (showHoverLabel)
                     Positioned(
                       key: const ValueKey<String>('ui-slider-hover-label'),
@@ -187,15 +187,17 @@ class _UiSliderState extends State<UiSlider> {
                       height: _hoverLabelHeight,
                       child: DecoratedBox(
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: UiColors.surfaceHover,
                           borderRadius: BorderRadius.circular(UiRadii.sm),
+                          border: Border.all(color: UiColors.borderStrong),
                         ),
                         child: Center(
                           child: Text(
                             hoverLabel,
                             style: UiTypography.label.copyWith(
-                              color: Colors.black87,
+                              color: UiColors.text,
                               fontSize: 10,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ),
@@ -250,11 +252,31 @@ class _UiSliderState extends State<UiSlider> {
     );
   }
 
-  // A plain thin bar handle straddling the track.
-  Widget _handle(Color color, double start) {
-    final decoration = BoxDecoration(
-      color: color,
-      borderRadius: BorderRadius.circular(_handleLong / 2),
+  // A round knob straddling the track.
+  Widget _handle(Color color, double start, {required bool active}) {
+    final knob = Center(
+      child: AnimatedContainer(
+        duration: UiMotion.fast,
+        curve: UiMotion.curve,
+        width: active ? _handleShort : _handleShort - 2,
+        height: active ? _handleShort : _handleShort - 2,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          boxShadow: [
+            const BoxShadow(
+              color: Color(0x66000000),
+              blurRadius: 4,
+              offset: Offset(0, 1),
+            ),
+            if (active)
+              BoxShadow(
+                color: UiColors.accentStrong.withValues(alpha: 0.35),
+                spreadRadius: 4,
+              ),
+          ],
+        ),
+      ),
     );
     if (_vertical) {
       // start is measured from the low (bottom) end.
@@ -263,7 +285,7 @@ class _UiSliderState extends State<UiSlider> {
         right: 0,
         bottom: start,
         height: _handleLong,
-        child: DecoratedBox(decoration: decoration),
+        child: knob,
       );
     }
     return Positioned(
@@ -271,7 +293,7 @@ class _UiSliderState extends State<UiSlider> {
       top: 0,
       width: _handleLong,
       height: _handleShort,
-      child: DecoratedBox(decoration: decoration),
+      child: knob,
     );
   }
 }

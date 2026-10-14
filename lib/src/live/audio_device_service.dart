@@ -7,15 +7,22 @@ import '../app/audio_device_info.dart';
 import 'system_audio_devices.dart';
 
 class LiveAudioDeviceService {
-  const LiveAudioDeviceService({bool? systemAudioOnly})
-    : _systemAudioOnlyOverride = systemAudioOnly;
+  const LiveAudioDeviceService({
+    bool? systemAudioOnly,
+    SystemAudioDevices? systemAudio,
+  }) : _systemAudioOnlyOverride = systemAudioOnly,
+       _systemAudioOverride = systemAudio;
 
   final bool? _systemAudioOnlyOverride;
+  final SystemAudioDevices? _systemAudioOverride;
 
   // Desktop native audio access. macOS merges native devices into WebRTC's
   // list; Windows treats the native list as authoritative and never asks the
   // WebRTC ADM to enumerate audio endpoints.
-  static final SystemAudioDevices _systemAudio = SystemAudioDevices();
+  static final SystemAudioDevices _sharedSystemAudio = SystemAudioDevices();
+
+  SystemAudioDevices get _systemAudio =>
+      _systemAudioOverride ?? _sharedSystemAudio;
 
   bool get _systemAudioOnly {
     return _systemAudioOnlyOverride ??

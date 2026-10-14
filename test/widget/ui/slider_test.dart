@@ -4,6 +4,9 @@ import 'package:client/src/ui/ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+// Size of the round knob's positioned slot in [UiSlider].
+const double _knobSize = 14;
+
 void main() {
   testWidgets('horizontal slider reaches both visual endpoints', (
     tester,
@@ -30,7 +33,8 @@ void main() {
             ),
           )
           .singleWhere(
-            (positioned) => positioned.width == 4 && positioned.height == 14,
+            (positioned) =>
+                positioned.width == _knobSize && positioned.height == _knobSize,
           )
           .left!;
     }
@@ -39,7 +43,8 @@ void main() {
     expect(handleLeft(), 0);
 
     await pump(1);
-    expect(handleLeft(), 96);
+    // The round knob's right edge lands on the slider's right edge.
+    expect(handleLeft() + _knobSize, 100);
   });
 
   testWidgets('slider shows hover percentage above its thumb', (tester) async {
@@ -77,7 +82,8 @@ void main() {
           ),
         )
         .singleWhere(
-          (positioned) => positioned.width == 4 && positioned.height == 14,
+          (positioned) =>
+              positioned.width == _knobSize && positioned.height == _knobSize,
         );
     final handleRect = Rect.fromLTWH(
       handle.left!,

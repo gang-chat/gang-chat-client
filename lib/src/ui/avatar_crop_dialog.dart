@@ -413,7 +413,7 @@ class _CropError extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: const BoxDecoration(
-        color: Color(0xFF2A2024),
+        color: UiColors.dangerSurface,
         border: Border.fromBorderSide(BorderSide(color: UiColors.dangerBorder)),
       ),
       child: Padding(

@@ -6,7 +6,6 @@ import 'surface.dart';
 import 'tokens.dart';
 
 const double _checkboxSize = 18;
-const double _checkboxDepth = 2;
 
 class UiCheckbox extends StatelessWidget {
   const UiCheckbox({
@@ -34,37 +33,45 @@ class UiCheckbox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final active = value;
-    final foreground = !active
+    final interactive = _interactive;
+    final background = !active
+        ? UiColors.fieldFill
+        : interactive
+        ? UiColors.accentStrong
+        : UiColors.accentStrong.withValues(alpha: 0.35);
+    final border = active
         ? Colors.transparent
-        : !_interactive
-        ? UiColors.textMuted
-        : UiColors.controlAccent;
-    final background = active ? UiColors.selected : UiColors.surface;
-    final border = active ? UiColors.selectedBorder : UiColors.border;
+        : interactive
+        ? UiColors.borderStrong
+        : UiColors.disabledBorder;
 
     Widget result = PressableSurface(
       width: _checkboxSize,
       height: _checkboxSize,
-      enabled: _interactive,
-      interactive: _interactive,
+      enabled: interactive,
+      interactive: interactive,
       onPressed: _toggle,
-      hoverLift: 0,
-      baseDepth: _checkboxDepth,
-      pressDepth: _checkboxDepth,
-      borderRadius: UiRadii.sm,
+      borderRadius: UiRadii.xs + 1,
       padding: EdgeInsets.zero,
-      mouseCursor: _interactive
+      mouseCursor: interactive
           ? SystemMouseCursors.click
           : SystemMouseCursors.basic,
       backgroundColor: background,
-      selectedBackgroundColor: UiColors.selected,
-      pressedBackgroundColor: UiColors.surfacePressed,
-      disabledBackgroundColor: UiColors.disabledSurface,
+      selectedBackgroundColor: background,
+      disabledBackgroundColor: background,
       borderColor: border,
-      selectedBorderColor: UiColors.selectedBorder,
-      disabledBorderColor: UiColors.disabledBorder,
+      selectedBorderColor: border,
+      disabledBorderColor: border,
       child: Center(
-        child: Icon(Icons.check_rounded, size: 15, color: foreground),
+        child: Icon(
+          Icons.check_rounded,
+          size: 14,
+          color: !active
+              ? Colors.transparent
+              : interactive
+              ? UiColors.onAccent
+              : UiColors.textSecondary,
+        ),
       ),
     );
 

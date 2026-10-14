@@ -67,7 +67,11 @@ class AvatarPicker extends StatelessWidget {
     this.onImagePreview,
     this.presetKeys = kAvatarPresetKeys,
     this.uploadLabel = '上传图片',
+    this.rounded = false,
   });
+
+  /// Rounded-square preview, used for room icons.
+  final bool rounded;
 
   /// Heading shown above the picker, e.g. '头像' or '房间图标'.
   final String label;
@@ -104,10 +108,7 @@ class AvatarPicker extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          label,
-          style: UiTypography.label.copyWith(color: UiColors.textMuted),
-        ),
+        Text(label, style: UiTypography.label),
         const SizedBox(height: 10),
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -118,6 +119,7 @@ class AvatarPicker extends StatelessWidget {
               defaultAvatarKey: normalizedDefaultAvatarKey,
               size: 88,
               onPreview: onImagePreview,
+              rounded: rounded,
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -160,6 +162,7 @@ class _AvatarPickerPreview extends StatelessWidget {
     required this.defaultAvatarKey,
     required this.size,
     required this.onPreview,
+    this.rounded = false,
   });
 
   final String label;
@@ -167,6 +170,7 @@ class _AvatarPickerPreview extends StatelessWidget {
   final String defaultAvatarKey;
   final double size;
   final VoidCallback? onPreview;
+  final bool rounded;
 
   @override
   Widget build(BuildContext context) {
@@ -175,17 +179,22 @@ class _AvatarPickerPreview extends StatelessWidget {
       defaultAvatarKey: defaultAvatarKey,
       size: size,
       showBorder: false,
+      rounded: rounded,
     );
     final url = imageUrl;
+    final radius = BorderRadius.circular(size * 0.3);
     final preview = SizedBox.square(
       key: const ValueKey('avatar-picker-preview'),
       dimension: size,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          shape: BoxShape.circle,
+          shape: rounded ? BoxShape.rectangle : BoxShape.circle,
+          borderRadius: rounded ? radius : null,
           border: Border.all(color: UiColors.border),
+          boxShadow: UiShadows.raised,
         ),
-        child: ClipOval(
+        child: ClipRRect(
+          borderRadius: rounded ? radius : BorderRadius.circular(size),
           child: url == null
               ? fallback
               : CachedAssetImage(
@@ -234,9 +243,12 @@ class _AvatarPickerSwatch extends StatelessWidget {
             color: avatarFallbackColor(keyName),
             shape: BoxShape.circle,
             border: Border.all(
-              color: selected ? UiColors.accent : UiColors.border,
-              width: selected ? 2 : 1,
+              color: selected ? UiColors.inverse : Colors.transparent,
+              width: 2,
             ),
+            boxShadow: selected
+                ? UiShadows.glow(UiColors.inverse, strength: 0.35)
+                : null,
           ),
         ),
       ),

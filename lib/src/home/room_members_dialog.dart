@@ -910,9 +910,9 @@ class _RoomMembersDialogState extends State<RoomMembersDialog> {
         maxHeight: _dialogMaxHeight,
         embedded: widget.embedded,
         onClose: _close,
-        pinned: sections.length > 1
-            ? SegmentedControl<_RoomMembersSection>(
-                expanded: true,
+        showBack: !widget.embedded,
+        navigation: sections.length > 1
+            ? SettingsNavigation<_RoomMembersSection>(
                 value: activeSection,
                 onChanged: _selectSection,
                 segments: sections,

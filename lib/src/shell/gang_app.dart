@@ -412,38 +412,45 @@ class _LoadingPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Scaffold(
       backgroundColor: appWindowBackground,
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Gang Chat',
-              style: TextStyle(
-                color: Color(0xFFECEFF1),
-                fontSize: 22,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0,
+      body: DotGridBackground(
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              BrandMark(size: 56),
+              SizedBox(height: 18),
+              Text(
+                'GANG CHAT',
+                style: TextStyle(
+                  color: UiColors.text,
+                  fontFamily: kDotFontFamily,
+                  fontSize: 26,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 2,
+                ),
               ),
-            ),
-            SizedBox(height: 20),
-            SizedBox.square(
-              dimension: 28,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.5,
-                color: Color(0xFF6FCFA6),
+              SizedBox(height: 22),
+              SizedBox(
+                width: 120,
+                child: LinearProgressIndicator(
+                  minHeight: 3,
+                  color: UiColors.accent,
+                  backgroundColor: UiColors.surfaceRaised,
+                  borderRadius: BorderRadius.all(Radius.circular(3)),
+                ),
               ),
-            ),
-            SizedBox(height: 14),
-            Text(
-              '正在加载',
-              style: TextStyle(
-                color: Color(0xFFB0B8C0),
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                letterSpacing: 0,
+              SizedBox(height: 14),
+              Text(
+                '正在加载',
+                style: TextStyle(
+                  color: UiColors.textMuted,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 0,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

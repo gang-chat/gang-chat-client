@@ -7,7 +7,7 @@ import 'package:flutter/scheduler.dart';
 
 import '../ui/ui.dart';
 
-const double hoverCardDefaultWidth = 248;
+const double hoverCardDefaultWidth = 284;
 const double hoverCardDefaultGap = 10;
 
 typedef HoverCardBuilder = Widget Function(BuildContext context);

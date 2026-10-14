@@ -128,12 +128,25 @@ void main() {
             .every((paragraph) => !paragraph.didExceedMaxLines),
         isTrue,
       );
+      // The preview stays within its height cap and the whole dialog, with
+      // all three action rows, fits the narrow window.
       expect(
         tester
             .getSize(find.byKey(const ValueKey('sticker-preview-image')))
             .height,
-        lessThan(320),
+        lessThanOrEqualTo(320),
       );
+      final dialogRect = tester.getRect(
+        find.descendant(of: dialog, matching: find.byType(Material)).first,
+      );
+      expect(dialogRect.width, lessThan(432));
+      expect(dialogRect.top, greaterThanOrEqualTo(0));
+      expect(dialogRect.bottom, lessThanOrEqualTo(760));
+      for (final rect in rects) {
+        expect(rect.left, greaterThanOrEqualTo(dialogRect.left));
+        expect(rect.right, lessThanOrEqualTo(dialogRect.right));
+        expect(rect.bottom, lessThanOrEqualTo(dialogRect.bottom));
+      }
       expect(find.widgetWithText(ui.Button, '删除'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },

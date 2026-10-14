@@ -218,7 +218,7 @@ class _LevelMeter extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: i < activeCount
                             ? _cyan
-                            : const Color(0xFF2A2F38),
+                            : UiColors.surfaceHover,
                         borderRadius: BorderRadius.circular(3),
                       ),
                     ),
@@ -351,9 +351,6 @@ class _ScreenShareResolutionRow extends StatelessWidget {
       pressedBackgroundColor: _primaryDark,
       borderColor: _borderColor,
       selectedBorderColor: UiColors.selectedBorder,
-      hoverLift: 3,
-      pressDepth: 3,
-      baseDepth: 5,
       padding: const EdgeInsets.symmetric(horizontal: 14),
       child: Row(
         children: [
@@ -406,9 +403,6 @@ class _DeviceRow extends StatelessWidget {
       pressedBackgroundColor: _primaryDark,
       borderColor: _borderColor,
       selectedBorderColor: UiColors.selectedBorder,
-      hoverLift: 3,
-      pressDepth: 3,
-      baseDepth: 5,
       padding: const EdgeInsets.symmetric(horizontal: 14),
       child: Row(
         children: [

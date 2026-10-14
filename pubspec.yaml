@@ -58,3 +58,23 @@ flutter:
   assets:
     - assets/config/app_config.json
     - assets/branding/
+  # Display faces (SIL Open Font License, see each folder's OFL.txt). Body
+  # text keeps the platform CJK font; these only carry Latin display text,
+  # labels and numerals.
+  fonts:
+    - family: Doto
+      fonts:
+        - asset: assets/fonts/doto/Doto-Bold.ttf
+          weight: 800
+    - family: JetBrains Mono
+      fonts:
+        - asset: assets/fonts/jetbrains_mono/JetBrainsMono-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/jetbrains_mono/JetBrainsMono-Bold.ttf
+          weight: 700
+    - family: Space Grotesk
+      fonts:
+        - asset: assets/fonts/space_grotesk/SpaceGrotesk-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/space_grotesk/SpaceGrotesk-Bold.ttf
+          weight: 700

@@ -10,7 +10,7 @@ class CompactCategoryButton extends StatefulWidget {
     required this.selected,
     required this.onPressed,
     this.count,
-    this.height = 29,
+    this.height = 30,
   });
 
   final String label;
@@ -44,16 +44,11 @@ class _CompactCategoryButtonState extends State<CompactCategoryButton> {
           padding: const EdgeInsets.symmetric(horizontal: 8),
           decoration: BoxDecoration(
             color: widget.selected
-                ? UiColors.selected
+                ? UiColors.inverse
                 : active
-                ? UiColors.surface
-                : UiColors.surfaceLow,
-            borderRadius: BorderRadius.circular(UiRadii.sm),
-            border: Border.all(
-              color: widget.selected
-                  ? UiColors.selectedBorder
-                  : UiColors.border,
-            ),
+                ? UiColors.surfaceHover
+                : UiColors.surface,
+            borderRadius: BorderRadius.circular(UiRadii.pill),
           ),
           child: Center(
             child: Text(
@@ -61,8 +56,11 @@ class _CompactCategoryButtonState extends State<CompactCategoryButton> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: UiTypography.label.copyWith(
-                color: widget.selected ? UiColors.accent : UiColors.text,
-                fontSize: 11,
+                color: widget.selected
+                    ? UiColors.onInverse
+                    : UiColors.textSecondary,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ),

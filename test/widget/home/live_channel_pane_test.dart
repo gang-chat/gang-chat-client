@@ -78,11 +78,11 @@ void main() {
     final joinRect = tester.getRect(join);
     final collapseRect = tester.getRect(collapse);
     expect(
-      find.descendant(of: join, matching: find.text('加入')),
+      find.descendant(of: join, matching: find.text('加入语音')),
       findsOneWidget,
     );
     expect(
-      find.descendant(of: collapse, matching: find.text('收起')),
+      find.descendant(of: collapse, matching: find.text('回到聊天')),
       findsOneWidget,
     );
     expect(collapseRect.width, closeTo(joinRect.width, 0.01));
@@ -110,7 +110,10 @@ void main() {
 
     final join = find.byKey(const ValueKey<String>('live-control:join'));
     expect(
-      find.descendant(of: join, matching: find.byIcon(Icons.call)),
+      find.descendant(
+        of: join,
+        matching: find.byIcon(Icons.graphic_eq_rounded),
+      ),
       findsNothing,
     );
     expect(
@@ -150,7 +153,10 @@ void main() {
     expect(button.loading, isFalse);
     expect(button.onPressed, isNull);
     expect(
-      find.descendant(of: join, matching: find.byIcon(Icons.call)),
+      find.descendant(
+        of: join,
+        matching: find.byIcon(Icons.graphic_eq_rounded),
+      ),
       findsOneWidget,
     );
     expect(
@@ -188,7 +194,10 @@ void main() {
     expect(button.loading, isFalse);
     expect(button.onPressed, isNull);
     expect(
-      find.descendant(of: join, matching: find.byIcon(Icons.call)),
+      find.descendant(
+        of: join,
+        matching: find.byIcon(Icons.graphic_eq_rounded),
+      ),
       findsOneWidget,
     );
     expect(
@@ -203,11 +212,13 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('wide join and collapse actions are matching labeled buttons', (
+  testWidgets('wide join and collapse actions share the floating dock', (
     tester,
   ) async {
     final searchController = TextEditingController();
     addTearDown(searchController.dispose);
+    var joins = 0;
+    var backToChat = 0;
 
     await tester.pumpWidget(
       _host(
@@ -216,25 +227,45 @@ void main() {
         width: 960,
         joined: false,
         platform: TargetPlatform.windows,
+        onJoin: () => joins += 1,
+        onBackToChat: () => backToChat += 1,
       ),
     );
 
+    final dock = find.byKey(const ValueKey<String>('live-control-dock'));
     final join = find.byKey(const ValueKey<String>('live-control:join'));
     final collapse = find.byKey(
       const ValueKey<String>('live-control:collapse'),
     );
+    expect(dock, findsOneWidget);
+    expect(find.descendant(of: dock, matching: join), findsOneWidget);
+    expect(find.descendant(of: dock, matching: collapse), findsOneWidget);
     expect(
-      find.descendant(of: join, matching: find.text('加入')),
+      find.descendant(of: join, matching: find.text('加入语音')),
       findsOneWidget,
     );
+    expect(tester.widget<ui.Button>(join).tone, ui.ButtonTone.primary);
+    // The wide dock keeps "back to chat" as a compact icon action next to the
+    // labeled primary join button.
     expect(
-      find.descendant(of: collapse, matching: find.text('收起')),
-      findsOneWidget,
+      find.descendant(of: collapse, matching: find.text('回到聊天')),
+      findsNothing,
     );
+    expect(find.byTooltip('收起语音频道'), findsOneWidget);
+    final joinRect = tester.getRect(join);
+    final collapseRect = tester.getRect(collapse);
+    expect(collapseRect.height, closeTo(joinRect.height, 0.01));
+    expect(collapseRect.center.dy, closeTo(joinRect.center.dy, 0.01));
+    expect(collapseRect.left, greaterThan(joinRect.right));
     expect(
-      tester.getSize(collapse).width,
-      closeTo(tester.getSize(join).width, 0.01),
+      tester.getRect(dock).center.dx,
+      closeTo(tester.getRect(find.byType(LiveChannelPane)).center.dx, 0.01),
     );
+
+    await tester.tap(join);
+    await tester.tap(collapse);
+    expect(joins, 1);
+    expect(backToChat, 1);
     expect(tester.takeException(), isNull);
   });
 
@@ -262,7 +293,7 @@ void main() {
       find.byKey(const ValueKey<String>('live-control:camera')),
     );
     expect(
-      find.descendant(of: collapse, matching: find.text('收起')),
+      find.descendant(of: collapse, matching: find.text('回到聊天')),
       findsNothing,
     );
     expect(collapseRect.size, cameraRect.size);
@@ -291,10 +322,10 @@ void main() {
     final leave = find.byKey(const ValueKey<String>('live-control:leave'));
     final collapseRect = tester.getRect(collapse);
     expect(
-      find.descendant(of: collapse, matching: find.text('收起')),
+      find.descendant(of: collapse, matching: find.text('回到聊天')),
       findsOneWidget,
     );
-    expect(collapseRect.width, greaterThan(44));
+    expect(collapseRect.width, greaterThan(46));
     expect(collapseRect.top, greaterThan(tester.getRect(leave).bottom));
     expect(tester.takeException(), isNull);
   });
@@ -324,7 +355,7 @@ void main() {
       final avatar = tester.widget<ui.Avatar>(
         find.byWidgetPredicate(
           (widget) =>
-              widget is ui.Avatar && widget.label == 'Me' && widget.size == 42,
+              widget is ui.Avatar && widget.label == 'Me' && widget.size == 50,
         ),
       );
       final cardFinder = find.ancestor(
@@ -363,9 +394,22 @@ void main() {
         const ValueKey<String>('live-member-status:kick:current_user'),
       );
 
+      final speakingRing = tester.widget<AnimatedContainer>(
+        find
+            .ancestor(
+              of: find.byWidget(avatar),
+              matching: find.byType(AnimatedContainer),
+            )
+            .first,
+      );
+      final speakingRingBorder =
+          (speakingRing.decoration! as BoxDecoration).border! as Border;
+
       expect(avatar.active, isFalse);
       expect(avatar.showBorder, isFalse);
+      expect(speakingRingBorder.top.color, ui.UiColors.accent);
       expect(card.height, closeTo(cardRect.width, 0.01));
+      expect(cardRect.height, closeTo(cardRect.width, 0.01));
       expect(avatarRect.center.dx, closeTo(cardRect.center.dx, 1));
       expect(name.textAlign, TextAlign.center);
       expect(name.style?.color, ui.UiColors.accent);
@@ -383,7 +427,8 @@ void main() {
       );
       expect(activeTagRect.right, lessThanOrEqualTo(cardRect.right));
       expect(activeTagRect.top, lessThan(nameRect.top));
-      expect(activeTagRect.bottom, lessThan(avatarRect.top));
+      expect(activeTagRect.top, lessThan(avatarRect.top));
+      expect(activeTagRect.overlaps(avatarRect), isFalse);
       expect(cardRect.bottom - headphonesButtonRect.bottom, lessThan(14));
       expect(micButtonRect.width, closeTo(micButtonRect.height, 0.01));
       expect(
@@ -480,14 +525,25 @@ void main() {
       ),
     );
 
+    final stageCenter = tester
+        .getRect(find.byKey(const ValueKey<String>('live-stage-surface')))
+        .center
+        .dx;
+
     expect(currentRect.top, closeTo(remoteRect.top, 0.01));
-    expect(currentRect.height, closeTo(162 * scale, 0.01));
-    expect(remoteRect.height, closeTo(162 * scale, 0.01));
+    expect(currentRect.height, closeTo(154 * scale, 0.01));
+    expect(currentRect.height, closeTo(currentRect.width, 0.01));
+    expect(remoteRect.height, closeTo(remoteRect.width, 0.01));
     expect(remoteRect.left - currentRect.right, closeTo(12, 0.01));
+    expect(
+      (currentRect.left + remoteRect.right) / 2,
+      closeTo(stageCenter, 0.01),
+    );
     expect(currentRect.width, lessThan(154));
-    expect(tester.getRect(avatar).width, closeTo(42 * scale, 0.01));
+    expect(tester.getRect(avatar).width, closeTo(50 * scale, 0.01));
     expect(tester.getRect(activityTag).width, closeTo(24 * scale, 0.01));
-    expect(tester.getRect(micButton).width, closeTo(32.5 * scale, 0.01));
+    // Four status slots share the card's inner width (inside its 1px border).
+    expect(tester.getRect(micButton).width, closeTo(32 * scale, 0.01));
     expect(
       find.ancestor(of: currentCard, matching: find.byType(FittedBox)),
       findsOneWidget,
@@ -616,7 +672,7 @@ void main() {
         (widget) =>
             widget is ui.Avatar &&
             widget.label == 'Global Phabe' &&
-            widget.size == 42,
+            widget.size == 50,
       ),
     );
 
@@ -845,7 +901,7 @@ void main() {
       const ValueKey<String>('live-volume-panel:Phabe语音音量'),
     );
     expect(tester.getSize(volumePanel).width, closeTo(32.5, 1e-9));
-    expect(tester.getSize(volumePanel).height, closeTo(144 * 32.5 / 44, 1e-9));
+    expect(tester.getSize(volumePanel).height, closeTo(144 * 32.5 / 46, 1e-9));
     await tester.tapAt(
       tester.getRect(volumeSlider).bottomCenter - const Offset(0, 1),
     );
@@ -968,7 +1024,9 @@ void main() {
       );
       final buttonRect = tester.getRect(volumeButton);
       final panelRect = tester.getRect(volumePanel);
-      expect(panelRect.width, closeTo(buttonRect.width, 0.01));
+      // The panel is sized from the slot width; the flat card border now
+      // insets the button by a sub-pixel amount at this scale.
+      expect(panelRect.width, closeTo(buttonRect.width, 0.5));
       expect(panelRect.center.dx, closeTo(buttonRect.center.dx, 0.01));
 
       await tester.tapAt(
@@ -2450,6 +2508,10 @@ void main() {
           ),
         ];
 
+    // In the shell the live stage sits below the window header and the room
+    // context bar; the docked music box may rise into that space. Reserve the
+    // same room above the pane here so the stage itself fills 740 - 120.
+    const shellChromeAbove = 120.0;
     double? stablePanelHeight;
     Rect? androidCompactPanel;
     Rect? windowsWidePanel;
@@ -2464,6 +2526,7 @@ void main() {
             live: _liveState(const []),
             width: testCase.width,
             height: 740,
+            topInset: shellChromeAbove,
             platform: testCase.platform,
             musicBox: _emptyMusicBoxState,
             musicBoxOpen: true,
@@ -2521,8 +2584,12 @@ void main() {
       );
       if (testCase.label == 'Android compact') {
         androidCompactPanel = panelRect;
+        // The deck header's ghost close key.
         await tester.tap(
-          find.descendant(of: panel, matching: find.byIcon(Icons.close)),
+          find.descendant(
+            of: panel,
+            matching: find.byKey(const ValueKey<String>('music-box-close')),
+          ),
         );
         await tester.pump();
         expect(closeTaps, 1);
@@ -2539,6 +2606,29 @@ void main() {
       reason:
           'wrapped compact controls should move the fixed-height panel upward',
     );
+
+    // Without any room above the pane, the standard height of a 740px pane is
+    // what the wide layout uses; wrapped compact controls then push the panel
+    // into the screen top, and only there may it give up height.
+    await tester.binding.setSurfaceSize(const Size(960, 740));
+    await tester.pumpWidget(
+      HomeAdaptiveLayout(
+        compact: false,
+        child: _host(
+          searchController: searchController,
+          live: _liveState(const []),
+          width: 960,
+          height: 740,
+          platform: TargetPlatform.windows,
+          musicBox: _emptyMusicBoxState,
+          musicBoxOpen: true,
+        ),
+      ),
+    );
+    await tester.pump();
+    final fullPanelHeight = tester
+        .getRect(find.byKey(const ValueKey<String>('live-music-box-panel')))
+        .height;
 
     await tester.binding.setSurfaceSize(const Size(320, 740));
     await tester.pumpWidget(
@@ -2563,7 +2653,7 @@ void main() {
     expect(limitedPanel.top, closeTo(0, 0.01));
     expect(
       limitedPanel.height,
-      lessThan(stablePanelHeight!),
+      lessThan(fullPanelHeight),
       reason: 'the panel should shrink only after it reaches the screen top',
     );
     expect(
@@ -2757,6 +2847,7 @@ Widget _host({
   Map<String, bool> liveKitMicMutedByParticipantId = const {},
   double width = 720,
   double height = 520,
+  double topInset = 0,
   bool loading = false,
   bool joined = true,
   bool joining = false,
@@ -2765,6 +2856,7 @@ Widget _host({
   bool headphonesMuted = false,
   TargetPlatform? platform,
   VoidCallback? onJoin,
+  VoidCallback? onBackToChat,
   VoidCallback? onToggleMic,
   VoidCallback? onToggleHeadphones,
   VoidCallback? onToggleCamera,
@@ -2807,9 +2899,10 @@ Widget _host({
         resizeToAvoidBottomInset: resizeToAvoidBottomInset,
         body: HomeKeyboardOverlayViewport(
           enabled: preserveKeyboardViewport,
-          child: SizedBox(
+          child: Container(
             width: width,
             height: height,
+            padding: EdgeInsets.only(top: topInset),
             child: LiveChannelPane(
               title: 'Test room',
               avatarUrl: null,
@@ -2832,7 +2925,7 @@ Widget _host({
               suspendStageVideo: suspendStageVideo,
               onStageSelectionChanged: onStageSelectionChanged ?? (_) {},
               onEnterFullScreen: onEnterFullScreen ?? (_) {},
-              onBackToChat: () {},
+              onBackToChat: onBackToChat ?? () {},
               onJoin: onJoin ?? () {},
               onLeave: () {},
               onToggleMic: onToggleMic ?? () {},
@@ -2958,7 +3051,8 @@ void _expectMediaMemberCard(
       : tester.getRect(stoppedThumbnailFinder!);
 
   final scale = cardRect.width / card.height;
-  expect(cardRect.height, closeTo(162 * scale, 0.01));
+  expect(cardRect.height, closeTo(154 * scale, 0.01));
+  expect(cardRect.height, closeTo(cardRect.width, 0.01));
   expect(
     liveVideoFinder,
     stoppedThumbnailKey == null ? findsOneWidget : findsNothing,

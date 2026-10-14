@@ -126,7 +126,7 @@ class ReadOnlyTextBox extends StatefulWidget {
     this.fieldKey,
     this.maxLines = 1,
     this.style,
-    this.backgroundColor = UiColors.surfaceLow,
+    this.backgroundColor = UiColors.background,
     this.borderColor = UiColors.border,
     this.padding = const EdgeInsets.fromLTRB(13, 11, 13, 11),
   });

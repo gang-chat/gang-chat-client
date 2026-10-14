@@ -66,14 +66,14 @@ part 'settings_profile_widgets.dart';
 part 'settings_audio_widgets.dart';
 part 'settings_music_playlists.dart';
 
-const _primaryDark = Color(0xFF14171D);
-const _primaryDarkLow = Color(0xFF181C24);
-const _borderColor = Color(0xFF2A2F38);
-const _cyan = UiColors.controlAccent;
-const _textPrimary = Color(0xFFECEFF1);
-const _textSecondary = Color(0xFFB0B8C0);
-const _textMuted = Color(0xFF6F7785);
-const _danger = Color(0xFFE58383);
+const _primaryDark = UiColors.background;
+const _primaryDarkLow = UiColors.surfaceLow;
+const _borderColor = UiColors.border;
+const _cyan = UiColors.accent;
+const _textPrimary = UiColors.text;
+const _textSecondary = UiColors.textSecondary;
+const _textMuted = UiColors.textMuted;
+const _danger = UiColors.danger;
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({
@@ -96,6 +96,7 @@ class SettingsPage extends StatefulWidget {
     this.autoUpdatePromptStore = const LocalAutoUpdatePromptStore(),
     this.installInfoService = const InstallInfoService(),
     this.releaseUpdateService = const ReleaseUpdateService(),
+    this.updatePlatformOverride,
     this.windowController,
     this.closeBehaviorStore = const LocalCloseBehaviorStore(),
     this.languageStore = const LocalLanguagePreferenceStore(),
@@ -137,6 +138,10 @@ class SettingsPage extends StatefulWidget {
   final AutoUpdatePromptStore autoUpdatePromptStore;
   final InstallInfoService installInfoService;
   final ReleaseUpdateService releaseUpdateService;
+
+  /// Platform whose installers the update check looks for; defaults to the
+  /// running operating system (tests pin it, like [AppUpdateGate] does).
+  final AppUpdatePlatform? updatePlatformOverride;
   final DesktopWindowController? windowController;
   final CloseBehaviorStore closeBehaviorStore;
   final LanguagePreferenceStore languageStore;
@@ -175,6 +180,7 @@ class _SettingsPageState extends State<SettingsPage>
   final _currentPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _settingsSearchController = TextEditingController();
 
   static const _usernameAvailabilityDebounceDuration = Duration(
     milliseconds: 350,
@@ -364,6 +370,7 @@ class _SettingsPageState extends State<SettingsPage>
 
   @override
   void dispose() {
+    _settingsSearchController.dispose();
     if (widget.androidSystemService.isSupported) {
       WidgetsBinding.instance.removeObserver(this);
     }
@@ -1444,7 +1451,8 @@ class _SettingsPageState extends State<SettingsPage>
   }
 
   AppUpdatePlatform? _currentUpdatePlatform() {
-    return appUpdatePlatformForOperatingSystem(Platform.operatingSystem);
+    return widget.updatePlatformOverride ??
+        appUpdatePlatformForOperatingSystem(Platform.operatingSystem);
   }
 
   Future<void> _openFeedbackMail() async {
@@ -3637,6 +3645,61 @@ class _SettingsPageState extends State<SettingsPage>
     }
   }
 
+  Map<SettingsSection, String> _sectionSummaries() {
+    final user = _user;
+    final language = switch (_language) {
+      'zh-Hant' => '繁體中文',
+      'en' => 'English',
+      _ => '简体中文',
+    };
+    final email = _normalizedAccountEmail;
+    final stickerCount = _allStickerItems().length;
+    return {
+      SettingsSection.profile: user == null ? '未登录' : '@${user.username}',
+      SettingsSection.preferences: widget.androidSystemService.isSupported
+          ? language
+          : '$language · ${closeBehaviorLabel(_closeBehavior)}',
+      SettingsSection.security: email.isEmpty
+          ? '未绑定邮箱'
+          : _accountEmailVerified
+          ? '邮箱已验证'
+          : '邮箱待验证',
+      SettingsSection.voice:
+          '输入 ${audioVolumePercentText(_inputVolume)} · '
+          '输出 ${audioVolumePercentText(_outputVolume)}',
+      SettingsSection.stickers: stickerCount == 0
+          ? '上传与整理表情'
+          : '$stickerCount 个表情',
+      SettingsSection.playlists: '整理个人歌单',
+      SettingsSection.about: appVersionNumberLabel(widget.appVersion),
+    };
+  }
+
+  Widget _buildSearchResults(String query) {
+    final android = widget.androidSystemService.isSupported;
+    final results = settingsSearchMatches(query, android: android);
+    if (results.isEmpty) {
+      return SettingsList(
+        children: const [_SettingsEmptyState(text: '没有匹配的设置')],
+      );
+    }
+    return SettingsList(
+      spacing: 6,
+      children: [
+        for (var i = 0; i < results.length; i++)
+          _SettingsSearchResultRow(
+            key: ValueKey('settings-search-result-$i'),
+            entry: results[i],
+            query: query.trim(),
+            onPressed: () {
+              _settingsSearchController.clear();
+              _selectSection(results[i].section);
+            },
+          ),
+      ],
+    );
+  }
+
   Widget _buildSectionContent() {
     return switch (_section) {
       SettingsSection.profile => _buildProfileContent(),
@@ -3975,8 +4038,9 @@ class _SettingsPageState extends State<SettingsPage>
               ),
             ],
           ),
-        Align(
+        UnconstrainedBox(
           alignment: Alignment.centerRight,
+          constrainedAxis: Axis.vertical,
           child: Button(
             onPressed: _savingAccount || _savingCloseBehavior
                 ? null
@@ -4119,8 +4183,9 @@ class _SettingsPageState extends State<SettingsPage>
               ),
             ],
           ),
-          Align(
+          UnconstrainedBox(
             alignment: Alignment.centerRight,
+            constrainedAxis: Axis.vertical,
             child: Button(
               onPressed: _savingProfile || _savingAccount ? null : _saveProfile,
               loading: _savingProfile,
@@ -4207,8 +4272,9 @@ class _SettingsPageState extends State<SettingsPage>
                 ),
               ),
               const SizedBox(height: 14),
-              Align(
+              UnconstrainedBox(
                 alignment: Alignment.centerRight,
+                constrainedAxis: Axis.vertical,
                 child: Button(
                   onPressed: _savingAccount ? null : _saveAccount,
                   loading: _savingAccount,
@@ -4339,8 +4405,9 @@ class _SettingsPageState extends State<SettingsPage>
                   ),
                 ),
                 const SizedBox(height: 14),
-                Align(
+                UnconstrainedBox(
                   alignment: Alignment.centerRight,
+                  constrainedAxis: Axis.vertical,
                   child: Button(
                     onPressed: user.isSuperuser || _changingAccountSuspension
                         ? null
@@ -4372,8 +4439,9 @@ class _SettingsPageState extends State<SettingsPage>
                 ),
               ),
               const SizedBox(height: 14),
-              Align(
+              UnconstrainedBox(
                 alignment: Alignment.centerRight,
+                constrainedAxis: Axis.vertical,
                 child: Button(
                   onPressed:
                       _settingsController.canDeleteAccount &&
@@ -4582,6 +4650,7 @@ class _SettingsPageState extends State<SettingsPage>
       );
     }
 
+    final searchQuery = _settingsSearchController.text.trim();
     return FloatingNoticeEmitter(
       notices: _floatingNotices(),
       child: Scaffold(
@@ -4599,11 +4668,34 @@ class _SettingsPageState extends State<SettingsPage>
             size: 38,
             loading: _isRefreshing,
           ),
-          pinned: _SettingsNavigation(
-            selected: _section,
-            onChanged: _selectSection,
+          sectionTitleOverride: searchQuery.isEmpty ? null : '搜索结果',
+          sectionMetaOverride: searchQuery.isEmpty
+              ? null
+              : '${settingsSearchMatches(searchQuery, android: widget.androidSystemService.isSupported).length} 项',
+          search: Input(
+            key: const ValueKey('settings-search-input'),
+            controller: _settingsSearchController,
+            hintText: '搜索设置',
+            prefixIcon: Icons.search_rounded,
+            showClearButton: true,
+            maxLines: 1,
+            height: 38,
+            onChanged: (_) => setState(() {}),
           ),
-          body: _buildSectionContent(),
+          navigation: SettingsTileNavigation<SettingsSection>(
+            value: _section,
+            onChanged: (section) {
+              if (_settingsSearchController.text.isNotEmpty) {
+                _settingsSearchController.clear();
+              }
+              _selectSection(section);
+            },
+            segments: _settingsSectionSegments,
+            summaries: _sectionSummaries(),
+          ),
+          body: searchQuery.isEmpty
+              ? _buildSectionContent()
+              : _buildSearchResults(searchQuery),
         ),
       ),
     );

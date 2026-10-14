@@ -7,6 +7,9 @@ import 'tokens.dart';
 
 enum SurfaceCorner { topLeft, topRight, bottomLeft, bottomRight }
 
+/// The kit's single pressable primitive: a flat rounded surface that tints on
+/// hover and press. Buttons, rows, cards and segmented items all build on it so
+/// interaction feedback is identical everywhere.
 class PressableSurface extends StatefulWidget {
   const PressableSurface({
     super.key,
@@ -25,21 +28,16 @@ class PressableSurface extends StatefulWidget {
     this.cancelTouchPressOnDrag = false,
     this.selected = false,
     this.backgroundColor = UiColors.surface,
+    this.hoverBackgroundColor,
     this.selectedBackgroundColor = UiColors.selected,
-    this.pressedBackgroundColor = UiColors.surfacePressed,
+    this.pressedBackgroundColor,
     this.disabledBackgroundColor = UiColors.disabledSurface,
     this.borderColor = UiColors.border,
-    this.baseBorderColor,
     this.selectedBorderColor = UiColors.selectedBorder,
     this.disabledBorderColor = UiColors.disabledBorder,
-    this.borderRadius = UiRadii.sm,
-    this.hoverLift = 3,
-    this.pressDepth = double.infinity,
-    this.baseDepth = 5,
+    this.borderRadius = UiRadii.md,
     this.hoverEffect = true,
     this.pressEffect = true,
-    this.defaultRaised = false,
-    this.elevateOnHover = false,
     this.cornerCut = Size.zero,
     this.cutCorner,
   });
@@ -63,24 +61,20 @@ class PressableSurface extends StatefulWidget {
   final bool cancelTouchPressOnDrag;
   final bool selected;
   final Color backgroundColor;
+
+  /// Background while hovered. Defaults to a light tint of the resting color.
+  final Color? hoverBackgroundColor;
   final Color selectedBackgroundColor;
-  final Color pressedBackgroundColor;
+
+  /// Background while pressed. Defaults to a darkened resting color.
+  final Color? pressedBackgroundColor;
   final Color disabledBackgroundColor;
   final Color borderColor;
-
-  /// Optional border used by the lower depth layer. When omitted, the lower
-  /// layer keeps the same border as the cap for backwards compatibility.
-  final Color? baseBorderColor;
   final Color selectedBorderColor;
   final Color disabledBorderColor;
   final double borderRadius;
-  final double hoverLift;
-  final double pressDepth;
-  final double baseDepth;
   final bool hoverEffect;
   final bool pressEffect;
-  final bool defaultRaised;
-  final bool elevateOnHover;
   final Size cornerCut;
   final SurfaceCorner? cutCorner;
 
@@ -206,61 +200,43 @@ class _PressableSurfaceState extends State<PressableSurface> {
     final radius = widget.borderRadius <= 0
         ? BorderRadius.zero
         : BorderRadius.circular(widget.borderRadius);
-    final background = widget.enabled
+    final interactive = _isInteractive;
+    final resting = widget.enabled
         ? (widget.selected
               ? widget.selectedBackgroundColor
               : widget.backgroundColor)
         : widget.disabledBackgroundColor;
-    final borderColor = widget.enabled
+    final restingBorder = widget.enabled
         ? (widget.selected ? widget.selectedBorderColor : widget.borderColor)
         : widget.disabledBorderColor;
     final pressed = widget.loading || (_pressed && widget.pressEffect);
-    final effectiveBackground = pressed
-        ? Color.lerp(background, widget.pressedBackgroundColor, 0.28)!
-        : background;
-    final shadowColor = _shadowFor(background);
-    final hoverLift = widget.hoverEffect && _hovered && _isInteractive
-        ? widget.hoverLift
-        : 0.0;
-    final maxDepth = widget.baseDepth.clamp(0.0, double.infinity).toDouble();
-    final pressDepth = widget.pressDepth.clamp(0.0, maxDepth).toDouble();
-    final outerHeight = widget.elevateOnHover
-        ? widget.height
-        : widget.height + widget.hoverLift + maxDepth;
-    final baseTop = widget.elevateOnHover ? 0.0 : widget.hoverLift + maxDepth;
-    final restTop = widget.elevateOnHover
-        ? 0.0
-        : widget.defaultRaised
-        ? 0.0
-        : widget.hoverLift;
-    final bottomTop = widget.elevateOnHover ? 0.0 : widget.hoverLift + maxDepth;
-    final capTop = widget.elevateOnHover
-        ? (pressed ? 0.0 : -hoverLift)
-        : pressed
-        ? (restTop + pressDepth).clamp(0.0, bottomTop).toDouble()
-        : (restTop - hoverLift).clamp(0.0, bottomTop).toDouble();
-    final baseOpacity = widget.enabled ? 1.0 : 0.42;
+    final hovered = widget.hoverEffect && _hovered && interactive;
+    final Color background;
+    if (pressed) {
+      final pressedColor = widget.pressedBackgroundColor;
+      background = pressedColor == null
+          ? UiStates.pressed(resting)
+          : Color.lerp(resting, pressedColor, 0.4)!;
+    } else if (hovered) {
+      background = widget.selected
+          ? UiStates.hover(resting)
+          : widget.hoverBackgroundColor ?? UiStates.hover(resting);
+    } else {
+      background = resting;
+    }
+    final border = hovered && _visibleBorder(restingBorder)
+        ? Color.lerp(restingBorder, Colors.white, 0.07)!
+        : restingBorder;
     final explicitWidth = widget.width != null && widget.width!.isFinite
         ? widget.width
         : null;
-    final cap = _SurfaceLayer(
-      background: effectiveBackground,
-      borderColor: borderColor,
-      borderRadius: radius,
-      cornerCut: widget.cornerCut,
-      cutCorner: widget.cutCorner,
-      padding: widget.padding,
-      child: widget.child,
-    );
 
     Widget result = Padding(
       padding: widget.margin,
       child: MouseRegion(
         cursor:
             widget.mouseCursor ??
-            (_isInteractive
-                ? SystemMouseCursors.click
-                : SystemMouseCursors.basic),
+            (interactive ? SystemMouseCursors.click : SystemMouseCursors.basic),
         onEnter: (_) => _setHover(true),
         onExit: (_) => _setHover(false),
         child: Listener(
@@ -270,55 +246,18 @@ class _PressableSurfaceState extends State<PressableSurface> {
           onPointerMove: _handlePointerMove,
           onPointerUp: _handlePointerUp,
           onPointerCancel: _handlePointerCancel,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final fillWidth =
-                  explicitWidth != null || constraints.hasTightWidth;
-              final stack = Stack(
-                clipBehavior: widget.elevateOnHover ? Clip.none : Clip.hardEdge,
-                children: [
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    top: baseTop,
-                    height: widget.height,
-                    child: Opacity(
-                      opacity: baseOpacity,
-                      child: _SurfaceLayer(
-                        background: shadowColor,
-                        borderColor: widget.baseBorderColor ?? borderColor,
-                        borderRadius: radius,
-                        cornerCut: widget.cornerCut,
-                        cutCorner: widget.cutCorner,
-                      ),
-                    ),
-                  ),
-                  if (fillWidth)
-                    AnimatedPositioned(
-                      duration: const Duration(milliseconds: 95),
-                      curve: Curves.easeOutCubic,
-                      left: 0,
-                      right: 0,
-                      top: capTop,
-                      height: widget.height,
-                      child: cap,
-                    )
-                  else
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 95),
-                      curve: Curves.easeOutCubic,
-                      transform: Matrix4.translationValues(0, capTop, 0),
-                      child: SizedBox(height: widget.height, child: cap),
-                    ),
-                ],
-              );
-
-              return SizedBox(
-                width: explicitWidth,
-                height: outerHeight,
-                child: stack,
-              );
-            },
+          child: SizedBox(
+            width: explicitWidth,
+            height: widget.height,
+            child: _SurfaceLayer(
+              background: background,
+              borderColor: border,
+              borderRadius: radius,
+              cornerCut: widget.cornerCut,
+              cutCorner: widget.cutCorner,
+              padding: widget.padding,
+              child: widget.child,
+            ),
           ),
         ),
       ),
@@ -331,7 +270,7 @@ class _PressableSurfaceState extends State<PressableSurface> {
 
     return Semantics(
       button: widget.onPressed != null,
-      enabled: _isInteractive,
+      enabled: interactive,
       child: result,
     );
   }
@@ -358,7 +297,9 @@ class _SurfaceLayer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final content = DecoratedBox(
+    final content = AnimatedContainer(
+      duration: UiMotion.fast,
+      curve: UiMotion.curve,
       decoration: BoxDecoration(
         color: background,
         borderRadius: borderRadius,
@@ -462,8 +403,4 @@ Path _surfacePath(
 
   path.close();
   return path;
-}
-
-Color _shadowFor(Color background) {
-  return Color.lerp(background, Colors.black, 0.46)!;
 }

@@ -83,21 +83,31 @@ void registerShellSettingsWidgetTests() {
       );
       await tester.pumpAndSettle();
 
+      final sideNavigation = find.byKey(
+        const ValueKey('settings-side-navigation'),
+      );
+      expect(sideNavigation, findsOneWidget);
+      Finder inSideNavigation(String text) =>
+          find.descendant(of: sideNavigation, matching: find.text(text));
+      // The page title names the managed account in the settings header.
       expect(find.text('目标用户 的用户设置'), findsOneWidget);
-      expect(find.text('用户资料'), findsOneWidget);
-      expect(find.text('偏好设置'), findsOneWidget);
-      expect(find.text('隐私和安全'), findsOneWidget);
-      expect(find.text('语音和视频'), findsOneWidget);
-      expect(find.text('我的表情包'), findsOneWidget);
-      expect(find.text('关于Gang Chat'), findsOneWidget);
+      expect(inSideNavigation('用户资料'), findsOneWidget);
+      expect(inSideNavigation('偏好设置'), findsOneWidget);
+      expect(inSideNavigation('隐私和安全'), findsOneWidget);
+      expect(inSideNavigation('语音和视频'), findsOneWidget);
+      expect(inSideNavigation('我的表情包'), findsOneWidget);
+      expect(inSideNavigation('关于Gang Chat'), findsOneWidget);
+      // The selected section is repeated as the content header.
+      expect(find.text('隐私和安全'), findsNWidgets(2));
       expect(find.text('当前密码'), findsNothing);
       final forgot = find.widgetWithText(ui.Button, '忘记密码');
       expect(forgot, findsOneWidget);
       expect(tester.widget<ui.Button>(forgot).onPressed, isNull);
 
-      await tester.tap(find.text('我的表情包').first);
+      await tester.tap(inSideNavigation('我的表情包'));
       await tester.pumpAndSettle();
 
+      expect(find.text('我的表情包'), findsNWidgets(2));
       expect(find.text('目标表情包'), findsNothing);
       expect(
         requestedUris.any(
@@ -263,7 +273,7 @@ void registerShellSettingsWidgetTests() {
 
       await _openLiveChannelFromHeader(tester);
 
-      await tester.tap(find.widgetWithText(ui.Button, '加入'));
+      await tester.tap(find.widgetWithText(ui.Button, '加入语音'));
       await tester.pumpAndSettle();
 
       final handler = windowController.closeRequestHandler;
@@ -332,10 +342,10 @@ void registerShellSettingsWidgetTests() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Alpha Room'));
+      await tester.tap(_settingsPartRoomTab('server-alpha'));
       await tester.pumpAndSettle();
       await _openLiveChannelFromHeader(tester);
-      await tester.tap(find.widgetWithText(ui.Button, '加入'));
+      await tester.tap(find.widgetWithText(ui.Button, '加入语音'));
       await tester.pumpAndSettle();
 
       blockNextMicStateRequest = true;
@@ -389,10 +399,9 @@ void registerShellSettingsWidgetTests() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Alpha Room'));
-    await tester.pumpAndSettle();
+    await _homeOpenRoom(tester, 'server-alpha');
     await _openLiveChannelFromHeader(tester);
-    await tester.tap(find.widgetWithText(ui.Button, '加入'));
+    await tester.tap(find.widgetWithText(ui.Button, '加入语音'));
     await tester.pumpAndSettle();
 
     expect(liveSession.inputVolumes.last, closeTo(0.35, 1e-9));
@@ -401,7 +410,10 @@ void registerShellSettingsWidgetTests() {
     await tester.tap(find.byTooltip('设置'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('语音和视频').first);
-    await tester.pumpAndSettle();
+    // Device enumeration can keep the refresh spinner turning, so pump frames
+    // instead of waiting for every animation to settle.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('设置'), findsOneWidget);
     expect(find.text('输入音量'), findsOneWidget);
@@ -750,6 +762,7 @@ void registerShellSettingsWidgetTests() {
           api: api,
           apiBaseUrl: 'http://example.test/api/v1',
           appVersion: '0.4.0',
+          updatePlatformOverride: AppUpdatePlatform.windows,
           feedbackMailService: _FakeFeedbackMailService(feedbackDrafts),
           autoUpdatePromptStore: _FakeAutoUpdatePromptStore(
             autoUpdateWrites,
@@ -779,7 +792,8 @@ void registerShellSettingsWidgetTests() {
 
     expect(find.text('版本信息'), findsOneWidget);
     expect(find.text('版本编号'), findsOneWidget);
-    expect(find.text('0.4.0'), findsOneWidget);
+    // The version appears in the field and as the about tile's summary.
+    expect(find.text('0.4.0'), findsNWidgets(2));
     expect(find.text('发行时间'), findsOneWidget);
     expect(find.text('上次更新时间'), findsOneWidget);
     expect(
@@ -844,6 +858,7 @@ void registerShellSettingsWidgetTests() {
           isSubWindow: true,
           currentUser: CurrentUser.fromJson(_currentUserJson),
           appVersion: '0.4.0',
+          updatePlatformOverride: AppUpdatePlatform.windows,
           autoUpdatePromptStore: autoUpdateStore,
           installInfoService: const _FakeInstallInfoService('2026/07/01'),
           releaseUpdateService: ReleaseUpdateService(
@@ -1041,10 +1056,9 @@ void registerShellSettingsWidgetTests() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Alpha Room'));
-    await tester.pumpAndSettle();
+    await _homeOpenRoom(tester, 'server-alpha');
     await _openLiveChannelFromHeader(tester);
-    await tester.tap(find.widgetWithText(ui.Button, '加入'));
+    await tester.tap(find.widgetWithText(ui.Button, '加入语音'));
     await tester.pumpAndSettle();
 
     await tester.tap(_liveControl('headphones'));
@@ -1052,14 +1066,14 @@ void registerShellSettingsWidgetTests() {
     expect(
       find.descendant(
         of: _liveControl('mic'),
-        matching: find.byIcon(Icons.mic_off),
+        matching: find.byIcon(Icons.mic_off_rounded),
       ),
       findsOneWidget,
     );
     expect(
       find.descendant(
         of: _liveControl('headphones'),
-        matching: find.byIcon(Icons.headset_off),
+        matching: find.byIcon(Icons.headset_off_rounded),
       ),
       findsOneWidget,
     );
@@ -1071,7 +1085,10 @@ void registerShellSettingsWidgetTests() {
     await tester.tap(find.byTooltip('设置'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('语音和视频').first);
-    await tester.pumpAndSettle();
+    // Device enumeration can keep the refresh spinner turning, so pump frames
+    // instead of waiting for every animation to settle.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(liveSession.inputVolumes.last, closeTo(0.62, 1e-9));
     expect(liveSession.outputVolumes.last, closeTo(0.27, 1e-9));
@@ -1090,14 +1107,14 @@ void registerShellSettingsWidgetTests() {
     expect(
       find.descendant(
         of: _liveControl('mic'),
-        matching: find.byIcon(Icons.mic),
+        matching: find.byIcon(Icons.mic_rounded),
       ),
       findsOneWidget,
     );
     expect(
       find.descendant(
         of: _liveControl('headphones'),
-        matching: find.byIcon(Icons.headphones),
+        matching: find.byIcon(Icons.headphones_rounded),
       ),
       findsOneWidget,
     );
@@ -1126,10 +1143,10 @@ void registerShellSettingsWidgetTests() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Alpha Room'));
+    await tester.tap(_settingsPartRoomTab('server-alpha'));
     await tester.pumpAndSettle();
     await _openLiveChannelFromHeader(tester);
-    await tester.tap(find.widgetWithText(ui.Button, '加入'));
+    await tester.tap(find.widgetWithText(ui.Button, '加入语音'));
     await tester.pumpAndSettle();
 
     await tester.tap(_liveControl('headphones'));
@@ -1140,14 +1157,14 @@ void registerShellSettingsWidgetTests() {
     expect(
       find.descendant(
         of: _liveControl('mic'),
-        matching: find.byIcon(Icons.mic_off),
+        matching: find.byIcon(Icons.mic_off_rounded),
       ),
       findsOneWidget,
     );
     expect(
       find.descendant(
         of: _liveControl('headphones'),
-        matching: find.byIcon(Icons.headset_off),
+        matching: find.byIcon(Icons.headset_off_rounded),
       ),
       findsOneWidget,
     );
@@ -1168,14 +1185,14 @@ void registerShellSettingsWidgetTests() {
     expect(
       find.descendant(
         of: _liveControl('mic'),
-        matching: find.byIcon(Icons.mic),
+        matching: find.byIcon(Icons.mic_rounded),
       ),
       findsOneWidget,
     );
     expect(
       find.descendant(
         of: _liveControl('headphones'),
-        matching: find.byIcon(Icons.headphones),
+        matching: find.byIcon(Icons.headphones_rounded),
       ),
       findsOneWidget,
     );
@@ -1185,14 +1202,14 @@ void registerShellSettingsWidgetTests() {
     expect(
       find.descendant(
         of: _liveControl('mic'),
-        matching: find.byIcon(Icons.mic),
+        matching: find.byIcon(Icons.mic_rounded),
       ),
       findsOneWidget,
     );
     expect(
       find.descendant(
         of: _liveControl('headphones'),
-        matching: find.byIcon(Icons.headphones),
+        matching: find.byIcon(Icons.headphones_rounded),
       ),
       findsOneWidget,
     );
@@ -1219,6 +1236,11 @@ class _MemoryStickerPackStore extends StickerPackStore {
     lastWrittenUserId = userId;
     this.packs = packs;
   }
+}
+
+/// The header room tab for [roomId]; the lobby card repeats the room name.
+Finder _settingsPartRoomTab(String roomId) {
+  return find.byKey(ValueKey<String>('home-room-tab-$roomId'));
 }
 
 class _TaskRemovalAndroidSystemService extends AndroidSystemService {

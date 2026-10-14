@@ -13,8 +13,8 @@ class Sidebar extends StatelessWidget {
     this.footer,
     this.width = 248,
     this.height,
-    this.padding = const EdgeInsets.fromLTRB(16, 18, 16, 16),
-    this.backgroundColor = UiColors.surfaceLow,
+    this.padding = const EdgeInsets.fromLTRB(12, 18, 12, 14),
+    this.backgroundColor = UiColors.background,
     this.borderColor = UiColors.border,
   });
 
@@ -155,12 +155,12 @@ class _SidebarGroupBlock extends StatelessWidget {
       children: [
         if (group.label != null) ...[
           Padding(
-            padding: const EdgeInsets.only(left: 4, bottom: 8),
+            padding: const EdgeInsets.only(left: 10, bottom: 6),
             child: Text(
               group.label!,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: UiTypography.label,
+              style: UiTypography.overline,
             ),
           ),
         ],
@@ -169,7 +169,7 @@ class _SidebarGroupBlock extends StatelessWidget {
           itemIndex < group.items.length;
           itemIndex++
         ) ...[
-          if (itemIndex > 0) const SizedBox(height: 3),
+          if (itemIndex > 0) const SizedBox(height: 2),
           _SidebarItemButton(
             item: group.items[itemIndex],
             selected: group.items[itemIndex].id == selectedId,
@@ -200,9 +200,9 @@ class _SidebarItemButton extends StatelessWidget {
     final foreground = !item.enabled
         ? UiColors.textMuted
         : selected
-        ? UiColors.text
+        ? UiColors.onInverse
         : UiColors.textSecondary;
-    final accent = selected ? UiColors.accent : UiColors.textMuted;
+    final accent = selected ? UiColors.onInverse : UiColors.textMuted;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -212,26 +212,26 @@ class _SidebarItemButton extends StatelessWidget {
         return PressableSurface(
           width: width,
           height: 36,
-          hoverLift: 2,
-          baseDepth: 4,
           onPressed: enabled ? onPressed : null,
           tooltip: item.tooltip,
           enabled: item.enabled,
           selected: selected,
-          backgroundColor: UiColors.surfaceLow,
-          selectedBackgroundColor: UiColors.selected,
-          pressedBackgroundColor: UiColors.surfacePressed,
-          borderColor: UiColors.border,
-          selectedBorderColor: UiColors.selectedBorder,
-          borderRadius: UiRadii.md,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
+          backgroundColor: Colors.transparent,
+          hoverBackgroundColor: UiColors.surfaceRaised,
+          selectedBackgroundColor: UiColors.inverse,
+          disabledBackgroundColor: Colors.transparent,
+          borderColor: Colors.transparent,
+          selectedBorderColor: Colors.transparent,
+          disabledBorderColor: Colors.transparent,
+          borderRadius: UiRadii.pill,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           child: IconTheme.merge(
             data: IconThemeData(color: accent, size: 18),
             child: DefaultTextStyle.merge(
               style: TextStyle(
                 color: foreground,
                 fontSize: 13,
-                fontWeight: FontWeight.w600,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                 letterSpacing: 0,
               ),
               child: Row(
@@ -267,12 +267,11 @@ class _SidebarBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? UiColors.accent : UiColors.textMuted;
+    final color = selected ? UiColors.onAccent : UiColors.textSecondary;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: color.withValues(alpha: selected ? 0.16 : 0.1),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha: 0.42)),
+        color: selected ? UiColors.accentStrong : UiColors.surfaceHover,
+        borderRadius: BorderRadius.circular(UiRadii.pill),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),

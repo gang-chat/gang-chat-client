@@ -9,8 +9,9 @@ class _RoomDialogShell extends StatelessWidget {
     required this.maxWidth,
     required this.maxHeight,
     this.headerAction,
-    this.pinned,
+    this.navigation,
     this.embedded = false,
+    this.showBack = true,
   });
 
   final String title;
@@ -20,8 +21,12 @@ class _RoomDialogShell extends StatelessWidget {
   final double maxWidth;
   final double maxHeight;
   final Widget? headerAction;
-  final Widget? pinned;
+  final SettingsNavigationBase? navigation;
   final bool embedded;
+
+  /// Embedded room pages sit under the room tabs, which already lead back to
+  /// the chat; only standalone pages (like room creation) need a back button.
+  final bool showBack;
 
   @override
   Widget build(BuildContext context) {
@@ -30,11 +35,12 @@ class _RoomDialogShell extends StatelessWidget {
         icon: icon,
         title: title,
         headerAction: headerAction,
-        onBack: onClose,
-        pinned: pinned,
+        onBack: showBack ? onClose : null,
+        navigation: navigation,
         body: child,
       );
     }
+    final pinned = navigation?.buildHorizontal(context);
 
     final body = Padding(
       padding: const EdgeInsets.fromLTRB(22, 16, 22, 18),
@@ -64,7 +70,7 @@ class _RoomDialogShell extends StatelessWidget {
               ),
             ],
           ),
-          if (pinned != null) ...[const SizedBox(height: 14), pinned!],
+          if (pinned != null) ...[const SizedBox(height: 14), pinned],
           const SizedBox(height: 14),
           Expanded(child: child),
         ],

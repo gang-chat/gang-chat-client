@@ -133,11 +133,15 @@ class Button extends StatelessWidget {
         width: surfaceWidth,
         height: height,
         padding: padding,
+        borderRadius: UiRadii.pill,
         backgroundColor: colors.background,
         selectedBackgroundColor: colors.background,
+        hoverBackgroundColor: colors.hoverBackground,
         pressedBackgroundColor: colors.pressedBackground,
         borderColor: colors.border,
         selectedBorderColor: colors.border,
+        disabledBackgroundColor: colors.background,
+        disabledBorderColor: colors.border,
         child: content,
       );
     }
@@ -167,23 +171,34 @@ class ButtonIcon extends StatelessWidget {
     this.onToggleChanged,
     this.size = 40,
     this.loading = false,
+    this.ghost = false,
     this.backgroundColor,
     this.borderColor,
-    this.baseBorderColor,
+    this.width,
+    this.radius = UiRadii.pill,
+    this.iconSize,
   });
 
   final VoidCallback? onPressed;
   final ValueChanged<bool>? onToggleChanged;
   final Widget icon;
+
+  /// Width of a key-shaped button; defaults to [size] (a circle).
+  final double? width;
+  final double radius;
+  final double? iconSize;
   final String? tooltip;
   final ButtonTone tone;
   final bool selected;
   final bool? toggleValue;
   final double size;
   final bool loading;
+
+  /// Borderless toolbar style: transparent at rest, tinted on hover. Active
+  /// (selected/toggled) ghost buttons still show their tone colours.
+  final bool ghost;
   final Color? backgroundColor;
   final Color? borderColor;
-  final Color? baseBorderColor;
 
   @override
   Widget build(BuildContext context) {
@@ -197,7 +212,13 @@ class ButtonIcon extends StatelessWidget {
         ? () => onToggleChanged!(!toggled)
         : onPressed;
     final active = selected || toggled || tone == ButtonTone.primary;
-    final colors = _colorsFor(tone, visuallyEnabled, active: active);
+    final colors = _colorsFor(
+      tone,
+      visuallyEnabled,
+      active: active,
+      ghost: ghost,
+      icon: true,
+    );
     final background = backgroundColor ?? colors.background;
     final border = borderColor ?? colors.border;
 
@@ -207,19 +228,29 @@ class ButtonIcon extends StatelessWidget {
       enabled: visuallyEnabled,
       loading: loading,
       selected: active,
-      width: size,
+      width: width ?? size,
       height: size,
       padding: EdgeInsets.zero,
+      borderRadius: radius,
       backgroundColor: background,
       selectedBackgroundColor: background,
+      hoverBackgroundColor: backgroundColor == null
+          ? colors.hoverBackground
+          : null,
       pressedBackgroundColor: colors.pressedBackground,
       borderColor: border,
       selectedBorderColor: border,
-      baseBorderColor: baseBorderColor,
+      disabledBackgroundColor: background,
+      disabledBorderColor: border,
       child: IconTheme.merge(
-        data: IconThemeData(color: colors.foreground, size: size * 0.46),
+        data: IconThemeData(
+          color: colors.foreground,
+          size: iconSize ?? size * 0.46,
+        ),
         child: Center(
-          child: loading ? _ButtonLoadingIndicator(size: size * 0.46) : icon,
+          child: loading
+              ? _ButtonLoadingIndicator(size: iconSize ?? size * 0.46)
+              : icon,
         ),
       ),
     );
@@ -350,23 +381,36 @@ class _ButtonContent extends StatelessWidget {
 class _ButtonColors {
   const _ButtonColors({
     required this.background,
+    required this.hoverBackground,
     required this.pressedBackground,
     required this.border,
     required this.foreground,
   });
 
   final Color background;
+  final Color hoverBackground;
   final Color pressedBackground;
   final Color border;
   final Color foreground;
 }
 
-_ButtonColors _colorsFor(ButtonTone tone, bool enabled, {bool active = false}) {
+const Color _neutralButtonSurface = Color(0xFF1A1A1D);
+const Color _neutralButtonBorder = Color(0xFF2E2E33);
+const Color _neutralIconForeground = Color(0xFFC9C9CD);
+
+_ButtonColors _colorsFor(
+  ButtonTone tone,
+  bool enabled, {
+  bool active = false,
+  bool ghost = false,
+  bool icon = false,
+}) {
   if (!enabled) {
-    return const _ButtonColors(
-      background: UiColors.disabledSurface,
-      pressedBackground: UiColors.disabledSurface,
-      border: UiColors.disabledBorder,
+    return _ButtonColors(
+      background: ghost ? Colors.transparent : UiColors.disabledSurface,
+      hoverBackground: ghost ? Colors.transparent : UiColors.disabledSurface,
+      pressedBackground: ghost ? Colors.transparent : UiColors.disabledSurface,
+      border: ghost ? Colors.transparent : UiColors.disabledBorder,
       foreground: UiColors.textMuted,
     );
   }
@@ -374,31 +418,49 @@ _ButtonColors _colorsFor(ButtonTone tone, bool enabled, {bool active = false}) {
   switch (tone) {
     case ButtonTone.neutral:
       if (active) {
-        return const _ButtonColors(
-          background: UiColors.selected,
-          pressedBackground: Color(0xFF14211B),
-          border: UiColors.selectedBorder,
-          foreground: UiColors.accent,
+        // Selected / toggled-on controls invert to a white pill.
+        return _ButtonColors(
+          background: UiColors.inverse,
+          hoverBackground: const Color(0xFFFFFFFF),
+          pressedBackground: const Color(0xFFD9D9D6),
+          border: Colors.transparent,
+          foreground: UiColors.onInverse,
         );
       }
-      return const _ButtonColors(
-        background: UiColors.surface,
-        pressedBackground: UiColors.surfacePressed,
-        border: UiColors.border,
-        foreground: UiColors.text,
+      if (ghost) {
+        return const _ButtonColors(
+          background: Colors.transparent,
+          hoverBackground: UiColors.surfaceHover,
+          pressedBackground: UiColors.surfaceRaised,
+          border: Colors.transparent,
+          foreground: _neutralIconForeground,
+        );
+      }
+      return _ButtonColors(
+        background: _neutralButtonSurface,
+        hoverBackground: UiStates.hover(_neutralButtonSurface),
+        pressedBackground: UiStates.pressed(_neutralButtonSurface),
+        border: _neutralButtonBorder,
+        foreground: icon ? _neutralIconForeground : UiColors.text,
       );
     case ButtonTone.primary:
-      return const _ButtonColors(
-        background: UiColors.selected,
-        pressedBackground: Color(0xFF14211B),
-        border: UiColors.selectedBorder,
-        foreground: UiColors.accent,
+      return _ButtonColors(
+        background: UiColors.accentStrong,
+        hoverBackground: UiColors.accent,
+        pressedBackground: Color.lerp(
+          UiColors.accentStrong,
+          Colors.black,
+          0.12,
+        )!,
+        border: Colors.transparent,
+        foreground: UiColors.onAccent,
       );
     case ButtonTone.danger:
-      return const _ButtonColors(
-        background: Color(0xFF2E1F22),
-        pressedBackground: Color(0xFF1A1214),
-        border: UiColors.dangerBorder,
+      return _ButtonColors(
+        background: ghost ? Colors.transparent : UiColors.dangerSurface,
+        hoverBackground: UiStates.hover(UiColors.dangerSurface),
+        pressedBackground: UiStates.pressed(UiColors.dangerSurface),
+        border: ghost ? Colors.transparent : UiColors.dangerBorder,
         foreground: UiColors.danger,
       );
   }

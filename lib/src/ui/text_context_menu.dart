@@ -7,9 +7,9 @@ import 'package:flutter/services.dart';
 import 'tokens.dart';
 
 const double _contextMenuScreenPadding = 8;
-const double _contextMenuWidth = 184;
+const double _contextMenuWidth = 196;
 const double _contextMenuMinItemHeight = 32;
-const double _contextMenuHorizontalPadding = 12;
+const double _contextMenuHorizontalPadding = 10;
 const Key _contextMenuPanelKey = ValueKey('text-context-menu-panel');
 const Key _contextMenuDividerKey = ValueKey('text-context-menu-divider');
 final GlobalKey _contextMenuPanelBoundsKey = GlobalKey(
@@ -694,20 +694,14 @@ class _ContextMenuPanel extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: UiColors.surfaceRaised,
-          borderRadius: BorderRadius.circular(UiRadii.md),
+          borderRadius: BorderRadius.circular(UiRadii.lg - 2),
           border: Border.all(color: UiColors.borderStrong),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.34),
-              blurRadius: 18,
-              offset: const Offset(0, 10),
-            ),
-          ],
+          boxShadow: UiShadows.popover,
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(UiRadii.md),
+          borderRadius: BorderRadius.circular(UiRadii.lg - 2),
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 5),
+            padding: const EdgeInsets.all(5),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -766,7 +760,12 @@ class _ContextMenuItemState extends State<_ContextMenuItem> {
             horizontal: _contextMenuHorizontalPadding,
             vertical: 6,
           ),
-          color: _enabled && _hovered ? UiColors.selected : Colors.transparent,
+          decoration: BoxDecoration(
+            color: _enabled && _hovered
+                ? UiColors.surfaceHover
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(UiRadii.sm),
+          ),
           child: Row(
             children: [
               Expanded(
@@ -811,14 +810,12 @@ class _ContextMenuDivider extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       key: _contextMenuDividerKey,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: SizedBox(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      child: const SizedBox(
         width: double.infinity,
-        height: 2,
+        height: 1,
         child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: UiColors.accent.withValues(alpha: 0.78),
-          ),
+          decoration: BoxDecoration(color: UiColors.borderStrong),
         ),
       ),
     );

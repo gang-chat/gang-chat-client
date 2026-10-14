@@ -10,8 +10,6 @@ import 'tokens.dart';
 
 const double _inputHorizontalPadding = 12;
 const double _inputIconSize = 17;
-const double _inputVisualLift = 3;
-const double _inputBaseDepth = 5;
 const double _inputTextVerticalOffset = 4;
 const double _inputIconVerticalOffset = 5;
 const double _inputUnboundedBottomPadding = 8;
@@ -47,6 +45,7 @@ class Input extends StatefulWidget {
     this.undoController,
     this.canPasteNonText,
     this.enableInteractiveSelection = true,
+    this.bare = false,
   });
 
   static const double defaultHeight = 40;
@@ -76,6 +75,10 @@ class Input extends StatefulWidget {
   final UndoHistoryController? undoController;
   final Future<bool> Function()? canPasteNonText;
   final bool enableInteractiveSelection;
+
+  /// Renders only the text field, without the well background and border, for
+  /// hosts (like the chat composer) that draw their own container.
+  final bool bare;
 
   /// The collapsed (single-line) height of the field. Defaults to
   /// [defaultHeight]; callers can shrink it for tighter, denser layouts.
@@ -334,52 +337,43 @@ class _InputState extends State<Input> {
     );
 
     final enabled = widget.enabled;
-    final capTop = enabled && (_hovered || focused) ? 0.0 : _inputVisualLift;
-    final surfaceDepth = _inputVisualLift + _inputBaseDepth;
-    final background = enabled
-        ? focused
-              ? UiColors.selected
-              : UiColors.surface
-        : UiColors.disabledSurface;
-    final borderColor = enabled
-        ? focused
-              ? UiColors.accentBorder
-              : UiColors.border
-        : UiColors.disabledBorder;
-    final shadowColor = Color.lerp(background, Colors.black, 0.46)!;
+    if (widget.bare) {
+      return MouseRegion(
+        cursor: enabled ? SystemMouseCursors.text : SystemMouseCursors.basic,
+        child: content,
+      );
+    }
+    final background = enabled ? UiColors.fieldFill : UiColors.disabledSurface;
+    final borderColor = !enabled
+        ? UiColors.disabledBorder
+        : focused
+        ? UiColors.accentStrong
+        : _hovered
+        ? UiColors.fieldBorderHover
+        : UiColors.fieldBorder;
+    final radius = BorderRadius.circular(UiRadii.md);
 
     return MouseRegion(
       cursor: enabled ? SystemMouseCursors.text : SystemMouseCursors.basic,
       onEnter: (_) => _handleHoverChanged(true),
       onExit: (_) => _handleHoverChanged(false),
-      child: Stack(
-        fit: StackFit.passthrough,
-        clipBehavior: Clip.hardEdge,
-        children: [
-          Positioned(
-            left: 0,
-            right: 0,
-            top: surfaceDepth,
-            bottom: 0,
-            child: _InputLayer(
-              background: shadowColor,
-              borderColor: borderColor,
-            ),
-          ),
-          AnimatedPadding(
-            duration: const Duration(milliseconds: 95),
-            curve: Curves.easeOutCubic,
-            padding: EdgeInsets.only(
-              top: capTop,
-              bottom: surfaceDepth - capTop,
-            ),
-            child: _InputLayer(
-              background: background,
-              borderColor: borderColor,
-              child: content,
-            ),
-          ),
-        ],
+      child: AnimatedContainer(
+        duration: UiMotion.fast,
+        curve: UiMotion.curve,
+        decoration: BoxDecoration(
+          color: background,
+          borderRadius: radius,
+          border: Border.all(color: borderColor),
+          boxShadow: focused && enabled
+              ? [
+                  BoxShadow(
+                    color: UiColors.accentStrong.withValues(alpha: 0.2),
+                    spreadRadius: 3,
+                  ),
+                ]
+              : null,
+        ),
+        child: ClipRRect(borderRadius: radius, child: content),
       ),
     );
   }
@@ -486,33 +480,6 @@ class _InputClearButton extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _InputLayer extends StatelessWidget {
-  const _InputLayer({
-    required this.background,
-    required this.borderColor,
-    this.child,
-  });
-
-  final Color background;
-  final Color borderColor;
-  final Widget? child;
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(UiRadii.md),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: background,
-          borderRadius: BorderRadius.circular(UiRadii.md),
-          border: Border.all(color: borderColor),
-        ),
-        child: child ?? const SizedBox.expand(),
       ),
     );
   }

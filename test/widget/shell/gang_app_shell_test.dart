@@ -81,10 +81,6 @@ void main() {
   registerShellUiShowcaseWidgetTests();
 }
 
-Color _expectedShadowForBackground(Color background) {
-  return Color.lerp(background, Colors.black, 0.46)!;
-}
-
 List<BoxDecoration> _inputLayerDecorations(
   WidgetTester tester,
   Finder inputFinder,

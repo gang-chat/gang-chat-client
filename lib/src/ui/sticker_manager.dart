@@ -1234,8 +1234,8 @@ class _StickerManagerPanelState extends State<StickerManagerPanel> {
 }
 
 // 表情包专用配色:这两个颜色不在通用 token 中,保留本地常量以维持原视觉。
-const _stickerAccent = Color(0xFF6FCFA6);
-const _stickerDangerBorder = Color(0xFF3A2A2E);
+const _stickerAccent = UiColors.accentStrong;
+const _stickerDangerBorder = UiColors.dangerBorder;
 
 class StickerActionGridEntry {
   const StickerActionGridEntry({required this.label, required this.button});
@@ -1417,7 +1417,7 @@ class _StickerGridTile extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final tileHeight = constraints.maxHeight.isFinite
-            ? math.max(54.0, constraints.maxHeight - 6)
+            ? math.max(54.0, constraints.maxHeight)
             : 86.0;
         return UiTooltip(
           message: item.sticker.name,
@@ -1428,11 +1428,8 @@ class _StickerGridTile extends StatelessWidget {
             padding: const EdgeInsets.all(7),
             backgroundColor: UiColors.background,
             selectedBackgroundColor: UiColors.selected,
-            pressedBackgroundColor: UiColors.surfaceLow,
             borderColor: selected ? UiColors.selectedBorder : UiColors.border,
             selectedBorderColor: UiColors.selectedBorder,
-            hoverLift: 2,
-            baseDepth: 4,
             child: Stack(
               fit: StackFit.expand,
               children: [

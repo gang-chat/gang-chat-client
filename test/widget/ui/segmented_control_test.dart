@@ -439,7 +439,7 @@ void main() {
         if (widget is! DecoratedBox) return false;
         final decoration = widget.decoration;
         return decoration is BoxDecoration &&
-            decoration.color == ui.UiColors.selected;
+            decoration.color == ui.UiColors.inverse;
       });
       final selectedThumbRect = tester.getRect(selectedThumb);
       final thirdSegmentRect = tester.getRect(

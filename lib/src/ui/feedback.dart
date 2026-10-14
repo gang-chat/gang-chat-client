@@ -437,9 +437,9 @@ IconData _noticeIcon(FloatingNoticeTone tone) {
 
 Color _noticeAccent(FloatingNoticeTone tone) {
   return switch (tone) {
-    FloatingNoticeTone.success => UiColors.accent,
+    FloatingNoticeTone.success => UiColors.success,
     FloatingNoticeTone.error => UiColors.danger,
-    FloatingNoticeTone.info => UiColors.controlAccent,
+    FloatingNoticeTone.info => UiColors.accent,
   };
 }
 
@@ -465,19 +465,13 @@ class Toast extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: UiColors.surfaceRaised,
-          borderRadius: BorderRadius.circular(UiRadii.lg),
+          borderRadius: BorderRadius.circular(UiRadii.md + 2),
           border: Border.all(color: UiColors.borderStrong),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.36),
-              blurRadius: 24,
-              offset: const Offset(0, 12),
-            ),
-          ],
+          boxShadow: UiShadows.popover,
         ),
         child: Padding(
           padding: EdgeInsets.fromLTRB(
-            UiSpacing.md,
+            UiSpacing.sm,
             UiSpacing.sm,
             onClose == null ? UiSpacing.md : UiSpacing.xs,
             UiSpacing.sm,
@@ -487,8 +481,16 @@ class Toast extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               if (icon != null) ...[
-                Icon(icon, size: 16, color: accent),
-                const SizedBox(width: 8),
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.16),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, size: 15, color: accent),
+                ),
+                const SizedBox(width: 10),
               ],
               Flexible(
                 child: Text(
@@ -565,14 +567,11 @@ class _NoticeCloseButtonState extends State<_NoticeCloseButton> {
             height: 26,
             decoration: BoxDecoration(
               color: _pressed
-                  ? UiColors.surfacePressed
-                  : active
                   ? UiColors.surface
+                  : active
+                  ? UiColors.surfaceHover
                   : Colors.transparent,
-              borderRadius: BorderRadius.circular(UiRadii.md),
-              border: Border.all(
-                color: active ? UiColors.border : Colors.transparent,
-              ),
+              borderRadius: BorderRadius.circular(UiRadii.sm),
             ),
             child: Icon(
               Icons.close,
@@ -788,17 +787,19 @@ class DialogFrame extends StatelessWidget {
         : actions;
     return Dialog(
       backgroundColor: Colors.transparent,
+      elevation: 0,
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: maxWidth),
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: UiColors.surface,
-            borderRadius: BorderRadius.circular(UiRadii.lg),
-            border: Border.all(color: UiColors.border),
+            color: UiColors.surfaceLow,
+            borderRadius: BorderRadius.circular(UiRadii.xl),
+            border: Border.all(color: UiColors.borderStrong),
+            boxShadow: UiShadows.dialog,
           ),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+            padding: const EdgeInsets.fromLTRB(22, 20, 22, 20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -806,13 +807,21 @@ class DialogFrame extends StatelessWidget {
                 Row(
                   children: [
                     if (icon != null) ...[
-                      Icon(icon, size: 18, color: UiColors.accent),
-                      const SizedBox(width: 8),
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: UiColors.selected,
+                          borderRadius: BorderRadius.circular(UiRadii.md),
+                        ),
+                        child: Icon(icon, size: 17, color: UiColors.accent),
+                      ),
+                      const SizedBox(width: 12),
                     ],
                     Expanded(child: Text(title, style: UiTypography.title)),
                   ],
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 16),
                 // Dialog applies the current viewInsets (including the
                 // Android IME) before laying out this frame.  Let the content
                 // yield that vertical space instead of keeping a fixed child
@@ -820,7 +829,7 @@ class DialogFrame extends StatelessWidget {
                 Flexible(fit: FlexFit.loose, child: child),
                 if (resolvedActions.isNotEmpty ||
                     resolvedActionBar != null) ...[
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 20),
                   if (resolvedActionBar != null)
                     resolvedActionBar
                   else

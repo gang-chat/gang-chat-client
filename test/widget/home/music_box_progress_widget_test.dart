@@ -369,6 +369,34 @@ MusicBoxState _state({
 Finder _groupHeader(MusicBoxActiveSourceType type) =>
     _key('music-box-group-header:${musicBoxActiveSourceTypeValue(type)}');
 
+/// Whether a group header shows its open state: the header's chevron turns
+/// a quarter (pointing down) and its button semantics report expanded.
+bool _groupOpen(WidgetTester tester, MusicBoxActiveSourceType type) {
+  final header = _groupHeader(type);
+  final chevron = find.descendant(
+    of: header,
+    matching: find.ancestor(
+      of: find.byIcon(Icons.chevron_right_rounded),
+      matching: find.byType(AnimatedRotation),
+    ),
+  );
+  final turns = tester.widget<AnimatedRotation>(chevron).turns;
+  final semantics = tester.widget<Semantics>(
+    find
+        .descendant(
+          of: header,
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is Semantics && widget.properties.expanded != null,
+          ),
+        )
+        .first,
+  );
+  final expanded = semantics.properties.expanded!;
+  expect(turns, expanded ? 0.25 : 0);
+  return expanded;
+}
+
 Finder _playlistRow(MusicBoxActiveSourceType type, String id) =>
     _key('music-box-playlist-row:${musicBoxActiveSourceTypeValue(type)}:$id');
 
@@ -383,7 +411,10 @@ Future<void> _reveal(WidgetTester tester, Finder finder) async {
 }
 
 /// Taps the group header of [type] and lets its playlist load resolve.
-Future<void> _openGroup(WidgetTester tester, MusicBoxActiveSourceType type) async {
+Future<void> _openGroup(
+  WidgetTester tester,
+  MusicBoxActiveSourceType type,
+) async {
   await _reveal(tester, _groupHeader(type));
   await tester.tap(_groupHeader(type));
   await tester.pump();
@@ -581,6 +612,10 @@ void main() {
           (index) => _track('boundary-$index', title: '第 $index 首歌'),
         );
         final currentIndex = boundary.$2;
+        // The deck (display, transport keys, fader) and the 房间歌单 / 我的歌单
+        // group headers under the queue leave a 500px panel's list short
+        // enough that the last queue row can still be centered. Give the list
+        // room so that centering either end really runs into the boundary.
         await tester.pumpWidget(
           _host(
             _state(
@@ -590,7 +625,7 @@ void main() {
               queue: queue,
             ),
             controller,
-            height: 500,
+            height: 600,
           ),
         );
         await tester.pump();
@@ -611,8 +646,12 @@ void main() {
         expect(_within(tileRect, listRect), isTrue);
         if (currentIndex == 0) {
           expect(position.pixels, 0);
+          // Centering would scroll above the start, so the reveal clamps.
+          expect(tileRect.center.dy, lessThan(listRect.center.dy - 1));
         } else {
           expect(position.pixels, closeTo(position.maxScrollExtent, 1));
+          // Centering would scroll past the end, so the reveal clamps.
+          expect(tileRect.center.dy, greaterThan(listRect.center.dy + 1));
         }
         expect(tester.takeException(), isNull);
       },
@@ -759,10 +798,7 @@ void main() {
     );
     expect(find.descendant(of: roomHeader, matching: wave), findsOneWidget);
     expect(
-      find.descendant(
-        of: _queueHeaderRow('点歌队列 · 0 首 · 未播放'),
-        matching: wave,
-      ),
+      find.descendant(of: _queueHeaderRow('点歌队列 · 0 首 · 未播放'), matching: wave),
       findsNothing,
     );
     expect(find.descendant(of: myHeader, matching: wave), findsNothing);
@@ -814,34 +850,28 @@ void main() {
     expect(_key('music-box-queue-tile:a'), findsOneWidget);
     expect(_groupHeader(MusicBoxActiveSourceType.roomPlaylist), findsOneWidget);
     expect(_groupHeader(MusicBoxActiveSourceType.userPlaylist), findsOneWidget);
-    for (final header in [
-      _groupHeader(MusicBoxActiveSourceType.roomPlaylist),
-      _groupHeader(MusicBoxActiveSourceType.userPlaylist),
+    for (final type in [
+      MusicBoxActiveSourceType.roomPlaylist,
+      MusicBoxActiveSourceType.userPlaylist,
     ]) {
-      expect(
-        find.descendant(of: header, matching: find.byIcon(Icons.chevron_right)),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(of: header, matching: find.byIcon(Icons.expand_more)),
-        findsNothing,
-      );
+      expect(_groupOpen(tester, type), isFalse);
     }
-    expect(_playlistRow(MusicBoxActiveSourceType.roomPlaylist, 'room-list'), findsNothing);
+    expect(
+      _playlistRow(MusicBoxActiveSourceType.roomPlaylist, 'room-list'),
+      findsNothing,
+    );
     expect(api.roomListCalls, 0);
     expect(api.personalListCalls, 0);
 
     await _openGroup(tester, MusicBoxActiveSourceType.roomPlaylist);
     expect(api.roomListCalls, 1);
     expect(api.personalListCalls, 0);
+    expect(_groupOpen(tester, MusicBoxActiveSourceType.roomPlaylist), isTrue);
+    expect(_groupOpen(tester, MusicBoxActiveSourceType.userPlaylist), isFalse);
     expect(
-      find.descendant(
-        of: _groupHeader(MusicBoxActiveSourceType.roomPlaylist),
-        matching: find.byIcon(Icons.expand_more),
-      ),
+      _playlistRow(MusicBoxActiveSourceType.roomPlaylist, 'room-list'),
       findsOneWidget,
     );
-    expect(_playlistRow(MusicBoxActiveSourceType.roomPlaylist, 'room-list'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -886,8 +916,14 @@ void main() {
 
     await _openGroup(tester, MusicBoxActiveSourceType.roomPlaylist);
     final header = _groupHeader(MusicBoxActiveSourceType.roomPlaylist);
-    expect(find.descendant(of: header, matching: find.text('2')), findsOneWidget);
-    final row = _playlistRow(MusicBoxActiveSourceType.roomPlaylist, 'room-list');
+    expect(
+      find.descendant(of: header, matching: find.text('2')),
+      findsOneWidget,
+    );
+    final row = _playlistRow(
+      MusicBoxActiveSourceType.roomPlaylist,
+      'room-list',
+    );
     expect(
       find.descendant(of: row, matching: find.text('房间收藏')),
       findsOneWidget,
@@ -899,7 +935,11 @@ void main() {
     expect(_key('music-box-queue-tile:a'), findsOneWidget);
     expect(api.roomPlaylistLoads, 0);
 
-    await _unfoldPlaylist(tester, MusicBoxActiveSourceType.roomPlaylist, 'room-list');
+    await _unfoldPlaylist(
+      tester,
+      MusicBoxActiveSourceType.roomPlaylist,
+      'room-list',
+    );
     expect(api.roomPlaylistLoads, 1);
     final tracks = _key('music-box-playlist-tracks:room-list');
     final track = _key('music-box-playlist-track:netease:track-1');
@@ -908,7 +948,11 @@ void main() {
     expect(_within(tester.getRect(row), listRect), isTrue);
     expect(tester.getTopLeft(track).dy, greaterThan(tester.getTopLeft(row).dy));
     expect(
-      tester.getTopLeft(_playlistRow(MusicBoxActiveSourceType.roomPlaylist, 'room-list-2')).dy,
+      tester
+          .getTopLeft(
+            _playlistRow(MusicBoxActiveSourceType.roomPlaylist, 'room-list-2'),
+          )
+          .dy,
       greaterThan(tester.getTopLeft(track).dy),
     );
     expect(api.activatedSourceType, isNull);
@@ -950,12 +994,22 @@ void main() {
     await _openGroup(tester, MusicBoxActiveSourceType.roomPlaylist);
 
     // The playlist row itself carries no play action.
-    expect(_key('music-box-playlist-play-all:room_playlist:room-list'), findsNothing);
+    expect(
+      _key('music-box-playlist-play-all:room_playlist:room-list'),
+      findsNothing,
+    );
     expect(api.activatedSourceType, isNull);
 
-    await _unfoldPlaylist(tester, MusicBoxActiveSourceType.roomPlaylist, 'room-list');
+    await _unfoldPlaylist(
+      tester,
+      MusicBoxActiveSourceType.roomPlaylist,
+      'room-list',
+    );
     final trackPlay = _key('music-box-playlist-track-play:netease:track-1');
-    expect(_actionLabel(tester, 'music-box-playlist-track-play:netease:track-1'), '从这首歌开始播放歌单');
+    expect(
+      _actionLabel(tester, 'music-box-playlist-track-play:netease:track-1'),
+      '从这首歌开始播放歌单',
+    );
     await tester.tap(trackPlay);
     await tester.pump();
     expect(api.activatedSourceType, MusicBoxActiveSourceType.roomPlaylist);
@@ -1004,32 +1058,49 @@ void main() {
     await _showActiveSource(tester);
 
     expect(_key('music-box-search-panel'), findsNothing);
-    expect(_key('music-box-queue-tile:req-1'), findsOneWidget);
+    // The request queue keeps its own row; revealing the playing playlist
+    // scrolls the deck's list so the queue now sits just above the viewport.
     expect(
-      find.descendant(
-        of: _groupHeader(MusicBoxActiveSourceType.roomPlaylist),
-        matching: find.byIcon(Icons.expand_more),
+      find.byKey(
+        const ValueKey<String>('music-box-queue-tile:req-1'),
+        skipOffstage: false,
       ),
       findsOneWidget,
     );
-    final row = _playlistRow(MusicBoxActiveSourceType.roomPlaylist, 'room-list');
+    expect(_groupOpen(tester, MusicBoxActiveSourceType.roomPlaylist), isTrue);
+    final row = _playlistRow(
+      MusicBoxActiveSourceType.roomPlaylist,
+      'room-list',
+    );
     expect(row, findsOneWidget);
     final tracks = _key('music-box-playlist-tracks:room-list');
     expect(
-      find.descendant(of: tracks, matching: _key('music-box-queue-tile:snap-1')),
+      find.descendant(
+        of: tracks,
+        matching: _key('music-box-queue-tile:snap-1'),
+      ),
       findsOneWidget,
     );
     expect(
-      find.descendant(of: tracks, matching: _key('music-box-queue-tile:snap-2')),
+      find.descendant(
+        of: tracks,
+        matching: _key('music-box-queue-tile:snap-2'),
+      ),
       findsOneWidget,
     );
-    expect(tester.getTopLeft(_key('music-box-queue-tile:snap-1')).dy, greaterThan(tester.getTopLeft(row).dy));
+    expect(
+      tester.getTopLeft(_key('music-box-queue-tile:snap-1')).dy,
+      greaterThan(tester.getTopLeft(row).dy),
+    );
     expect(_key('music-box-queue-leading-playing:snap-1'), findsOneWidget);
     expect(_key('music-box-queue-remove:snap-1'), findsNothing);
     expect(_key('music-box-playlist-track:netease:track-1'), findsNothing);
     expect(api.roomPlaylistLoads, 0);
     // Nothing plays a playlist as a whole; songs inside carry playback.
-    expect(_key('music-box-playlist-play-all:room_playlist:room-list'), findsNothing);
+    expect(
+      _key('music-box-playlist-play-all:room_playlist:room-list'),
+      findsNothing,
+    );
     expect(api.activatedSourceType, isNull);
     expect(tester.takeException(), isNull);
   });
@@ -1069,7 +1140,11 @@ void main() {
     await tester.pump();
     await tester.pump();
     await _openGroup(tester, MusicBoxActiveSourceType.roomPlaylist);
-    await _unfoldPlaylist(tester, MusicBoxActiveSourceType.roomPlaylist, 'room-list');
+    await _unfoldPlaylist(
+      tester,
+      MusicBoxActiveSourceType.roomPlaylist,
+      'room-list',
+    );
     final listRect = tester.getRect(_key('music-box-list'));
     final queueHeader = find.text('点歌队列 · 15 首 · 正在播放', skipOffstage: false);
     expect(tester.getRect(queueHeader).top, lessThan(listRect.top));
@@ -1125,7 +1200,10 @@ void main() {
     // regardless of the per-item play-now permission.
     expect(_key('music-box-queue-play-all'), findsNothing);
     final play = _key('music-box-queue-play-now:req-2');
-    expect(_actionLabel(tester, 'music-box-queue-play-now:req-2'), '从这首歌开始播放点歌队列');
+    expect(
+      _actionLabel(tester, 'music-box-queue-play-now:req-2'),
+      '从这首歌开始播放点歌队列',
+    );
     await tester.tap(play);
     await tester.pump();
     expect(api.activatedSourceType, MusicBoxActiveSourceType.temporary);
@@ -1337,14 +1415,26 @@ void main() {
     expect(myHeader, findsNothing);
 
     final add = _key('music-box-search-add:netease:qingtian');
-    expect(_actionLabel(tester, 'music-box-search-add:netease:qingtian'), '加入点歌队列');
+    expect(
+      _actionLabel(tester, 'music-box-search-add:netease:qingtian'),
+      '加入点歌队列',
+    );
     await tester.tap(add);
     await tester.pump();
     expect(queued, const [fresh]);
 
     final queuedAdd = _key('music-box-search-add:netease:already-queued-track');
-    expect(_actionLabel(tester, 'music-box-search-add:netease:already-queued-track'), '已在点歌队列');
-    expect(_actionEnabled(tester, 'music-box-search-add:netease:already-queued-track'), isFalse);
+    expect(
+      _actionLabel(tester, 'music-box-search-add:netease:already-queued-track'),
+      '已在点歌队列',
+    );
+    expect(
+      _actionEnabled(
+        tester,
+        'music-box-search-add:netease:already-queued-track',
+      ),
+      isFalse,
+    );
     await tester.tap(queuedAdd);
     await tester.pump();
     expect(queued, const [fresh]);
@@ -1372,58 +1462,59 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('empty playlist groups offer the matching first-playlist action', (
-    tester,
-  ) async {
-    final controller = TextEditingController();
-    addTearDown(controller.dispose);
-    var personalCreateCount = 0;
-    var roomCreateCount = 0;
-    final state = _state(
-      playbackState: MusicBoxPlaybackState.stopped,
-      positionMs: 0,
-    );
-    final api = _RoomPlaylistApiFake(
-      state,
-      playlist: _roomPlaylist,
-      items: const [],
-      roomPlaylists: const [],
-    );
-
-    await tester.pumpWidget(
-      _host(
+  testWidgets(
+    'empty playlist groups offer the matching first-playlist action',
+    (tester) async {
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+      var personalCreateCount = 0;
+      var roomCreateCount = 0;
+      final state = _state(
+        playbackState: MusicBoxPlaybackState.stopped,
+        positionMs: 0,
+      );
+      final api = _RoomPlaylistApiFake(
         state,
-        controller,
-        height: 500,
-        musicBoxController: MusicBoxController(api: api),
-        roomId: 'room-1',
-        currentUser: _playlistCurrentUser,
-        room: _playlistRoom,
-        onCreateFirstPersonalPlaylist: () => personalCreateCount += 1,
-        onCreateFirstRoomPlaylist: () => roomCreateCount += 1,
-      ),
-    );
+        playlist: _roomPlaylist,
+        items: const [],
+        roomPlaylists: const [],
+      );
 
-    await _openGroup(tester, MusicBoxActiveSourceType.userPlaylist);
-    expect(find.text('还没有个人歌单'), findsOneWidget);
-    final createPersonal = _key('music-box-create-first-personal-playlist');
-    await _reveal(tester, createPersonal);
-    await tester.tap(createPersonal);
-    await tester.pump();
-    expect(personalCreateCount, 1);
-    expect(roomCreateCount, 0);
+      await tester.pumpWidget(
+        _host(
+          state,
+          controller,
+          height: 500,
+          musicBoxController: MusicBoxController(api: api),
+          roomId: 'room-1',
+          currentUser: _playlistCurrentUser,
+          room: _playlistRoom,
+          onCreateFirstPersonalPlaylist: () => personalCreateCount += 1,
+          onCreateFirstRoomPlaylist: () => roomCreateCount += 1,
+        ),
+      );
 
-    await _openGroup(tester, MusicBoxActiveSourceType.roomPlaylist);
-    expect(find.text('还没有房间歌单'), findsOneWidget);
-    expect(find.text('还没有个人歌单', skipOffstage: false), findsOneWidget);
-    final createRoom = _key('music-box-create-first-room-playlist');
-    await _reveal(tester, createRoom);
-    await tester.tap(createRoom);
-    await tester.pump();
-    expect(personalCreateCount, 1);
-    expect(roomCreateCount, 1);
-    expect(tester.takeException(), isNull);
-  });
+      await _openGroup(tester, MusicBoxActiveSourceType.userPlaylist);
+      expect(find.text('还没有个人歌单'), findsOneWidget);
+      final createPersonal = _key('music-box-create-first-personal-playlist');
+      await _reveal(tester, createPersonal);
+      await tester.tap(createPersonal);
+      await tester.pump();
+      expect(personalCreateCount, 1);
+      expect(roomCreateCount, 0);
+
+      await _openGroup(tester, MusicBoxActiveSourceType.roomPlaylist);
+      expect(find.text('还没有房间歌单'), findsOneWidget);
+      expect(find.text('还没有个人歌单', skipOffstage: false), findsOneWidget);
+      final createRoom = _key('music-box-create-first-room-playlist');
+      await _reveal(tester, createRoom);
+      await tester.tap(createRoom);
+      await tester.pump();
+      expect(personalCreateCount, 1);
+      expect(roomCreateCount, 1);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('my playlists pins an active playlist the viewer cannot list', (
     tester,
@@ -1478,14 +1569,30 @@ void main() {
       ),
       findsOneWidget,
     );
-    final pinned = _playlistRow(MusicBoxActiveSourceType.userPlaylist, 'other-playlist');
+    final pinned = _playlistRow(
+      MusicBoxActiveSourceType.userPlaylist,
+      'other-playlist',
+    );
     final own = _playlistRow(MusicBoxActiveSourceType.userPlaylist, 'mine');
     expect(
       find.descendant(of: pinned, matching: find.text('夜晚精选')),
       findsOneWidget,
     );
-    expect(find.descendant(of: pinned, matching: find.text('2 首')), findsOneWidget);
-    expect(find.descendant(of: own, matching: find.text('5 首')), findsOneWidget);
+    expect(
+      find.descendant(of: pinned, matching: find.text('2 首')),
+      findsOneWidget,
+    );
+    // The deck leaves the list a shorter well, so the viewer's own playlist
+    // starts just below the pinned one, under the fold.
+    await _reveal(tester, own);
+    expect(
+      find.descendant(of: pinned, matching: find.text('夜晚精选')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: own, matching: find.text('5 首')),
+      findsOneWidget,
+    );
     expect(tester.getTopLeft(pinned).dy, lessThan(tester.getTopLeft(own).dy));
     expect(tester.takeException(), isNull);
   });
@@ -1529,7 +1636,10 @@ void main() {
     await tester.pump();
     await tester.pump();
     await tester.pump();
-    final row = _playlistRow(MusicBoxActiveSourceType.roomPlaylist, 'room-list');
+    final row = _playlistRow(
+      MusicBoxActiveSourceType.roomPlaylist,
+      'room-list',
+    );
     expect(row, findsOneWidget);
     expect(
       find.descendant(
@@ -1567,7 +1677,11 @@ void main() {
       ),
     );
     await _openGroup(tester, MusicBoxActiveSourceType.roomPlaylist);
-    await _unfoldPlaylist(tester, MusicBoxActiveSourceType.roomPlaylist, 'room-list');
+    await _unfoldPlaylist(
+      tester,
+      MusicBoxActiveSourceType.roomPlaylist,
+      'room-list',
+    );
 
     await tester.tap(
       find.descendant(
@@ -1619,7 +1733,10 @@ void main() {
 
     final loading = _key('music-box-queue-leading-loading:downloading-track');
     expect(loading, findsOneWidget);
-    expect(_key('music-box-queue-leading-index:downloading-track'), findsNothing);
+    expect(
+      _key('music-box-queue-leading-index:downloading-track'),
+      findsNothing,
+    );
     expect(
       tester.getCenter(loading).dx,
       lessThan(tester.getTopLeft(find.text('正在下载的歌曲')).dx),
@@ -1703,7 +1820,11 @@ void main() {
           playbackState: MusicBoxPlaybackState.stopped,
           positionMs: 0,
           temporaryQueue: [
-            _track('queued-item', trackId: 'already-queued-track', title: '已点歌曲'),
+            _track(
+              'queued-item',
+              trackId: 'already-queued-track',
+              title: '已点歌曲',
+            ),
           ],
         ),
         controller,
@@ -1714,9 +1835,13 @@ void main() {
     );
     await _openSearch(tester);
 
-    await tester.tap(_key('music-box-search-tile:netease:already-queued-track'));
+    await tester.tap(
+      _key('music-box-search-tile:netease:already-queued-track'),
+    );
     await tester.pump();
-    final card = _key('music-box-song-card:search:netease:already-queued-track');
+    final card = _key(
+      'music-box-song-card:search:netease:already-queued-track',
+    );
     expect(card, findsOneWidget);
     final queuedButton = find.descendant(
       of: card,

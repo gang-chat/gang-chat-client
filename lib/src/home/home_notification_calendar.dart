@@ -444,8 +444,6 @@ class _NotificationCalendarDialogState
       pressedBackgroundColor: UiColors.surfaceRaised,
       borderColor: Colors.transparent,
       selectedBorderColor: Colors.transparent,
-      baseDepth: 0,
-      pressDepth: 0,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [

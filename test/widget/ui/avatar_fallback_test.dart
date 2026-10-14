@@ -5,12 +5,12 @@ import 'package:client/src/ui/ui.dart';
 
 void main() {
   test('avatarFallbackColor maps known keys and falls back to blue', () {
-    expect(avatarFallbackColor('blue-3'), const Color(0xFF526C9F));
+    expect(avatarFallbackColor('blue-3'), const Color(0xFF4E68D0));
     expect(normalizeAvatarPresetKey('room-1'), 'blue-3');
-    expect(avatarFallbackColor('room-1'), const Color(0xFF526C9F));
-    expect(avatarFallbackColor('graphite-2'), const Color(0xFF5B5D63));
-    expect(avatarFallbackColor('red-2'), const Color(0xFF7B4F52));
-    expect(avatarFallbackColor('missing'), const Color(0xFF526C9F));
+    expect(avatarFallbackColor('room-1'), const Color(0xFF4E68D0));
+    expect(avatarFallbackColor('graphite-2'), const Color(0xFF50525E));
+    expect(avatarFallbackColor('red-2'), const Color(0xFFC9363F));
+    expect(avatarFallbackColor('missing'), const Color(0xFF4E68D0));
     expect(avatarPresetLabel('room-1'), '蓝色');
     expect(avatarPresetLabel('purple-2'), '紫色');
     expect(avatarPresetLabel('missing'), '蓝色');
@@ -195,7 +195,7 @@ void main() {
         expect(text.textAlign, TextAlign.center);
         expect(text.textScaler, TextScaler.noScaling);
         expect(text.style?.fontFamily, 'sans-serif');
-        expect(text.style?.fontSize, size * 0.34);
+        expect(text.style?.fontSize, size * 0.36);
         expect(text.style?.height, isNull);
         expect(text.style?.leadingDistribution, isNull);
         final avatarCenter = tester.getCenter(avatar);
@@ -224,10 +224,7 @@ void main() {
     );
 
     final avatar = find.byKey(const ValueKey('windows-avatar'));
-    final textFinder = find.descendant(
-      of: avatar,
-      matching: find.text('TE'),
-    );
+    final textFinder = find.descendant(of: avatar, matching: find.text('TE'));
     final text = tester.widget<Text>(textFinder);
     expect(text.textScaler, isNull);
     expect(text.style?.fontFamily, isNull);
@@ -257,7 +254,10 @@ void main() {
     final label = tester.widget<Text>(find.text('KA'));
     expect(decoration.border, isNull);
     expect(container.foregroundDecoration, isNull);
-    expect(label.style?.color, UiColors.text);
+    // Without the active border the initials keep the neutral fallback color
+    // instead of switching to the active accent.
+    expect(label.style?.color, Colors.white);
+    expect(label.style?.color, isNot(UiColors.accent));
   });
 
   testWidgets('avatar picker opens preview only for uploaded images', (

@@ -37,6 +37,7 @@ import '../app/messages_controller.dart';
 import '../app/music_box_controller.dart';
 import '../app/music_box_display.dart' as music_box_display;
 import '../app/music_track_preview.dart';
+import '../app/network_latency.dart' as network_latency;
 import '../app/personal_music_playlists.dart';
 import '../app/realtime_controller.dart';
 import '../app/realtime_live_events.dart';
@@ -86,16 +87,16 @@ import '../ui/ui.dart';
 import 'adaptive_layout.dart';
 import 'chat_pane.dart';
 import 'compact_activity_layout.dart';
-import 'home_content.dart';
 import 'home_keyboard_layout.dart';
 import 'hover_card_anchor.dart';
 import 'home_notifications.dart';
-import 'home_sidebar.dart';
+import 'home_room_navigation.dart';
 import 'live_channel_pane.dart';
 import 'live_screen_share_picker.dart';
 import 'music_playlist_snapshot_dialog.dart';
 import 'music_track_profile_card.dart';
 import 'navigation.dart';
+import 'room_context_bar.dart';
 import 'room_profile_card.dart';
 import 'room_management.dart';
 
@@ -113,7 +114,7 @@ part 'home_shell_layout.dart';
 part 'home_shell_title_bar.dart';
 part 'home_shell_join_dialog.dart';
 
-const _windowEdgeBorder = Color(0xFF303842);
+const _windowEdgeBorder = Color(0xFF1C1C20);
 const _defaultLiveVolumeRestore = 0.5;
 
 Widget _withAndroidBottomSafeArea({
@@ -281,6 +282,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   bool _closeConfirming = false;
   bool _exitingApplication = false;
   bool _narrowContentOpen = false;
+
+  /// Wide layout: the lobby (room overview) is in front of the open room.
+  bool _lobbyOpen = false;
   bool _compactLayout = false;
   bool _auxiliaryOpenedFromNarrowSidebar = false;
   _ContentMode _contentMode = _ContentMode.chat;
@@ -361,6 +365,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   int _searchRequestSerial = 0;
   String _searchQuery = '';
   bool _searchExpanded = false;
+  bool _searchPaletteOpen = false;
   bool _titleSearchContextMenuOpen = false;
   VoidCallback? _pendingTitleSearchContextMenuUpdate;
   bool _searching = false;
@@ -822,132 +827,113 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
               decoration: BoxDecoration(
                 border: Border.all(color: _windowEdgeBorder),
               ),
-              child: LayoutBuilder(
-                builder: (context, shellConstraints) {
-                  final narrowLayout =
-                      shellConstraints.maxWidth < narrowBreakpoint;
-                  _compactLayout = narrowLayout;
-                  final titleSearchLayout = _homeTitleBarSearchLayout(
-                    context,
-                    shellConstraints.maxWidth,
-                    hasLiveRoom: true,
-                  );
-                  final showSearchOverlay =
-                      titleSearchLayout != null &&
-                      !_appUpdateDownloadInProgress;
-                  final content = Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      KeyedSubtree(
-                        key: ValueKey(widget.app.currentUser.id),
-                        child: Column(
-                          children: [
-                            _HomeTitleBar(
-                              windowController: widget.windowController,
-                              searchController: _titleSearchController,
-                              searchTapRegionGroup: _searchTapRegionGroup,
-                              liveRoomDockBuilder: liveRoomDockBuilder,
-                              interactionLocked: _appUpdateDownloadInProgress,
-                              onActivateSearch: _activateSearch,
-                              onSearchTapOutside: _collapseSearch,
-                              onSearchContextMenuOpenChanged:
-                                  _handleTitleSearchContextMenuOpenChanged,
-                              onClearSearchQuery: _clearSearchQuery,
-                            ),
-                            Expanded(
-                              child: _buildAppUpdateLockedBody(
-                                LayoutBuilder(
-                                  builder: (context, constraints) {
-                                    final narrow =
-                                        constraints.maxWidth < narrowBreakpoint;
-                                    if (narrow) {
-                                      return _buildNarrowLayout(
-                                        constraints.maxWidth,
-                                        footerLiveRoomDockBuilder:
-                                            useAndroidLayout
-                                            ? liveRoomDockBuilder
-                                            : null,
+              child: DotGridBackground(
+                child: LayoutBuilder(
+                  builder: (context, shellConstraints) {
+                    final narrowLayout =
+                        shellConstraints.maxWidth < narrowBreakpoint;
+                    _compactLayout = narrowLayout;
+                    final showSearchPalette =
+                        _searchPaletteOpen && !_appUpdateDownloadInProgress;
+                    final content = Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        KeyedSubtree(
+                          key: ValueKey(widget.app.currentUser.id),
+                          child: Column(
+                            children: [
+                              _buildHeader(
+                                compact: narrowLayout,
+                                liveRoomDockBuilder: liveRoomDockBuilder,
+                              ),
+                              Expanded(
+                                child: _buildAppUpdateLockedBody(
+                                  LayoutBuilder(
+                                    builder: (context, constraints) {
+                                      final narrow =
+                                          constraints.maxWidth <
+                                          narrowBreakpoint;
+                                      if (narrow) {
+                                        return _buildNarrowLayout(
+                                          constraints.maxWidth,
+                                          liveRoomDockBuilder:
+                                              liveRoomDockBuilder,
+                                        );
+                                      }
+                                      return _buildContentSheet(
+                                        _buildContentPane(),
                                       );
-                                    }
-
-                                    return Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      children: [
-                                        _buildSidebar(
-                                          width: sidebarWidth,
-                                          openContentOnSelect: false,
-                                        ),
-                                        Expanded(child: _buildContentPane()),
-                                      ],
-                                    );
-                                  },
+                                    },
+                                  ),
                                 ),
                               ),
+                            ],
+                          ),
+                        ),
+                        if (showSearchPalette)
+                          Positioned.fill(
+                            child: _SearchPalette(
+                              compact: narrowLayout,
+                              field: _buildPaletteSearchField(),
+                              results: _hasSearchQuery
+                                  ? _buildSearchResultsTapRegion()
+                                  : null,
+                              onDismiss: _closeSearchPalette,
                             ),
-                          ],
-                        ),
-                      ),
-                      if (_hasSearchQuery &&
-                          _searchExpanded &&
-                          showSearchOverlay)
-                        Positioned(
-                          top: _homeTitleBarHeight - 1,
-                          left: titleSearchLayout.left,
-                          width: titleSearchLayout.width,
-                          child: _buildSearchResultsTapRegion(),
-                        ),
-                      if (fullScreenTrack != null)
-                        Positioned.fill(
-                          child: FullScreenMediaOrientation(
-                            child: LiveFullScreenStage(
-                              track: fullScreenTrack,
-                              label: liveStageTrackLabel(
-                                _live,
-                                fullScreenTrack,
-                              ),
-                              cameraMirrored:
-                                  live_display
-                                      .liveParticipantByUserId(
+                          ),
+                        if (fullScreenTrack != null)
+                          Positioned.fill(
+                            child: FullScreenMediaOrientation(
+                              child: LiveFullScreenStage(
+                                track: fullScreenTrack,
+                                label: liveStageTrackLabel(
+                                  _live,
+                                  fullScreenTrack,
+                                ),
+                                cameraMirrored:
+                                    live_display
+                                        .liveParticipantByUserId(
+                                          _live,
+                                          fullScreenTrack.identity,
+                                        )
+                                        ?.cameraMirrored ??
+                                    false,
+                                screenShareViewers:
+                                    fullScreenTrack.isScreenShare
+                                    ? live_display.liveScreenShareViewers(
                                         _live,
                                         fullScreenTrack.identity,
                                       )
-                                      ?.cameraMirrored ??
-                                  false,
-                              screenShareViewers: fullScreenTrack.isScreenShare
-                                  ? live_display.liveScreenShareViewers(
-                                      _live,
-                                      fullScreenTrack.identity,
-                                    )
-                                  : const <UserSummary>[],
-                              screenShareVolume:
-                                  _liveSessionController.screenShareVolume,
-                              onScreenShareVolumeChanged:
-                                  _changeScreenShareVolume,
-                              onScreenShareMuteToggled:
-                                  _toggleScreenShareAudioMute,
-                              onExit: _exitLiveFullScreen,
+                                    : const <UserSummary>[],
+                                screenShareVolume:
+                                    _liveSessionController.screenShareVolume,
+                                onScreenShareVolumeChanged:
+                                    _changeScreenShareVolume,
+                                onScreenShareMuteToggled:
+                                    _toggleScreenShareAudioMute,
+                                onExit: _exitLiveFullScreen,
+                              ),
                             ),
                           ),
-                        ),
-                    ],
-                  );
-                  final responsiveContent = HomeAdaptiveLayout(
-                    compact: narrowLayout,
-                    child: content,
-                  );
-                  if (!useAndroidLayout) return responsiveContent;
-                  return PopScope(
-                    key: const ValueKey('android-shell-back-scope'),
-                    canPop: !_canHandleShellBack(narrowLayout: narrowLayout),
-                    onPopInvokedWithResult: (didPop, result) {
-                      if (!didPop) {
-                        _handleShellBack(narrowLayout: narrowLayout);
-                      }
-                    },
-                    child: responsiveContent,
-                  );
-                },
+                      ],
+                    );
+                    final responsiveContent = HomeAdaptiveLayout(
+                      compact: narrowLayout,
+                      child: content,
+                    );
+                    if (!useAndroidLayout) return responsiveContent;
+                    return PopScope(
+                      key: const ValueKey('android-shell-back-scope'),
+                      canPop: !_canHandleShellBack(narrowLayout: narrowLayout),
+                      onPopInvokedWithResult: (didPop, result) {
+                        if (!didPop) {
+                          _handleShellBack(narrowLayout: narrowLayout);
+                        }
+                      },
+                      child: responsiveContent,
+                    );
+                  },
+                ),
               ),
             ),
           ),

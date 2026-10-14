@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:client/src/ui/input.dart';
 import 'package:client/src/ui/text_context_menu.dart';
+import 'package:client/src/ui/tokens.dart';
 
 void main() {
   testWidgets('input clear button clears text and reports the change', (
@@ -363,22 +364,38 @@ void main() {
     );
   });
 
-  testWidgets('input stays lifted while focused without hover', (tester) async {
+  testWidgets('input keeps its focus ring while focused without hover', (
+    tester,
+  ) async {
     final controller = TextEditingController(text: 'hello');
     addTearDown(controller.dispose);
 
     await _pumpInput(tester, controller);
 
-    AnimatedPadding inputCap() {
-      return tester.widget<AnimatedPadding>(find.byType(AnimatedPadding));
+    BoxDecoration inputFrame() {
+      final frame = tester.widget<AnimatedContainer>(
+        find.descendant(
+          of: find.byType(Input),
+          matching: find.byType(AnimatedContainer),
+        ),
+      );
+      return frame.decoration! as BoxDecoration;
     }
 
-    expect(inputCap().padding, const EdgeInsets.only(top: 3, bottom: 5));
+    Color borderColor() => (inputFrame().border! as Border).top.color;
+
+    expect(borderColor(), UiColors.fieldBorder);
+    expect(inputFrame().boxShadow, isNull);
 
     await tester.tap(find.byType(TextField));
     await tester.pumpAndSettle();
 
-    expect(inputCap().padding, const EdgeInsets.only(top: 0, bottom: 8));
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).focusNode!.hasFocus,
+      isTrue,
+    );
+    expect(borderColor(), UiColors.accentStrong);
+    expect(inputFrame().boxShadow, isNotEmpty);
   });
 
   testWidgets('input context menu shows select all without clipboard text', (

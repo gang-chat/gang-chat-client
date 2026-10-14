@@ -79,15 +79,15 @@ class _MusicBoxTrackRowState extends State<_MusicBoxTrackRow> {
   @override
   Widget build(BuildContext context) {
     final actionCount = widget.trailing.length;
-    final titleStyle = TextStyle(
+    final titleStyle = UiTypography.body.copyWith(
       color: widget.selected ? UiColors.accent : UiColors.text,
-      fontSize: 13,
-      fontWeight: FontWeight.w500,
-    );
-    final subtitleStyle = TextStyle(
-      color: widget.subtitleColor,
-      fontSize: 11,
+      fontSize: 13.5,
       fontWeight: FontWeight.w600,
+      height: 1.3,
+    );
+    final subtitleStyle = UiTypography.mono.copyWith(
+      color: widget.subtitleColor,
+      fontSize: 10.5,
     );
     final body = LayoutBuilder(
       builder: (context, constraints) {
@@ -134,14 +134,19 @@ class _MusicBoxTrackRowState extends State<_MusicBoxTrackRow> {
           duration: const Duration(milliseconds: 80),
           curve: Curves.easeOutCubic,
           constraints: const BoxConstraints(minHeight: _musicBoxRowMinHeight),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
           decoration: BoxDecoration(
             color: widget.selected
                 ? UiColors.selected
                 : _hovered
                 ? widget.hoverColor
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(UiRadii.sm),
+            borderRadius: BorderRadius.circular(UiRadii.md),
+            border: Border.all(
+              color: widget.selected
+                  ? UiColors.accentBorder
+                  : Colors.transparent,
+            ),
           ),
           child: Row(
             children: [
@@ -213,6 +218,7 @@ class _MusicBoxRowAction extends StatelessWidget {
         loading: loading,
         onPressed: onPressed,
         size: size,
+        ghost: tone != ButtonTone.primary,
       ),
     );
   }
@@ -319,13 +325,12 @@ class _MusicBoxQueueRowLeading extends StatelessWidget {
       );
     }
     return Text(
-      '${index + 1}',
+      '${index + 1}'.padLeft(2, '0'),
       key: ValueKey<String>('music-box-queue-leading-index:${item.id}'),
-      style: const TextStyle(
+      style: UiTypography.mono.copyWith(
         color: UiColors.textMuted,
         fontSize: 11,
-        fontWeight: FontWeight.w600,
-        fontFeatures: [FontFeature.tabularFigures()],
+        fontWeight: FontWeight.w700,
       ),
     );
   }
@@ -392,17 +397,20 @@ class _MusicBoxPlaylistRowState extends State<_MusicBoxPlaylistRow> {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 80),
             curve: Curves.easeOutCubic,
-            constraints: const BoxConstraints(
-              minHeight: _musicBoxRowMinHeight,
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            constraints: const BoxConstraints(minHeight: _musicBoxRowMinHeight),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
             decoration: BoxDecoration(
               color: widget.playing
                   ? UiColors.selected
                   : _hovered
                   ? widget.hoverColor
                   : Colors.transparent,
-              borderRadius: BorderRadius.circular(UiRadii.sm),
+              borderRadius: BorderRadius.circular(UiRadii.md),
+              border: Border.all(
+                color: widget.playing
+                    ? UiColors.accentBorder
+                    : Colors.transparent,
+              ),
             ),
             child: Row(
               children: [
@@ -418,12 +426,12 @@ class _MusicBoxPlaylistRowState extends State<_MusicBoxPlaylistRow> {
                     children: [
                       Text(
                         widget.name,
-                        style: TextStyle(
+                        style: UiTypography.body.copyWith(
                           color: widget.playing
                               ? UiColors.accent
                               : UiColors.text,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -431,10 +439,9 @@ class _MusicBoxPlaylistRowState extends State<_MusicBoxPlaylistRow> {
                         widget.playing
                             ? '正在播放 · ${widget.itemCount} 首'
                             : '${widget.itemCount} 首',
-                        style: const TextStyle(
+                        style: UiTypography.mono.copyWith(
                           color: UiColors.textMuted,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
+                          fontSize: 10.5,
                         ),
                       ),
                     ],
@@ -462,8 +469,12 @@ class _MusicBoxSectionHeader extends StatelessWidget {
     required this.title,
     this.leading,
     this.trailing = const <Widget>[],
+    this.channel,
+    this.channelLit = false,
   });
 
+  final String? channel;
+  final bool channelLit;
   final String title;
   final Widget? leading;
   final List<Widget> trailing;
@@ -477,24 +488,31 @@ class _MusicBoxSectionHeader extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          if (leading != null) ...[leading!, const SizedBox(width: 4)],
+          if (channel != null) ...[
+            const SizedBox(width: 6),
+            Text(
+              channel!,
+              style: UiTypography.dot.copyWith(
+                fontSize: 13,
+                color: channelLit ? UiColors.accent : UiColors.textMuted,
+              ),
+            ),
+            const SizedBox(width: 10),
+          ],
+          if (leading != null) ...[leading!, const SizedBox(width: 6)],
           Expanded(
             child: Text(
               title,
               maxLines: 1,
               softWrap: false,
               overflow: TextOverflow.fade,
-              style: const TextStyle(
-                color: UiColors.textSecondary,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
+              style: UiTypography.label.copyWith(
+                color: UiColors.text,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ),
-          for (final action in trailing) ...[
-            const SizedBox(width: 4),
-            action,
-          ],
+          for (final action in trailing) ...[const SizedBox(width: 4), action],
         ],
       ),
     );
