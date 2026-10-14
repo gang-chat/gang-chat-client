@@ -665,7 +665,7 @@ flutter devices
 
 ### macOS
 
-- macOS 10.15 或更高版本。
+- macOS 12 或更高版本（Xcode 26 起不再支持更低的部署目标）。
 - Xcode 和命令行工具。
 - CocoaPods。
 - 摄像头、麦克风和屏幕录制权限。
