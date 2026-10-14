@@ -111,7 +111,7 @@ class SettingsTileNavigation<T> extends SettingsNavigation<T> {
   }) {
     const gap = 8.0;
     final count = segments.length;
-    final minTileWidth = compact ? 112.0 : 128.0;
+    const minTileWidth = 112.0;
     final available = maxWidth - horizontalPadding * 2;
     final fits = available >= count * minTileWidth + (count - 1) * gap;
     Widget tile(int index, {double? width}) {

@@ -96,6 +96,7 @@ class SettingsPage extends StatefulWidget {
     this.autoUpdatePromptStore = const LocalAutoUpdatePromptStore(),
     this.installInfoService = const InstallInfoService(),
     this.releaseUpdateService = const ReleaseUpdateService(),
+    this.updatePlatformOverride,
     this.windowController,
     this.closeBehaviorStore = const LocalCloseBehaviorStore(),
     this.languageStore = const LocalLanguagePreferenceStore(),
@@ -137,6 +138,10 @@ class SettingsPage extends StatefulWidget {
   final AutoUpdatePromptStore autoUpdatePromptStore;
   final InstallInfoService installInfoService;
   final ReleaseUpdateService releaseUpdateService;
+
+  /// Platform whose installers the update check looks for; defaults to the
+  /// running operating system (tests pin it, like [AppUpdateGate] does).
+  final AppUpdatePlatform? updatePlatformOverride;
   final DesktopWindowController? windowController;
   final CloseBehaviorStore closeBehaviorStore;
   final LanguagePreferenceStore languageStore;
@@ -1446,7 +1451,8 @@ class _SettingsPageState extends State<SettingsPage>
   }
 
   AppUpdatePlatform? _currentUpdatePlatform() {
-    return appUpdatePlatformForOperatingSystem(Platform.operatingSystem);
+    return widget.updatePlatformOverride ??
+        appUpdatePlatformForOperatingSystem(Platform.operatingSystem);
   }
 
   Future<void> _openFeedbackMail() async {

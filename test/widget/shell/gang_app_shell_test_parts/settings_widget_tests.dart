@@ -760,6 +760,7 @@ void registerShellSettingsWidgetTests() {
           api: api,
           apiBaseUrl: 'http://example.test/api/v1',
           appVersion: '0.4.0',
+          updatePlatformOverride: AppUpdatePlatform.windows,
           feedbackMailService: _FakeFeedbackMailService(feedbackDrafts),
           autoUpdatePromptStore: _FakeAutoUpdatePromptStore(
             autoUpdateWrites,
@@ -789,7 +790,8 @@ void registerShellSettingsWidgetTests() {
 
     expect(find.text('版本信息'), findsOneWidget);
     expect(find.text('版本编号'), findsOneWidget);
-    expect(find.text('0.4.0'), findsOneWidget);
+    // The version appears in the field and as the about tile's summary.
+    expect(find.text('0.4.0'), findsNWidgets(2));
     expect(find.text('发行时间'), findsOneWidget);
     expect(find.text('上次更新时间'), findsOneWidget);
     expect(
@@ -854,6 +856,7 @@ void registerShellSettingsWidgetTests() {
           isSubWindow: true,
           currentUser: CurrentUser.fromJson(_currentUserJson),
           appVersion: '0.4.0',
+          updatePlatformOverride: AppUpdatePlatform.windows,
           autoUpdatePromptStore: autoUpdateStore,
           installInfoService: const _FakeInstallInfoService('2026/07/01'),
           releaseUpdateService: ReleaseUpdateService(
