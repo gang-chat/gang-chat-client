@@ -28,6 +28,14 @@ class _ViewportAnchor {
   final double top;
 }
 
+/// Row key that remembers its message so the list can find the row's new index
+/// after messages are inserted, instead of reparenting every keyed row.
+class _MessageRowKey extends GlobalKey {
+  const _MessageRowKey(this.clientMessageId) : super.constructor();
+
+  final String clientMessageId;
+}
+
 /// Callbacks for file-attachment downloads, bundled so they can travel from
 /// [ChatPane] down to each [_FileAttachmentTile] without threading five
 /// separate parameters through every intermediate widget.
@@ -262,9 +270,9 @@ class _MessageStageState extends State<_MessageStage> {
   int _retainedNewMessageLabelCount = 0;
   late final ScrollController _scrollController;
   final GlobalKey _messageListKey = GlobalKey();
-  final GlobalKey _oldestMessageKey = GlobalKey();
   final GlobalKey _firstNewMessageKey = GlobalKey();
-  final Map<String, GlobalKey> _messageRowKeys = {};
+  final Map<String, _MessageRowKey> _messageRowKeys = {};
+  Map<String, int> _messageIndexByClientId = const {};
   final Set<String> _viewedUnreadMentionClientIds = {};
   String? _highlightedMentionClientId;
   String? _highlightedMessageId;
@@ -562,8 +570,12 @@ class _MessageStageState extends State<_MessageStage> {
       if (!mounted) return;
       final listBox =
           _messageListKey.currentContext?.findRenderObject() as RenderBox?;
-      final oldestBox =
-          _oldestMessageKey.currentContext?.findRenderObject() as RenderBox?;
+      final oldestBox = widget.messages.isEmpty
+          ? null
+          : _messageRowKeys[widget.messages.first.clientMessageId]
+                    ?.currentContext
+                    ?.findRenderObject()
+                as RenderBox?;
       if (listBox == null) return;
       if (oldestBox == null) {
         if (_underflowBottomSpacer > 0 || !_messageListReady) {
@@ -700,16 +712,36 @@ class _MessageStageState extends State<_MessageStage> {
   }
 
   GlobalKey _messageRowKey(String clientMessageId) {
-    return _messageRowKeys.putIfAbsent(clientMessageId, GlobalKey.new);
+    return _messageRowKeys.putIfAbsent(
+      clientMessageId,
+      () => _MessageRowKey(clientMessageId),
+    );
   }
 
-  void _trimMessageRowKeys() {
-    final activeIds = {
-      for (final message in widget.messages) message.clientMessageId,
+  void _syncMessageRowKeys() {
+    final messages = widget.messages;
+    _messageIndexByClientId = {
+      for (var index = 0; index < messages.length; index++)
+        messages[index].clientMessageId: index,
     };
     _messageRowKeys.removeWhere(
-      (id, key) => !activeIds.contains(id) || key.currentContext == null,
+      (id, key) =>
+          !_messageIndexByClientId.containsKey(id) ||
+          key.currentContext == null,
     );
+  }
+
+  // Inserting a message shifts every row's list index. Mapping each mounted row
+  // back to its new index lets the list move the row's element in place;
+  // otherwise every row's GlobalKey subtree is deactivated and re-taken during
+  // sliver layout, which rebuilds dependency-driven overlay children (such as
+  // an open hover card's LayoutBuilder) while the row is detached.
+  int? _findMessageItemIndex(Key key) {
+    if (key is! _MessageRowKey) return null;
+    final chronologicalIndex = _messageIndexByClientId[key.clientMessageId];
+    if (chronologicalIndex == null) return null;
+    // Item 0 is the underflow spacer, and the list is reversed.
+    return widget.messages.length - chronologicalIndex;
   }
 
   _ViewportAnchor? _captureViewportAnchorFrom(List<Message> messages) {
@@ -1088,7 +1120,7 @@ class _MessageStageState extends State<_MessageStage> {
 
   @override
   Widget build(BuildContext context) {
-    _trimMessageRowKeys();
+    _syncMessageRowKeys();
     if (widget.error != null && !widget.roomReady) {
       return FloatingNoticeEmitter(
         notices: [
@@ -1161,6 +1193,7 @@ class _MessageStageState extends State<_MessageStage> {
         widget.bottomInset,
       ),
       itemCount: widget.messages.length + 1,
+      findItemIndexCallback: _findMessageItemIndex,
       separatorBuilder: (context, index) =>
           index == 0 ? const SizedBox.shrink() : const SizedBox(height: 12),
       itemBuilder: (context, index) {
@@ -1255,14 +1288,10 @@ class _MessageStageState extends State<_MessageStage> {
               ),
           ],
         );
-        final keyedRow = KeyedSubtree(
+        return KeyedSubtree(
           key: _messageRowKey(message.clientMessageId),
           child: row,
         );
-        if (chronologicalIndex == 0) {
-          return KeyedSubtree(key: _oldestMessageKey, child: keyedRow);
-        }
-        return keyedRow;
       },
     );
 
