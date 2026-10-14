@@ -50,7 +50,9 @@ const double _authRememberHeight = 28;
 const double _authSubmitHeight = 46;
 const double _accountHistoryItemHeight = 38;
 const double _authSegmentedControlOuterHeight = 40;
-const double _authInputOuterHeight = 46;
+const double _authInputHeight = 46;
+// [Input] draws a 1px border outside its [Input.height].
+const double _authInputOuterHeight = _authInputHeight + 2;
 const double _accountHistoryDropdownTop =
     _authTitleBarHeight +
     _authTitleBarGap +
@@ -717,7 +719,7 @@ class _LoginPageState extends State<LoginPage> {
                                             ),
                                             Input(
                                               controller: _password,
-                                              height: _authInputOuterHeight,
+                                              height: _authInputHeight,
                                               enabled: !_submitState.busy,
                                               hintText: '密码',
                                               prefixIcon: Icons.lock_outline,
@@ -751,7 +753,7 @@ class _LoginPageState extends State<LoginPage> {
                                               ),
                                               Input(
                                                 controller: _confirmPassword,
-                                                height: _authInputOuterHeight,
+                                                height: _authInputHeight,
                                                 enabled: !_submitState.busy,
                                                 hintText: '确认密码',
                                                 prefixIcon: Icons.lock_outline,
@@ -926,7 +928,7 @@ class _LoginPageState extends State<LoginPage> {
   Widget _buildPrimaryIdentityInput() {
     return Input(
       controller: _login,
-      height: _authInputOuterHeight,
+      height: _authInputHeight,
       enabled: !_submitState.busy,
       hintText: _registering ? '登录用户名' : '登录用户名或邮箱地址',
       prefixIcon: Icons.person_outline,
@@ -962,7 +964,7 @@ class _LoginPageState extends State<LoginPage> {
   Widget _buildRegisterEmailInput() {
     return Input(
       controller: _email,
-      height: _authInputOuterHeight,
+      height: _authInputHeight,
       enabled: !_submitState.busy,
       hintText: '邮箱地址',
       prefixIcon: Icons.alternate_email,

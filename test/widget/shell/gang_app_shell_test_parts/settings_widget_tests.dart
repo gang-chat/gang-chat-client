@@ -83,21 +83,30 @@ void registerShellSettingsWidgetTests() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('目标用户 的用户设置'), findsOneWidget);
-      expect(find.text('用户资料'), findsOneWidget);
-      expect(find.text('偏好设置'), findsOneWidget);
-      expect(find.text('隐私和安全'), findsOneWidget);
-      expect(find.text('语音和视频'), findsOneWidget);
-      expect(find.text('我的表情包'), findsOneWidget);
-      expect(find.text('关于Gang Chat'), findsOneWidget);
+      final sideNavigation = find.byKey(
+        const ValueKey('settings-side-navigation'),
+      );
+      expect(sideNavigation, findsOneWidget);
+      Finder inSideNavigation(String text) =>
+          find.descendant(of: sideNavigation, matching: find.text(text));
+      expect(inSideNavigation('目标用户 的用户设置'), findsOneWidget);
+      expect(inSideNavigation('用户资料'), findsOneWidget);
+      expect(inSideNavigation('偏好设置'), findsOneWidget);
+      expect(inSideNavigation('隐私和安全'), findsOneWidget);
+      expect(inSideNavigation('语音和视频'), findsOneWidget);
+      expect(inSideNavigation('我的表情包'), findsOneWidget);
+      expect(inSideNavigation('关于Gang Chat'), findsOneWidget);
+      // The selected section is repeated as the content header.
+      expect(find.text('隐私和安全'), findsNWidgets(2));
       expect(find.text('当前密码'), findsNothing);
       final forgot = find.widgetWithText(ui.Button, '忘记密码');
       expect(forgot, findsOneWidget);
       expect(tester.widget<ui.Button>(forgot).onPressed, isNull);
 
-      await tester.tap(find.text('我的表情包').first);
+      await tester.tap(inSideNavigation('我的表情包'));
       await tester.pumpAndSettle();
 
+      expect(find.text('我的表情包'), findsNWidgets(2));
       expect(find.text('目标表情包'), findsNothing);
       expect(
         requestedUris.any(
@@ -263,7 +272,7 @@ void registerShellSettingsWidgetTests() {
 
       await _openLiveChannelFromHeader(tester);
 
-      await tester.tap(find.widgetWithText(ui.Button, '加入'));
+      await tester.tap(find.widgetWithText(ui.Button, '加入语音'));
       await tester.pumpAndSettle();
 
       final handler = windowController.closeRequestHandler;
@@ -332,10 +341,10 @@ void registerShellSettingsWidgetTests() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Alpha Room'));
+      await tester.tap(_settingsPartRoomTab('server-alpha'));
       await tester.pumpAndSettle();
       await _openLiveChannelFromHeader(tester);
-      await tester.tap(find.widgetWithText(ui.Button, '加入'));
+      await tester.tap(find.widgetWithText(ui.Button, '加入语音'));
       await tester.pumpAndSettle();
 
       blockNextMicStateRequest = true;
@@ -1126,10 +1135,10 @@ void registerShellSettingsWidgetTests() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Alpha Room'));
+    await tester.tap(_settingsPartRoomTab('server-alpha'));
     await tester.pumpAndSettle();
     await _openLiveChannelFromHeader(tester);
-    await tester.tap(find.widgetWithText(ui.Button, '加入'));
+    await tester.tap(find.widgetWithText(ui.Button, '加入语音'));
     await tester.pumpAndSettle();
 
     await tester.tap(_liveControl('headphones'));
@@ -1140,14 +1149,14 @@ void registerShellSettingsWidgetTests() {
     expect(
       find.descendant(
         of: _liveControl('mic'),
-        matching: find.byIcon(Icons.mic_off),
+        matching: find.byIcon(Icons.mic_off_rounded),
       ),
       findsOneWidget,
     );
     expect(
       find.descendant(
         of: _liveControl('headphones'),
-        matching: find.byIcon(Icons.headset_off),
+        matching: find.byIcon(Icons.headset_off_rounded),
       ),
       findsOneWidget,
     );
@@ -1168,14 +1177,14 @@ void registerShellSettingsWidgetTests() {
     expect(
       find.descendant(
         of: _liveControl('mic'),
-        matching: find.byIcon(Icons.mic),
+        matching: find.byIcon(Icons.mic_rounded),
       ),
       findsOneWidget,
     );
     expect(
       find.descendant(
         of: _liveControl('headphones'),
-        matching: find.byIcon(Icons.headphones),
+        matching: find.byIcon(Icons.headphones_rounded),
       ),
       findsOneWidget,
     );
@@ -1185,14 +1194,14 @@ void registerShellSettingsWidgetTests() {
     expect(
       find.descendant(
         of: _liveControl('mic'),
-        matching: find.byIcon(Icons.mic),
+        matching: find.byIcon(Icons.mic_rounded),
       ),
       findsOneWidget,
     );
     expect(
       find.descendant(
         of: _liveControl('headphones'),
-        matching: find.byIcon(Icons.headphones),
+        matching: find.byIcon(Icons.headphones_rounded),
       ),
       findsOneWidget,
     );
@@ -1219,6 +1228,11 @@ class _MemoryStickerPackStore extends StickerPackStore {
     lastWrittenUserId = userId;
     this.packs = packs;
   }
+}
+
+/// The header room tab for [roomId]; the lobby card repeats the room name.
+Finder _settingsPartRoomTab(String roomId) {
+  return find.byKey(ValueKey<String>('home-room-tab-$roomId'));
 }
 
 class _TaskRemovalAndroidSystemService extends AndroidSystemService {
