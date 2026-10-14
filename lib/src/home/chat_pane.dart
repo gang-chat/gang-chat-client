@@ -37,7 +37,6 @@ import '../app/voice_message_display.dart' as voice_display;
 import '../protocol/models.dart';
 import '../shell/external_uri_launcher.dart';
 import '../ui/ui.dart';
-import 'adaptive_layout.dart';
 import 'chat_image_preview.dart';
 import 'hover_card_anchor.dart';
 import 'music_playlist_profile_card.dart';
@@ -46,29 +45,17 @@ import 'room_profile_card.dart';
 
 export 'chat_image_preview.dart';
 
-part 'chat_header.dart';
 part 'chat_messages.dart';
 part 'chat_composer_dock.dart';
 part 'chat_profile_card.dart';
 
-const _chatHeaderHeight = 111.0;
 const _chatHorizontalPadding = 18.0;
 const _chatFloatingEdgeInset = 14.0;
-const _chatHeaderHorizontalInset = _chatFloatingEdgeInset;
-const _chatHeaderVisualTopInset = _chatHeaderHorizontalInset;
-const _chatHeaderBottomInset = 16.0;
-const _headerSurfaceHoverLift = 3.0;
-const _headerSurfaceBaseDepth = 5.0;
-const _liveHeaderCardHeight = 70.0;
-const _headerActionButtonSize = 31.0;
-const _headerActionGap = 0.0;
-const _messageMaxWidth = 560.0;
+const _messageMaxWidth = 720.0;
 // Breathing room below the last message before the composer row begins.
 const _messageListBottomInset = 14.0;
 const _composerHorizontalInset = _chatFloatingEdgeInset;
 const _composerBottomInset = _chatFloatingEdgeInset;
-const _outgoingBubble = Color(0xFF1F352B);
-const _incomingBubble = UiColors.surface;
 
 class ChatPane extends StatelessWidget {
   const ChatPane({
@@ -92,7 +79,6 @@ class ChatPane extends StatelessWidget {
     required this.error,
     required this.sending,
     required this.sendError,
-    this.hasPendingJoinRequests = false,
     required this.composerController,
     required this.composerPanelController,
     required this.stickerPanel,
@@ -129,10 +115,6 @@ class ChatPane extends StatelessWidget {
     required this.onRemoveAttachment,
     required this.onRetryAttachment,
     required this.onRetry,
-    this.onNavigateBack,
-    required this.onOpenLiveChannel,
-    required this.onOpenRoomMembers,
-    required this.onOpenRoomSettings,
     required this.onViewedNewMessages,
     this.onResolveSenderProfile,
     this.onResolveRoomProfile,
@@ -161,7 +143,6 @@ class ChatPane extends StatelessWidget {
   final String? error;
   final bool sending;
   final String? sendError;
-  final bool hasPendingJoinRequests;
   final TextEditingController composerController;
   final ChatComposerController composerPanelController;
   final sticker_display.StickerPanelLoadState stickerPanel;
@@ -200,10 +181,6 @@ class ChatPane extends StatelessWidget {
   final ValueChanged<String> onRemoveAttachment;
   final ValueChanged<String> onRetryAttachment;
   final VoidCallback onRetry;
-  final VoidCallback? onNavigateBack;
-  final VoidCallback onOpenLiveChannel;
-  final VoidCallback onOpenRoomMembers;
-  final VoidCallback onOpenRoomSettings;
   final VoidCallback onViewedNewMessages;
 
   /// Resolves a richer profile for a message sender on demand (gender, common
@@ -219,53 +196,15 @@ class ChatPane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final title = _roomTitle(room, roomCard);
-    final avatarLabel = _roomAvatarLabel(room, roomCard);
-    final avatarUrl = room?.avatarUrl ?? roomCard?.avatarUrl;
-    final defaultAvatarKey =
-        room?.defaultAvatarKey ??
-        roomCard?.defaultAvatarKey ??
-        kDefaultAvatarPresetKey;
-    final liveParticipantCount =
-        live?.participantCount ??
-        room?.live.participantCount ??
-        roomCard?.liveParticipantCount;
-    final liveAvatarPreview =
-        live?.participants
-            .map((participant) => participant.user)
-            .take(5)
-            .toList() ??
-        room?.live.participants
-            .map((participant) => participant.user)
-            .take(5)
-            .toList() ??
-        roomCard?.liveAvatarPreview ??
-        const <UserSummary>[];
     final roomReady = room != null;
     final stageKey = ValueKey(
       'message-stage-${room?.id ?? roomCard?.id ?? 'none'}',
     );
 
     return ColoredBox(
-      color: UiColors.background,
+      color: Colors.transparent,
       child: Column(
         children: [
-          _RoomHeader(
-            onNavigateBack: onNavigateBack,
-            title: title,
-            avatarLabel: avatarLabel,
-            avatarUrl: avatarUrl,
-            defaultAvatarKey: defaultAvatarKey,
-            memberCount: room?.memberCount ?? roomCard?.memberCount,
-            onlineMemberCount:
-                room?.onlineMemberCount ?? roomCard?.onlineMemberCount,
-            liveParticipantCount: liveParticipantCount,
-            liveAvatarPreview: liveAvatarPreview,
-            hasPendingJoinRequests: hasPendingJoinRequests,
-            onLivePressed: onOpenLiveChannel,
-            onMembersPressed: onOpenRoomMembers,
-            onSettingsPressed: onOpenRoomSettings,
-          ),
           Expanded(
             child: _MessageStage(
               key: stageKey,
@@ -364,20 +303,4 @@ String _currentUserRoomDisplayName(CurrentUser currentUser, RoomDetail? room) {
   final displayName = currentUser.displayName.trim();
   if (displayName.isNotEmpty) return displayName;
   return currentUser.username;
-}
-
-String _roomTitle(RoomDetail? room, RoomCard? card) {
-  final detailRemark = room?.remarkName?.trim();
-  if (detailRemark != null && detailRemark.isNotEmpty) return detailRemark;
-  final detailTitle = room?.name.trim();
-  if (detailTitle != null && detailTitle.isNotEmpty) return detailTitle;
-  final cardTitle = card?.displayName.trim();
-  if (cardTitle != null && cardTitle.isNotEmpty) return cardTitle;
-  return '聊天';
-}
-
-String _roomAvatarLabel(RoomDetail? room, RoomCard? card) {
-  if (room != null) return room_display.roomAvatarLabel(room);
-  if (card != null) return room_display.roomCardAvatarLabel(card);
-  return '聊天';
 }

@@ -158,16 +158,10 @@ class _LiveMusicBoxPanelState extends State<LiveMusicBoxPanel> {
     final state = widget.state;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: UiColors.surface,
-        borderRadius: BorderRadius.circular(_liveRoomRadius),
-        border: Border.all(color: UiColors.border),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x66080A0D),
-            offset: Offset(0, 10),
-            blurRadius: 22,
-          ),
-        ],
+        color: UiColors.surfaceRaised,
+        borderRadius: BorderRadius.circular(UiRadii.xl),
+        border: Border.all(color: UiColors.borderStrong),
+        boxShadow: UiShadows.popover,
       ),
       child: Padding(
         padding: const EdgeInsets.all(11),
@@ -285,8 +279,6 @@ class _MusicBoxHeader extends StatelessWidget {
               backgroundColor: UiColors.surfaceLow,
               selected: playing,
               borderRadius: UiRadii.md,
-              hoverLift: 1,
-              baseDepth: 2,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -481,8 +473,7 @@ class _MusicBoxNowPlaying extends StatelessWidget {
                             : Icons.play_arrow,
                       ),
                       tooltip: switch (transport) {
-                        music_box_display.MusicBoxTransportAction.pause =>
-                          '暂停',
+                        music_box_display.MusicBoxTransportAction.pause => '暂停',
                         music_box_display.MusicBoxTransportAction.resume =>
                           '继续播放',
                         music_box_display.MusicBoxTransportAction.play => '播放',

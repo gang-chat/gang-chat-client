@@ -658,10 +658,10 @@ class _RoomSettingsDialogState extends State<RoomSettingsDialog> {
                 size: 38,
                 loading: _refreshing,
               ),
-        pinned: _creating
+        showBack: _creating || !widget.embedded,
+        navigation: _creating
             ? null
-            : SegmentedControl<RoomSettingsSection>(
-                expanded: true,
+            : SettingsNavigation<RoomSettingsSection>(
                 value: _section,
                 onChanged: (section) => setState(() => _section = section),
                 segments: [

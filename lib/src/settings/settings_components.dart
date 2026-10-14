@@ -1,57 +1,42 @@
 part of 'settings_page.dart';
 
-class _SettingsNavigation extends StatelessWidget {
-  const _SettingsNavigation({required this.selected, required this.onChanged});
-
-  final SettingsSection selected;
-  final ValueChanged<SettingsSection> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return SegmentedControl<SettingsSection>(
-      expanded: true,
-      value: selected,
-      onChanged: onChanged,
-      segments: const [
-        Segment(
-          value: SettingsSection.profile,
-          label: '用户资料',
-          icon: Icons.badge_outlined,
-        ),
-        Segment(
-          value: SettingsSection.preferences,
-          label: '偏好设置',
-          icon: Icons.tune_outlined,
-        ),
-        Segment(
-          value: SettingsSection.security,
-          label: '隐私和安全',
-          icon: Icons.shield_outlined,
-        ),
-        Segment(
-          value: SettingsSection.voice,
-          label: '语音和视频',
-          icon: Icons.graphic_eq,
-        ),
-        Segment(
-          value: SettingsSection.stickers,
-          label: '我的表情包',
-          icon: Icons.emoji_emotions_outlined,
-        ),
-        Segment(
-          value: SettingsSection.playlists,
-          label: '我的歌单',
-          icon: Icons.queue_music_outlined,
-        ),
-        Segment(
-          value: SettingsSection.about,
-          label: '关于Gang Chat',
-          icon: Icons.info_outline,
-        ),
-      ],
-    );
-  }
-}
+const _settingsSectionSegments = [
+  Segment(
+    value: SettingsSection.profile,
+    label: '用户资料',
+    icon: Icons.badge_outlined,
+  ),
+  Segment(
+    value: SettingsSection.preferences,
+    label: '偏好设置',
+    icon: Icons.tune_outlined,
+  ),
+  Segment(
+    value: SettingsSection.security,
+    label: '隐私和安全',
+    icon: Icons.shield_outlined,
+  ),
+  Segment(
+    value: SettingsSection.voice,
+    label: '语音和视频',
+    icon: Icons.graphic_eq,
+  ),
+  Segment(
+    value: SettingsSection.stickers,
+    label: '我的表情包',
+    icon: Icons.emoji_emotions_outlined,
+  ),
+  Segment(
+    value: SettingsSection.playlists,
+    label: '我的歌单',
+    icon: Icons.queue_music_outlined,
+  ),
+  Segment(
+    value: SettingsSection.about,
+    label: '关于Gang Chat',
+    icon: Icons.info_outline,
+  ),
+];
 
 class _SettingsGroup extends StatelessWidget {
   const _SettingsGroup({

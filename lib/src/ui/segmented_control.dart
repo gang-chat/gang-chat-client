@@ -74,9 +74,7 @@ class _SegmentedControlState<T> extends State<SegmentedControl<T>> {
   // platform font fallbacks. Keep a small buffer so a fully measured label is
   // never forced back into clipping at a fractional-width boundary.
   static const double _contentWidthSafety = 6;
-  static const double _hoverLift = 0;
-  static const double _baseDepth = 5;
-  static const double _contentLift = 0;
+  static const double _thumbInset = 3;
   static const Duration _duration = Duration(milliseconds: 180);
   static const TextStyle _segmentTextStyle = TextStyle(
     fontFamily: kClientFontFamily,
@@ -166,7 +164,7 @@ class _SegmentedControlState<T> extends State<SegmentedControl<T>> {
           _selectedIndexLastBuild = selectedIndex;
           return SizedBox(
             width: constrained ? double.infinity : preferredWidth,
-            height: widget.height + _hoverLift + _baseDepth,
+            height: widget.height,
             child: _buildOverflowLayout(
               context,
               segmentWidths: preferredWidths,
@@ -192,7 +190,7 @@ class _SegmentedControlState<T> extends State<SegmentedControl<T>> {
         );
         return SizedBox(
           width: widget.expanded && constrained ? double.infinity : targetWidth,
-          height: widget.height + _hoverLift + _baseDepth,
+          height: widget.height,
           child: _buildTrack(
             segmentWidths: fit.widths,
             horizontalPadding: fit.horizontalPadding,
@@ -240,7 +238,7 @@ class _SegmentedControlState<T> extends State<SegmentedControl<T>> {
                   physics: const ClampingScrollPhysics(),
                   child: SizedBox(
                     width: _sum(segmentWidths),
-                    height: widget.height + _hoverLift + _baseDepth,
+                    height: widget.height,
                     child: _buildTrack(
                       segmentWidths: segmentWidths,
                       horizontalPadding: _segmentPadding,
@@ -272,19 +270,14 @@ class _SegmentedControlState<T> extends State<SegmentedControl<T>> {
   }) {
     final selectedLeft = _sum(segmentWidths.take(selectedIndex));
     final selectedPressed = _pressedIndex == selectedIndex;
-    final capTop = selectedPressed ? _baseDepth : 0.0;
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: 0,
-          height: widget.height,
+        Positioned.fill(
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: UiColors.surfacePressed,
-              borderRadius: BorderRadius.circular(UiRadii.md),
+              color: UiColors.fieldFill,
+              borderRadius: BorderRadius.circular(UiRadii.pill),
               border: Border.all(color: UiColors.border),
             ),
           ),
@@ -292,11 +285,15 @@ class _SegmentedControlState<T> extends State<SegmentedControl<T>> {
         AnimatedPositioned(
           duration: _duration,
           curve: Curves.easeOutCubic,
-          left: selectedLeft,
-          top: 0,
-          width: segmentWidths[selectedIndex],
-          height: widget.height + _hoverLift + _baseDepth,
-          child: _SegmentThumb(capTop: capTop, height: widget.height),
+          left: selectedLeft + _thumbInset,
+          top: _thumbInset,
+          width: (segmentWidths[selectedIndex] - _thumbInset * 2)
+              .clamp(0.0, double.infinity)
+              .toDouble(),
+          height: (widget.height - _thumbInset * 2)
+              .clamp(0.0, double.infinity)
+              .toDouble(),
+          child: _SegmentThumb(pressed: selectedPressed),
         ),
         Positioned.fill(
           child: Row(
@@ -304,16 +301,13 @@ class _SegmentedControlState<T> extends State<SegmentedControl<T>> {
               for (var index = 0; index < widget.segments.length; index++)
                 SizedBox(
                   width: segmentWidths[index],
-                  height: widget.height + _baseDepth,
+                  height: widget.height,
                   child: _SegmentHitTarget(
                     segment: widget.segments[index],
                     selected: index == selectedIndex,
                     hovered: index == _hoveredIndex,
                     height: widget.height,
                     horizontalPadding: horizontalPadding,
-                    capTop: index == selectedIndex
-                        ? capTop - _contentLift
-                        : _baseDepth - _contentLift,
                     onHoverChanged: (hovered) {
                       setState(() {
                         _hoveredIndex = hovered ? index : null;
@@ -549,12 +543,11 @@ class _SegmentControlIconButton extends StatelessWidget {
       selected: selected,
       width: size,
       height: size,
-      hoverLift: 0,
-      borderRadius: UiRadii.md,
-      backgroundColor: UiColors.surfacePressed,
+      borderRadius: UiRadii.pill,
+      backgroundColor: UiColors.fieldFill,
       selectedBackgroundColor: UiColors.selected,
       borderColor: UiColors.border,
-      selectedBorderColor: UiColors.selectedBorder,
+      selectedBorderColor: UiColors.accentBorder,
       child: Icon(
         icon,
         size: _SegmentedControlState._iconSize + 2,
@@ -577,46 +570,21 @@ bool _segmentWidthsDiffer(List<double> left, List<double> right) {
 }
 
 class _SegmentThumb extends StatelessWidget {
-  const _SegmentThumb({required this.capTop, required this.height});
+  const _SegmentThumb({required this.pressed});
 
-  final double capTop;
-  final double height;
+  final bool pressed;
 
   @override
   Widget build(BuildContext context) {
-    final radius = BorderRadius.circular(UiRadii.md);
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Positioned(
-          left: 0,
-          right: 0,
-          top: _SegmentedControlState._baseDepth,
-          bottom: 0,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: UiColors.surfacePressed,
-              borderRadius: radius,
-              border: Border.all(color: UiColors.selectedBorder),
-            ),
-          ),
-        ),
-        AnimatedPositioned(
-          duration: const Duration(milliseconds: 140),
-          curve: Curves.easeOutCubic,
-          left: 0,
-          right: 0,
-          top: capTop,
-          height: height,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: UiColors.selected,
-              borderRadius: radius,
-              border: Border.all(color: UiColors.selectedBorder),
-            ),
-          ),
-        ),
-      ],
+    final color = pressed ? const Color(0xFFD9D9D6) : UiColors.inverse;
+    return AnimatedContainer(
+      duration: UiMotion.fast,
+      curve: UiMotion.curve,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(UiRadii.pill),
+        boxShadow: UiShadows.raised,
+      ),
     );
   }
 }
@@ -626,7 +594,6 @@ class _SegmentHitTarget<T> extends StatelessWidget {
     required this.segment,
     required this.selected,
     required this.hovered,
-    required this.capTop,
     required this.height,
     required this.horizontalPadding,
     required this.onHoverChanged,
@@ -637,7 +604,6 @@ class _SegmentHitTarget<T> extends StatelessWidget {
   final Segment<T> segment;
   final bool selected;
   final bool hovered;
-  final double capTop;
   final double height;
   final double horizontalPadding;
   final ValueChanged<bool> onHoverChanged;
@@ -647,10 +613,11 @@ class _SegmentHitTarget<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final foreground = selected
-        ? UiColors.accent
+        ? UiColors.onInverse
         : hovered
         ? UiColors.text
         : UiColors.textSecondary;
+    final iconColor = foreground;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => onHoverChanged(true),
@@ -664,10 +631,7 @@ class _SegmentHitTarget<T> extends StatelessWidget {
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 140),
-              curve: Curves.easeOutCubic,
-              transform: Matrix4.translationValues(0, capTop, 0),
+            Container(
               alignment: Alignment.center,
               height: height,
               padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
@@ -684,7 +648,7 @@ class _SegmentHitTarget<T> extends StatelessWidget {
                             Icon(
                               segment.icon,
                               size: _SegmentedControlState._iconSize,
-                              color: foreground,
+                              color: iconColor,
                             ),
                             const SizedBox(
                               width: _SegmentedControlState._iconGap,

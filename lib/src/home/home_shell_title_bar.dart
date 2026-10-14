@@ -1,19 +1,12 @@
 part of 'home_shell.dart';
 
-const _homeTitleBarHeight = 44.0;
-const _homeTitleBarSearchWidth = 520.0;
-const _homeTitleBarSearchHeight = 30.0;
-const _homeTitleBarMinSearchWidth = 122.0;
+const _homeTitleBarHeight = 52.0;
 const _homeTitleBarControlsWidth = appWindowControlsWidth;
-const _homeTitleBarLiveRoomHeight = 30.0;
-const _homeTitleBarLiveRoomHorizontalInset = 10.0;
-const _homeTitleBarLiveRoomDefaultWidth =
-    sidebarWidth - _homeTitleBarLiveRoomHorizontalInset * 2;
-const _homeTitleBarLiveRoomSearchGap = 14.0;
-const _homeTitleBarLiveRoomActionSize = 28.0;
-const _homeTitleBarLiveRoomMinActionSize = 16.0;
-const _homeTitleBarLiveRoomMinWidth = 80.0;
-const _homeTitleBarLiveRoomTextSafetyWidth = 2.0;
+const _homeSearchFieldHeight = 44.0;
+const _homeSearchPaletteMaxWidth = 660.0;
+const _headerActionSize = 34.0;
+const _liveDockHeight = 52.0;
+const _liveDockActionSize = 30.0;
 typedef _TitleLiveRoomDockBuilder =
     Widget Function(double maxWidth, {bool fillAvailable});
 
@@ -22,124 +15,48 @@ bool _homeTitleBarShowsCustomWindowControls(BuildContext context) {
   return platform != TargetPlatform.macOS && platform != TargetPlatform.android;
 }
 
-double _homeTitleBarBrandWidth(BuildContext context, double maxWidth) {
-  final showWindowControls = _homeTitleBarShowsCustomWindowControls(context);
-  final wide = maxWidth >= narrowBreakpoint;
-  final compactBrandWidth =
-      (maxWidth -
-              (showWindowControls ? _homeTitleBarControlsWidth : 0) -
-              _homeTitleBarMinSearchWidth)
-          .clamp(118.0, 168.0)
-          .toDouble();
-  return wide ? sidebarWidth : compactBrandWidth;
-}
-
-bool _homeTitleBarCanShowSearch(double maxWidth) {
-  return maxWidth >= narrowBreakpoint;
-}
-
-bool _homeTitleBarPlacesLiveRoomOnRight(BuildContext context) {
-  final platform = Theme.of(context).platform;
-  return !_homeTitleBarShowsCustomWindowControls(context) &&
-      platform != TargetPlatform.macOS;
-}
-
-double _homeTitleBarLiveRoomLeft(BuildContext context) {
+double _homeTitleBarLeadingInset(BuildContext context) {
   if (Theme.of(context).platform == TargetPlatform.macOS) {
     return WindowChromeInsets.of(context).titleBarLeadingControlsSafeInset;
   }
-  return _homeTitleBarLiveRoomHorizontalInset;
+  return 16;
 }
 
-class _HomeTitleBarSearchLayout {
-  const _HomeTitleBarSearchLayout({required this.left, required this.width});
-
-  final double left;
-  final double width;
-
-  double get right => left + width;
-}
-
-_HomeTitleBarSearchLayout? _homeTitleBarSearchLayout(
-  BuildContext context,
-  double maxWidth, {
-  required bool hasLiveRoom,
-}) {
-  if (!_homeTitleBarCanShowSearch(maxWidth)) return null;
-
-  final showWindowControls = _homeTitleBarShowsCustomWindowControls(context);
-  final placeLiveRoomOnRight = _homeTitleBarPlacesLiveRoomOnRight(context);
-  final liveRoomLeft = _homeTitleBarLiveRoomLeft(context);
-  var minimumLeft = 0.0;
-  var maximumRight = maxWidth;
-  if (showWindowControls) {
-    maximumRight -= _homeTitleBarControlsWidth + appWindowControlGap;
-  }
-  if (hasLiveRoom) {
-    final reservedLiveRoomWidth =
-        _homeTitleBarLiveRoomHorizontalInset +
-        _homeTitleBarLiveRoomMinWidth +
-        _homeTitleBarLiveRoomSearchGap;
-    if (placeLiveRoomOnRight) {
-      maximumRight -= reservedLiveRoomWidth;
-    } else {
-      minimumLeft =
-          liveRoomLeft +
-          _homeTitleBarLiveRoomMinWidth +
-          _homeTitleBarLiveRoomSearchGap;
-    }
-  }
-
-  final availableWidth = maximumRight - minimumLeft;
-  final width = availableWidth
-      .clamp(_homeTitleBarMinSearchWidth, _homeTitleBarSearchWidth)
-      .toDouble();
-  final centeredLeft = (maxWidth - width) / 2;
-  if (hasLiveRoom && !placeLiveRoomOnRight) {
-    final preferredLeft =
-        liveRoomLeft +
-        _homeTitleBarLiveRoomDefaultWidth +
-        _homeTitleBarLiveRoomSearchGap;
-    if (maximumRight - width >= preferredLeft) {
-      minimumLeft = preferredLeft;
-    }
-  }
-  if (hasLiveRoom && placeLiveRoomOnRight) {
-    final preferredRight =
-        maxWidth -
-        _homeTitleBarLiveRoomHorizontalInset -
-        _homeTitleBarLiveRoomDefaultWidth -
-        _homeTitleBarLiveRoomSearchGap;
-    if (preferredRight - width >= minimumLeft) {
-      maximumRight = preferredRight;
-    }
-  }
-  final left = centeredLeft.clamp(minimumLeft, maximumRight - width).toDouble();
-  return _HomeTitleBarSearchLayout(left: left, width: width);
-}
-
+/// The window header. Wide layouts carry the room tabs here; every layout
+/// carries the global actions (voice, search, notifications, settings and the
+/// account menu) on the right and the window buttons at the far edge.
 class _HomeTitleBar extends StatefulWidget {
   const _HomeTitleBar({
     required this.windowController,
-    required this.searchController,
-    required this.searchTapRegionGroup,
-    required this.liveRoomDockBuilder,
+    required this.compact,
     required this.interactionLocked,
-    required this.onActivateSearch,
-    required this.onSearchTapOutside,
-    required this.onSearchContextMenuOpenChanged,
-    required this.onClearSearchQuery,
+    required this.tabStrip,
+    required this.voiceCapsule,
+    required this.searchActive,
+    required this.onOpenSearch,
+    required this.notificationsActive,
+    required this.hasPendingNotifications,
+    required this.pendingNotificationCount,
+    required this.onOpenNotifications,
+    required this.settingsActive,
+    required this.onOpenSettings,
+    required this.account,
   });
 
   final DesktopWindowController windowController;
-  final TextEditingController searchController;
-  final Object searchTapRegionGroup;
-  final _TitleLiveRoomDockBuilder liveRoomDockBuilder;
+  final bool compact;
   final bool interactionLocked;
-  final VoidCallback onActivateSearch;
-  final VoidCallback onSearchTapOutside;
-  final ValueChanged<bool> onSearchContextMenuOpenChanged;
-  final VoidCallback onClearSearchQuery;
+  final Widget? tabStrip;
+  final Widget? voiceCapsule;
+  final bool searchActive;
+  final VoidCallback onOpenSearch;
+  final bool notificationsActive;
+  final bool hasPendingNotifications;
+  final int pendingNotificationCount;
+  final VoidCallback onOpenNotifications;
+  final bool settingsActive;
+  final VoidCallback onOpenSettings;
+  final Widget account;
 
   @override
   State<_HomeTitleBar> createState() => _HomeTitleBarState();
@@ -185,162 +102,448 @@ class _HomeTitleBarState extends State<_HomeTitleBar> {
 
   @override
   Widget build(BuildContext context) {
+    // Windows/Linux 使用自定义窗口按钮；macOS 使用系统原生红绿灯，
+    // Android/iOS 等非桌面平台不构建窗口控制区。
+    final showWindowControls = _homeTitleBarShowsCustomWindowControls(context);
+    final locked = widget.interactionLocked;
+    final tabStrip = widget.tabStrip;
+    final voiceCapsule = widget.voiceCapsule;
+    final pendingCount = widget.pendingNotificationCount <= 0
+        ? 1
+        : widget.pendingNotificationCount;
+    Widget lockable(Widget child) => IgnorePointer(
+      ignoring: locked,
+      child: Opacity(opacity: locked ? 0.54 : 1, child: child),
+    );
     return SizedBox(
       height: _homeTitleBarHeight,
-      child: DecoratedBox(
-        decoration: const BoxDecoration(
-          color: UiColors.surfaceLow,
-          border: Border(bottom: BorderSide(color: UiColors.border)),
-        ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            // Windows/Linux 使用自定义窗口按钮；macOS 使用系统原生红绿灯，
-            // Android/iOS 等非桌面平台不构建窗口控制区。
-            final showWindowControls = _homeTitleBarShowsCustomWindowControls(
-              context,
-            );
-            final brandWidth = _homeTitleBarBrandWidth(
-              context,
-              constraints.maxWidth,
-            );
-            final searchLayout = _homeTitleBarSearchLayout(
-              context,
-              constraints.maxWidth,
-              hasLiveRoom: true,
-            );
-            final platform = Theme.of(context).platform;
-            final narrow = constraints.maxWidth < narrowBreakpoint;
-            final showLiveRoom =
-                !(narrow && platform == TargetPlatform.android);
-            final placeLiveRoomOnRight = _homeTitleBarPlacesLiveRoomOnRight(
-              context,
-            );
-            final liveRoomLeft = _homeTitleBarLiveRoomLeft(context);
-            final liveRoomBoundary = showWindowControls
-                ? constraints.maxWidth -
-                      _homeTitleBarControlsWidth -
-                      appWindowControlGap
-                : constraints.maxWidth;
-            final liveRoomAvailableWidth = searchLayout == null
-                ? liveRoomBoundary -
-                      liveRoomLeft -
-                      _homeTitleBarLiveRoomHorizontalInset
-                : placeLiveRoomOnRight
-                ? constraints.maxWidth -
-                      _homeTitleBarLiveRoomHorizontalInset -
-                      searchLayout.right -
-                      _homeTitleBarLiveRoomSearchGap
-                : searchLayout.left -
-                      liveRoomLeft -
-                      _homeTitleBarLiveRoomSearchGap;
-            final liveRoomMaxWidth = liveRoomAvailableWidth
-                .clamp(0.0, double.infinity)
-                .toDouble();
-
-            return Stack(
-              children: [
-                Row(
-                  children: [
-                    SizedBox(
-                      width: brandWidth,
-                      child: AppWindowDragRegion(
-                        windowController: widget.windowController,
-                        onDoubleTap: _toggleMaximize,
-                        child: const SizedBox.expand(),
-                      ),
-                    ),
-                    Expanded(
-                      child: AppWindowDragRegion(
-                        windowController: widget.windowController,
-                        onDoubleTap: _toggleMaximize,
-                        child: const SizedBox.expand(),
-                      ),
-                    ),
-                    if (showWindowControls)
-                      SelectionContainer.disabled(
-                        child: AppWindowControls(
-                          maximized: _maximized,
-                          onMinimize: _minimize,
-                          onToggleMaximize: _toggleMaximize,
-                          onClose: _close,
+      child: ColoredBox(
+        color: Colors.transparent,
+        child: Row(
+          children: [
+            SizedBox(width: _homeTitleBarLeadingInset(context)),
+            _HomeTitleBrand(showWordmark: !widget.compact),
+            const SizedBox(width: 14),
+            Expanded(
+              child: AppWindowDragRegion(
+                windowController: widget.windowController,
+                onDoubleTap: _toggleMaximize,
+                child: SizedBox.expand(
+                  child: tabStrip == null
+                      ? null
+                      : Align(
+                          alignment: Alignment.centerLeft,
+                          child: lockable(tabStrip),
                         ),
-                      ),
-                  ],
                 ),
-                if (showLiveRoom)
-                  Positioned(
-                    top:
-                        (_homeTitleBarHeight - _homeTitleBarLiveRoomHeight) / 2,
-                    left: placeLiveRoomOnRight ? null : liveRoomLeft,
-                    right: placeLiveRoomOnRight
-                        ? _homeTitleBarLiveRoomHorizontalInset
-                        : null,
-                    child: widget.liveRoomDockBuilder(liveRoomMaxWidth),
+              ),
+            ),
+            const SizedBox(width: 10),
+            lockable(
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (voiceCapsule != null) ...[
+                    voiceCapsule,
+                    const SizedBox(width: 10),
+                  ],
+                  ButtonIcon(
+                    key: const ValueKey('home-title-search-button'),
+                    tooltip: '搜索',
+                    icon: const Icon(Icons.search_rounded),
+                    selected: widget.searchActive,
+                    ghost: true,
+                    size: _headerActionSize,
+                    onPressed: widget.onOpenSearch,
                   ),
-                if (searchLayout != null)
-                  Positioned(
-                    left: searchLayout.left,
-                    width: searchLayout.width,
-                    top: (_homeTitleBarHeight - _homeTitleBarSearchHeight) / 2,
-                    child: TapRegion(
-                      groupId: widget.searchTapRegionGroup,
-                      onTapOutside: (_) => widget.onSearchTapOutside(),
-                      child: SizedBox(
-                        key: const ValueKey('home-title-search'),
-                        height: _homeTitleBarSearchHeight,
-                        child: _TitleSearchField(
-                          controller: widget.searchController,
-                          tapRegionGroup: widget.searchTapRegionGroup,
-                          enabled: !widget.interactionLocked,
-                          onContextMenuOpenChanged:
-                              widget.onSearchContextMenuOpenChanged,
-                          onActivated: widget.onActivateSearch,
-                          onClearQuery: widget.onClearSearchQuery,
+                  const SizedBox(width: 2),
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      ButtonIcon(
+                        key: const ValueKey(
+                          'home-sidebar-notifications-button',
                         ),
+                        tooltip: '通知',
+                        icon: Icon(
+                          widget.notificationsActive
+                              ? Icons.notifications_rounded
+                              : Icons.notifications_none_rounded,
+                        ),
+                        selected: widget.notificationsActive,
+                        ghost: true,
+                        size: _headerActionSize,
+                        onPressed: widget.onOpenNotifications,
                       ),
-                    ),
+                      if (widget.hasPendingNotifications)
+                        Positioned(
+                          right: -5,
+                          top: -3,
+                          child: IgnorePointer(
+                            child: RoomUnreadBadge(count: pendingCount),
+                          ),
+                        ),
+                    ],
                   ),
-              ],
-            );
-          },
+                  const SizedBox(width: 2),
+                  ButtonIcon(
+                    key: const ValueKey('home-sidebar-settings-button'),
+                    tooltip: '设置',
+                    icon: Icon(
+                      widget.settingsActive
+                          ? Icons.settings_rounded
+                          : Icons.settings_outlined,
+                    ),
+                    selected: widget.settingsActive,
+                    ghost: true,
+                    size: _headerActionSize,
+                    onPressed: widget.onOpenSettings,
+                  ),
+                  const SizedBox(width: 8),
+                  widget.account,
+                ],
+              ),
+            ),
+            SizedBox(width: showWindowControls ? 6 : 14),
+            if (showWindowControls)
+              SelectionContainer.disabled(
+                child: SizedBox(
+                  width: _homeTitleBarControlsWidth,
+                  child: AppWindowControls(
+                    maximized: _maximized,
+                    onMinimize: _minimize,
+                    onToggleMaximize: _toggleMaximize,
+                    onClose: _close,
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
   }
 }
 
-bool _titleLiveTextCanShowCharacter({
-  required String text,
-  required TextStyle style,
-  required TextDirection textDirection,
-  required TextScaler textScaler,
-  required double maxWidth,
-}) {
-  if (text.isEmpty || maxWidth <= 0) return false;
-  return _titleLiveRoomTextWidth(
-        text: text.characters.first,
-        style: style,
-        textDirection: textDirection,
-        textScaler: textScaler,
-      ) <=
-      maxWidth;
+class _HomeTitleBrand extends StatelessWidget {
+  const _HomeTitleBrand({required this.showWordmark});
+
+  final bool showWordmark;
+
+  @override
+  Widget build(BuildContext context) {
+    return SelectionContainer.disabled(
+      child: Row(
+        key: const ValueKey('home-title-brand'),
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const BrandMark(size: 30),
+          if (showWordmark) ...[
+            const SizedBox(width: 10),
+            Text(
+              'GANG CHAT',
+              style: UiTypography.dot.copyWith(
+                fontSize: 17,
+                letterSpacing: 1.2,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
-double _titleLiveRoomTextWidth({
-  required String text,
-  required TextStyle style,
-  required TextDirection textDirection,
-  required TextScaler textScaler,
-}) {
-  final painter = TextPainter(
-    text: TextSpan(text: text, style: style),
-    maxLines: 1,
-    textDirection: textDirection,
-    textScaler: textScaler,
-  )..layout();
-  return painter.width.ceilToDouble() + _homeTitleBarLiveRoomTextSafetyWidth;
+/// Avatar button in the header that opens the account panel: identity,
+/// presence, connection quality and the account actions.
+class _HeaderAccountButton extends StatelessWidget {
+  const _HeaderAccountButton({
+    required this.user,
+    required this.inLive,
+    required this.reconnecting,
+    required this.requestRoundTrip,
+    required this.logoutActive,
+    required this.onOpenSettings,
+    required this.onLogout,
+  });
+
+  final CurrentUser user;
+  final bool inLive;
+  final bool reconnecting;
+  final Duration? requestRoundTrip;
+  final bool logoutActive;
+  final VoidCallback onOpenSettings;
+  final VoidCallback onLogout;
+
+  @override
+  Widget build(BuildContext context) {
+    final statusLabel = room_display.currentUserPresenceLabel(
+      user,
+      inLive: inLive,
+      reconnecting: reconnecting,
+    );
+    final presenceColor = _presenceColor(statusLabel);
+    final avatarUrl = AppConfigScope.of(context).resolveAssetUrl(user.avatarUrl);
+    final latencyQuality = network_latency.networkLatencyQuality(
+      requestRoundTrip,
+    );
+    return AnchoredPanelAnchor(
+      width: 264,
+      anchor: (context, open, toggle) => UiTooltip(
+        message: user.displayName,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            key: const ValueKey('home-account-button'),
+            behavior: HitTestBehavior.opaque,
+            onTap: toggle,
+            child: AnimatedContainer(
+              duration: UiMotion.fast,
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: open || logoutActive
+                      ? UiColors.accent
+                      : Colors.transparent,
+                  width: 1.5,
+                ),
+              ),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Avatar(
+                    label: room_display.userAvatarLabel(user.toSummary()),
+                    imageUrl: avatarUrl,
+                    defaultAvatarKey: user.defaultAvatarKey,
+                    size: 30,
+                    showBorder: false,
+                  ),
+                  Positioned(
+                    right: -2,
+                    bottom: -2,
+                    child: Container(
+                      key: const ValueKey('home-sidebar-presence-dot'),
+                      width: 11,
+                      height: 11,
+                      decoration: BoxDecoration(
+                        color: presenceColor,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: UiColors.background,
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+      panelBuilder: (context, close) => Column(
+        key: const ValueKey('home-sidebar-user-summary'),
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+            child: Row(
+              children: [
+                Avatar(
+                  label: room_display.userAvatarLabel(user.toSummary()),
+                  imageUrl: avatarUrl,
+                  defaultAvatarKey: user.defaultAvatarKey,
+                  size: 42,
+                  showBorder: false,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        user.displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: UiTypography.subtitle,
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Container(
+                            width: 7,
+                            height: 7,
+                            decoration: BoxDecoration(
+                              color: presenceColor,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            statusLabel,
+                            style: UiTypography.caption.copyWith(
+                              color: UiColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: UiColors.surface,
+              borderRadius: BorderRadius.circular(UiRadii.md),
+            ),
+            child: Row(
+              children: [
+                LatencySignalBadge(
+                  activeBars: network_latency.networkLatencySignalBars(
+                    requestRoundTrip,
+                  ),
+                  activeColor: _latencySignalColor(latencyQuality),
+                  tooltip: network_latency.networkLatencyTooltip(
+                    requestRoundTrip,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    network_latency.networkLatencyTooltip(requestRoundTrip),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: UiTypography.caption.copyWith(
+                      color: UiColors.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.all(6),
+            child: Column(
+              children: [
+                _AccountMenuItem(
+                  icon: Icons.tune_rounded,
+                  label: '偏好与账号设置',
+                  onPressed: () {
+                    close();
+                    onOpenSettings();
+                  },
+                ),
+                _AccountMenuItem(
+                  key: const ValueKey('home-account-logout'),
+                  icon: Icons.logout_rounded,
+                  label: '退出登录',
+                  danger: true,
+                  onPressed: () {
+                    close();
+                    onLogout();
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
+class _AccountMenuItem extends StatefulWidget {
+  const _AccountMenuItem({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    this.danger = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+  final bool danger;
+
+  @override
+  State<_AccountMenuItem> createState() => _AccountMenuItemState();
+}
+
+class _AccountMenuItemState extends State<_AccountMenuItem> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = widget.danger ? UiColors.danger : UiColors.text;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onPressed,
+        child: AnimatedContainer(
+          duration: UiMotion.fast,
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: _hovered
+                ? (widget.danger
+                      ? UiColors.danger.withValues(alpha: 0.14)
+                      : UiColors.surfaceHover)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(UiRadii.sm),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                widget.icon,
+                size: 17,
+                color: widget.danger ? color : UiColors.textSecondary,
+              ),
+              const SizedBox(width: 10),
+              Text(
+                widget.label,
+                style: UiTypography.body.copyWith(fontSize: 13, color: color),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Color _presenceColor(String label) {
+  return switch (label) {
+    '语音' => UiColors.presenceVoice,
+    '重连中' => UiColors.presenceReconnecting,
+    '离线' => UiColors.presenceOffline,
+    _ => UiColors.presenceOnline,
+  };
+}
+
+Color _latencySignalColor(network_latency.NetworkLatencyQuality quality) {
+  return switch (quality) {
+    network_latency.NetworkLatencyQuality.good => UiColors.success,
+    network_latency.NetworkLatencyQuality.fair => UiColors.amber,
+    network_latency.NetworkLatencyQuality.poor => UiColors.danger,
+    network_latency.NetworkLatencyQuality.unavailable => UiColors.textMuted,
+  };
+}
+
+/// Voice connection control. In the header it is a compact capsule; with
+/// [fillAvailable] (compact layout) it becomes a full-width bar. Before a
+/// voice channel is joined it still exposes the microphone and headphone
+/// toggles so they can be set up front.
 class _TitleLiveRoomDock extends StatelessWidget {
   const _TitleLiveRoomDock({
     required this.maxWidth,
@@ -370,197 +573,182 @@ class _TitleLiveRoomDock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const namedLeadingInset = 7.0;
-    const compactLeadingInset = 6.0;
-    const trailingInset = 4.0;
-    const volumeIconSize = 16.0;
-    const identityGap = 7.0;
-    const avatarSize = 20.0;
-    const nameActionGap = 8.0;
     final joined = room != null;
     final label = room?.displayName ?? '未加入语音频道';
-    final actionCount = joined ? 3 : 2;
     final micControl = live_display.liveMicControlState(
       micMuted: micMuted,
       voiceBlocked: voiceBlocked,
     );
-    final resolvedAvatar = joined
-        ? AppConfigScope.of(context).resolveAssetUrl(room!.avatarUrl)
-        : null;
-    final roomNameStyle = DefaultTextStyle.of(context).style
-        .merge(
-          UiTypography.label.copyWith(
-            color: UiColors.text,
-            fontWeight: FontWeight.w600,
+    final actions = <Widget>[
+      _TitleLiveActionButton(
+        key: const ValueKey<String>('home-title-live-room:mic'),
+        size: _liveDockActionSize,
+        tooltip: micControl.mutedForDisplay ? '打开麦克风' : '关闭麦克风',
+        icon: micControl.mutedForDisplay
+            ? Icons.mic_off_rounded
+            : Icons.mic_rounded,
+        color: !micControl.enabled
+            ? UiColors.danger
+            : micControl.active
+            ? UiColors.text
+            : UiColors.danger,
+        onPressed: micControl.enabled ? onToggleMic : null,
+      ),
+      _TitleLiveActionButton(
+        key: const ValueKey<String>('home-title-live-room:headphones'),
+        size: _liveDockActionSize,
+        tooltip: headphonesMuted ? '打开耳机' : '关闭耳机',
+        icon: headphonesMuted
+            ? Icons.headset_off_rounded
+            : Icons.headphones_rounded,
+        color: headphonesMuted ? UiColors.danger : UiColors.text,
+        onPressed: onToggleHeadphones,
+      ),
+      if (joined)
+        _TitleLiveActionButton(
+          key: const ValueKey<String>('home-title-live-room:leave'),
+          size: _liveDockActionSize,
+          tooltip: '离开语音频道',
+          icon: Icons.call_end_rounded,
+          color: Colors.white,
+          background: UiColors.danger.withValues(alpha: 0.85),
+          onPressed: onLeave,
+        ),
+    ];
+    final name = OverflowMarqueeText(
+      key: const ValueKey<String>('home-title-live-room:name'),
+      trackKey: const ValueKey<String>('home-title-live-room:marquee-track'),
+      text: label,
+      style: UiTypography.label.copyWith(
+        color: joined ? UiColors.text : UiColors.textSecondary,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+    final Widget dock;
+    if (fillAvailable) {
+      dock = Container(
+        width: maxWidth,
+        height: _liveDockHeight,
+        padding: const EdgeInsets.only(left: 12, right: 8),
+        decoration: BoxDecoration(
+          color: joined ? const Color(0xFF13241F) : UiColors.surface,
+          borderRadius: BorderRadius.circular(UiRadii.lg),
+          border: Border.all(
+            color: joined ? UiColors.successBorder : UiColors.border,
           ),
-        )
-        .copyWith(inherit: false);
-    final textDirection = Directionality.of(context);
-    final textScaler = MediaQuery.textScalerOf(context);
-    final fullRoomNameWidth = _titleLiveRoomTextWidth(
-      text: label,
-      style: roomNameStyle,
-      textDirection: textDirection,
-      textScaler: textScaler,
-    );
-    final preferredIdentityWidth = joined
-        ? volumeIconSize + identityGap + avatarSize + identityGap
-        : 0.0;
-    final preferredWidth =
-        (namedLeadingInset +
-                preferredIdentityWidth +
-                fullRoomNameWidth +
-                nameActionGap +
-                _homeTitleBarLiveRoomActionSize * actionCount +
-                trailingInset)
-            .clamp(_homeTitleBarLiveRoomDefaultWidth, double.infinity)
-            .toDouble();
-    final width = fillAvailable
-        ? maxWidth
-        : preferredWidth.clamp(0.0, maxWidth).toDouble();
-    final actionSize = ((width - (joined ? 32 : 20)) / actionCount)
-        .clamp(
-          _homeTitleBarLiveRoomMinActionSize,
-          _homeTitleBarLiveRoomActionSize,
-        )
-        .toDouble();
-    final actionButtonsWidth = actionSize * actionCount;
-    final namedIdentityFixedWidth =
-        namedLeadingInset +
-        (joined ? preferredIdentityWidth : 0) +
-        nameActionGap +
-        actionButtonsWidth +
-        trailingInset;
-    final showRoomName = _titleLiveTextCanShowCharacter(
-      text: label,
-      style: roomNameStyle,
-      textDirection: textDirection,
-      textScaler: textScaler,
-      maxWidth: width - namedIdentityFixedWidth,
-    );
-    final volumeIdentityWidth =
-        compactLeadingInset +
-        volumeIconSize +
-        identityGap +
-        avatarSize +
-        actionButtonsWidth +
-        trailingInset;
-    final showVolumeIcon =
-        joined && (showRoomName || width >= volumeIdentityWidth);
-    final dock = UiTooltip(
+        ),
+        child: Row(
+          children: [
+            _VoiceStatusOrb(joined: joined),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    joined ? '语音已连接' : '语音',
+                    style: UiTypography.caption.copyWith(
+                      color: joined ? UiColors.success : UiColors.textMuted,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  name,
+                ],
+              ),
+            ),
+            ...actions,
+          ],
+        ),
+      );
+    } else {
+      dock = AnimatedContainer(
+        duration: UiMotion.standard,
+        curve: UiMotion.curve,
+        height: 36,
+        padding: EdgeInsets.only(left: joined ? 10 : 4, right: 3),
+        decoration: BoxDecoration(
+          color: joined ? const Color(0xFF13241F) : UiColors.surface,
+          borderRadius: BorderRadius.circular(UiRadii.pill),
+          border: Border.all(
+            color: joined ? UiColors.successBorder : UiColors.border,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (joined) ...[
+              const _VoiceStatusOrb(joined: true, size: 8),
+              const SizedBox(width: 8),
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: (maxWidth - 120).clamp(40.0, 150.0).toDouble(),
+                ),
+                child: name,
+              ),
+              const SizedBox(width: 6),
+            ],
+            ...actions,
+          ],
+        ),
+      );
+    }
+    return UiTooltip(
       message: joined ? '打开语音频道' : '可在加入前设置麦克风和耳机',
-      preferBelow: true,
-      verticalOffset: 22,
       child: MouseRegion(
         cursor: joined ? SystemMouseCursors.click : SystemMouseCursors.basic,
         child: GestureDetector(
           key: const ValueKey<String>('home-title-live-room'),
           behavior: HitTestBehavior.opaque,
           onTap: onOpen,
-          child: SizedBox(
-            width: width,
-            height: _homeTitleBarLiveRoomHeight,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: UiColors.surface,
-                borderRadius: BorderRadius.circular(UiRadii.md),
-                border: Border.all(color: UiColors.border),
-              ),
-              child: Padding(
-                padding: EdgeInsets.only(
-                  left: showRoomName ? namedLeadingInset : compactLeadingInset,
-                  right: trailingInset,
-                ),
-                child: Row(
-                  children: [
-                    if (showVolumeIcon) ...[
-                      const Icon(
-                        Icons.volume_up,
-                        size: volumeIconSize,
-                        color: UiColors.accent,
-                      ),
-                      const SizedBox(width: identityGap),
-                    ],
-                    if (joined)
-                      Avatar(
-                        label: room!.avatarLabel,
-                        imageUrl: resolvedAvatar,
-                        defaultAvatarKey: room!.defaultAvatarKey,
-                        size: avatarSize,
-                        showBorder: false,
-                      ),
-                    if (showRoomName) ...[
-                      if (joined) const SizedBox(width: identityGap),
-                      Expanded(
-                        child: OverflowMarqueeText(
-                          key: const ValueKey<String>(
-                            'home-title-live-room:name',
-                          ),
-                          trackKey: const ValueKey<String>(
-                            'home-title-live-room:marquee-track',
-                          ),
-                          text: label,
-                          style: roomNameStyle,
-                        ),
-                      ),
-                      const SizedBox(width: nameActionGap),
-                    ] else
-                      const Spacer(),
-                    _TitleLiveActionButton(
-                      key: const ValueKey<String>('home-title-live-room:mic'),
-                      size: actionSize,
-                      tooltip: micControl.mutedForDisplay ? '打开麦克风' : '关闭麦克风',
-                      icon: micControl.mutedForDisplay
-                          ? Icons.mic_off
-                          : Icons.mic,
-                      color: !micControl.enabled
-                          ? UiColors.danger
-                          : micControl.active
-                          ? UiColors.accent
-                          : UiColors.textMuted,
-                      onPressed: micControl.enabled ? onToggleMic : null,
-                    ),
-                    _TitleLiveActionButton(
-                      key: const ValueKey<String>(
-                        'home-title-live-room:headphones',
-                      ),
-                      size: actionSize,
-                      tooltip: headphonesMuted ? '打开耳机' : '关闭耳机',
-                      icon: headphonesMuted
-                          ? Icons.headset_off
-                          : Icons.headphones,
-                      color: headphonesMuted
-                          ? UiColors.textMuted
-                          : UiColors.accent,
-                      onPressed: onToggleHeadphones,
-                    ),
-                    if (joined)
-                      _TitleLiveActionButton(
-                        key: const ValueKey<String>(
-                          'home-title-live-room:leave',
-                        ),
-                        size: actionSize,
-                        tooltip: '离开语音频道',
-                        icon: Icons.call_end,
-                        color: UiColors.danger,
-                        onPressed: onLeave,
-                      ),
-                  ],
-                ),
-              ),
-            ),
+          child: IgnorePointer(
+            ignoring: interactionLocked,
+            child: Opacity(opacity: interactionLocked ? 0.54 : 1, child: dock),
           ),
         ),
       ),
     );
-    return IgnorePointer(
-      ignoring: interactionLocked,
-      child: Opacity(opacity: interactionLocked ? 0.54 : 1, child: dock),
+  }
+}
+
+class _VoiceStatusOrb extends StatelessWidget {
+  const _VoiceStatusOrb({required this.joined, this.size});
+
+  final bool joined;
+  final double? size;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = this.size;
+    if (size != null) {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: UiColors.success,
+          shape: BoxShape.circle,
+          boxShadow: UiShadows.glow(UiColors.success, strength: 0.7),
+        ),
+      );
+    }
+    return Container(
+      width: 30,
+      height: 30,
+      decoration: BoxDecoration(
+        color: joined ? UiColors.successSurface : UiColors.surfaceRaised,
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: Icon(
+        Icons.graphic_eq_rounded,
+        size: 16,
+        color: joined ? UiColors.success : UiColors.textMuted,
+      ),
     );
   }
 }
 
-class _TitleLiveActionButton extends StatelessWidget {
+class _TitleLiveActionButton extends StatefulWidget {
   const _TitleLiveActionButton({
     super.key,
     required this.tooltip,
@@ -568,6 +756,7 @@ class _TitleLiveActionButton extends StatelessWidget {
     required this.color,
     required this.onPressed,
     required this.size,
+    this.background,
   });
 
   final String tooltip;
@@ -575,28 +764,50 @@ class _TitleLiveActionButton extends StatelessWidget {
   final Color color;
   final VoidCallback? onPressed;
   final double size;
+  final Color? background;
+
+  @override
+  State<_TitleLiveActionButton> createState() => _TitleLiveActionButtonState();
+}
+
+class _TitleLiveActionButtonState extends State<_TitleLiveActionButton> {
+  bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
-    final enabled = onPressed != null;
+    final enabled = widget.onPressed != null;
+    final background = widget.background;
     return UiTooltip(
-      message: tooltip,
-      preferBelow: true,
-      verticalOffset: 22,
+      message: widget.tooltip,
       child: MouseRegion(
         cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () {
-            if (enabled) onPressed!();
+            if (enabled) widget.onPressed!();
           },
-          child: SizedBox.square(
-            dimension: size,
+          child: AnimatedContainer(
+            duration: UiMotion.fast,
+            width: widget.size,
+            height: widget.size,
+            margin: const EdgeInsets.symmetric(horizontal: 1),
+            decoration: BoxDecoration(
+              color: background != null
+                  ? (_hovered ? UiStates.hover(background) : background)
+                  : _hovered && enabled
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.transparent,
+              shape: BoxShape.circle,
+            ),
             child: Center(
               child: Icon(
-                icon,
-                size: (size - 8).clamp(10.0, 16.0).toDouble(),
-                color: enabled ? color : color.withValues(alpha: 0.56),
+                widget.icon,
+                size: 16,
+                color: enabled
+                    ? widget.color
+                    : widget.color.withValues(alpha: 0.56),
               ),
             ),
           ),
@@ -606,8 +817,146 @@ class _TitleLiveActionButton extends StatelessWidget {
   }
 }
 
-/// 标题栏中央的搜索框。不复用通用 [Input] 封装,而是一个普通的圆角矩形,
-/// 获得焦点时会像按钮一样显示绿色边框与底色。
+/// Centered search overlay ("command palette"): one large field on top and
+/// the categorised results underneath.
+class _SearchPalette extends StatelessWidget {
+  const _SearchPalette({
+    required this.compact,
+    required this.field,
+    required this.results,
+    required this.onDismiss,
+  });
+
+  final bool compact;
+  final Widget field;
+  final Widget? results;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final results = this.results;
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): onDismiss,
+      },
+      child: Stack(
+        key: const ValueKey('home-search-palette'),
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              key: const ValueKey('home-search-palette-barrier'),
+              behavior: HitTestBehavior.opaque,
+              onTap: onDismiss,
+              child: const ColoredBox(color: Color(0x99050608)),
+            ),
+          ),
+          Positioned.fill(
+            child: SafeArea(
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    compact ? 10 : 24,
+                    compact ? 10 : 72,
+                    compact ? 10 : 24,
+                    24,
+                  ),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      maxWidth: _homeSearchPaletteMaxWidth,
+                    ),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: UiColors.surfaceRaised,
+                        borderRadius: BorderRadius.circular(UiRadii.xl),
+                        border: Border.all(color: UiColors.borderStrong),
+                        boxShadow: UiShadows.dialog,
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(UiRadii.xl - 1),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.all(10),
+                              child: SizedBox(
+                                height: _homeSearchFieldHeight,
+                                child: field,
+                              ),
+                            ),
+                            const Divider(height: 1),
+                            if (results != null)
+                              Flexible(child: results)
+                            else
+                              const _SearchPaletteHint(),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SearchPaletteHint extends StatelessWidget {
+  const _SearchPaletteHint();
+
+  @override
+  Widget build(BuildContext context) {
+    Widget chip(IconData icon, String label) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: UiColors.surface,
+        borderRadius: BorderRadius.circular(UiRadii.pill),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: UiColors.textMuted),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: UiTypography.caption.copyWith(
+              color: UiColors.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '可以搜索',
+            style: UiTypography.overline,
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              chip(Icons.meeting_room_outlined, '我的房间'),
+              chip(Icons.public_rounded, '公开房间'),
+              chip(Icons.chat_bubble_outline_rounded, '聊天记录'),
+              chip(Icons.insert_drive_file_outlined, '文件'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 搜索面板顶部的大号输入框。
 class _TitleSearchField extends StatefulWidget {
   const _TitleSearchField({
     required this.controller,
@@ -616,6 +965,7 @@ class _TitleSearchField extends StatefulWidget {
     required this.onContextMenuOpenChanged,
     required this.onActivated,
     required this.onClearQuery,
+    this.autofocus = false,
   });
 
   final TextEditingController controller;
@@ -624,6 +974,7 @@ class _TitleSearchField extends StatefulWidget {
   final ValueChanged<bool> onContextMenuOpenChanged;
   final VoidCallback onActivated;
   final VoidCallback onClearQuery;
+  final bool autofocus;
 
   @override
   State<_TitleSearchField> createState() => _TitleSearchFieldState();
@@ -681,24 +1032,13 @@ class _TitleSearchFieldState extends State<_TitleSearchField> {
 
   @override
   Widget build(BuildContext context) {
-    final activeFocus = _focused && widget.enabled;
-    final accent = activeFocus ? UiColors.accent : UiColors.textMuted;
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 90),
-      curve: Curves.easeOutCubic,
-      height: _homeTitleBarSearchHeight,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        color: activeFocus ? UiColors.selected : UiColors.surface,
-        borderRadius: BorderRadius.circular(UiRadii.md),
-        border: Border.all(
-          color: activeFocus ? UiColors.selectedBorder : UiColors.border,
-        ),
-      ),
+    return Container(
+      height: _homeSearchFieldHeight,
+      padding: const EdgeInsets.only(left: 12, right: 8),
       child: Row(
         children: [
-          Icon(Icons.search, size: 16, color: accent),
-          const SizedBox(width: 8),
+          const Icon(Icons.search_rounded, size: 20, color: UiColors.accent),
+          const SizedBox(width: 12),
           Expanded(
             child: TextFieldEditingShortcuts(
               controller: widget.controller,
@@ -707,6 +1047,7 @@ class _TitleSearchFieldState extends State<_TitleSearchField> {
               child: TextField(
                 controller: widget.controller,
                 focusNode: _focusNode,
+                autofocus: widget.autofocus,
                 maxLines: 1,
                 enabled: widget.enabled,
                 textInputAction: TextInputAction.search,
@@ -714,14 +1055,14 @@ class _TitleSearchFieldState extends State<_TitleSearchField> {
                 onTap: widget.enabled ? widget.onActivated : null,
                 cursorColor: UiColors.accent,
                 cursorWidth: 1.5,
-                style: UiTypography.body.copyWith(fontSize: 13, height: 1.2),
+                style: UiTypography.body.copyWith(fontSize: 16, height: 1.2),
                 contextMenuBuilder: _contextMenuBuilder,
                 decoration: InputDecoration(
                   isCollapsed: true,
                   border: InputBorder.none,
-                  hintText: '搜索',
+                  hintText: '搜索房间、聊天记录和文件',
                   hintStyle: UiTypography.body.copyWith(
-                    fontSize: 13,
+                    fontSize: 16,
                     height: 1.2,
                     color: UiColors.textMuted,
                   ),
@@ -736,7 +1077,19 @@ class _TitleSearchFieldState extends State<_TitleSearchField> {
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: widget.onClearQuery,
-                child: Icon(Icons.close, size: 15, color: UiColors.textMuted),
+                child: Container(
+                  width: 22,
+                  height: 22,
+                  decoration: const BoxDecoration(
+                    color: UiColors.surfaceHover,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.close_rounded,
+                    size: 14,
+                    color: UiColors.textSecondary,
+                  ),
+                ),
               ),
             ),
           ],
@@ -814,21 +1167,15 @@ class _TitleSearchResultsPanel extends StatelessWidget {
     final message = error?.trim();
     final panel = DecoratedBox(
       decoration: BoxDecoration(
-        color: UiColors.surfaceLow,
+        color: UiColors.surfaceRaised,
         borderRadius: BorderRadius.circular(UiRadii.lg),
         border: Border.all(color: UiColors.borderStrong),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.34),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        boxShadow: UiShadows.popover,
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(UiRadii.lg),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 440),
+          constraints: const BoxConstraints(maxHeight: 480),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

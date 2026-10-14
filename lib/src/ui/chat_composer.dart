@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'button.dart';
 import 'input.dart';
+import 'surface.dart';
 import 'tokens.dart';
 
 enum ComposerPanelType { list, static }
@@ -353,77 +354,128 @@ class _ChatComposerState extends State<ChatComposer> {
   Widget build(BuildContext context) {
     final openAction = _openAction;
     final openPanel = openAction?.panel;
+    final leading = [
+      for (final action in widget.actions)
+        if (action.alignment == ComposerActionAlignment.leading) action,
+    ];
+    final trailing = [
+      for (final action in widget.actions)
+        if (action.alignment == ComposerActionAlignment.trailing) action,
+    ];
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final composer = DecoratedBox(
-          decoration: BoxDecoration(
-            color: UiColors.surfaceLow,
-            borderRadius: BorderRadius.circular(UiRadii.lg),
-            border: Border.all(color: UiColors.border),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(UiRadii.lg),
-            child: _ComposerContent(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (widget.header != null)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-                      child: widget.header,
-                    ),
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      12,
-                      widget.header == null ? 12 : 8,
-                      12,
-                      8,
-                    ),
-                    child: AnimatedSize(
-                      duration: const Duration(milliseconds: 160),
-                      curve: Curves.easeOutCubic,
-                      alignment: Alignment.topCenter,
-                      child: openPanel == null
-                          ? _wrapSuggestionShortcuts(
-                              _wrapPaste(
-                                Input(
-                                  controller: _effectiveController,
-                                  focusNode: _inputFocusNode,
-                                  hintText: widget.hintText,
-                                  minLines: widget.minLines,
-                                  maxLines: widget.maxLines,
-                                  inputFormatters: widget.inputFormatters,
-                                  canPasteNonText: widget.onCanPasteFiles,
-                                  onSubmitted: widget.onSubmitted,
-                                  onChanged: widget.onChanged,
-                                ),
-                              ),
-                            )
-                          : _ComposerPanelFrame(
-                              key: ValueKey(openAction!.id),
-                              panel: openPanel,
-                            ),
-                    ),
-                  ),
-                  if (widget.attachments != null)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                      child: widget.attachments,
-                    ),
-                  if (widget.actions.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-                      child: _ComposerActionRow(
-                        actions: widget.actions,
-                        openActionId: _openActionId,
-                        onAction: _handleAction,
-                      ),
-                    ),
-                ],
-              ),
+        final input = _wrapSuggestionShortcuts(
+          _wrapPaste(
+            Input(
+              controller: _effectiveController,
+              focusNode: _inputFocusNode,
+              hintText: widget.hintText,
+              minLines: widget.minLines,
+              maxLines: widget.maxLines,
+              inputFormatters: widget.inputFormatters,
+              canPasteNonText: widget.onCanPasteFiles,
+              onSubmitted: widget.onSubmitted,
+              onChanged: widget.onChanged,
+              bare: true,
             ),
           ),
+        );
+        final composer = Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            AnimatedSize(
+              duration: UiMotion.standard,
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.bottomCenter,
+              child: openPanel == null
+                  ? const SizedBox(width: double.infinity)
+                  : Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: _ComposerPanelFrame(
+                        key: ValueKey(openAction!.id),
+                        panel: openPanel,
+                      ),
+                    ),
+            ),
+            ListenableBuilder(
+              listenable: _inputFocusNode,
+              builder: (context, child) => AnimatedContainer(
+                duration: UiMotion.fast,
+                curve: UiMotion.curve,
+                decoration: BoxDecoration(
+                  color: UiColors.surface,
+                  borderRadius: BorderRadius.circular(UiRadii.lg + 4),
+                  border: Border.all(
+                    color: _inputFocusNode.hasFocus
+                        ? UiColors.accentBorder
+                        : UiColors.border,
+                  ),
+                  boxShadow: UiShadows.raised,
+                ),
+                child: child,
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(UiRadii.lg + 3),
+                child: _ComposerContent(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (widget.header != null)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+                          child: widget.header,
+                        ),
+                      if (widget.attachments != null)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+                          child: widget.attachments,
+                        ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            for (final action in leading)
+                              _ComposerActionButton(
+                                action: action,
+                                selected:
+                                    action.selected ||
+                                    action.id == _openActionId,
+                                onAction: _handleAction,
+                              ),
+                            if (leading.isNotEmpty)
+                              Container(
+                                width: 1,
+                                height: 20,
+                                margin: const EdgeInsets.only(
+                                  left: 4,
+                                  right: 2,
+                                  bottom: 10,
+                                ),
+                                color: UiColors.borderStrong,
+                              ),
+                            Expanded(child: input),
+                            for (final action in trailing)
+                              _ComposerActionButton(
+                                action: action,
+                                selected:
+                                    action.selected ||
+                                    action.id == _openActionId,
+                                onAction: _handleAction,
+                                prominent: true,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
         );
 
         if (!constraints.hasBoundedWidth) return composer;
@@ -443,74 +495,59 @@ class _ComposerSuggestionNavigateIntent extends Intent {
   final ComposerSuggestionNavigation navigation;
 }
 
-class _ComposerActionRow extends StatelessWidget {
-  const _ComposerActionRow({
-    required this.actions,
-    required this.openActionId,
-    required this.onAction,
-  });
-
-  final List<ComposerAction> actions;
-  final String? openActionId;
-  final ValueChanged<ComposerAction> onAction;
-
-  @override
-  Widget build(BuildContext context) {
-    // Trailing actions (typically send) are pinned to the far right; the rest
-    // stay grouped on the left.
-    final leading = [
-      for (final action in actions)
-        if (action.alignment == ComposerActionAlignment.leading) action,
-    ];
-    final trailing = [
-      for (final action in actions)
-        if (action.alignment == ComposerActionAlignment.trailing) action,
-    ];
-
-    return Row(
-      children: [
-        for (var index = 0; index < leading.length; index++) ...[
-          if (index > 0) const SizedBox(width: 8),
-          _ComposerActionButton(
-            action: leading[index],
-            selected:
-                leading[index].selected || leading[index].id == openActionId,
-            onAction: onAction,
-          ),
-        ],
-        const Spacer(),
-        for (var index = 0; index < trailing.length; index++) ...[
-          if (index > 0) const SizedBox(width: 8),
-          _ComposerActionButton(
-            action: trailing[index],
-            selected:
-                trailing[index].selected || trailing[index].id == openActionId,
-            onAction: onAction,
-          ),
-        ],
-      ],
-    );
-  }
-}
-
 class _ComposerActionButton extends StatelessWidget {
   const _ComposerActionButton({
     required this.action,
     required this.selected,
     required this.onAction,
+    this.prominent = false,
   });
 
   final ComposerAction action;
   final bool selected;
   final ValueChanged<ComposerAction> onAction;
 
+  /// Trailing actions (send) render as a filled round button.
+  final bool prominent;
+
   @override
   Widget build(BuildContext context) {
+    if (prominent) {
+      final primary = action.tone == ButtonTone.primary;
+      return Padding(
+        padding: const EdgeInsets.only(left: 4),
+        child: PressableSurface(
+          width: 40,
+          height: 40,
+          tooltip: action.tooltip ?? action.label,
+          selected: selected,
+          onPressed: () => onAction(action),
+          backgroundColor: primary
+              ? UiColors.accentStrong
+              : UiColors.surfaceRaised,
+          selectedBackgroundColor: primary
+              ? UiColors.accentStrong
+              : UiColors.selected,
+          borderColor: Colors.transparent,
+          selectedBorderColor: Colors.transparent,
+          borderRadius: UiRadii.pill,
+          child: Center(
+            child: Icon(
+              action.icon,
+              size: 19,
+              color: primary ? UiColors.onAccent : UiColors.textSecondary,
+            ),
+          ),
+        ),
+      );
+    }
     return ButtonIcon(
       tooltip: action.tooltip ?? action.label,
       icon: Icon(action.icon),
       tone: action.tone,
       selected: selected,
+      ghost: true,
+      size: 40,
       onPressed: () => onAction(action),
     );
   }
@@ -525,9 +562,10 @@ class _ComposerPanelFrame extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: UiColors.surface,
-        borderRadius: BorderRadius.circular(UiRadii.md),
-        border: Border.all(color: UiColors.border),
+        color: UiColors.surfaceRaised,
+        borderRadius: BorderRadius.circular(UiRadii.lg),
+        border: Border.all(color: UiColors.borderStrong),
+        boxShadow: UiShadows.popover,
       ),
       child: SizedBox(
         width: double.infinity,

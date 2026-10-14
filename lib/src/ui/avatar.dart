@@ -26,41 +26,41 @@ String normalizeAvatarPresetKey(String key) {
 
 Color avatarFallbackColor(String key) {
   return switch (normalizeAvatarPresetKey(key)) {
-    kDefaultAvatarPresetKey => const Color(0xFF526C9F),
-    'navy-2' => const Color(0xFF465B7D),
-    'azure-2' => const Color(0xFF4A7194),
-    'sky-2' => const Color(0xFF4F7F92),
-    'cyan-2' => const Color(0xFF47777A),
-    'turquoise-2' => const Color(0xFF467B73),
-    'mint-2' => const Color(0xFF4F7A67),
-    'emerald-2' => const Color(0xFF3F725C),
-    'green-2' => const Color(0xFF46695B),
-    'forest-2' => const Color(0xFF496449),
-    'lime-2' => const Color(0xFF687A47),
-    'yellow-2' => const Color(0xFF7B7048),
-    'amber-2' => const Color(0xFF71614E),
-    'gold-2' => const Color(0xFF7A6744),
-    'orange-2' => const Color(0xFF7A6046),
-    'coral-2' => const Color(0xFF7A5952),
-    'red-2' => const Color(0xFF7B4F52),
-    'crimson-2' => const Color(0xFF74495A),
-    'pink-2' => const Color(0xFF75566F),
-    'magenta-2' => const Color(0xFF704D70),
-    'violet-2' => const Color(0xFF665B7D),
-    'purple-2' => const Color(0xFF62537C),
-    'lavender-2' => const Color(0xFF70688B),
-    'indigo-2' => const Color(0xFF5B638A),
-    'rose-2' => const Color(0xFF7A5961),
-    'teal-2' => const Color(0xFF536E73),
-    'olive-2' => const Color(0xFF6A704B),
-    'brown-2' => const Color(0xFF6D594C),
-    'sand-2' => const Color(0xFF746954),
-    'slate-2' => const Color(0xFF5E6472),
-    'steel-2' => const Color(0xFF4F6672),
-    'gray-2' => const Color(0xFF62666C),
-    'graphite-2' => const Color(0xFF5B5D63),
-    'black-2' => const Color(0xFF44474D),
-    _ => const Color(0xFF526C9F),
+    kDefaultAvatarPresetKey => const Color(0xFF4E68D0),
+    'navy-2' => const Color(0xFF3B589B),
+    'azure-2' => const Color(0xFF367FC9),
+    'sky-2' => const Color(0xFF3095C0),
+    'cyan-2' => const Color(0xFF2B95A1),
+    'turquoise-2' => const Color(0xFF319B8D),
+    'mint-2' => const Color(0xFF419F7A),
+    'emerald-2' => const Color(0xFF2C9661),
+    'green-2' => const Color(0xFF418B52),
+    'forest-2' => const Color(0xFF427740),
+    'lime-2' => const Color(0xFF6F913B),
+    'yellow-2' => const Color(0xFFAE9932),
+    'amber-2' => const Color(0xFFA87F38),
+    'gold-2' => const Color(0xFFA38533),
+    'orange-2' => const Color(0xFFC47131),
+    'coral-2' => const Color(0xFFD46049),
+    'red-2' => const Color(0xFFC9363F),
+    'crimson-2' => const Color(0xFFAB3655),
+    'pink-2' => const Color(0xFFC25191),
+    'magenta-2' => const Color(0xFFA744A7),
+    'violet-2' => const Color(0xFF8B57C7),
+    'purple-2' => const Color(0xFF7F44A7),
+    'lavender-2' => const Color(0xFF8573C9),
+    'indigo-2' => const Color(0xFF4A4EBF),
+    'rose-2' => const Color(0xFFBE6073),
+    'teal-2' => const Color(0xFF407782),
+    'olive-2' => const Color(0xFF767E44),
+    'brown-2' => const Color(0xFF7E5B44),
+    'sand-2' => const Color(0xFFA3875C),
+    'slate-2' => const Color(0xFF5E6782),
+    'steel-2' => const Color(0xFF517085),
+    'gray-2' => const Color(0xFF696E77),
+    'graphite-2' => const Color(0xFF50525E),
+    'black-2' => const Color(0xFF31333F),
+    _ => const Color(0xFF4E68D0),
   };
 }
 
@@ -121,6 +121,7 @@ class Avatar extends StatelessWidget {
     this.paintBorderOnForeground = false,
     this.showBorder = true,
     this.showFallbackText = true,
+    this.rounded = false,
   });
 
   final String label;
@@ -139,6 +140,10 @@ class Avatar extends StatelessWidget {
   final bool showBorder;
   final bool showFallbackText;
 
+  /// Rounded-square ("squircle") shape. Rooms use it so they read differently
+  /// from people, which are always circles.
+  final bool rounded;
+
   @override
   Widget build(BuildContext context) {
     final initials = avatarInitials(label);
@@ -155,23 +160,31 @@ class Avatar extends StatelessWidget {
     final borderActive = showBorder && active;
     final border = showBorder
         ? Border.all(
-            color: borderActive ? activeColor : UiColors.border,
+            color: borderActive
+                ? activeColor
+                : Colors.white.withValues(alpha: 0.06),
             width: borderActive ? activeBorderWidth : 1,
           )
         : null;
+    final radius = rounded ? BorderRadius.circular(size * 0.3) : null;
+    final shape = rounded ? BoxShape.rectangle : BoxShape.circle;
+    Widget clip(Widget child) => rounded
+        ? ClipRRect(borderRadius: radius!, child: child)
+        : ClipOval(child: child);
     return SizedBox.square(
       dimension: size,
       child: Container(
         decoration: BoxDecoration(
           color: fillColor,
-          shape: BoxShape.circle,
+          shape: shape,
+          borderRadius: radius,
           border: paintBorderOnForeground ? null : border,
         ),
         foregroundDecoration: paintBorderOnForeground && border != null
-            ? BoxDecoration(shape: BoxShape.circle, border: border)
+            ? BoxDecoration(shape: shape, borderRadius: radius, border: border)
             : null,
-        child: ClipOval(
-          child: imageUrl == null
+        child: clip(
+          imageUrl == null
               ? showFallbackText
                     ? Center(
                         child: Text(
@@ -183,9 +196,9 @@ class Avatar extends StatelessWidget {
                           style: TextStyle(
                             color: key == null && borderActive
                                 ? activeColor
-                                : UiColors.text,
-                            fontSize: size * 0.34,
-                            fontWeight: FontWeight.w600,
+                                : Colors.white,
+                            fontSize: size * 0.36,
+                            fontWeight: FontWeight.w700,
                             // The desktop font family is unavailable on
                             // Android. Keep the native font's own ascent and
                             // descent so Center can align its complete line box

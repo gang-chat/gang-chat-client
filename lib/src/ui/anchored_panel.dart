@@ -27,13 +27,7 @@ class AnchoredPanel extends StatelessWidget {
           color: backgroundColor,
           borderRadius: BorderRadius.circular(UiRadii.lg),
           border: Border.all(color: borderColor),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.36),
-              blurRadius: 24,
-              offset: const Offset(0, 12),
-            ),
-          ],
+          boxShadow: UiShadows.popover,
         ),
         child: child,
       ),
@@ -45,7 +39,8 @@ class AnchoredPanelAnchor extends StatefulWidget {
   const AnchoredPanelAnchor({
     super.key,
     required this.anchor,
-    required this.panel,
+    this.panel,
+    this.panelBuilder,
     this.width = 320,
     this.gap = 8,
     this.backgroundColor = UiColors.surfaceRaised,
@@ -54,7 +49,12 @@ class AnchoredPanelAnchor extends StatefulWidget {
 
   final Widget Function(BuildContext context, bool open, VoidCallback toggle)
   anchor;
-  final Widget panel;
+  final Widget? panel;
+
+  /// Builds the panel with a callback that closes it, for panels whose
+  /// actions should dismiss them. Takes precedence over [panel].
+  final Widget Function(BuildContext context, VoidCallback close)?
+  panelBuilder;
   final double width;
   final double gap;
   final Color backgroundColor;
@@ -130,7 +130,10 @@ class _AnchoredPanelAnchorState extends State<AnchoredPanelAnchor> {
                         width: widget.width,
                         backgroundColor: widget.backgroundColor,
                         borderColor: widget.borderColor,
-                        child: widget.panel,
+                        child:
+                            widget.panelBuilder?.call(context, _close) ??
+                            widget.panel ??
+                            const SizedBox.shrink(),
                       ),
                     ),
                   ),

@@ -4,9 +4,9 @@ import 'platform_gestures.dart';
 import 'tokens.dart';
 
 const double _contextMenuScreenPadding = 8;
-const double _contextMenuWidth = 184;
+const double _contextMenuWidth = 196;
 const double _contextMenuMinItemHeight = 32;
-const double _contextMenuHorizontalPadding = 12;
+const double _contextMenuHorizontalPadding = 10;
 
 class UiContextMenuSection {
   const UiContextMenuSection(this.items);
@@ -153,7 +153,7 @@ class _UiContextMenuRoute extends PopupRoute<void> {
   String? get barrierLabel => '关闭菜单';
 
   @override
-  Duration get transitionDuration => const Duration(milliseconds: 80);
+  Duration get transitionDuration => const Duration(milliseconds: 110);
 
   @override
   Duration get reverseTransitionDuration => const Duration(milliseconds: 60);
@@ -178,7 +178,13 @@ class _UiContextMenuRoute extends PopupRoute<void> {
         delegate: _UiContextMenuLayoutDelegate(position - localAdjustment),
         child: FadeTransition(
           opacity: animation,
-          child: _UiContextMenuPanel(sections: sections),
+          child: ScaleTransition(
+            alignment: Alignment.topLeft,
+            scale: Tween<double>(begin: 0.96, end: 1).animate(
+              CurvedAnimation(parent: animation, curve: UiMotion.curve),
+            ),
+            child: _UiContextMenuPanel(sections: sections),
+          ),
         ),
       ),
     );
@@ -220,20 +226,14 @@ class _UiContextMenuPanel extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: UiColors.surfaceRaised,
-          borderRadius: BorderRadius.circular(UiRadii.md),
+          borderRadius: BorderRadius.circular(UiRadii.lg - 2),
           border: Border.all(color: UiColors.borderStrong),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.34),
-              blurRadius: 18,
-              offset: const Offset(0, 10),
-            ),
-          ],
+          boxShadow: UiShadows.popover,
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(UiRadii.md),
+          borderRadius: BorderRadius.circular(UiRadii.lg - 2),
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 5),
+            padding: const EdgeInsets.all(5),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -303,13 +303,28 @@ class _UiContextMenuItemWidgetState extends State<_UiContextMenuItemWidget> {
             horizontal: _contextMenuHorizontalPadding,
             vertical: 6,
           ),
-          color: _enabled && (_hovered || widget.item.selected)
-              ? UiColors.selected
-              : Colors.transparent,
+          decoration: BoxDecoration(
+            color: !_enabled
+                ? Colors.transparent
+                : _hovered
+                ? (widget.item.danger
+                      ? UiColors.danger.withValues(alpha: 0.14)
+                      : UiColors.surfaceHover)
+                : widget.item.selected
+                ? UiColors.selected
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(UiRadii.sm),
+          ),
           child: Row(
             children: [
               if (widget.item.icon case final icon?) ...[
-                Icon(icon, size: 18, color: foreground),
+                Icon(
+                  icon,
+                  size: 17,
+                  color: widget.item.danger || widget.item.selected || !_enabled
+                      ? foreground
+                      : UiColors.textSecondary,
+                ),
                 const SizedBox(width: 10),
               ],
               Expanded(
@@ -366,15 +381,13 @@ class _UiContextMenuDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       child: SizedBox(
         width: double.infinity,
-        height: 2,
+        height: 1,
         child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: UiColors.accent.withValues(alpha: 0.78),
-          ),
+          decoration: BoxDecoration(color: UiColors.borderStrong),
         ),
       ),
     );

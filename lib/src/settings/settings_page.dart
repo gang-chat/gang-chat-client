@@ -4599,9 +4599,10 @@ class _SettingsPageState extends State<SettingsPage>
             size: 38,
             loading: _isRefreshing,
           ),
-          pinned: _SettingsNavigation(
-            selected: _section,
+          navigation: SettingsNavigation<SettingsSection>(
+            value: _section,
             onChanged: _selectSection,
+            segments: _settingsSectionSegments,
           ),
           body: _buildSectionContent(),
         ),

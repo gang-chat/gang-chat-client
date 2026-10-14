@@ -1,29 +1,5 @@
 part of 'live_channel_pane.dart';
 
-class _LiveRoomHeader extends StatelessWidget {
-  const _LiveRoomHeader({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const Icon(Icons.graphic_eq, color: UiColors.textSecondary, size: 20),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: UiTypography.title.copyWith(fontSize: 16),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _LiveMemberStage extends StatelessWidget {
   const _LiveMemberStage({
     required this.loading,
@@ -93,9 +69,33 @@ class _LiveMemberStage extends StatelessWidget {
         }
         if (participants.isEmpty) {
           return Center(
-            child: Text(
-              '语音频道里还没有人',
-              style: UiTypography.body.copyWith(color: UiColors.textMuted),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: UiColors.accentStrong.withValues(alpha: 0.12),
+                    border: Border.all(
+                      color: UiColors.accentStrong.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.graphic_eq_rounded,
+                    size: 32,
+                    color: UiColors.accent,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  '语音频道里还没有人',
+                  style: UiTypography.subtitle.copyWith(
+                    color: UiColors.textSecondary,
+                  ),
+                ),
+              ],
             ),
           );
         }
@@ -113,8 +113,9 @@ class _LiveMemberStage extends StatelessWidget {
           child: ConstrainedBox(
             constraints: BoxConstraints(minHeight: constraints.maxHeight),
             child: Align(
-              alignment: Alignment.topLeft,
+              alignment: Alignment.topCenter,
               child: Wrap(
+                alignment: WrapAlignment.center,
                 spacing: _memberCardSpacing,
                 runSpacing: _memberCardSpacing,
                 children: [
@@ -266,7 +267,7 @@ class _LiveMemberCard extends StatelessWidget {
         ? () => onSelectPreview(previewTrack)
         : null;
     final borderColor = state.highlighted
-        ? UiColors.borderStrong
+        ? UiColors.accent.withValues(alpha: 0.8)
         : UiColors.border;
     final activityIcon = _participantMetaIcon(participant, speaking: speaking);
     final canModerate = !local && canModerateParticipant(participant);
@@ -342,15 +343,13 @@ class _LiveMemberCard extends StatelessWidget {
       return _scaledSurface(
         child: PressableSurface(
           height: _memberCardWidth,
-          hoverLift: _memberCardHoverLift,
-          baseDepth: _memberCardBaseDepth,
-          borderRadius: UiRadii.lg,
+          borderRadius: UiRadii.xl,
           backgroundColor: state.highlighted
               ? _memberSpeakingBackground
               : _memberIdleBackground,
           selectedBackgroundColor: _memberSpeakingBackground,
           borderColor: borderColor,
-          selectedBorderColor: UiColors.borderStrong,
+          selectedBorderColor: borderColor,
           selected: state.highlighted,
           padding: EdgeInsets.zero,
           interactive: true,
@@ -441,15 +440,13 @@ class _LiveMemberCard extends StatelessWidget {
     return _scaledSurface(
       child: PressableSurface(
         height: _memberCardWidth,
-        hoverLift: _memberCardHoverLift,
-        baseDepth: _memberCardBaseDepth,
-        borderRadius: UiRadii.lg,
+        borderRadius: UiRadii.xl,
         backgroundColor: state.highlighted
             ? _memberSpeakingBackground
             : _memberIdleBackground,
         selectedBackgroundColor: _memberSpeakingBackground,
         borderColor: borderColor,
-        selectedBorderColor: UiColors.borderStrong,
+        selectedBorderColor: borderColor,
         selected: state.highlighted,
         padding: EdgeInsets.zero,
         onPressed: selectableTrack == null
@@ -461,12 +458,27 @@ class _LiveMemberCard extends StatelessWidget {
             if (activityTag != null)
               Positioned(top: 8, right: 9, child: activityTag),
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 33, 12, 8),
+              padding: const EdgeInsets.fromLTRB(12, 22, 12, 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Center(
-                    child: UserHoverCard(
+                    child: AnimatedContainer(
+                      duration: UiMotion.standard,
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: state.highlighted
+                              ? UiColors.accent
+                              : Colors.transparent,
+                          width: 2,
+                        ),
+                        boxShadow: state.highlighted
+                            ? UiShadows.glow(UiColors.accent, strength: 0.5)
+                            : null,
+                      ),
+                      child: UserHoverCard(
                       user: participant.user,
                       currentUser: currentUser,
                       onResolveProfile: onResolveParticipantProfile,
@@ -481,12 +493,13 @@ class _LiveMemberCard extends StatelessWidget {
                           context,
                         ).resolveAssetUrl(participant.user.avatarUrl),
                         defaultAvatarKey: participant.user.defaultAvatarKey,
-                        size: 42,
+                        size: 50,
                         showBorder: false,
                       ),
                     ),
+                    ),
                   ),
-                  const SizedBox(height: 5),
+                  const SizedBox(height: 8),
                   Text(
                     name,
                     maxLines: 1,

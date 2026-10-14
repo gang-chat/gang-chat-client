@@ -91,9 +91,9 @@ class _TextInputState extends State<TextInput> {
   Widget build(BuildContext context) {
     final field = DecoratedBox(
       decoration: BoxDecoration(
-        color: UiColors.surface,
-        borderRadius: BorderRadius.circular(UiRadii.lg),
-        border: Border.all(color: UiColors.border),
+        color: UiColors.fieldFill,
+        borderRadius: BorderRadius.circular(UiRadii.md),
+        border: Border.all(color: UiColors.fieldBorder),
       ),
       child: Row(
         crossAxisAlignment: widget.maxLines > 1
