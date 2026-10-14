@@ -624,7 +624,13 @@ class _LobbyHero extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        const SignalTag(label: 'GANG CHAT // LOBBY', dot: true),
+        // The hero shares its row with the counters; on narrower bento
+        // columns the tag scales down instead of overflowing.
+        const FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: SignalTag(label: 'GANG CHAT // LOBBY', dot: true),
+        ),
         SizedBox(height: compact ? 10 : 14),
         Text(
           '欢迎回来，${name.trim().isEmpty ? '朋友' : name.trim()}',

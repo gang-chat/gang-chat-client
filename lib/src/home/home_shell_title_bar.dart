@@ -125,83 +125,54 @@ class _HomeTitleBarState extends State<_HomeTitleBar> {
             _HomeTitleBrand(showWordmark: !widget.compact),
             const SizedBox(width: 14),
             Expanded(
-              child: AppWindowDragRegion(
-                windowController: widget.windowController,
-                onDoubleTap: _toggleMaximize,
-                child: SizedBox.expand(
-                  child: tabStrip == null
-                      ? null
-                      : Align(
-                          alignment: Alignment.centerLeft,
-                          child: lockable(tabStrip),
-                        ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            lockable(
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (voiceCapsule != null) ...[
-                    voiceCapsule,
-                    const SizedBox(width: 10),
-                  ],
-                  ButtonIcon(
-                    key: const ValueKey('home-title-search-button'),
-                    tooltip: '搜索',
-                    icon: const Icon(Icons.search_rounded),
-                    selected: widget.searchActive,
-                    ghost: true,
-                    size: _headerActionSize,
-                    onPressed: widget.onOpenSearch,
-                  ),
-                  const SizedBox(width: 2),
-                  Stack(
-                    clipBehavior: Clip.none,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // Keep part of the header for the room tabs (and the lobby
+                  // tab) even when a joined voice capsule makes the actions
+                  // wider than the window allows.
+                  final tabStripReserve = tabStrip == null
+                      ? 0.0
+                      : (constraints.maxWidth * 0.3).clamp(0.0, 160.0);
+                  final actionsMaxWidth =
+                      (constraints.maxWidth - 10 - tabStripReserve)
+                          .clamp(0.0, double.infinity)
+                          .toDouble();
+                  return Row(
                     children: [
-                      ButtonIcon(
-                        key: const ValueKey(
-                          'home-sidebar-notifications-button',
-                        ),
-                        tooltip: '通知',
-                        icon: Icon(
-                          widget.notificationsActive
-                              ? Icons.notifications_rounded
-                              : Icons.notifications_none_rounded,
-                        ),
-                        selected: widget.notificationsActive,
-                        ghost: true,
-                        size: _headerActionSize,
-                        onPressed: widget.onOpenNotifications,
-                      ),
-                      if (widget.hasPendingNotifications)
-                        Positioned(
-                          right: -5,
-                          top: -3,
-                          child: IgnorePointer(
-                            child: RoomUnreadBadge(count: pendingCount),
+                      Expanded(
+                        child: AppWindowDragRegion(
+                          windowController: widget.windowController,
+                          onDoubleTap: _toggleMaximize,
+                          child: SizedBox.expand(
+                            child: tabStrip == null
+                                ? null
+                                : Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: lockable(tabStrip),
+                                  ),
                           ),
                         ),
+                      ),
+                      const SizedBox(width: 10),
+                      // The global actions keep their natural size; only when
+                      // the window is narrower than the header's minimum (e.g.
+                      // 360px with Windows caption buttons) do they scale down
+                      // instead of overflowing.
+                      ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: actionsMaxWidth),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: _buildActions(
+                            lockable,
+                            voiceCapsule,
+                            pendingCount,
+                          ),
+                        ),
+                      ),
                     ],
-                  ),
-                  const SizedBox(width: 2),
-                  ButtonIcon(
-                    key: const ValueKey('home-sidebar-settings-button'),
-                    tooltip: '设置',
-                    icon: Icon(
-                      widget.settingsActive
-                          ? Icons.settings_rounded
-                          : Icons.settings_outlined,
-                    ),
-                    selected: widget.settingsActive,
-                    ghost: true,
-                    size: _headerActionSize,
-                    onPressed: widget.onOpenSettings,
-                  ),
-                  const SizedBox(width: 8),
-                  widget.account,
-                ],
+                  );
+                },
               ),
             ),
             SizedBox(width: showWindowControls ? 6 : 14),
@@ -219,6 +190,76 @@ class _HomeTitleBarState extends State<_HomeTitleBar> {
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildActions(
+    Widget Function(Widget child) lockable,
+    Widget? voiceCapsule,
+    int pendingCount,
+  ) {
+    return lockable(
+      Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (voiceCapsule != null) ...[
+            voiceCapsule,
+            const SizedBox(width: 10),
+          ],
+          ButtonIcon(
+            key: const ValueKey('home-title-search-button'),
+            tooltip: '搜索',
+            icon: const Icon(Icons.search_rounded),
+            selected: widget.searchActive,
+            ghost: true,
+            size: _headerActionSize,
+            onPressed: widget.onOpenSearch,
+          ),
+          const SizedBox(width: 2),
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              ButtonIcon(
+                key: const ValueKey('home-sidebar-notifications-button'),
+                tooltip: '通知',
+                icon: Icon(
+                  widget.notificationsActive
+                      ? Icons.notifications_rounded
+                      : Icons.notifications_none_rounded,
+                ),
+                selected: widget.notificationsActive,
+                ghost: true,
+                size: _headerActionSize,
+                onPressed: widget.onOpenNotifications,
+              ),
+              if (widget.hasPendingNotifications)
+                Positioned(
+                  right: -5,
+                  top: -3,
+                  child: IgnorePointer(
+                    child: RoomUnreadBadge(count: pendingCount),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(width: 2),
+          ButtonIcon(
+            key: const ValueKey('home-sidebar-settings-button'),
+            tooltip: '设置',
+            icon: Icon(
+              widget.settingsActive
+                  ? Icons.settings_rounded
+                  : Icons.settings_outlined,
+            ),
+            selected: widget.settingsActive,
+            ghost: true,
+            size: _headerActionSize,
+            onPressed: widget.onOpenSettings,
+          ),
+          const SizedBox(width: 8),
+          widget.account,
+        ],
       ),
     );
   }
@@ -282,7 +323,9 @@ class _HeaderAccountButton extends StatelessWidget {
       reconnecting: reconnecting,
     );
     final presenceColor = _presenceColor(statusLabel);
-    final avatarUrl = AppConfigScope.of(context).resolveAssetUrl(user.avatarUrl);
+    final avatarUrl = AppConfigScope.of(
+      context,
+    ).resolveAssetUrl(user.avatarUrl);
     final latencyQuality = network_latency.networkLatencyQuality(
       requestRoundTrip,
     );
@@ -846,9 +889,7 @@ class _SearchPalette extends StatelessWidget {
   Widget build(BuildContext context) {
     final results = this.results;
     return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.escape): onDismiss,
-      },
+      bindings: {const SingleActivator(LogicalKeyboardKey.escape): onDismiss},
       child: Stack(
         key: const ValueKey('home-search-palette'),
         children: [
@@ -933,9 +974,7 @@ class _SearchPaletteHint extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             label,
-            style: UiTypography.caption.copyWith(
-              color: UiColors.textSecondary,
-            ),
+            style: UiTypography.caption.copyWith(color: UiColors.textSecondary),
           ),
         ],
       ),
@@ -945,10 +984,7 @@ class _SearchPaletteHint extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '可以搜索',
-            style: UiTypography.overline,
-          ),
+          Text('可以搜索', style: UiTypography.overline),
           const SizedBox(height: 10),
           Wrap(
             spacing: 8,
