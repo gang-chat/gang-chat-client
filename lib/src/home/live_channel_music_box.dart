@@ -158,13 +158,13 @@ class _LiveMusicBoxPanelState extends State<LiveMusicBoxPanel> {
     final state = widget.state;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: UiColors.surfaceRaised,
+        color: UiColors.surfaceLow,
         borderRadius: BorderRadius.circular(UiRadii.xl),
         border: Border.all(color: UiColors.borderStrong),
         boxShadow: UiShadows.popover,
       ),
       child: Padding(
-        padding: const EdgeInsets.all(11),
+        padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -186,47 +186,61 @@ class _LiveMusicBoxPanelState extends State<LiveMusicBoxPanel> {
               onEnterCommonRoom: widget.onEnterCommonRoom,
               userProfileActionBuilder: widget.userProfileActionBuilder,
             ),
-            const SizedBox(height: 7),
+            const SizedBox(height: 8),
             _MusicBoxVolume(
               initialVolume: widget.volume,
               onChanged: widget.onVolumeChanged,
             ),
             const SizedBox(height: 10),
             Expanded(
-              child: _MusicBoxBody(
-                state: state,
-                searchOpen: _searchOpen,
-                openSections: _openSections,
-                openPlaylistKey: _openPlaylistKey,
-                revealSerial: _revealSerial,
-                revealSection: _revealSection,
-                onToggleSearch: _toggleSearch,
-                onToggleSection: _toggleSection,
-                onTogglePlaylist: _togglePlaylist,
-                onOpenPlaylist: _openPlaylist,
-                searchController: widget.searchController,
-                searchResults: widget.searchResults,
-                searching: widget.searching,
-                searchError: widget.searchError,
-                source: widget.source,
-                onQueueResult: widget.onQueueResult,
-                onRemoveItem: widget.onRemoveItem,
-                onSourceChanged: widget.onSourceChanged,
-                controller: widget.controller,
-                roomId: widget.roomId,
-                playlistsRevision: widget.playlistsRevision,
-                room: widget.room,
-                onStateChanged: widget.onStateChanged,
-                currentUser: widget.currentUser,
-                onResolveUserProfile: widget.onResolveUserProfile,
-                onResolveRoomProfile: widget.onResolveRoomProfile,
-                onEnterCommonRoom: widget.onEnterCommonRoom,
-                userProfileActionBuilder: widget.userProfileActionBuilder,
-                onCreateFirstRoomPlaylist: widget.onCreateFirstRoomPlaylist,
-                onCreateFirstPersonalPlaylist:
-                    widget.onCreateFirstPersonalPlaylist,
-                onEditRoomPlaylist: widget.onEditRoomPlaylist,
-                onEditPersonalPlaylist: widget.onEditPersonalPlaylist,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: UiColors.background,
+                  borderRadius: BorderRadius.circular(UiRadii.lg),
+                  border: Border.all(color: UiColors.border),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(UiRadii.lg - 1),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(6, 6, 6, 0),
+                    child: _MusicBoxBody(
+                      state: state,
+                      searchOpen: _searchOpen,
+                      openSections: _openSections,
+                      openPlaylistKey: _openPlaylistKey,
+                      revealSerial: _revealSerial,
+                      revealSection: _revealSection,
+                      onToggleSearch: _toggleSearch,
+                      onToggleSection: _toggleSection,
+                      onTogglePlaylist: _togglePlaylist,
+                      onOpenPlaylist: _openPlaylist,
+                      searchController: widget.searchController,
+                      searchResults: widget.searchResults,
+                      searching: widget.searching,
+                      searchError: widget.searchError,
+                      source: widget.source,
+                      onQueueResult: widget.onQueueResult,
+                      onRemoveItem: widget.onRemoveItem,
+                      onSourceChanged: widget.onSourceChanged,
+                      controller: widget.controller,
+                      roomId: widget.roomId,
+                      playlistsRevision: widget.playlistsRevision,
+                      room: widget.room,
+                      onStateChanged: widget.onStateChanged,
+                      currentUser: widget.currentUser,
+                      onResolveUserProfile: widget.onResolveUserProfile,
+                      onResolveRoomProfile: widget.onResolveRoomProfile,
+                      onEnterCommonRoom: widget.onEnterCommonRoom,
+                      userProfileActionBuilder: widget.userProfileActionBuilder,
+                      onCreateFirstRoomPlaylist:
+                          widget.onCreateFirstRoomPlaylist,
+                      onCreateFirstPersonalPlaylist:
+                          widget.onCreateFirstPersonalPlaylist,
+                      onEditRoomPlaylist: widget.onEditRoomPlaylist,
+                      onEditPersonalPlaylist: widget.onEditPersonalPlaylist,
+                    ),
+                  ),
+                ),
               ),
             ),
           ],
@@ -236,9 +250,8 @@ class _LiveMusicBoxPanelState extends State<LiveMusicBoxPanel> {
   }
 }
 
-/// Title row. The trailing source chip names the authoritative active source
-/// and jumps to its tab, so "what is playing" is always one tap away no matter
-/// where the user is browsing.
+/// Title row: the dot-matrix wordmark, the active-source chip (jumps to the
+/// list that owns what is playing) and the close key.
 class _MusicBoxHeader extends StatelessWidget {
   const _MusicBoxHeader({
     required this.state,
@@ -256,14 +269,18 @@ class _MusicBoxHeader extends StatelessWidget {
     final playing = music_box_display.musicBoxHasActivePlayback(state);
     return Row(
       children: [
-        const Icon(Icons.library_music, size: 16, color: UiColors.accent),
-        const SizedBox(width: 8),
-        const Text(
-          '音乐盒',
-          style: TextStyle(
-            color: UiColors.text,
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
+        const SizedBox(width: 4),
+        Semantics(
+          label: '音乐盒',
+          child: ExcludeSemantics(
+            child: Text(
+              'MUSIC BOX',
+              style: UiTypography.dot.copyWith(
+                fontSize: 15,
+                color: UiColors.text,
+                letterSpacing: 0.5,
+              ),
+            ),
           ),
         ),
         const SizedBox(width: 10),
@@ -272,24 +289,26 @@ class _MusicBoxHeader extends StatelessWidget {
             alignment: Alignment.centerRight,
             child: PressableSurface(
               key: const ValueKey<String>('music-box-active-source-chip'),
-              height: 24,
+              height: 26,
               tooltip: playing ? '正在播放的来源' : '当前来源',
               onPressed: onOpenSource,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              backgroundColor: UiColors.surfaceLow,
-              selected: playing,
-              borderRadius: UiRadii.md,
+              padding: const EdgeInsets.symmetric(horizontal: 9),
+              backgroundColor: playing ? UiColors.selected : UiColors.surface,
+              selected: false,
+              borderColor: playing ? UiColors.accentBorder : UiColors.border,
+              borderRadius: UiRadii.pill,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    playing
-                        ? Icons.graphic_eq
-                        : _musicBoxSourceTypeIcon(active.type),
-                    size: 13,
-                    color: playing ? UiColors.accent : UiColors.textSecondary,
-                  ),
-                  const SizedBox(width: 5),
+                  if (playing)
+                    const EqualizerBars(height: 10, barWidth: 2, gap: 1.5)
+                  else
+                    Icon(
+                      _musicBoxSourceTypeIcon(active.type),
+                      size: 13,
+                      color: UiColors.textSecondary,
+                    ),
+                  const SizedBox(width: 6),
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 120),
                     child: Text(
@@ -297,18 +316,18 @@ class _MusicBoxHeader extends StatelessWidget {
                       maxLines: 1,
                       softWrap: false,
                       overflow: TextOverflow.fade,
-                      style: TextStyle(
+                      style: UiTypography.label.copyWith(
                         color: playing ? UiColors.accent : UiColors.text,
                         fontSize: 11,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
                   const SizedBox(width: 2),
-                  const Icon(
-                    Icons.chevron_right,
-                    size: 13,
-                    color: UiColors.textMuted,
+                  Icon(
+                    Icons.arrow_outward_rounded,
+                    size: 12,
+                    color: playing ? UiColors.accent : UiColors.textMuted,
                   ),
                 ],
               ),
@@ -318,10 +337,11 @@ class _MusicBoxHeader extends StatelessWidget {
         const SizedBox(width: 6),
         ButtonIcon(
           key: const ValueKey<String>('music-box-close'),
-          icon: const Icon(Icons.close),
+          icon: const Icon(Icons.close_rounded),
           tooltip: '关闭音乐盒',
           onPressed: onClose,
-          size: 26,
+          ghost: true,
+          size: 28,
         ),
       ],
     );
@@ -336,10 +356,10 @@ IconData _musicBoxSourceTypeIcon(MusicBoxActiveSourceType type) {
   };
 }
 
-/// The now-playing strip: spinning vinyl, title, artist plus requester, the
-/// progress bar, and transport controls. Members the server does not let
-/// control playback see a single status line instead of four disabled
-/// buttons.
+/// The deck: a black dot-matrix display (status, title, artist and requester,
+/// dotted progress) with the record spinning half out of its right edge, then
+/// a row of hardware-style transport keys. Members the server does not let
+/// control playback see a single locked line instead of disabled keys.
 class _MusicBoxNowPlaying extends StatelessWidget {
   const _MusicBoxNowPlaying({
     required this.state,
@@ -365,6 +385,8 @@ class _MusicBoxNowPlaying extends StatelessWidget {
   final ValueChanged<PublicRoom>? onEnterCommonRoom;
   final UserProfileActionBuilder? userProfileActionBuilder;
 
+  static const double _recordSize = 104;
+
   @override
   Widget build(BuildContext context) {
     final current = state.currentItem;
@@ -377,148 +399,261 @@ class _MusicBoxNowPlaying extends StatelessWidget {
         ? current?.requestedBy
         : null;
     final artist = current?.artist.trim() ?? '';
+    final statusLabel = current == null
+        ? 'IDLE'
+        : switch (state.playback.state) {
+            MusicBoxPlaybackState.playing => 'NOW PLAYING',
+            MusicBoxPlaybackState.paused => 'PAUSED',
+            MusicBoxPlaybackState.stopped => 'STOPPED',
+          };
+    final live =
+        current != null &&
+        state.playback.state == MusicBoxPlaybackState.playing;
 
-    return Row(
-      children: [
-        _VinylRecord(spinning: spinning, label: current?.title),
-        const SizedBox(width: 11),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              OverflowMarqueeText(
-                key: const ValueKey<String>('music-box-now-playing:title'),
-                trackKey: const ValueKey<String>(
-                  'music-box-now-playing:title-marquee-track',
-                ),
-                text: current?.title ?? '未在播放',
-                style: TextStyle(
-                  color: current == null ? UiColors.textMuted : UiColors.text,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
+    final display = DecoratedBox(
+      decoration: BoxDecoration(
+        color: UiColors.surfacePressed,
+        borderRadius: BorderRadius.circular(UiRadii.lg),
+        border: Border.all(color: UiColors.border),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(UiRadii.lg - 1),
+        child: Stack(
+          children: [
+            const Positioned.fill(
+              child: DotGridBackground(
+                color: Colors.transparent,
+                dotColor: Color(0x12FFFFFF),
+                spacing: 6,
+                dotRadius: 0.6,
               ),
-              const SizedBox(height: 3),
-              Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      current == null
-                          ? '在下方搜索歌曲点歌'
-                          : artist.isEmpty
-                          ? '未知艺人'
-                          : artist,
-                      maxLines: 1,
-                      softWrap: false,
-                      overflow: TextOverflow.fade,
-                      style: const TextStyle(
-                        color: UiColors.textSecondary,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
+            ),
+            if (live)
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      center: const Alignment(1, 0),
+                      radius: 1.1,
+                      colors: [
+                        UiColors.accent.withValues(alpha: 0.14),
+                        UiColors.accent.withValues(alpha: 0),
+                      ],
                     ),
                   ),
-                  if (requester != null) ...[
-                    const SizedBox(width: 6),
-                    _MusicBoxRequesterChip(
-                      key: const ValueKey<String>(
-                        'music-box-now-playing:requester',
+                ),
+              ),
+            Positioned(
+              right: -_recordSize * 0.42,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: _VinylRecord(
+                  spinning: spinning,
+                  label: current?.title,
+                  size: _recordSize,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                12,
+                10,
+                _recordSize * 0.58 + 10,
+                10,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: SignalTag(
+                          label: statusLabel,
+                          color: live ? UiColors.accent : UiColors.textMuted,
+                          dot: true,
+                        ),
                       ),
-                      requester: requester,
-                      currentUser: currentUser,
-                      onResolveUserProfile: onResolveUserProfile,
-                      onResolveRoomProfile: onResolveRoomProfile,
-                      onEnterCommonRoom: onEnterCommonRoom,
-                      userProfileActionBuilder: userProfileActionBuilder,
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  OverflowMarqueeText(
+                    key: const ValueKey<String>('music-box-now-playing:title'),
+                    trackKey: const ValueKey<String>(
+                      'music-box-now-playing:title-marquee-track',
                     ),
-                  ],
+                    text: current?.title ?? '未在播放',
+                    style: UiTypography.title.copyWith(
+                      color: current == null
+                          ? UiColors.textMuted
+                          : UiColors.text,
+                      fontSize: 16,
+                      height: 1.25,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          current == null
+                              ? '在下方搜索歌曲点歌'
+                              : artist.isEmpty
+                              ? '未知艺人'
+                              : artist,
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.fade,
+                          style: UiTypography.mono.copyWith(
+                            color: UiColors.textSecondary,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                      if (requester != null) ...[
+                        const SizedBox(width: 8),
+                        _MusicBoxRequesterChip(
+                          key: const ValueKey<String>(
+                            'music-box-now-playing:requester',
+                          ),
+                          requester: requester,
+                          currentUser: currentUser,
+                          onResolveUserProfile: onResolveUserProfile,
+                          onResolveRoomProfile: onResolveRoomProfile,
+                          onEnterCommonRoom: onEnterCommonRoom,
+                          userProfileActionBuilder: userProfileActionBuilder,
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  _MusicBoxProgressBar(state: state),
                 ],
               ),
-              const SizedBox(height: 8),
-              _MusicBoxProgressBar(state: state),
-              const SizedBox(height: 8),
-              if (!canControl)
-                const Center(
-                  child: Text(
-                    '播放由房间管理员控制',
-                    key: ValueKey<String>('music-box-transport-locked'),
-                    style: TextStyle(
-                      color: UiColors.textMuted,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
+            ),
+          ],
+        ),
+      ),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        display,
+        const SizedBox(height: 8),
+        if (!canControl)
+          Container(
+            height: 40,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(UiRadii.md),
+              border: Border.all(color: UiColors.border),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.lock_outline_rounded,
+                  size: 14,
+                  color: UiColors.textMuted,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '播放由房间管理员控制',
+                  key: const ValueKey<String>('music-box-transport-locked'),
+                  style: UiTypography.label.copyWith(
+                    color: UiColors.textMuted,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          LayoutBuilder(
+            builder: (context, constraints) {
+              const gap = 6.0;
+              final unit = ((constraints.maxWidth - gap * 3) / 5)
+                  .clamp(30.0, 120.0)
+                  .toDouble();
+              return Row(
+                children: [
+                  Builder(
+                    builder: (context) => ButtonIcon(
+                      key: const ValueKey<String>('music-box-transport-mode'),
+                      icon: Icon(_musicBoxModeIcon(state.playback.mode)),
+                      tooltip:
+                          '播放模式：${_musicBoxModeLabel(state.playback.mode)}',
+                      selected:
+                          state.playback.mode !=
+                          MusicBoxPlaybackMode.sequential,
+                      onPressed:
+                          state.playback.capabilities.canChangeMode &&
+                              onModeChanged != null
+                          ? () => _showMusicBoxModeMenu(
+                              context,
+                              state.playback,
+                              onModeChanged!,
+                            )
+                          : null,
+                      size: 40,
+                      width: unit,
+                      radius: UiRadii.md,
+                      iconSize: 18,
                     ),
                   ),
-                )
-              else
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ButtonIcon(
-                      key: const ValueKey<String>(
-                        'music-box-transport-previous',
-                      ),
-                      icon: const Icon(Icons.skip_previous),
-                      tooltip: '上一首',
-                      onPressed: state.playback.canPrevious ? onPrevious : null,
-                      size: 30,
+                  const SizedBox(width: gap),
+                  ButtonIcon(
+                    key: const ValueKey<String>('music-box-transport-previous'),
+                    icon: const Icon(Icons.skip_previous_rounded),
+                    tooltip: '上一首',
+                    onPressed: state.playback.canPrevious ? onPrevious : null,
+                    size: 40,
+                    width: unit,
+                    radius: UiRadii.md,
+                    iconSize: 20,
+                  ),
+                  const SizedBox(width: gap),
+                  ButtonIcon(
+                    key: const ValueKey<String>('music-box-primary-playback'),
+                    icon: Icon(
+                      transport ==
+                              music_box_display.MusicBoxTransportAction.pause
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
                     ),
-                    const SizedBox(width: 7),
-                    ButtonIcon(
-                      key: const ValueKey<String>('music-box-primary-playback'),
-                      icon: Icon(
-                        transport ==
-                                music_box_display.MusicBoxTransportAction.pause
-                            ? Icons.pause
-                            : Icons.play_arrow,
-                      ),
-                      tooltip: switch (transport) {
-                        music_box_display.MusicBoxTransportAction.pause => '暂停',
-                        music_box_display.MusicBoxTransportAction.resume =>
-                          '继续播放',
-                        music_box_display.MusicBoxTransportAction.play => '播放',
-                      },
-                      tone: ButtonTone.primary,
-                      onPressed: hasQueue ? onTogglePlayback : null,
-                      size: 30,
-                    ),
-                    const SizedBox(width: 7),
-                    ButtonIcon(
-                      key: const ValueKey<String>('music-box-transport-next'),
-                      icon: const Icon(Icons.skip_next),
-                      tooltip: '下一首',
-                      onPressed: hasQueue && state.playback.canNext
-                          ? onSkip
-                          : null,
-                      size: 30,
-                    ),
-                    const SizedBox(width: 7),
-                    Builder(
-                      builder: (context) => ButtonIcon(
-                        key: const ValueKey<String>('music-box-transport-mode'),
-                        icon: Icon(_musicBoxModeIcon(state.playback.mode)),
-                        tooltip:
-                            '播放模式：${_musicBoxModeLabel(state.playback.mode)}',
-                        selected:
-                            state.playback.mode !=
-                            MusicBoxPlaybackMode.sequential,
-                        onPressed:
-                            state.playback.capabilities.canChangeMode &&
-                                onModeChanged != null
-                            ? () => _showMusicBoxModeMenu(
-                                context,
-                                state.playback,
-                                onModeChanged!,
-                              )
-                            : null,
-                        size: 30,
-                      ),
-                    ),
-                  ],
-                ),
-            ],
+                    tooltip: switch (transport) {
+                      music_box_display.MusicBoxTransportAction.pause => '暂停',
+                      music_box_display.MusicBoxTransportAction.resume =>
+                        '继续播放',
+                      music_box_display.MusicBoxTransportAction.play => '播放',
+                    },
+                    tone: ButtonTone.primary,
+                    onPressed: hasQueue ? onTogglePlayback : null,
+                    size: 40,
+                    width: unit * 2,
+                    radius: UiRadii.md,
+                    iconSize: 24,
+                  ),
+                  const SizedBox(width: gap),
+                  ButtonIcon(
+                    key: const ValueKey<String>('music-box-transport-next'),
+                    icon: const Icon(Icons.skip_next_rounded),
+                    tooltip: '下一首',
+                    onPressed: hasQueue && state.playback.canNext
+                        ? onSkip
+                        : null,
+                    size: 40,
+                    width: unit,
+                    radius: UiRadii.md,
+                    iconSize: 20,
+                  ),
+                ],
+              );
+            },
           ),
-        ),
       ],
     );
   }
@@ -556,9 +691,9 @@ class _MusicBoxRequesterChip extends StatelessWidget {
           onResolveRoomProfile: onResolveRoomProfile,
           onEnterCommonRoom: onEnterCommonRoom,
           userProfileActionBuilder: userProfileActionBuilder,
-          size: 18,
+          size: 16,
         ),
-        const SizedBox(width: 4),
+        const SizedBox(width: 5),
         ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 72),
           child: Text(
@@ -566,9 +701,9 @@ class _MusicBoxRequesterChip extends StatelessWidget {
             maxLines: 1,
             softWrap: false,
             overflow: TextOverflow.fade,
-            style: const TextStyle(
+            style: UiTypography.label.copyWith(
               color: UiColors.textMuted,
-              fontSize: 10,
+              fontSize: 10.5,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -639,13 +774,9 @@ class _MusicBoxVolume extends StatefulWidget {
 }
 
 class _MusicBoxVolumeState extends State<_MusicBoxVolume> {
-  // The collapsed square size / pill height.
+  // The mute key size; the strip is a little taller.
   static const _size = 24.0;
-  // The width the slider tail expands to on hover.
-  static const _sliderExtent = 110.0;
-  static const _gap = 10.0;
   static const _pad = 12.0;
-  static const _duration = Duration(milliseconds: 180);
 
   late double _volume = widget.initialVolume;
   // The level to restore to when unmuting; captured at the moment of muting.
@@ -657,10 +788,7 @@ class _MusicBoxVolumeState extends State<_MusicBoxVolume> {
   // drag ends, then fall back to the hover state.
   bool _dragging = false;
 
-  // When true, the pill sits expanded at rest (full width, slider always
-  // visible) instead of collapsing to a square that grows on hover. The
-  // hover/drag expansion still works either way — flip this back to false to
-  // restore the collapse-by-default behaviour.
+  // The fader strip is always fully shown; hover/drag only light its frame.
   static const _expandedByDefault = true;
 
   bool get _expanded => _expandedByDefault || _hovered || _dragging;
@@ -722,65 +850,58 @@ class _MusicBoxVolumeState extends State<_MusicBoxVolume> {
     );
   }
 
-  // Elongates rightward in place; the icon stays put on the left. Collapsed it
-  // is a single square; expanded it fills the full panel width so the slider
-  // gets the whole row to travel across.
+  // A flat fader strip: mute key, the slider, and the level in monospace.
   @override
   Widget build(BuildContext context) {
     final p = _palette;
-    final height = _size;
-
-    // The width is tweened explicitly so hover expansion remains smooth even
-    // though the control is a flat decorated surface rather than a button.
-    // Muting remains the inner icon's gesture; the slider owns its own pointer
-    // handling, so removing the button press layer does not change interaction.
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // Expand to the full available row width; fall back to the legacy fixed
-        // extent if the panel is laid out unbounded (shouldn't happen in the
-        // music box column, but keeps the tween finite).
-        final expandedWidth = constraints.maxWidth.isFinite
-            ? constraints.maxWidth
-            : height + _gap + _sliderExtent + _pad;
-        return Align(
-          alignment: Alignment.centerLeft,
-          child: MouseRegion(
-            onEnter: (_) => setState(() => _hovered = true),
-            onExit: (_) => setState(() => _hovered = false),
-            child: TweenAnimationBuilder<double>(
-              duration: _duration,
-              curve: Curves.easeOutCubic,
-              tween: Tween(end: _expanded ? expandedWidth : height),
-              builder: (context, width, child) {
-                return SizedBox(
-                  key: const ValueKey<String>('music-box-volume-control'),
-                  height: height,
-                  width: width,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: p.background,
-                      borderRadius: BorderRadius.circular(UiRadii.md),
-                      border: Border.all(color: p.border),
-                    ),
-                    child: child!,
-                  ),
-                );
-              },
-              child: Row(
-                children: [
-                  _iconButton(height),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: _pad),
-                      child: _slider(),
-                    ),
-                  ),
-                ],
-              ),
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: SizedBox(
+        key: const ValueKey<String>('music-box-volume-control'),
+        height: _size + 8,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: UiColors.surface,
+            borderRadius: BorderRadius.circular(UiRadii.md),
+            border: Border.all(
+              color: _expanded && _hovered
+                  ? UiColors.borderStrong
+                  : UiColors.border,
             ),
           ),
-        );
-      },
+          child: Row(
+            children: [
+              const SizedBox(width: 4),
+              _iconButton(_size + 4),
+              Text(
+                'VOL',
+                style: UiTypography.overline.copyWith(
+                  color: p.foreground == UiColors.accent
+                      ? UiColors.textSecondary
+                      : UiColors.textMuted,
+                  fontSize: 9.5,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(child: _slider()),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 30,
+                child: Text(
+                  (_volume * 100).round().toString().padLeft(2, '0'),
+                  textAlign: TextAlign.right,
+                  style: UiTypography.dot.copyWith(
+                    fontSize: 14,
+                    color: _muted ? UiColors.textMuted : UiColors.accent,
+                  ),
+                ),
+              ),
+              const SizedBox(width: _pad - 2),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -862,11 +983,20 @@ class _VinylRecordState extends State<_VinylRecord>
 
   @override
   Widget build(BuildContext context) {
-    return RotationTransition(
-      turns: _controller,
-      child: CustomPaint(
-        size: Size.square(widget.size),
-        painter: _VinylPainter(),
+    final size = Size.square(widget.size);
+    return SizedBox.fromSize(
+      size: size,
+      child: Stack(
+        children: [
+          RotationTransition(
+            turns: _controller,
+            child: CustomPaint(size: size, painter: const _VinylPainter()),
+          ),
+          // The light catching the grooves stays put while the disc turns.
+          IgnorePointer(
+            child: CustomPaint(size: size, painter: const _VinylSheenPainter()),
+          ),
+        ],
       ),
     );
   }
@@ -880,40 +1010,49 @@ class _VinylPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2;
 
-    // Disc body.
-    canvas.drawCircle(center, radius, Paint()..color = const Color(0xFF0E0E10));
+    canvas.drawCircle(center, radius, Paint()..color = const Color(0xFF0B0B0D));
     canvas.drawCircle(
       center,
-      radius,
+      radius - 0.5,
       Paint()
         ..color = UiColors.borderStrong
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1,
     );
 
-    // Grooves.
-    final groovePaint = Paint()
-      ..color = const Color(0xFF1C1C20)
+    final groove = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-    for (var r = radius - 6; r > radius * 0.34; r -= 5) {
-      canvas.drawCircle(center, r, groovePaint);
+      ..strokeWidth = 0.8;
+    var index = 0;
+    for (var r = radius - 4; r > radius * 0.4; r -= 2.6) {
+      groove.color = index.isEven
+          ? const Color(0xFF1A1A1E)
+          : const Color(0xFF131316);
+      canvas.drawCircle(center, r, groove);
+      index += 1;
     }
 
-    // Accent label and spindle hole.
-    canvas.drawCircle(center, radius * 0.30, Paint()..color = UiColors.accent);
-    canvas.drawCircle(
-      center,
-      radius * 0.30,
-      Paint()
-        ..color = UiColors.background
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1,
+    // Lime label with a printed stripe so the rotation reads at a glance.
+    final labelRadius = radius * 0.36;
+    canvas.drawCircle(center, labelRadius, Paint()..color = UiColors.accent);
+    canvas.save();
+    canvas.clipPath(
+      Path()..addOval(Rect.fromCircle(center: center, radius: labelRadius)),
     );
+    canvas.drawRect(
+      Rect.fromLTWH(
+        center.dx - labelRadius,
+        center.dy - labelRadius * 0.62,
+        labelRadius * 2,
+        labelRadius * 0.28,
+      ),
+      Paint()..color = UiColors.onAccent.withValues(alpha: 0.85),
+    );
+    canvas.restore();
     canvas.drawCircle(
       center,
-      radius * 0.07,
-      Paint()..color = UiColors.background,
+      labelRadius * 0.16,
+      Paint()..color = UiColors.surfacePressed,
     );
   }
 
@@ -921,9 +1060,42 @@ class _VinylPainter extends CustomPainter {
   bool shouldRepaint(_VinylPainter oldDelegate) => false;
 }
 
-/// Server-authoritative progress bar. The server pushes a fresh snapshot every
-/// second, so the bar simply renders the snapshot's reported position — no local
-/// stepping, no client clock, nothing to drift.
+class _VinylSheenPainter extends CustomPainter {
+  const _VinylSheenPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final center = rect.center;
+    final radius = size.width / 2;
+    final ring = Path()
+      ..fillType = PathFillType.evenOdd
+      ..addOval(Rect.fromCircle(center: center, radius: radius - 2))
+      ..addOval(Rect.fromCircle(center: center, radius: radius * 0.38));
+    canvas.drawPath(
+      ring,
+      Paint()
+        ..shader = SweepGradient(
+          colors: [
+            Colors.white.withValues(alpha: 0),
+            Colors.white.withValues(alpha: 0.07),
+            Colors.white.withValues(alpha: 0),
+            Colors.white.withValues(alpha: 0),
+            Colors.white.withValues(alpha: 0.05),
+            Colors.white.withValues(alpha: 0),
+          ],
+          stops: const [0.0, 0.1, 0.22, 0.5, 0.6, 0.72],
+        ).createShader(rect),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_VinylSheenPainter oldDelegate) => false;
+}
+
+/// Server-authoritative progress, drawn as a row of dots that light up as
+/// the song plays. The server pushes a fresh snapshot every second, so the
+/// bar renders the snapshot's reported position — no local stepping.
 class _MusicBoxProgressBar extends StatelessWidget {
   const _MusicBoxProgressBar({required this.state});
 
@@ -932,36 +1104,51 @@ class _MusicBoxProgressBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final progress = music_box_display.musicBoxProgress(state);
+    final hasTrack = state.currentItem != null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(3),
-          child: LinearProgressIndicator(
-            value: progress.fraction,
-            minHeight: 4,
-            backgroundColor: UiColors.surfaceRaised,
-            valueColor: const AlwaysStoppedAnimation(UiColors.accent),
+        Semantics(
+          value: '${(progress.fraction * 100).round()}%',
+          child: SizedBox(
+            height: 6,
+            child: CustomPaint(
+              painter: _DotProgressPainter(
+                fraction: progress.fraction,
+                active: hasTrack,
+              ),
+            ),
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 7),
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
               music_box_display.musicBoxFormatDuration(progress.positionMs),
-              style: const TextStyle(
-                color: UiColors.textMuted,
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
+              style: UiTypography.dot.copyWith(
+                fontSize: 17,
+                height: 1,
+                color: hasTrack ? UiColors.text : UiColors.textMuted,
               ),
             ),
+            const SizedBox(width: 6),
+            Text(
+              '/',
+              style: UiTypography.mono.copyWith(
+                fontSize: 10,
+                color: UiColors.textMuted,
+                height: 1,
+              ),
+            ),
+            const SizedBox(width: 6),
             Text(
               music_box_display.musicBoxFormatDuration(progress.durationMs),
-              style: const TextStyle(
-                color: UiColors.textMuted,
+              style: UiTypography.mono.copyWith(
                 fontSize: 10,
-                fontWeight: FontWeight.w600,
+                color: UiColors.textMuted,
+                height: 1,
               ),
             ),
           ],
@@ -969,4 +1156,40 @@ class _MusicBoxProgressBar extends StatelessWidget {
       ],
     );
   }
+}
+
+class _DotProgressPainter extends CustomPainter {
+  const _DotProgressPainter({required this.fraction, required this.active});
+
+  final double fraction;
+  final bool active;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const step = 5.0;
+    const radius = 1.3;
+    final count = math.max(2, (size.width / step).floor());
+    final spacing = (size.width - radius * 2) / (count - 1);
+    final lit = active ? (fraction.clamp(0.0, 1.0) * (count - 1)).round() : -1;
+    final y = size.height / 2;
+    final off = Paint()..color = const Color(0xFF2A2A30);
+    final on = Paint()..color = UiColors.accent;
+    for (var i = 0; i < count; i++) {
+      final x = radius + i * spacing;
+      if (i == lit) {
+        canvas.drawCircle(
+          Offset(x, y),
+          radius * 2.6,
+          Paint()..color = UiColors.accent.withValues(alpha: 0.25),
+        );
+        canvas.drawCircle(Offset(x, y), radius * 1.6, on);
+      } else {
+        canvas.drawCircle(Offset(x, y), radius, i < lit ? on : off);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DotProgressPainter oldDelegate) =>
+      oldDelegate.fraction != fraction || oldDelegate.active != active;
 }

@@ -262,7 +262,9 @@ Future<void> _musicBoxRunWrite(
 /// A box-height slot for the shared empty/loading/error widgets, which center
 /// themselves and therefore need bounded height inside a sliver list.
 Widget _musicBoxSliverBox(Widget child, {double height = 120}) {
-  return SliverToBoxAdapter(child: SizedBox(height: height, child: child));
+  return SliverToBoxAdapter(
+    child: SizedBox(height: height, child: child),
+  );
 }
 
 /// Tappable header of a collapsed/expanded group in the flat list.
@@ -274,9 +276,12 @@ class _MusicBoxGroupHeader extends StatelessWidget {
     required this.open,
     required this.playing,
     required this.onToggle,
+    required this.channel,
     this.count,
   });
 
+  /// Two-digit channel number printed in front of the group title.
+  final String channel;
   final String title;
   final IconData icon;
   final bool open;
@@ -295,16 +300,23 @@ class _MusicBoxGroupHeader extends StatelessWidget {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: onToggle,
-          child: SizedBox(
-            height: 36,
+          child: Container(
+            height: 40,
+            margin: const EdgeInsets.only(top: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            decoration: const BoxDecoration(
+              border: Border(top: BorderSide(color: UiColors.border)),
+            ),
             child: Row(
               children: [
-                Icon(
-                  open ? Icons.expand_more : Icons.chevron_right,
-                  size: 18,
-                  color: UiColors.textMuted,
+                Text(
+                  channel,
+                  style: UiTypography.dot.copyWith(
+                    fontSize: 13,
+                    color: playing ? UiColors.accent : UiColors.textMuted,
+                  ),
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(width: 10),
                 Icon(
                   playing ? Icons.graphic_eq : icon,
                   size: 15,
@@ -313,23 +325,31 @@ class _MusicBoxGroupHeader extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(
                   title,
-                  style: TextStyle(
+                  style: UiTypography.label.copyWith(
                     color: playing ? UiColors.accent : UiColors.text,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 if (count != null) ...[
                   const SizedBox(width: 6),
                   Text(
                     '$count',
-                    style: const TextStyle(
+                    style: UiTypography.mono.copyWith(
                       color: UiColors.textMuted,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 10.5,
                     ),
                   ),
                 ],
+                const Spacer(),
+                AnimatedRotation(
+                  turns: open ? 0.25 : 0,
+                  duration: UiMotion.fast,
+                  child: const Icon(
+                    Icons.chevron_right_rounded,
+                    size: 18,
+                    color: UiColors.textMuted,
+                  ),
+                ),
               ],
             ),
           ),
@@ -557,6 +577,9 @@ class _MusicBoxQueueSectionState extends State<_MusicBoxQueueSection> {
       child: Padding(
         padding: const EdgeInsets.only(bottom: 4),
         child: _MusicBoxSectionHeader(
+          channel: '01',
+          channelLit:
+              _isActive && music_box_display.musicBoxHasActivePlayback(state),
           leading: Icon(
             _isActive && music_box_display.musicBoxHasActivePlayback(state)
                 ? Icons.graphic_eq
@@ -673,8 +696,7 @@ class _MusicBoxQueueSectionState extends State<_MusicBoxQueueSection> {
             itemCount: items.length,
             itemBuilder: (context, index) {
               final item = items[index];
-              final isCurrent =
-                  item.id.isNotEmpty && item.id == currentItemId;
+              final isCurrent = item.id.isNotEmpty && item.id == currentItemId;
               final row = _queueRow(item, index, isCurrent);
               if (!isCurrent) return row;
               return KeyedSubtree(key: _currentRowKey, child: row);
@@ -895,7 +917,11 @@ class _MusicBoxPlaylistGroupState extends State<_MusicBoxPlaylistGroup> {
     }
   }
 
-  Widget _leadingCard(PersonalMusicPlaylist playlist, bool playing, Widget icon) {
+  Widget _leadingCard(
+    PersonalMusicPlaylist playlist,
+    bool playing,
+    Widget icon,
+  ) {
     final active = widget.state.activeSource;
     final isActive = music_box_display.musicBoxSourceIsActive(
       widget.state,
@@ -961,7 +987,9 @@ class _MusicBoxPlaylistGroupState extends State<_MusicBoxPlaylistGroup> {
   }
 
   List<Widget> _body() {
-    if (_loading && !_loaded) return [_musicBoxSliverBox(const _MusicBoxLoading())];
+    if (_loading && !_loaded) {
+      return [_musicBoxSliverBox(const _MusicBoxLoading())];
+    }
     final entries = _entries();
     final error = _error;
     if (error != null) {
@@ -969,7 +997,10 @@ class _MusicBoxPlaylistGroupState extends State<_MusicBoxPlaylistGroup> {
       // reachable under the retry state.
       return [
         _musicBoxSliverBox(
-          _MusicBoxRetryState(message: error, onRetry: () => unawaited(_load())),
+          _MusicBoxRetryState(
+            message: error,
+            onRetry: () => unawaited(_load()),
+          ),
         ),
         ..._rows(entries),
       ];
@@ -1100,6 +1131,7 @@ class _MusicBoxPlaylistGroupState extends State<_MusicBoxPlaylistGroup> {
               key: ValueKey<String>(
                 'music-box-group-header:${musicBoxActiveSourceTypeValue(widget.type)}',
               ),
+              channel: widget.roomScoped ? '02' : '03',
               title: widget.roomScoped ? '房间歌单' : '我的歌单',
               icon: widget.roomScoped ? Icons.meeting_room : Icons.person,
               open: widget.open,
@@ -1274,7 +1306,10 @@ class _MusicBoxPlaylistTracksState extends State<_MusicBoxPlaylistTracks> {
   }
 
   Widget _indented(Widget row) {
-    return Padding(padding: const EdgeInsets.only(left: _indent), child: row);
+    return Padding(
+      padding: const EdgeInsets.only(left: _indent),
+      child: row,
+    );
   }
 
   Widget _snapshotRow(MusicBoxQueueItem item, int index) {
@@ -1391,7 +1426,9 @@ class _MusicBoxPlaylistTracksState extends State<_MusicBoxPlaylistTracks> {
         itemBuilder: (context, index) => _snapshotRow(queue[index], index),
       );
     }
-    if (_loading) return _musicBoxSliverBox(const _MusicBoxLoading(), height: 96);
+    if (_loading) {
+      return _musicBoxSliverBox(const _MusicBoxLoading(), height: 96);
+    }
     final error = _error;
     if (error != null) {
       return _musicBoxSliverBox(
@@ -1448,7 +1485,11 @@ class _MusicBoxSearchResults extends StatelessWidget {
       body = _musicBoxSliverBox(const _MusicBoxLoading());
     } else if (message != null && message.isNotEmpty) {
       body = _musicBoxSliverBox(
-        _MusicBoxEmpty(icon: Icons.error_outline, message: '搜索失败', hint: message),
+        _MusicBoxEmpty(
+          icon: Icons.error_outline,
+          message: '搜索失败',
+          hint: message,
+        ),
       );
     } else if (results.isEmpty) {
       body = _musicBoxSliverBox(

@@ -174,11 +174,19 @@ class ButtonIcon extends StatelessWidget {
     this.ghost = false,
     this.backgroundColor,
     this.borderColor,
+    this.width,
+    this.radius = UiRadii.pill,
+    this.iconSize,
   });
 
   final VoidCallback? onPressed;
   final ValueChanged<bool>? onToggleChanged;
   final Widget icon;
+
+  /// Width of a key-shaped button; defaults to [size] (a circle).
+  final double? width;
+  final double radius;
+  final double? iconSize;
   final String? tooltip;
   final ButtonTone tone;
   final bool selected;
@@ -220,10 +228,10 @@ class ButtonIcon extends StatelessWidget {
       enabled: visuallyEnabled,
       loading: loading,
       selected: active,
-      width: size,
+      width: width ?? size,
       height: size,
       padding: EdgeInsets.zero,
-      borderRadius: UiRadii.pill,
+      borderRadius: radius,
       backgroundColor: background,
       selectedBackgroundColor: background,
       hoverBackgroundColor: backgroundColor == null
@@ -235,9 +243,14 @@ class ButtonIcon extends StatelessWidget {
       disabledBackgroundColor: background,
       disabledBorderColor: border,
       child: IconTheme.merge(
-        data: IconThemeData(color: colors.foreground, size: size * 0.46),
+        data: IconThemeData(
+          color: colors.foreground,
+          size: iconSize ?? size * 0.46,
+        ),
         child: Center(
-          child: loading ? _ButtonLoadingIndicator(size: size * 0.46) : icon,
+          child: loading
+              ? _ButtonLoadingIndicator(size: iconSize ?? size * 0.46)
+              : icon,
         ),
       ),
     );
