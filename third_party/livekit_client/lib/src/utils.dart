@@ -320,6 +320,22 @@ class Utils {
         ));
       }
     });
+    // libwebrtc treats bitrate/network priority as per-sender values that may
+    // only be set on encodings[0]; a non-default value on any later encoding
+    // makes addTransceiver/setParameters fail with UNSUPPORTED_PARAMETER.
+    // Presets are ordered low -> high, so carry the top layer's priority on
+    // the first encoding and leave the rest at their defaults.
+    if (result.length > 1) {
+      final top = result.last;
+      result.first
+        ..priority = top.priority
+        ..networkPriority = top.networkPriority;
+      for (final encoding in result.skip(1)) {
+        encoding
+          ..priority = rtc.RTCPriorityType.low
+          ..networkPriority = null;
+      }
+    }
     return result;
   }
 
