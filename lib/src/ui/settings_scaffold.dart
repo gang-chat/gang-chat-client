@@ -82,6 +82,174 @@ class SettingsNavigation<T> extends SettingsNavigationBase {
   }
 }
 
+/// Section navigation drawn as a strip of numbered tiles, each carrying a
+/// one-line summary of the section's current values. Used by the app
+/// settings page ("control room" layout).
+class SettingsTileNavigation<T> extends SettingsNavigation<T> {
+  const SettingsTileNavigation({
+    required super.segments,
+    required super.value,
+    required super.onChanged,
+    this.summaries = const {},
+  });
+
+  /// Current-value summaries keyed by section.
+  final Map<T, String> summaries;
+
+  int get selectedIndex {
+    for (var i = 0; i < segments.length; i++) {
+      if (segments[i].value == value) return i;
+    }
+    return 0;
+  }
+
+  Widget buildTiles(
+    BuildContext context, {
+    required bool compact,
+    required double horizontalPadding,
+    required double maxWidth,
+  }) {
+    const gap = 8.0;
+    final count = segments.length;
+    final minTileWidth = compact ? 112.0 : 128.0;
+    final available = maxWidth - horizontalPadding * 2;
+    final fits = available >= count * minTileWidth + (count - 1) * gap;
+    Widget tile(int index, {double? width}) {
+      final segment = segments[index];
+      return _SettingsTile(
+        index: index,
+        segment: segment,
+        summary: compact ? null : summaries[segment.value],
+        selected: segment.value == value,
+        compact: compact,
+        width: width,
+        onPressed: () => onChanged(segment.value),
+      );
+    }
+
+    if (fits) {
+      return Padding(
+        padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+        child: Row(
+          children: [
+            for (var i = 0; i < count; i++) ...[
+              if (i > 0) const SizedBox(width: gap),
+              Expanded(child: tile(i)),
+            ],
+          ],
+        ),
+      );
+    }
+    return ListView.separated(
+      scrollDirection: Axis.horizontal,
+      padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+      itemCount: count,
+      separatorBuilder: (context, index) => const SizedBox(width: gap),
+      itemBuilder: (context, index) => tile(index, width: minTileWidth + 12),
+    );
+  }
+}
+
+class _SettingsTile<T> extends StatelessWidget {
+  const _SettingsTile({
+    required this.index,
+    required this.segment,
+    required this.summary,
+    required this.selected,
+    required this.compact,
+    required this.onPressed,
+    this.width,
+  });
+
+  final int index;
+  final Segment<T> segment;
+  final String? summary;
+  final bool selected;
+  final bool compact;
+  final double? width;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = selected ? UiColors.onInverse : UiColors.text;
+    final muted = selected
+        ? UiColors.onInverse.withValues(alpha: 0.62)
+        : UiColors.textMuted;
+    final icon = segment.icon;
+    final summary = this.summary;
+    return PressableSurface(
+      width: width,
+      height: compact ? 64 : 84,
+      selected: selected,
+      onPressed: onPressed,
+      // Tiles can live in a horizontally scrolling strip: a touch swipe must
+      // scroll it instead of opening the section under the finger.
+      cancelTouchPressOnDrag: true,
+      backgroundColor: UiColors.card,
+      hoverBackgroundColor: UiColors.surfaceRaised,
+      selectedBackgroundColor: UiColors.inverse,
+      borderColor: UiColors.border,
+      selectedBorderColor: UiColors.inverse,
+      borderRadius: UiRadii.lg,
+      padding: EdgeInsets.fromLTRB(12, compact ? 9 : 11, 10, compact ? 9 : 11),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Text(
+                (index + 1).toString().padLeft(2, '0'),
+                style: UiTypography.dot.copyWith(
+                  fontSize: 13,
+                  height: 1,
+                  color: selected ? UiColors.onInverse : UiColors.accent,
+                ),
+              ),
+              const Spacer(),
+              if (segment.showBadge) ...[
+                BadgeDot(
+                  key: segment.badgeKey,
+                  size: 7,
+                  borderColor: Colors.transparent,
+                ),
+                const SizedBox(width: 6),
+              ],
+              if (icon != null) Icon(icon, size: 15, color: muted),
+            ],
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                segment.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: UiTypography.body.copyWith(
+                  color: foreground,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  height: 1.25,
+                ),
+              ),
+              if (summary != null && summary.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(
+                  summary,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: UiTypography.mono.copyWith(color: muted, fontSize: 10),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SettingsNavTile<T> extends StatelessWidget {
   const _SettingsNavTile({
     required this.segment,
@@ -218,7 +386,18 @@ class SettingsScaffold extends StatelessWidget {
     this.pinned,
     this.navigation,
     this.showTitle = true,
+    this.search,
+    this.sectionTitleOverride,
+    this.sectionMetaOverride,
   });
+
+  /// Search field shown in the header of the tile ("control room") layout.
+  final Widget? search;
+
+  /// Replaces the tile layout's section title and its `01 / 07` counter,
+  /// e.g. while search results are shown.
+  final String? sectionTitleOverride;
+  final String? sectionMetaOverride;
 
   /// 页面图标。
   final IconData icon;
@@ -259,12 +438,155 @@ class SettingsScaffold extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final navigation = this.navigation;
+          if (navigation is SettingsTileNavigation) {
+            return _buildTileLayout(context, navigation, constraints.maxWidth);
+          }
           if (navigation != null && constraints.maxWidth >= _twoPaneMinWidth) {
             return _buildTwoPane(context, navigation);
           }
           return _buildSinglePane(context, navigation);
         },
       ),
+    );
+  }
+
+  /// Control-room layout: a header (back, wordmark, search, action), a strip
+  /// of numbered section tiles with live summaries, the section title, then
+  /// the section body.
+  Widget _buildTileLayout(
+    BuildContext context,
+    SettingsTileNavigation<dynamic> navigation,
+    double maxWidth,
+  ) {
+    final compact = maxWidth < _twoPaneMinWidth;
+    final padding = compact ? 16.0 : _horizontalPadding;
+    final search = this.search;
+    final sectionTitle =
+        sectionTitleOverride ?? navigation.selectedLabel ?? title;
+    final index = navigation.selectedIndex + 1;
+    final total = navigation.segments.length;
+    final sectionMeta =
+        sectionMetaOverride ??
+        '${index.toString().padLeft(2, '0')} / '
+            '${total.toString().padLeft(2, '0')}';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            onBack == null ? padding : padding - 8,
+            compact ? 14 : 20,
+            padding - 4,
+            0,
+          ),
+          child: Row(
+            children: [
+              if (onBack != null) ...[
+                ButtonIcon(
+                  key: const ValueKey('settings-back-button'),
+                  tooltip: '返回',
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  onPressed: onBack,
+                  size: 36,
+                  ghost: true,
+                ),
+                const SizedBox(width: 6),
+              ],
+              Flexible(
+                flex: 0,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'SETTINGS',
+                      maxLines: 1,
+                      style: UiTypography.dot.copyWith(
+                        fontSize: compact ? 18 : 22,
+                        height: 1.05,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    if (showTitle) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: UiTypography.label.copyWith(
+                          color: UiColors.textMuted,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: search == null || compact
+                    ? const SizedBox.shrink()
+                    : Align(
+                        alignment: Alignment.centerRight,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 340),
+                          child: search,
+                        ),
+                      ),
+              ),
+              if (headerAction != null) ...[
+                const SizedBox(width: 8),
+                headerAction!,
+              ],
+            ],
+          ),
+        ),
+        if (search != null && compact) ...[
+          const SizedBox(height: 12),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: padding),
+            child: search,
+          ),
+        ],
+        SizedBox(height: compact ? 14 : 18),
+        SizedBox(
+          key: const ValueKey('settings-side-navigation'),
+          height: compact ? 64 : 84,
+          child: navigation.buildTiles(
+            context,
+            compact: compact,
+            horizontalPadding: padding,
+            maxWidth: maxWidth,
+          ),
+        ),
+        Padding(
+          padding: EdgeInsets.fromLTRB(padding, compact ? 16 : 22, padding, 14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: Text(
+                  sectionTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: compact ? UiTypography.title : UiTypography.headline,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(sectionMeta, style: UiTypography.overline),
+            ],
+          ),
+        ),
+        if (pinned != null) ...[
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: padding),
+            child: pinned,
+          ),
+          const SizedBox(height: _contentTopGap),
+        ],
+        Expanded(
+          child: _SettingsBodyInsets(horizontal: padding, child: body),
+        ),
+      ],
     );
   }
 
