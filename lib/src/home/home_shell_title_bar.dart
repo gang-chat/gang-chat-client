@@ -495,6 +495,13 @@ class _HeaderAccountButton extends StatelessWidget {
         ],
       ),
     );
+    // Narrow windows with custom window buttons (down to the 360px desktop
+    // minimum) have no room for the latency bars; the panel still shows the
+    // latency.
+    if (HomeAdaptiveLayout.usesCompactLayout(context) &&
+        _homeTitleBarShowsCustomWindowControls(context)) {
+      return panel;
+    }
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -734,11 +741,15 @@ class _TitleLiveRoomDock extends StatelessWidget {
             if (joined) ...[
               const _VoiceStatusOrb(joined: true, size: 8),
               const SizedBox(width: 8),
-              ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxWidth: (maxWidth - 120).clamp(40.0, 150.0).toDouble(),
+              // Flexible so a tight header shrinks the (scrolling) name
+              // instead of overflowing.
+              Flexible(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: (maxWidth - 120).clamp(40.0, 150.0).toDouble(),
+                  ),
+                  child: name,
                 ),
-                child: name,
               ),
               const SizedBox(width: 6),
             ],
