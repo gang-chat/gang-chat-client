@@ -309,17 +309,21 @@ class _MusicBoxHeader extends StatelessWidget {
                       color: UiColors.textSecondary,
                     ),
                   const SizedBox(width: 6),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 120),
-                    child: Text(
-                      music_box_display.musicBoxActiveSourceLabel(active),
-                      maxLines: 1,
-                      softWrap: false,
-                      overflow: TextOverflow.fade,
-                      style: UiTypography.label.copyWith(
-                        color: playing ? UiColors.accent : UiColors.text,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
+                  // Flexible so a long source name fades inside the chip
+                  // instead of overflowing a narrow (360px) deck header.
+                  Flexible(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 120),
+                      child: Text(
+                        music_box_display.musicBoxActiveSourceLabel(active),
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.fade,
+                        style: UiTypography.label.copyWith(
+                          color: playing ? UiColors.accent : UiColors.text,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ),

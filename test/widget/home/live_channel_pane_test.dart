@@ -2584,8 +2584,12 @@ void main() {
       );
       if (testCase.label == 'Android compact') {
         androidCompactPanel = panelRect;
+        // The deck header's ghost close key.
         await tester.tap(
-          find.descendant(of: panel, matching: find.byIcon(Icons.close)),
+          find.descendant(
+            of: panel,
+            matching: find.byKey(const ValueKey<String>('music-box-close')),
+          ),
         );
         await tester.pump();
         expect(closeTaps, 1);

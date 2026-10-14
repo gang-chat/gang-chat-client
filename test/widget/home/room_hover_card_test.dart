@@ -209,10 +209,16 @@ void main() {
       expect(creatorName, findsOneWidget);
       expect(tester.getSize(name).height, greaterThan(20));
       expect(tester.getSize(creatorName).height, lessThan(20));
+      // The pass prints the room name below the icon, so the long name gets
+      // the full card width to wrap in.
+      expect(icon, findsOneWidget);
       expect(
-        tester.getTopLeft(name).dx,
-        greaterThan(tester.getTopRight(icon).dx),
+        tester.getTopLeft(name).dy,
+        greaterThanOrEqualTo(tester.getBottomLeft(icon).dy),
       );
+      final card = tester.getRect(find.byType(AnchoredPanel));
+      expect(tester.getRect(name).left, greaterThanOrEqualTo(card.left));
+      expect(tester.getRect(name).right, lessThanOrEqualTo(card.right));
       expect(
         tester.widget<Text>(creatorName).overflow,
         isNot(TextOverflow.ellipsis),
@@ -1919,9 +1925,12 @@ Future<void> _ensureRoomProfileCardOpen(
   expect(find.byType(ReadOnlySelectableText), findsWidgets);
 }
 
+/// The room pass prints its icon as a 56px rounded square.
+const _roomCardIconSize = 56.0;
+
 Finder _roomProfileIcon() {
   return find.byWidgetPredicate(
-    (widget) => widget is Avatar && widget.size == 48,
+    (widget) => widget is Avatar && widget.size == _roomCardIconSize,
   );
 }
 

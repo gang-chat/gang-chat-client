@@ -65,27 +65,31 @@ void main() {
         );
         await tester.pumpAndSettle();
 
+        final navigation = find.byKey(
+          const ValueKey('settings-side-navigation'),
+        );
+        final playlistsTile = find.descendant(
+          of: navigation,
+          matching: find.text('我的歌单'),
+        );
         if (size.width < 720) {
-          // Narrow settings pages show the section navigation as a
-          // horizontally scrolling pill row; the open section stays reachable
+          // Narrow settings pages show the numbered section tiles as a
+          // horizontally scrolling strip; the open section stays reachable
           // there.
           await tester.scrollUntilVisible(
-            find.text('我的歌单'),
+            playlistsTile,
             80,
             scrollable: find
-                .byWidgetPredicate(
-                  (widget) =>
-                      widget is Scrollable &&
-                      widget.axisDirection == AxisDirection.right,
-                )
+                .descendant(of: navigation, matching: find.byType(Scrollable))
                 .first,
           );
         }
         expect(find.text('我的歌单'), findsWidgets);
+        expect(playlistsTile, findsOneWidget);
         expect(
-          tester.widget<Text>(find.text('我的歌单').first).style?.color,
+          tester.widget<Text>(playlistsTile).style?.color,
           ui.UiColors.onInverse,
-          reason: 'the playlists section is the selected navigation item',
+          reason: 'the playlists section is the selected navigation tile',
         );
         expect(find.text('歌单管理'), findsOneWidget);
         expect(find.text('夜晚'), findsOneWidget);
