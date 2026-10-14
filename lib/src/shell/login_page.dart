@@ -40,6 +40,7 @@ const double _authTitleBarTopInset = 18;
 const double _authTitleBarHeight = 128;
 const double _authTitleBarGap = 18;
 const double _authBrandIconSize = 50;
+const double _authMacBrandIconSize = 38;
 const double _authFieldGap = 10;
 const double _authModeGap = 14;
 const double _authActionGap = 10;
@@ -996,6 +997,13 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Widget _buildTitleBar() {
+    final macOS = Theme.of(context).platform == TargetPlatform.macOS;
+    final wordmark = Text(
+      'GANG CHAT',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: UiTypography.dot.copyWith(fontSize: 30, letterSpacing: 2),
+    );
     final title = MouseRegion(
       cursor: SystemMouseCursors.basic,
       child: SelectionContainer.disabled(
@@ -1005,20 +1013,27 @@ class _LoginPageState extends State<LoginPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              const BrandMark(
-                key: ValueKey('auth-brand-icon'),
-                size: _authBrandIconSize,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'GANG CHAT',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: UiTypography.dot.copyWith(
-                  fontSize: 30,
-                  letterSpacing: 2,
+              // macOS keeps its native traffic lights in the top-left corner,
+              // so the mark moves inline with the wordmark, below them.
+              if (macOS)
+                Row(
+                  children: [
+                    const BrandMark(
+                      key: ValueKey('auth-brand-icon'),
+                      size: _authMacBrandIconSize,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(child: wordmark),
+                  ],
+                )
+              else ...[
+                const BrandMark(
+                  key: ValueKey('auth-brand-icon'),
+                  size: _authBrandIconSize,
                 ),
-              ),
+                const SizedBox(height: 16),
+                wordmark,
+              ],
               const SizedBox(height: 10),
               const SignalTag(
                 label: 'VOICE · CHAT · SQUAD',

@@ -5,10 +5,11 @@ import FlutterMacOS
 
 private let loginWindowSize = NSSize(width: 430, height: 256)
 private let resizeCursorEdgeWidth: CGFloat = 8
-// Logical height of the v2 Flutter title bar. The native traffic lights are
+// Logical height of the Flutter title bar. The native traffic lights are
 // vertically centered within this band. Keep in sync with `_homeTitleBarHeight`
-// in lib/src/v2/home_shell_title_bar.dart.
-private let v2TitleBarHeight: CGFloat = 44
+// in lib/src/home/home_shell_title_bar.dart (and the macOS leading inset in
+// lib/src/ui/window_chrome.dart).
+private let v2TitleBarHeight: CGFloat = 52
 private let screenThumbnailChannel = "gang_chat/screen_thumbnail"
 private let clipboardChannel = "gang_chat/clipboard"
 private let fileDropChannel = "gang_chat/file_drop"
