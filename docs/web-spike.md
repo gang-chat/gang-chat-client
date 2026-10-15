@@ -88,7 +88,33 @@ flutter build web --release --no-web-resources-cdn
 
 1–4 和 9–10 做完就能得到一个"聊天可用"的 Web 版；全部完成约 2–3 周，再加缓冲约 4 周。
 
+## 部署
+
+Web 版放在 `https://ky-z.com/gang-chat/app/`，与 API（`/gang-chat/api/v1`）同源，
+所以不需要跨域配置，并直接使用站点已有的 HTTPS（麦克风、摄像头、屏幕共享都要求
+HTTPS）。
+
+1. **nginx**：把 `deploy/web/nginx-gang-chat-app.conf` 里的两个 `location` 块放进
+   ky-z.com 已有的 `server { ... }`，确认 `mime.types` 里有 `wasm`，然后
+   `sudo nginx -t && sudo systemctl reload nginx`。
+2. **服务器目录**：`/var/www/gang-chat-app`，部署用户可写、nginx 可读。
+3. **构建并部署**：
+
+   ```bash
+   GANG_WEB_DEPLOY_SSH=<user>@<host> tool/deploy_web.sh
+   ```
+
+   脚本先调用 `tool/build_web.sh`（`--no-web-resources-cdn --base-href /gang-chat/app/`），
+   再用 rsync 上传到 `releases/<UTC 时间戳>/`，最后原子切换 `current` 软链接，
+   默认保留最近 5 个版本以便回滚。加 `GANG_WEB_DEPLOY_DRY_RUN=1` 只打印命令。
+
+在上面"要做的事"完成之前，不要把这个地址公开给用户；可以先作为内部测试地址，
+登录后实际检查各功能。
+
 ## 本次没有验证的
+
+- nginx 配置没有实际运行过（本机没有 nginx）；上线前先 `nginx -t`。
+- 部署脚本没有对真实服务器运行过；远端的切换和清理逻辑在本地模拟验证过。
 
 - 登录后的所有功能（没有测试账号；不能往生产服务器提交真实密码）。
 - 资源域名和对象存储的 CORS。

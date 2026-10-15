@@ -1,11 +1,11 @@
 {
-    "name": "client",
-    "short_name": "client",
+    "name": "Gang Chat",
+    "short_name": "Gang Chat",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#060607",
+    "theme_color": "#060607",
+    "description": "Gang Chat 网页版：房间聊天、语音频道和屏幕共享。",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
