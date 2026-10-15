@@ -187,7 +187,13 @@ jobs:
           echo "APPLE_NOTARY_ISSUER_ID=$APPLE_NOTARY_ISSUER_ID" >> "$GITHUB_ENV"
 
       - name: Build macOS (release)
-        run: flutter build macos --release --build-name="${{ needs.prepare.outputs.version }}"
+        # Sparkle compares CFBundleVersion, so it must grow with every release.
+        # Reuse the monotonic major*1000000 + minor*1000 + patch code that
+        # Android already uses as its version code.
+        run: |
+          flutter build macos --release \
+            --build-name="${{ needs.prepare.outputs.version }}" \
+            --build-number="${{ needs.prepare.outputs.android_version_code }}"
 
       - name: Sign and verify macOS app
         if: steps.macos_signing.outputs.enabled == 'true'
@@ -196,6 +202,13 @@ jobs:
           set -euo pipefail
           APP="build/macos/Build/Products/Release/GangChat.app"
           [ -d "$APP" ] || { echo "app bundle not found at $APP"; exit 1; }
+
+          # Re-sign with the entitlements Xcode embedded, where build settings
+          # such as $(PRODUCT_BUNDLE_IDENTIFIER) in Sparkle's mach-lookup
+          # exceptions are already expanded; the source file is not.
+          ENTITLEMENTS="$RUNNER_TEMP/GangChat.entitlements"
+          codesign -d --entitlements - --xml "$APP" > "$ENTITLEMENTS"
+          plutil -lint "$ENTITLEMENTS"
 
           while IFS= read -r -d '' item; do
             if [ -f "$item" ] && ! file -b "$item" | grep -q 'Mach-O'; then
@@ -213,6 +226,7 @@ jobs:
               \( \
                 -type d \( \
                   -name '*.framework' -o \
+                  -name '*.app' -o \
                   -name '*.xpc' -o \
                   -name '*.appex' -o \
                   -name '*.bundle' \
@@ -225,7 +239,7 @@ jobs:
             --force \
             --timestamp \
             --options runtime \
-            --entitlements macos/Runner/Release.entitlements \
+            --entitlements "$ENTITLEMENTS" \
             --sign "$MACOS_SIGNING_IDENTITY" \
             "$APP"
           codesign --verify --deep --strict --verbose=2 "$APP"
@@ -293,11 +307,71 @@ jobs:
             --verbose=2 \
             "$DMG"
 
+      - name: Sign the update and write the Sparkle appcast
+        shell: bash
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          APP="build/macos/Build/Products/Release/GangChat.app"
+          DMG="${{ steps.dmg.outputs.name }}"
+          VERSION="${{ needs.prepare.outputs.version }}"
+          BUILD_NUMBER="${{ needs.prepare.outputs.android_version_code }}"
+          PUBLIC_KEY="$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$APP/Contents/Info.plist" 2>/dev/null || true)"
+
+          # Like desktop signing: skip when neither half is configured, fail
+          # when only one is. An app with a public key but no signed appcast
+          # would never see another update.
+          if [ -z "$SPARKLE_ED_PRIVATE_KEY" ] && [ -z "$PUBLIC_KEY" ]; then
+            echo "::warning::Sparkle appcast skipped: SPARKLE_ED_PRIVATE_KEY and SUPublicEDKey are not configured. macOS updates fall back to a browser download."
+            echo "- ⚠️ macOS: no Sparkle appcast; in-app updates fall back to a browser download." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ -z "$SPARKLE_ED_PRIVATE_KEY" ] || [ -z "$PUBLIC_KEY" ]; then
+            echo "::error::Sparkle is half configured: set both the SPARKLE_ED_PRIVATE_KEY secret and SUPublicEDKey in macos/Runner/Info.plist. See docs/release-workflow.md."
+            exit 1
+          fi
+
+          SIGN_UPDATE=macos/Pods/Sparkle/bin/sign_update
+          ATTRIBUTES="$(printf '%s' "$SPARKLE_ED_PRIVATE_KEY" | "$SIGN_UPDATE" --ed-key-file - "$DMG")"
+          SIGNATURE="$(printf '%s' "$ATTRIBUTES" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')"
+          LENGTH="$(printf '%s' "$ATTRIBUTES" | sed -n 's/.*length="\([0-9]*\)".*/\1/p')"
+          [ -n "$SIGNATURE" ] && [ -n "$LENGTH" ] || { echo "unexpected sign_update output: $ATTRIBUTES"; exit 1; }
+          # Installed apps verify with SUPublicEDKey; refuse to publish an
+          # update they would reject.
+          swift tool/verify_sparkle_signature.swift "$PUBLIC_KEY" "$SIGNATURE" "$DMG"
+
+          BUCKET_URL="$(python3 -c 'import json; print(json.load(open("assets/config/app_config.json"))["release_bucket_url"].rstrip("/"))')"
+          PUB_DATE="$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S +0000')"
+          cat > appcast.xml <<EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+            <channel>
+              <title>GangChat</title>
+              <item>
+                <title>GangChat ${VERSION}</title>
+                <pubDate>${PUB_DATE}</pubDate>
+                <sparkle:version>${BUILD_NUMBER}</sparkle:version>
+                <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
+                <sparkle:minimumSystemVersion>12.0</sparkle:minimumSystemVersion>
+                <enclosure url="${BUCKET_URL}/releases/${DMG}" type="application/octet-stream" sparkle:edSignature="${SIGNATURE}" length="${LENGTH}"/>
+              </item>
+            </channel>
+          </rss>
+          EOF
+          # Sign the feed too, so Sparkle can detect a tampered appcast.
+          printf '%s' "$SPARKLE_ED_PRIVATE_KEY" | "$SIGN_UPDATE" --ed-key-file - appcast.xml
+          xmllint --noout appcast.xml
+          cat appcast.xml
+          echo "- ✅ macOS: Sparkle update signed; upload appcast.xml next to $DMG in releases/." >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
           name: macos-dmg
-          path: ${{ steps.dmg.outputs.name }}
+          path: |
+            ${{ steps.dmg.outputs.name }}
+            appcast.xml
           if-no-files-found: error
 
       - name: Clean up macOS signing material

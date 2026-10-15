@@ -100,6 +100,80 @@ spctl --assess --type open --context context:primary-signature \
   --verbose=2 GangChat_v1.2.3.dmg
 ```
 
+## macOS in-app updates (Sparkle)
+
+The macOS app runs in the App Sandbox. Anything a sandboxed app writes is
+quarantined as "created by a sandboxed app", and macOS refuses to launch an
+app copied out of a DMG the app downloaded itself (`spctl`: "File created by an
+AppSandbox, exec/open not allowed"). The macOS client therefore updates
+through [Sparkle 2](https://sparkle-project.org): it reads an appcast, checks
+the EdDSA signature of the update and installs it with Sparkle's XPC
+installer, which runs outside the sandbox, so the installed app carries no
+quarantine flag.
+
+- The app checks at launch (when automatic update prompts are on) and from
+  Settings → About. Sparkle shows its own update window.
+- The appcast is `releases/appcast.xml` next to the installers in the release
+  bucket (`release_bucket_url` in `assets/config/app_config.json`).
+- Sparkle compares `CFBundleVersion`, so the macOS build number is
+  `major * 1000000 + minor * 1000 + patch`, the same code Android uses.
+- Builds without an update-signing key fall back to opening the DMG link in the
+  browser. A browser download carries the normal quarantine flag instead of
+  the sandbox one, so the app can launch; while builds are ad-hoc signed that
+  takes "Open Anyway" in System Settings → Privacy & Security once per update.
+
+### One-time setup
+
+1. Build macOS once so CocoaPods installs Sparkle's tools, then create the
+   update-signing key pair. `generate_keys` keeps the private key in your login
+   keychain and prints the public key:
+
+   ```bash
+   macos/Pods/Sparkle/bin/generate_keys
+   ```
+
+2. Put the printed public key in `SUPublicEDKey` in `macos/Runner/Info.plist`
+   and commit it. It is public and belongs in the repository.
+3. Export the private key and add the file's contents as the repository secret
+   `SPARKLE_ED_PRIVATE_KEY`:
+
+   ```bash
+   macos/Pods/Sparkle/bin/generate_keys -x sparkle_private_key
+   ```
+
+   Back the private key up in the secret manager, then delete the exported
+   file. **If the private key is lost, installed apps can never accept another
+   update**, because they only trust the public key they shipped with.
+
+Like desktop signing, the release workflow skips the appcast with a warning
+when neither the secret nor `SUPublicEDKey` is set, and fails when only one is.
+It also refuses to publish an update whose signature doesn't verify against
+`SUPublicEDKey` (`tool/verify_sparkle_signature.swift`).
+
+### Each release
+
+The macOS artifact contains `GangChat_v<version>.dmg` and `appcast.xml`. Upload
+the DMG to `releases/` in the bucket first, then `appcast.xml` (replacing the
+previous one). The appcast points at the DMG's bucket URL, so uploading it
+first would offer an update that can't be downloaded yet.
+
+### Moving existing installs to Sparkle
+
+Versions up to 0.10.0 still use the old in-app download, which leaves an app
+that won't launch. Users on those versions should install the first
+Sparkle-enabled release from the homepage in their browser. Anyone already
+stuck can repair the installed app with:
+
+```bash
+xattr -drs com.apple.quarantine /Applications/GangChat.app
+```
+
+Sparkle works with the current ad-hoc signed builds, because it verifies
+updates with its own EdDSA key. Developer ID signing (above) is still worth
+setting up: ad-hoc builds change signature with every release, so macOS asks
+again for microphone, camera, screen recording and keychain access after each
+update.
+
 ## Android signing
 
 Published APKs must use the same private key across releases so Android can
@@ -173,7 +247,8 @@ added without changing room-message logic.
 ## Secret handling
 
 PFX, P12, App Store Connect P8, Android keystore files, Firebase service-account
-files, and their passwords must be kept outside the repository and backed up in
+files, the Sparkle EdDSA private key, and their passwords must be kept outside
+the repository and backed up in
 an access-controlled secret manager. The private-key file patterns are ignored
 by Git as a final safeguard, but repository ignore rules are not a replacement
 for secret management.

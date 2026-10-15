@@ -4,7 +4,13 @@ enum AppUpdatePlatform { windows, macos, android }
 
 bool shouldTerminateApplicationAfterInstallerLaunch(
   AppUpdatePlatform platform,
-) => platform != AppUpdatePlatform.android;
+) => platform == AppUpdatePlatform.windows;
+
+/// macOS hands the DMG download to the browser when Sparkle isn't configured.
+/// A DMG downloaded by the sandboxed app is marked "created by a sandboxed
+/// app", and macOS refuses to launch an app copied out of it.
+bool downloadsUpdateInBrowser(AppUpdatePlatform platform) =>
+    platform == AppUpdatePlatform.macos;
 
 String updateDownloadConfirmationBody(AppUpdatePlatform platform) {
   if (platform == AppUpdatePlatform.android) {
@@ -12,8 +18,16 @@ String updateDownloadConfirmationBody(AppUpdatePlatform platform) {
         '将弹出“点击安装”通知。若未开启通知权限，重新打开 Gang Chat 时也会弹出安装界面。'
         '安装完成前请勿退出 Gang Chat。';
   }
+  if (downloadsUpdateInBrowser(platform)) {
+    return '将在浏览器中下载新版安装包。下载完成后打开 DMG，'
+        '把 GangChat 拖到“应用程序”文件夹替换旧版本即可。';
+  }
   return '将下载新版安装包。下载完成后，Gang Chat 会退出当前程序并启动安装程序。';
 }
+
+/// Sparkle's update feed, published next to the installers.
+String sparkleAppcastUrl(String bucketUrl) =>
+    releaseAssetUrl(bucketUrl, 'releases/appcast.xml');
 
 class ReleaseAsset {
   const ReleaseAsset({

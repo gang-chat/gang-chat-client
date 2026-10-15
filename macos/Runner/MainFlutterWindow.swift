@@ -13,6 +13,7 @@ private let screenThumbnailChannel = "gang_chat/screen_thumbnail"
 private let clipboardChannel = "gang_chat/clipboard"
 private let fileDropChannel = "gang_chat/file_drop"
 private let audioDevicesChannel = "gang_chat/audio_devices"
+private let updaterChannel = "gang_chat/updater"
 private let appBackground = NSColor(
   red: CGFloat(0x14) / 255.0,
   green: CGFloat(0x17) / 255.0,
@@ -47,6 +48,7 @@ class MainFlutterWindow: NSWindow {
     registerScreenThumbnailChannel(flutterViewController)
     registerClipboardChannel(flutterViewController)
     registerAudioDevicesChannel(flutterViewController)
+    registerUpdaterChannel(flutterViewController)
     installFileDropTarget(flutterViewController)
     RegisterGeneratedPlugins(registry: flutterViewController)
 
@@ -178,6 +180,53 @@ class MainFlutterWindow: NSWindow {
   // whose screen grabber shears frames on Retina displays (the same stride bug
   // the live share avoids by using ScreenCaptureKit). CGDisplayCreateImage lets
   // CoreGraphics own the buffer stride, so the thumbnail comes back undistorted.
+  // In-app updates through Sparkle on `gang_chat/updater` (see AppDelegate).
+  //
+  // Methods:
+  //   `isAvailable` -> Bool: this build has an update-signing key and Sparkle
+  //     started.
+  //   `checkForUpdates` {feedUrl: String?, background: Bool} -> nil. A
+  //     background check only shows UI when an update exists; a user check
+  //     always reports back, including "up to date". Fails with
+  //     `updater_unavailable` when Sparkle isn't configured.
+  private func registerUpdaterChannel(_ flutterViewController: FlutterViewController) {
+    let channel = FlutterMethodChannel(
+      name: updaterChannel,
+      binaryMessenger: flutterViewController.engine.binaryMessenger
+    )
+    channel.setMethodCallHandler { call, result in
+      guard let appDelegate = NSApp.delegate as? AppDelegate else {
+        result(FlutterError(code: "updater_unavailable", message: nil, details: nil))
+        return
+      }
+      switch call.method {
+      case "isAvailable":
+        result(appDelegate.startUpdaterIfConfigured())
+      case "checkForUpdates":
+        let args = call.arguments as? [String: Any]
+        if let feedUrl = args?["feedUrl"] as? String, !feedUrl.isEmpty {
+          appDelegate.updateFeedURL = feedUrl
+        }
+        guard appDelegate.startUpdaterIfConfigured() else {
+          result(FlutterError(
+            code: "updater_unavailable",
+            message: "In-app updates are not configured for this build.",
+            details: nil
+          ))
+          return
+        }
+        if (args?["background"] as? Bool) == true {
+          appDelegate.updaterController.updater.checkForUpdatesInBackground()
+        } else {
+          appDelegate.updaterController.checkForUpdates(nil)
+        }
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+  }
+
   private func registerScreenThumbnailChannel(_ flutterViewController: FlutterViewController) {
     let channel = FlutterMethodChannel(
       name: screenThumbnailChannel,

@@ -3,18 +3,41 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:client/src/app/app_update.dart';
 
 void main() {
-  test('only desktop update launches terminate the current application', () {
+  test('only the Windows installer launch terminates the application', () {
     expect(
       shouldTerminateApplicationAfterInstallerLaunch(AppUpdatePlatform.windows),
       isTrue,
     );
+    // macOS hands the DMG to the browser and keeps running.
     expect(
       shouldTerminateApplicationAfterInstallerLaunch(AppUpdatePlatform.macos),
-      isTrue,
+      isFalse,
     );
     expect(
       shouldTerminateApplicationAfterInstallerLaunch(AppUpdatePlatform.android),
       isFalse,
+    );
+  });
+
+  test('macOS downloads updates in the browser, not inside the sandbox', () {
+    expect(downloadsUpdateInBrowser(AppUpdatePlatform.macos), isTrue);
+    expect(downloadsUpdateInBrowser(AppUpdatePlatform.windows), isFalse);
+    expect(downloadsUpdateInBrowser(AppUpdatePlatform.android), isFalse);
+
+    final macBody = updateDownloadConfirmationBody(AppUpdatePlatform.macos);
+    expect(macBody, contains('浏览器'));
+    expect(macBody, contains('应用程序'));
+    expect(macBody, isNot(contains('退出当前程序')));
+  });
+
+  test('the Sparkle appcast sits next to the installers', () {
+    expect(
+      sparkleAppcastUrl('https://os.ky-z.com:9000/gang-chat'),
+      'https://os.ky-z.com:9000/gang-chat/releases/appcast.xml',
+    );
+    expect(
+      sparkleAppcastUrl('https://os.ky-z.com:9000/gang-chat/'),
+      'https://os.ky-z.com:9000/gang-chat/releases/appcast.xml',
     );
   });
 

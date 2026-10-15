@@ -7,6 +7,7 @@ import 'package:client/src/app/settings_about.dart';
 import 'package:client/src/shell/app_update_gate.dart';
 import 'package:client/src/shell/desktop_window_controller.dart';
 import 'package:client/src/shell/release_update_service.dart';
+import 'package:client/src/shell/sparkle_updater.dart';
 import 'package:client/src/ui/ui.dart' as ui;
 
 void main() {
@@ -305,6 +306,63 @@ void main() {
     expect(find.text('发现新版本'), findsNothing);
     expect(find.text('Home is visible'), findsOneWidget);
   });
+
+  testWidgets('macOS hands the launch check to Sparkle when it is set up', (
+    tester,
+  ) async {
+    final updateService = _FakeReleaseUpdateService(null);
+    final sparkle = _FakeSparkleUpdater(available: true);
+    final reportedUpdates = <AvailableAppUpdate>[];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ui.uiTheme(),
+        home: AppUpdateGate(
+          releaseBucketUrl: 'https://os.example.test/gang-chat',
+          currentVersion: '0.5.0',
+          autoUpdatePromptStore: const _FakeAutoUpdatePromptStore(true),
+          updateService: updateService,
+          sparkleUpdater: sparkle,
+          platformOverride: AppUpdatePlatform.macos,
+          windowController: DesktopWindowController(),
+          onUpdateAvailable: reportedUpdates.add,
+          child: const Scaffold(body: Text('Home')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(sparkle.checks, [('https://os.example.test/gang-chat', true)]);
+    expect(updateService.requestedPlatform, isNull);
+    expect(reportedUpdates, isEmpty);
+  });
+
+  testWidgets('macOS keeps the release bucket check without Sparkle', (
+    tester,
+  ) async {
+    final updateService = _FakeReleaseUpdateService(null);
+    final sparkle = _FakeSparkleUpdater(available: false);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ui.uiTheme(),
+        home: AppUpdateGate(
+          releaseBucketUrl: 'https://os.example.test/gang-chat',
+          currentVersion: '0.5.0',
+          autoUpdatePromptStore: const _FakeAutoUpdatePromptStore(true),
+          updateService: updateService,
+          sparkleUpdater: sparkle,
+          platformOverride: AppUpdatePlatform.macos,
+          windowController: DesktopWindowController(),
+          child: const Scaffold(body: Text('Home')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(sparkle.checks, isEmpty);
+    expect(updateService.requestedPlatform, AppUpdatePlatform.macos);
+  });
 }
 
 class _FakeReleaseUpdateService extends ReleaseUpdateService {
@@ -356,4 +414,22 @@ class _FakeAutoUpdatePromptStore extends AutoUpdatePromptStore {
 
   @override
   Future<void> writeIgnoredVersion(String? version) async {}
+}
+
+class _FakeSparkleUpdater implements SparkleUpdater {
+  _FakeSparkleUpdater({required this.available});
+
+  final bool available;
+  final checks = <(String, bool)>[];
+
+  @override
+  Future<bool> isAvailable() async => available;
+
+  @override
+  Future<void> checkForUpdates({
+    required String bucketUrl,
+    bool background = false,
+  }) async {
+    checks.add((bucketUrl, background));
+  }
 }

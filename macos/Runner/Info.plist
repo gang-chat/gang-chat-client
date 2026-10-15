@@ -34,5 +34,15 @@
 	<string>Gang Chat uses your microphone in live rooms.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>SUEnableAutomaticChecks</key>
+	<false/>
+	<key>SUEnableInstallerLauncherService</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://os.ky-z.com:9000/gang-chat/releases/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string></string>
+	<key>SUShowReleaseNotes</key>
+	<false/>
 </dict>
 </plist>

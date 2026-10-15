@@ -37,6 +37,12 @@ target 'Runner' do
   # flutter_webrtc plugin depends on to avoid pulling in a second WebRTC slice.
   pod 'WebRTC-SDK', '144.7559.01'
 
+  # In-app updates. Sparkle's installer runs as an XPC service outside the App
+  # Sandbox, so an installed update never carries the "created by a sandboxed
+  # app" quarantine flag that stops macOS from launching it. Its XPC services
+  # ship inside Sparkle.framework; see docs/release-workflow.md.
+  pod 'Sparkle', '2.9.6'
+
   target 'RunnerTests' do
     inherit! :search_paths
   end

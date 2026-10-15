@@ -8,6 +8,7 @@ import '../ui/ui.dart';
 import 'desktop_window_controller.dart';
 import 'local_auto_update_prompt_store.dart';
 import 'release_update_service.dart';
+import 'sparkle_updater.dart';
 import '../config/host_platform.dart';
 
 typedef AppUpdateAvailableCallback = void Function(AvailableAppUpdate update);
@@ -21,6 +22,7 @@ class AppUpdateGate extends StatefulWidget {
     this.currentVersion = gangChatClientVersion,
     this.autoUpdatePromptStore = const LocalAutoUpdatePromptStore(),
     this.updateService,
+    this.sparkleUpdater = const SparkleUpdater(),
     this.platformOverride,
     this.onUpdateAvailable,
   });
@@ -30,6 +32,7 @@ class AppUpdateGate extends StatefulWidget {
   final String releaseBucketUrl;
   final AutoUpdatePromptStore autoUpdatePromptStore;
   final ReleaseUpdateService? updateService;
+  final SparkleUpdater sparkleUpdater;
   final AppUpdatePlatform? platformOverride;
   final DesktopWindowController windowController;
   final AppUpdateAvailableCallback? onUpdateAvailable;
@@ -73,6 +76,20 @@ class _AppUpdateGateState extends State<AppUpdateGate> {
     } catch (_) {
       return;
     }
+
+    // Sparkle checks the appcast and shows its own window when an update
+    // exists, so the release bucket prompt isn't used.
+    if (platform == AppUpdatePlatform.macos &&
+        await widget.sparkleUpdater.isAvailable()) {
+      try {
+        await widget.sparkleUpdater.checkForUpdates(
+          bucketUrl: widget.releaseBucketUrl,
+          background: true,
+        );
+      } catch (_) {}
+      return;
+    }
+    if (!mounted) return;
 
     setState(() => _checking = true);
     try {

@@ -44,6 +44,7 @@ import '../shell/android_system_service.dart';
 import '../shell/app_update_gate.dart';
 import '../shell/desktop_window_controller.dart';
 import '../shell/email_verification_flow.dart';
+import '../shell/external_uri_launcher.dart';
 import '../shell/file_selection_service.dart';
 import '../shell/feedback_mail_service.dart';
 import '../shell/install_info_service.dart';
@@ -53,6 +54,7 @@ import '../shell/local_audio_device_store.dart';
 import '../shell/local_language_preference_store.dart';
 import '../shell/music_track_preview_service.dart';
 import '../shell/release_update_service.dart';
+import '../shell/sparkle_updater.dart';
 import '../shell/password_reset_flow.dart';
 import '../ui/avatar_crop_dialog.dart';
 import '../ui/sticker_upload_adapter.dart';
@@ -96,6 +98,8 @@ class SettingsPage extends StatefulWidget {
     this.autoUpdatePromptStore = const LocalAutoUpdatePromptStore(),
     this.installInfoService = const InstallInfoService(),
     this.releaseUpdateService = const ReleaseUpdateService(),
+    this.sparkleUpdater = const SparkleUpdater(),
+    this.externalUriLauncher = const ExternalUriLauncher(),
     this.updatePlatformOverride,
     this.windowController,
     this.closeBehaviorStore = const LocalCloseBehaviorStore(),
@@ -138,6 +142,8 @@ class SettingsPage extends StatefulWidget {
   final AutoUpdatePromptStore autoUpdatePromptStore;
   final InstallInfoService installInfoService;
   final ReleaseUpdateService releaseUpdateService;
+  final SparkleUpdater sparkleUpdater;
+  final ExternalUriLauncher externalUriLauncher;
 
   /// Platform whose installers the update check looks for; defaults to the
   /// running operating system (tests pin it, like [AppUpdateGate] does).
@@ -1244,14 +1250,20 @@ class _SettingsPageState extends State<SettingsPage>
       });
       return;
     }
+    final bucketUrl = AppConfigScope.of(context).releaseBucketUrl;
     setState(() {
       _checkingAppVersion = true;
       _aboutError = null;
       _notice = null;
     });
+    if (platform == AppUpdatePlatform.macos &&
+        await widget.sparkleUpdater.isAvailable()) {
+      await _checkAppVersionWithSparkle(bucketUrl);
+      return;
+    }
     try {
       final update = await widget.releaseUpdateService.checkForUpdate(
-        bucketUrl: AppConfigScope.of(context).releaseBucketUrl,
+        bucketUrl: bucketUrl,
         currentVersion: widget.appVersion,
         platform: platform,
       );
@@ -1271,6 +1283,22 @@ class _SettingsPageState extends State<SettingsPage>
         _markFloatingNoticeEvent('aboutError', _aboutError);
       });
     }
+  }
+
+  /// Sparkle shows its own window for the result, including "up to date".
+  Future<void> _checkAppVersionWithSparkle(String bucketUrl) async {
+    String? error;
+    try {
+      await widget.sparkleUpdater.checkForUpdates(bucketUrl: bucketUrl);
+    } catch (_) {
+      error = '检查更新失败';
+    }
+    if (!mounted) return;
+    setState(() {
+      _checkingAppVersion = false;
+      _aboutError = error;
+      _markFloatingNoticeEvent('aboutError', _aboutError);
+    });
   }
 
   void _resetUpdateDownloadState() {
@@ -1378,6 +1406,10 @@ class _SettingsPageState extends State<SettingsPage>
   Future<void> _downloadAndInstallAvailableUpdate() async {
     final update = _availableAppUpdate;
     if (update == null || _downloadingAppUpdate) return;
+    if (downloadsUpdateInBrowser(update.asset.platform)) {
+      await _openAvailableUpdateInBrowser(update);
+      return;
+    }
     final cancellationToken = ReleaseDownloadCancellationToken();
     widget.onAppUpdateDownloadCancellationChanged?.call(cancellationToken);
     var androidDownloadStatusSet = false;
@@ -1447,6 +1479,26 @@ class _SettingsPageState extends State<SettingsPage>
         }
       }
       widget.onAppUpdateDownloadCancellationChanged?.call(null);
+    }
+  }
+
+  Future<void> _openAvailableUpdateInBrowser(AvailableAppUpdate update) async {
+    try {
+      await widget.externalUriLauncher.open(update.downloadUrl);
+      if (!mounted) return;
+      setState(() {
+        _notice = '已在浏览器中开始下载，下载完成后打开 DMG 替换旧版本';
+        _markFloatingNoticeEvent('notice', _notice);
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _updateDownloadError = userFacingErrorMessage(
+          error,
+          fallback: '无法打开下载链接',
+        );
+        _markFloatingNoticeEvent('updateDownloadError', _updateDownloadError);
+      });
     }
   }
 
