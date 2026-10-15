@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart' as file_selector;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'android_system_service.dart';
 
@@ -176,6 +177,26 @@ class FileSelectionService {
   Future<void> discardLocation(SaveFileLocation location) async {
     if (!location.requiresCommit) return;
     await androidSystemService.discardDocumentFile(location.path);
+  }
+
+  /// Whether files are saved by handing them to the browser as a download.
+  /// Browsers have no save dialog or writable paths to offer, so on the web
+  /// use [saveBytesAsBrowserDownload] instead of picking a location.
+  bool get savesAsBrowserDownload => kIsWeb;
+
+  /// Web only: hands [bytes] to the browser as a download named [filename];
+  /// the browser decides where it goes.
+  Future<void> saveBytesAsBrowserDownload({
+    required Uint8List bytes,
+    required String filename,
+    String? mimeType,
+  }) {
+    assert(kIsWeb, 'Browser downloads only exist on the web.');
+    return file_selector.XFile.fromData(
+      bytes,
+      mimeType: mimeType ?? _mimeTypeForSuggestedName(filename),
+      name: filename,
+    ).saveTo(filename);
   }
 
   Future<String?> saveBytesToDownloads({

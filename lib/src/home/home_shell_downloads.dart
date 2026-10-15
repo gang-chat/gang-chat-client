@@ -37,6 +37,15 @@ extension _HomeShellDownloads on _HomeShellState {
     }
 
     final suggestedName = file_display.fileAttachmentTitle(attachment);
+    if (_fileSelectionService.savesAsBrowserDownload) {
+      await _downloadAttachmentInBrowser(
+        downloadKey: downloadKey,
+        attachment: attachment,
+        resolvedUrl: resolvedUrl,
+        suggestedName: suggestedName,
+      );
+      return;
+    }
     SaveFileLocation? location;
     try {
       location = await _fileSelectionService.getSaveLocation(
@@ -148,6 +157,104 @@ extension _HomeShellDownloads on _HomeShellState {
         // Best-effort cleanup. A completed Android commit already removed the
         // staging file; cleanup failures must not overwrite download state.
       }
+    }
+  }
+
+  /// The web has no save dialog or file system: fetch the attachment into
+  /// memory with the usual progress, pause and cancel, then hand it to the
+  /// browser as a download.
+  Future<void> _downloadAttachmentInBrowser({
+    required String downloadKey,
+    required MessageAttachment attachment,
+    required String resolvedUrl,
+    required String suggestedName,
+  }) async {
+    final cacheRequest = MediaCacheRequest.tryFromUrl(
+      url: resolvedUrl,
+      filename: suggestedName,
+      mimeType: attachment.asset?.mimeType,
+      expectedBytes: attachment.asset?.sizeBytes,
+    );
+    if (cacheRequest == null) {
+      _showDownloadNotice(
+        file_display.fileDownloadUnavailableMessage(),
+        tone: FloatingNoticeTone.error,
+      );
+      return;
+    }
+
+    // Nothing is written to disk, so there is never a partial file to clean
+    // up; the name only identifies the transfer.
+    final transfer = _fileDownloadsController.createDownload(
+      totalBytes: attachment.asset?.sizeBytes ?? 0,
+      destinationPath: suggestedName,
+    );
+    _setHomeState(
+      () => _applyDownloadPatch(
+        _fileDownloadsController.patchStartedDownload(
+          downloads: _fileDownloads,
+          downloadKey: downloadKey,
+          transfer: transfer,
+        ),
+      ),
+    );
+
+    void applyProgress({required int sentBytes, required int totalBytes}) {
+      if (!mounted) return;
+      final patch = _fileDownloadsController.patchDownloadProgress(
+        downloads: _fileDownloads,
+        downloadKey: downloadKey,
+        transfer: transfer,
+      );
+      if (patch == null) return;
+      _setHomeState(() => _applyDownloadPatch(patch));
+    }
+
+    try {
+      final bytes = await _mediaCacheController.getOrDownloadBytes(
+        request: cacheRequest,
+        transfer: transfer,
+        onProgress: applyProgress,
+      );
+      if (!_fileDownloadsController.canCompleteDownload(
+        downloads: _fileDownloads,
+        downloadKey: downloadKey,
+        transfer: transfer,
+      )) {
+        return;
+      }
+      await _fileSelectionService.saveBytesAsBrowserDownload(
+        bytes: bytes,
+        filename: suggestedName,
+        mimeType: attachment.asset?.mimeType,
+      );
+      if (!mounted) return;
+      _setHomeState(
+        () => _applyDownloadPatch(
+          _fileDownloadsController.patchCompletedDownload(
+            downloads: _fileDownloads,
+            downloadKey: downloadKey,
+          ),
+        ),
+      );
+      _showDownloadNotice(
+        file_display.fileDownloadedNotice(),
+        tone: FloatingNoticeTone.success,
+      );
+    } on MediaCacheCancelledException catch (_) {
+      // Cancellation already removed the entry via [_cancelDownload]; nothing
+      // to report.
+    } catch (error) {
+      if (!mounted) return;
+      _setHomeState(
+        () => _applyDownloadPatch(
+          _fileDownloadsController.patchFailedDownload(
+            downloads: _fileDownloads,
+            transfer: transfer,
+            failure: error,
+          ),
+        ),
+      );
     }
   }
 

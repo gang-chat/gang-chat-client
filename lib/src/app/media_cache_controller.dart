@@ -135,11 +135,20 @@ class MediaCacheController {
   /// the web has no file system, so it downloads into a bounded in-memory
   /// cache instead. Use this rather than [getOrDownload] in code that also
   /// runs on the web.
+  ///
+  /// [transfer] and [onProgress] report progress and allow pausing and
+  /// cancelling, as for [getOrDownload].
   Future<Uint8List> getOrDownloadBytes({
     required MediaCacheRequest request,
+    FileTransferState? transfer,
+    MediaCacheProgressHandler? onProgress,
   }) async {
     if (!kIsWeb) {
-      final file = await getOrDownload(request: request);
+      final file = await getOrDownload(
+        request: request,
+        transfer: transfer,
+        onProgress: onProgress,
+      );
       return file.readAsBytes();
     }
     final key = request.cacheKey;
@@ -151,7 +160,11 @@ class MediaCacheController {
     final active = _webInFlight[key];
     if (active != null) return active;
 
-    final future = _downloadBytes(request);
+    final future = _downloadBytes(
+      request,
+      transfer: transfer,
+      onProgress: onProgress,
+    );
     _webInFlight[key] = future;
     try {
       final bytes = await future;
@@ -162,22 +175,53 @@ class MediaCacheController {
     }
   }
 
-  Future<Uint8List> _downloadBytes(MediaCacheRequest request) async {
+  Future<Uint8List> _downloadBytes(
+    MediaCacheRequest request, {
+    FileTransferState? transfer,
+    MediaCacheProgressHandler? onProgress,
+  }) async {
     final client = _httpClientFactory();
+    if (transfer != null) transfer.downloadClient = client;
     try {
       final response = await client.send(http.Request('GET', request.uri));
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw StateError('下载失败 (${response.statusCode})');
       }
-      final bytes = await response.stream.toBytes();
       // Browsers return the decoded body, so Content-Length (the encoded
       // size) can differ; only the size recorded for the file is reliable.
       final expected = request.expectedBytes;
+      final total = expected ?? response.contentLength ?? 0;
+      transfer?.updateProgress(sentBytes: 0, totalBytes: total);
+      onProgress?.call(sentBytes: 0, totalBytes: total);
+
+      final builder = BytesBuilder(copy: false);
+      await for (final chunk in response.stream) {
+        await _waitIfPaused(transfer);
+        if (transfer?.cancelled == true) {
+          throw const MediaCacheCancelledException();
+        }
+        builder.add(chunk);
+        transfer?.updateProgress(sentBytes: builder.length, totalBytes: total);
+        onProgress?.call(sentBytes: builder.length, totalBytes: total);
+      }
+      if (transfer?.cancelled == true) {
+        throw const MediaCacheCancelledException();
+      }
+      final bytes = builder.takeBytes();
       if (expected != null && expected > 0 && expected != bytes.length) {
         throw StateError('下载不完整');
       }
       return bytes;
+    } catch (_) {
+      // Cancelling closes the client, which surfaces as a transport error.
+      if (transfer?.cancelled == true) {
+        throw const MediaCacheCancelledException();
+      }
+      rethrow;
     } finally {
+      if (transfer != null && identical(transfer.downloadClient, client)) {
+        transfer.downloadClient = null;
+      }
       client.close();
     }
   }

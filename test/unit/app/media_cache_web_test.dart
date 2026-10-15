@@ -1,6 +1,7 @@
 @TestOn('browser')
 library;
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'package:client/src/app/file_downloads_controller.dart';
 import 'package:client/src/app/media_cache_controller.dart';
 import 'package:client/src/ui/cached_asset_image.dart';
 
@@ -80,6 +82,64 @@ void main() {
       controller.getOrDownloadBytes(request: request(expectedBytes: 4)),
       throwsStateError,
     );
+  });
+
+  test('reports download progress to the transfer', () async {
+    final controller = MediaCacheController(
+      httpClientFactory: () => MockClient.streaming(
+        (_, _) async => http.StreamedResponse(
+          Stream.fromIterable([
+            [1, 2],
+            [3, 4],
+          ]),
+          200,
+        ),
+      ),
+    );
+    final transfer = FileDownloadsController().createDownload(
+      totalBytes: 4,
+      destinationPath: 'report.pdf',
+    );
+    final progress = <int>[];
+
+    final bytes = await controller.getOrDownloadBytes(
+      request: request(expectedBytes: 4),
+      transfer: transfer,
+      onProgress: ({required sentBytes, required totalBytes}) =>
+          progress.add(sentBytes),
+    );
+
+    expect(bytes, [1, 2, 3, 4]);
+    expect(progress, [0, 2, 4]);
+    expect(transfer.sentBytes, 4);
+    expect(transfer.downloadClient, isNull);
+  });
+
+  test('cancelling a download reports cancellation, not a failure', () async {
+    final body = StreamController<List<int>>();
+    final controller = MediaCacheController(
+      httpClientFactory: () => MockClient.streaming(
+        (_, _) async => http.StreamedResponse(body.stream, 200),
+      ),
+    );
+    final downloads = FileDownloadsController();
+    final transfer = downloads.createDownload(
+      totalBytes: 4,
+      destinationPath: 'report.pdf',
+    );
+
+    final result = controller.getOrDownloadBytes(
+      request: request(expectedBytes: 4),
+      transfer: transfer,
+      onProgress: ({required sentBytes, required totalBytes}) {
+        if (sentBytes > 0) downloads.cancel(transfer);
+      },
+    );
+    body.add([1, 2]);
+    body.add([3, 4]);
+    unawaited(body.close());
+
+    await expectLater(result, throwsA(isA<MediaCacheCancelledException>()));
   });
 
   testWidgets('CachedAssetImage shows media from memory on the web', (

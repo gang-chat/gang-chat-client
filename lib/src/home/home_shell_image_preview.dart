@@ -51,6 +51,13 @@ extension _HomeShellImagePreview on _HomeShellState {
     String suggestedName,
   ) async {
     final bytes = await _fetchImageBytes(url);
+    if (_fileSelectionService.savesAsBrowserDownload) {
+      await _fileSelectionService.saveBytesAsBrowserDownload(
+        bytes: bytes,
+        filename: suggestedName,
+      );
+      return;
+    }
     if (HostPlatform.isAndroid) {
       try {
         await _fileSelectionService.saveBytesToDownloads(
@@ -86,6 +93,15 @@ extension _HomeShellImagePreview on _HomeShellState {
   Future<void> _previewSaveAs(String url, String suggestedName) async {
     // Fetch first so a transport failure surfaces before the picker opens.
     final bytes = await _fetchImageBytes(url);
+    if (_fileSelectionService.savesAsBrowserDownload) {
+      // Browsers have no save dialog of their own to open; where the file
+      // goes (or whether to ask) is the browser's download setting.
+      await _fileSelectionService.saveBytesAsBrowserDownload(
+        bytes: bytes,
+        filename: suggestedName,
+      );
+      return;
+    }
     final location = await _fileSelectionService.getSaveLocation(
       suggestedName: suggestedName,
     );
