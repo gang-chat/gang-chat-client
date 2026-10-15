@@ -41,7 +41,7 @@
 	<key>SUFeedURL</key>
 	<string>https://os.ky-z.com:9000/gang-chat/releases/appcast.xml</string>
 	<key>SUPublicEDKey</key>
-	<string></string>
+	<string>qt5Xe3gI5E44p2fg3P+2o4VoK5wck2oy+WxpPFu/g3A=</string>
 	<key>SUShowReleaseNotes</key>
 	<false/>
 </dict>
