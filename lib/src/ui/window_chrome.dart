@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 const _macOsSidebarTopOffset = 18.0;
@@ -15,6 +16,14 @@ class WindowChromeInsets {
   final double titleBarLeadingControlsSafeInset;
 
   static WindowChromeInsets of(BuildContext context) {
+    // A browser reports the visitor's OS (often macOS) but the page has no
+    // native window chrome, so there is nothing to keep clear.
+    if (kIsWeb) {
+      return const WindowChromeInsets(
+        sidebarTopOffset: 0,
+        titleBarLeadingControlsSafeInset: 0,
+      );
+    }
     final platform = Theme.of(context).platform;
     final viewPadding =
         MediaQuery.maybeOf(context)?.viewPadding ?? EdgeInsets.zero;

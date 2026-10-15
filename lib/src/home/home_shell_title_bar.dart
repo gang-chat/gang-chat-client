@@ -18,8 +18,18 @@ typedef _TitleLiveRoomDockBuilder =
     Widget Function(double maxWidth, {bool fillAvailable});
 
 bool _homeTitleBarShowsCustomWindowControls(BuildContext context) {
+  // A browser tab has no window of its own to minimise or close.
+  if (kIsWeb) return false;
   final platform = Theme.of(context).platform;
   return platform != TargetPlatform.macOS && platform != TargetPlatform.android;
+}
+
+/// Phone-sized platforms put the live room on the right of the title bar.
+/// In a browser that means a phone browser; desktop browsers keep it on the
+/// left like the desktop app.
+bool _homeTitleBarIsMobilePlatform(BuildContext context) {
+  final platform = Theme.of(context).platform;
+  return platform == TargetPlatform.android || platform == TargetPlatform.iOS;
 }
 
 double _homeTitleBarBrandWidth(BuildContext context, double maxWidth) {
@@ -39,13 +49,16 @@ bool _homeTitleBarCanShowSearch(double maxWidth) {
 }
 
 bool _homeTitleBarPlacesLiveRoomOnRight(BuildContext context) {
+  if (kIsWeb) return _homeTitleBarIsMobilePlatform(context);
   final platform = Theme.of(context).platform;
   return !_homeTitleBarShowsCustomWindowControls(context) &&
       platform != TargetPlatform.macOS;
 }
 
 double _homeTitleBarLiveRoomLeft(BuildContext context) {
-  if (Theme.of(context).platform == TargetPlatform.macOS) {
+  // Only the macOS app has traffic lights to clear; a browser on a Mac
+  // reports macOS too but draws none.
+  if (!kIsWeb && Theme.of(context).platform == TargetPlatform.macOS) {
     return WindowChromeInsets.of(context).titleBarLeadingControlsSafeInset;
   }
   return _homeTitleBarLiveRoomHorizontalInset;
