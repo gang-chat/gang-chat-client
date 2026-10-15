@@ -250,6 +250,11 @@ class _LiveMusicBoxPanelState extends State<LiveMusicBoxPanel> {
   }
 }
 
+/// Narrowest header slot in which the active-source chip still shows its
+/// label: the chip's fixed parts (border, padding, source mark, arrow) take
+/// 53px, leaving room for at least a couple of characters.
+const double _musicBoxSourceChipMinLabelWidth = 80;
+
 /// Title row: the dot-matrix wordmark, the active-source chip (jumps to the
 /// list that owns what is playing) and the close key.
 class _MusicBoxHeader extends StatelessWidget {
@@ -285,57 +290,76 @@ class _MusicBoxHeader extends StatelessWidget {
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: PressableSurface(
-              key: const ValueKey<String>('music-box-active-source-chip'),
-              height: 26,
-              tooltip: playing ? '正在播放的来源' : '当前来源',
-              onPressed: onOpenSource,
-              padding: const EdgeInsets.symmetric(horizontal: 9),
-              backgroundColor: playing ? UiColors.selected : UiColors.surface,
-              selected: false,
-              borderColor: playing ? UiColors.accentBorder : UiColors.border,
-              borderRadius: UiRadii.pill,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (playing)
-                    const EqualizerBars(height: 10, barWidth: 2, gap: 1.5)
-                  else
-                    Icon(
-                      _musicBoxSourceTypeIcon(active.type),
-                      size: 13,
-                      color: UiColors.textSecondary,
-                    ),
-                  const SizedBox(width: 6),
-                  // Flexible so a long source name fades inside the chip
-                  // instead of overflowing a narrow (360px) deck header.
-                  Flexible(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 120),
-                      child: Text(
-                        music_box_display.musicBoxActiveSourceLabel(active),
-                        maxLines: 1,
-                        softWrap: false,
-                        overflow: TextOverflow.fade,
-                        style: UiTypography.label.copyWith(
-                          color: playing ? UiColors.accent : UiColors.text,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // The docked deck can be as narrow as the live room's inner
+              // width on a 320px phone; there the chip keeps only its source
+              // mark (the tooltip still names it) instead of overflowing.
+              final showLabel =
+                  constraints.maxWidth >= _musicBoxSourceChipMinLabelWidth;
+              return Align(
+                alignment: Alignment.centerRight,
+                child: PressableSurface(
+                  key: const ValueKey<String>('music-box-active-source-chip'),
+                  height: 26,
+                  tooltip: playing ? '正在播放的来源' : '当前来源',
+                  onPressed: onOpenSource,
+                  padding: const EdgeInsets.symmetric(horizontal: 9),
+                  backgroundColor: playing
+                      ? UiColors.selected
+                      : UiColors.surface,
+                  selected: false,
+                  borderColor: playing
+                      ? UiColors.accentBorder
+                      : UiColors.border,
+                  borderRadius: UiRadii.pill,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (playing)
+                        const EqualizerBars(height: 10, barWidth: 2, gap: 1.5)
+                      else
+                        Icon(
+                          _musicBoxSourceTypeIcon(active.type),
+                          size: 13,
+                          color: UiColors.textSecondary,
                         ),
-                      ),
-                    ),
+                      if (showLabel) ...[
+                        const SizedBox(width: 6),
+                        // Flexible so a long source name fades inside the
+                        // chip instead of overflowing a narrow deck header.
+                        Flexible(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 120),
+                            child: Text(
+                              music_box_display.musicBoxActiveSourceLabel(
+                                active,
+                              ),
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.fade,
+                              style: UiTypography.label.copyWith(
+                                color: playing
+                                    ? UiColors.accent
+                                    : UiColors.text,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 2),
+                        Icon(
+                          Icons.arrow_outward_rounded,
+                          size: 12,
+                          color: playing ? UiColors.accent : UiColors.textMuted,
+                        ),
+                      ],
+                    ],
                   ),
-                  const SizedBox(width: 2),
-                  Icon(
-                    Icons.arrow_outward_rounded,
-                    size: 12,
-                    color: playing ? UiColors.accent : UiColors.textMuted,
-                  ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           ),
         ),
         const SizedBox(width: 6),
@@ -1126,36 +1150,43 @@ class _MusicBoxProgressBar extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 7),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              music_box_display.musicBoxFormatDuration(progress.positionMs),
-              style: UiTypography.dot.copyWith(
-                fontSize: 17,
-                height: 1,
-                color: hasTrack ? UiColors.text : UiColors.textMuted,
+        // Scales the readout down only when the display is narrower than it
+        // (the docked deck on a 320px phone); otherwise it draws at full size.
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.bottomLeft,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                music_box_display.musicBoxFormatDuration(progress.positionMs),
+                style: UiTypography.dot.copyWith(
+                  fontSize: 17,
+                  height: 1,
+                  color: hasTrack ? UiColors.text : UiColors.textMuted,
+                ),
               ),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              '/',
-              style: UiTypography.mono.copyWith(
-                fontSize: 10,
-                color: UiColors.textMuted,
-                height: 1,
+              const SizedBox(width: 6),
+              Text(
+                '/',
+                style: UiTypography.mono.copyWith(
+                  fontSize: 10,
+                  color: UiColors.textMuted,
+                  height: 1,
+                ),
               ),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              music_box_display.musicBoxFormatDuration(progress.durationMs),
-              style: UiTypography.mono.copyWith(
-                fontSize: 10,
-                color: UiColors.textMuted,
-                height: 1,
+              const SizedBox(width: 6),
+              Text(
+                music_box_display.musicBoxFormatDuration(progress.durationMs),
+                style: UiTypography.mono.copyWith(
+                  fontSize: 10,
+                  color: UiColors.textMuted,
+                  height: 1,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );

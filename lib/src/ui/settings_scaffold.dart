@@ -434,6 +434,8 @@ class SettingsScaffold extends StatelessWidget {
   final Widget body;
 
   static const double _sideNavWidth = 232;
+  static const double _singlePaneHeaderContentHeight = 48;
+  static const double _singlePaneContentTopGap = 14;
   static const double _twoPaneMinWidth = 720;
   static const double _contentTopGap = 16;
   static const double _horizontalPadding = 28;
@@ -697,100 +699,73 @@ class SettingsScaffold extends StatelessWidget {
     );
   }
 
+  /// Single-column page: header (back, icon, title, action), optional
+  /// pinned area, then the full-width body. With a [navigation] the section
+  /// pills sit under the header.
   Widget _buildSinglePane(
     BuildContext context,
     SettingsNavigationBase? navigation,
   ) {
-    final showHeader = showTitle || onBack != null || headerAction != null;
-    final column = Column(
+    const horizontalPadding = 22.0;
+    return Column(
       children: [
-        if (showHeader)
-          Container(
-            height: 16 + titleBarHeight + 48,
-            padding: const EdgeInsets.fromLTRB(
-              _horizontalPadding - 8,
-              titleBarHeight + 16,
-              _horizontalPadding - 8,
-              0,
-            ),
-            child: Row(
-              children: [
-                if (onBack != null) ...[
-                  ButtonIcon(
-                    tooltip: '返回',
-                    icon: const Icon(Icons.arrow_back_rounded),
-                    onPressed: onBack,
-                    size: 36,
-                    ghost: true,
-                  ),
-                  const SizedBox(width: 8),
-                ] else
-                  const SizedBox(width: 8),
-                if (showTitle) ...[
-                  _TitleIcon(icon: icon, color: iconColor),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      title,
-                      overflow: TextOverflow.ellipsis,
-                      style: UiTypography.headline,
-                    ),
-                  ),
-                ] else
-                  const Spacer(),
-                ?headerAction,
-              ],
-            ),
+        Container(
+          height: titleBarHeight + 16 + _singlePaneHeaderContentHeight,
+          padding: const EdgeInsets.fromLTRB(
+            horizontalPadding,
+            titleBarHeight + 16,
+            horizontalPadding,
+            0,
           ),
+          child: Row(
+            children: [
+              if (onBack != null) ...[
+                ButtonIcon(
+                  tooltip: '返回',
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: onBack,
+                  size: 38,
+                ),
+                const SizedBox(width: 16),
+              ],
+              if (showTitle) ...[
+                Icon(icon, color: iconColor ?? UiColors.accent, size: 19),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    overflow: TextOverflow.ellipsis,
+                    style: UiTypography.headline.copyWith(fontSize: 20),
+                  ),
+                ),
+              ] else
+                const Spacer(),
+              ?headerAction,
+            ],
+          ),
+        ),
         if (navigation != null) ...[
-          const SizedBox(height: _contentTopGap),
+          const SizedBox(height: _singlePaneContentTopGap),
           Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: _horizontalPadding - 8,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: horizontalPadding),
             child: navigation.buildHorizontal(context),
           ),
         ],
         if (pinned != null) ...[
-          const SizedBox(height: _contentTopGap),
+          const SizedBox(height: _singlePaneContentTopGap),
           Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: _horizontalPadding - 8,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: horizontalPadding),
             child: pinned,
           ),
         ],
-        const SizedBox(height: _contentTopGap),
+        const SizedBox(height: _singlePaneContentTopGap),
         Expanded(
           child: _SettingsBodyInsets(
-            horizontal: _horizontalPadding - 8,
+            horizontal: horizontalPadding,
             child: body,
           ),
         ),
       ],
-    );
-    return navigation == null ? _ReadableWidth(child: column) : column;
-  }
-}
-
-/// Keeps single-column pages at a readable width on wide windows.
-class _ReadableWidth extends StatelessWidget {
-  const _ReadableWidth({required this.child});
-
-  static const double maxWidth = 860;
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth <= maxWidth) return child;
-        return Align(
-          alignment: Alignment.topCenter,
-          child: SizedBox(width: maxWidth, child: child),
-        );
-      },
     );
   }
 }

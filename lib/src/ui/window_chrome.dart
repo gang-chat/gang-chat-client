@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 
 const _macOsSidebarTopOffset = 18.0;
-// MainFlutterWindow centres the native traffic lights in the 52px header band
-// with an even 19px inset, so they end near x=73. Leave the same 19px gap
-// before Flutter title-bar content so the lights never crowd the brand.
-const _macOsTitleBarLeadingControlsSafeInset = 92.0;
+// The native traffic lights end near x=69 after MainFlutterWindow recenters
+// them. Keep a small interaction gap before Flutter title-bar content.
+const _macOsTitleBarLeadingControlsSafeInset = 80.0;
 
 class WindowChromeInsets {
   const WindowChromeInsets({

@@ -658,10 +658,10 @@ class _RoomSettingsDialogState extends State<RoomSettingsDialog> {
                 size: 38,
                 loading: _refreshing,
               ),
-        showBack: _creating || !widget.embedded,
-        navigation: _creating
+        pinned: _creating
             ? null
-            : SettingsNavigation<RoomSettingsSection>(
+            : SegmentedControl<RoomSettingsSection>(
+                expanded: true,
                 value: _section,
                 onChanged: (section) => setState(() => _section = section),
                 segments: [
@@ -748,7 +748,6 @@ class _RoomSettingsDialogState extends State<RoomSettingsDialog> {
               maxLines: null,
             ),
             AvatarPicker(
-              rounded: true,
               label: '图标',
               displayName: _avatarDisplayName,
               imageUrl: _avatarPreviewUrl(AppConfigScope.of(context)),

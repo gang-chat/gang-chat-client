@@ -399,19 +399,20 @@ class LocalParticipant extends Participant<LocalTrackPublication> {
     logger.fine('Video layers: ${layers.map((e) => e)}');
 
     Future<lk_models.TrackInfo> negotiate() async {
-      track.transceiver = await room.engine.createTransceiverRTCRtpSender(track, publishOptions!, encodings);
+      final options = publishOptions!;
+      track.transceiver = await room.engine.createTransceiverRTCRtpSender(track, options, encodings);
 
-      track.codec = publishOptions.videoCodec;
+      track.codec = options.videoCodec;
       if (lkBrowser() != BrowserType.firefox) {
         await room.engine.setPreferredCodec(
           track.transceiver!,
           'video',
-          publishOptions.videoCodec,
+          options.videoCodec,
         );
       }
 
       if ([TrackSource.camera, TrackSource.screenShareVideo].contains(track.source)) {
-        final degradationPreference = publishOptions.degradationPreference ??
+        final degradationPreference = options.degradationPreference ??
             getDefaultDegradationPreference(
               track,
             );
@@ -421,7 +422,7 @@ class LocalParticipant extends Participant<LocalTrackPublication> {
       if (kIsWeb && lkBrowser() == BrowserType.firefox && track.kind == TrackType.AUDIO) {
         //TOOD:
       } else {
-        _registerStartBitrate(track, publishOptions, encodings);
+        _registerStartBitrate(track, options, encodings);
       }
 
       await room.engine.negotiate();

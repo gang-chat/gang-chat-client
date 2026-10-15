@@ -36,23 +36,27 @@ typedef AuthEmailAvailabilityCheck = Future<bool> Function(String email);
 
 enum _AuthMode { login, register }
 
-const double _authTitleBarTopInset = 18;
-const double _authTitleBarHeight = 128;
-const double _authTitleBarGap = 18;
-const double _authBrandIconSize = 50;
-const double _authMacBrandIconSize = 38;
-const double _authFieldGap = 10;
-const double _authModeGap = 14;
-const double _authActionGap = 10;
-const double _authErrorHeight = 14;
+const double _authTitleBarTopInset = 14;
+const double _authTitleBarHeight = 54;
+const double _authTitleBarGap = 14;
+const double _authBrandIconSize = 36;
+const double _authBrandGap = 10;
+const double _authFieldGap = 3;
+const double _authModeGap = 10;
+const double _authActionGap = 6;
+const double _authErrorHeight = 11;
 const double _authPasswordErrorGap = 4;
 const double _authErrorRememberGap = 0;
 const double _authRememberHeight = 28;
-const double _authSubmitHeight = 46;
+const double _authSubmitHeight = 32;
 const double _accountHistoryItemHeight = 38;
-const double _authSegmentedControlOuterHeight = 40;
-const double _authInputHeight = 46;
-// [Input] draws a 1px border outside its [Input.height].
+// The segmented control draws its border inside its height, so its outer
+// height is the height it is given.
+const double _authSegmentedControlHeight = 36;
+const double _authSegmentedControlOuterHeight = _authSegmentedControlHeight;
+// [Input] draws its 1px border outside its nominal height, so each field
+// occupies its height plus the top and bottom border.
+const double _authInputHeight = Input.defaultHeight;
 const double _authInputOuterHeight = _authInputHeight + 2;
 const double _accountHistoryDropdownTop =
     _authTitleBarHeight +
@@ -68,13 +72,20 @@ const double _authRegisterFieldsCenter =
     _authSegmentedControlOuterHeight +
     _authModeGap +
     (_authInputOuterHeight * 4 + _authFieldGap * 3) / 2;
+const _authTitleBarStyle = TextStyle(
+  color: UiColors.text,
+  fontSize: 22,
+  fontWeight: FontWeight.w700,
+  height: 1,
+  letterSpacing: 0,
+);
 const _androidAuthSystemUiOverlayStyle = SystemUiOverlayStyle(
-  statusBarColor: UiColors.background,
+  statusBarColor: UiColors.surfaceLow,
   statusBarBrightness: Brightness.dark,
   statusBarIconBrightness: Brightness.light,
   systemStatusBarContrastEnforced: false,
-  systemNavigationBarColor: UiColors.background,
-  systemNavigationBarDividerColor: UiColors.background,
+  systemNavigationBarColor: UiColors.surfaceLow,
+  systemNavigationBarDividerColor: UiColors.surfaceLow,
   systemNavigationBarIconBrightness: Brightness.light,
   systemNavigationBarContrastEnforced: false,
 );
@@ -617,7 +628,7 @@ class _LoginPageState extends State<LoginPage> {
         widget.windowController != null &&
         Theme.of(context).platform == TargetPlatform.windows;
     final page = Scaffold(
-      backgroundColor: UiColors.background,
+      backgroundColor: isAndroid ? UiColors.surfaceLow : UiColors.background,
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -637,19 +648,15 @@ class _LoginPageState extends State<LoginPage> {
                   key: const ValueKey('auth-surface'),
                   width: surfaceWidth,
                   height: surfaceHeight,
-                  child: DotGridBackground(
+                  child: DecoratedBox(
+                    decoration: const BoxDecoration(color: UiColors.surfaceLow),
                     child: Stack(
                       children: [
-                        const Positioned(
-                          left: -110,
-                          top: -150,
-                          child: IgnorePointer(child: _AuthGlow()),
-                        ),
                         Padding(
                           padding: const EdgeInsets.fromLTRB(
-                            28,
+                            24,
                             _authTitleBarTopInset,
-                            28,
+                            24,
                             7,
                           ),
                           child: AutofillGroup(
@@ -675,7 +682,7 @@ class _LoginPageState extends State<LoginPage> {
                                             SegmentedControl<_AuthMode>(
                                               expanded: true,
                                               height:
-                                                  _authSegmentedControlOuterHeight,
+                                                  _authSegmentedControlHeight,
                                               value: _registering
                                                   ? _AuthMode.register
                                                   : _AuthMode.login,
@@ -790,10 +797,6 @@ class _LoginPageState extends State<LoginPage> {
                                               onPressed: _submit,
                                               child: Text(
                                                 _registering ? '创建账号' : '登录',
-                                                style: const TextStyle(
-                                                  fontSize: 14,
-                                                  fontWeight: FontWeight.w800,
-                                                ),
                                               ),
                                             ),
                                           ],
@@ -997,50 +1000,32 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Widget _buildTitleBar() {
-    final macOS = Theme.of(context).platform == TargetPlatform.macOS;
-    final wordmark = Text(
-      'GANG CHAT',
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: UiTypography.dot.copyWith(fontSize: 30, letterSpacing: 2),
-    );
     final title = MouseRegion(
       cursor: SystemMouseCursors.basic,
       child: SelectionContainer.disabled(
         child: SizedBox(
           height: _authTitleBarHeight,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              // macOS keeps its native traffic lights in the top-left corner,
-              // so the mark moves inline with the wordmark, below them.
-              if (macOS)
-                Row(
-                  children: [
-                    const BrandMark(
-                      key: ValueKey('auth-brand-icon'),
-                      size: _authMacBrandIconSize,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(child: wordmark),
-                  ],
-                )
-              else ...[
-                const BrandMark(
-                  key: ValueKey('auth-brand-icon'),
-                  size: _authBrandIconSize,
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Image.asset(
+                  'assets/branding/auth_brand_icon.png',
+                  key: const ValueKey('auth-brand-icon'),
+                  width: _authBrandIconSize,
+                  height: _authBrandIconSize,
+                  fit: BoxFit.contain,
+                  filterQuality: FilterQuality.none,
                 ),
-                const SizedBox(height: 16),
-                wordmark,
+                const SizedBox(width: _authBrandGap),
+                const Text(
+                  'Gang Chat',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _authTitleBarStyle,
+                ),
               ],
-              const SizedBox(height: 10),
-              const SignalTag(
-                label: 'VOICE · CHAT · SQUAD',
-                color: UiColors.accent,
-                dot: true,
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -1050,27 +1035,6 @@ class _LoginPageState extends State<LoginPage> {
     return AppWindowDragRegion(
       windowController: windowController,
       child: title,
-    );
-  }
-}
-
-class _AuthGlow extends StatelessWidget {
-  const _AuthGlow();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 360,
-      height: 360,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: RadialGradient(
-          colors: [
-            UiColors.accent.withValues(alpha: 0.2),
-            UiColors.accent.withValues(alpha: 0),
-          ],
-        ),
-      ),
     );
   }
 }

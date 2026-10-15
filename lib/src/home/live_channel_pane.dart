@@ -27,7 +27,10 @@ part 'live_channel_music_box_body.dart';
 part 'live_channel_music_box_rows.dart';
 part 'live_channel_music_box_song_card.dart';
 
-const _liveStagePadding = EdgeInsets.fromLTRB(24, 22, 24, 18);
+const _paneEdgeInset = 14.0;
+const _paneTopInset = _paneEdgeInset;
+const _liveRoomRadius = UiRadii.md;
+const _liveRoomPadding = 18.0;
 // Width of the right-docked music box panel when expanded. Wide enough for a
 // song row to carry its index, title, requester, and two actions.
 const _musicBoxPanelWidth = 340.0;
@@ -35,7 +38,7 @@ const _memberCardWidth = 154.0;
 const _memberCardMinTwoColumnWidth = 135.0;
 const _memberCardSpacing = 12.0;
 const _memberCardSurfaceHeight = _memberCardWidth;
-const _controlButtonSize = 46.0;
+const _controlButtonSize = 44.0;
 const _controlHoverInfoBelowReserve = 4.0;
 const _controlHoverInfoVerticalOffset = 24.0;
 const _liveStageControlGap = 16.0;
@@ -43,8 +46,10 @@ const _liveStageControlGap = 16.0;
 // transport row in the standard layout. Narrow layouts may add more rows, but
 // those rows must move the docked panel upward instead of shortening it.
 const _musicBoxStandardControlHeight = _controlButtonSize * 2 + 10.0;
-const _memberSpeakingBackground = Color(0xFF151A09);
-const _memberIdleBackground = Color(0xFF141417);
+const _liveRoomBackground = UiColors.surfaceLow;
+const _liveRoomBorder = UiColors.border;
+const _memberSpeakingBackground = Color(0xFF252A34);
+const _memberIdleBackground = Color(0xFF1D2328);
 
 enum LiveStageSelectionMode { none, track }
 
@@ -307,20 +312,35 @@ class _LiveChannelPaneState extends State<LiveChannelPane> {
     final musicBoxEnabled = musicBox?.enabled ?? false;
     final musicBoxOpen =
         widget.joined && musicBoxEnabled && widget.musicBoxOpen;
-    return DecoratedBox(
-      key: const ValueKey<String>('live-stage-surface'),
-      decoration: const BoxDecoration(
-        gradient: RadialGradient(
-          center: Alignment(0, 1.25),
-          radius: 1.1,
-          colors: [Color(0xFF1B2208), UiColors.surfaceLow],
-        ),
-      ),
+    return ColoredBox(
+      color: UiColors.background,
       child: Padding(
-        padding: _liveStagePadding,
-        child: Column(
+        padding: const EdgeInsets.fromLTRB(
+          _paneEdgeInset,
+          _paneTopInset,
+          _paneEdgeInset,
+          _paneEdgeInset,
+        ),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: _liveRoomBackground,
+            borderRadius: BorderRadius.circular(_liveRoomRadius),
+            border: Border.all(color: _liveRoomBorder),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x66080A0D),
+                offset: Offset(0, 10),
+                blurRadius: 22,
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(_liveRoomPadding),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                _LiveRoomHeader(title: widget.title),
+                const SizedBox(height: 16),
                 Expanded(
                   child: _LiveChannelBodyLayout(
                     stage: Column(
@@ -494,6 +514,8 @@ class _LiveChannelPaneState extends State<LiveChannelPane> {
                 ),
               ],
             ),
+          ),
+        ),
       ),
     );
   }

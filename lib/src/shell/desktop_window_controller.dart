@@ -8,7 +8,7 @@ import 'package:window_manager/window_manager.dart';
 
 import '../lifecycle/shutdown_hooks.dart';
 
-const appWindowBackground = Color(0xFF060607);
+const appWindowBackground = Color(0xFF14171D);
 
 // The authenticated desktop shell can use the same compact navigation as a
 // phone, so its minimum width should match that layout instead of the old
@@ -17,10 +17,13 @@ const _responsiveAppWindowMinSize = Size(360, 600);
 const _appWindowSize = Size(1180, 760);
 const _unboundedWindowSize = Size(100000, 100000);
 const _minimumWindowSize = Size(1, 1);
-const _authWidgetWidth = 420.0;
-const _authBottomBreathingRoom = 28.0;
-const _loginWidgetHeight = 432.0 + _authBottomBreathingRoom;
-const _registerWidgetHeight = 516.0 + _authBottomBreathingRoom;
+const _authWidgetWidth = 430.0;
+const _authBottomBreathingRoom = 24.0;
+const _authBrandTitleExtraHeight = 53.0;
+const _loginWidgetHeight =
+    291.0 + _authBrandTitleExtraHeight + _authBottomBreathingRoom;
+const _registerWidgetHeight =
+    359.0 + _authBrandTitleExtraHeight + _authBottomBreathingRoom;
 const _loginWidgetSize = Size(_authWidgetWidth, _loginWidgetHeight);
 const _registerWidgetSize = Size(_authWidgetWidth, _registerWidgetHeight);
 const _loginWindowSize = _loginWidgetSize;
