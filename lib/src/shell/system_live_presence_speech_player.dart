@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../app/live_presence_announcement.dart';
 import 'android_system_service.dart';
+import 'browser/browser_bridge.dart';
 import '../config/host_platform.dart';
 
 /// Free local TTS backed by the operating system's installed voices.
@@ -26,7 +27,7 @@ class SystemLivePresenceSpeechPlayer implements LivePresenceSpeechPlayer {
     LivePresenceAnnouncement announcement, {
     required double volume,
   }) async {
-    if (_disposed || kIsWeb || volume <= 0) return;
+    if (_disposed || volume <= 0) return;
     final segments = announcement.segments
         .map((segment) => segment.trim())
         .where((segment) => segment.isNotEmpty)
@@ -34,7 +35,9 @@ class SystemLivePresenceSpeechPlayer implements LivePresenceSpeechPlayer {
     if (segments.isEmpty) return;
 
     try {
-      if (HostPlatform.isWindows) {
+      if (kIsWeb) {
+        await _speakInBrowser(segments, volume);
+      } else if (HostPlatform.isWindows) {
         await _speakOnWindows(segments, volume);
       } else if (HostPlatform.isMacOS) {
         await _speakOnMacOS(segments);
@@ -49,6 +52,16 @@ class SystemLivePresenceSpeechPlayer implements LivePresenceSpeechPlayer {
       }
     } catch (_) {
       // Presence speech is best-effort and must never interrupt live controls.
+    }
+  }
+
+  /// The browser's speech synthesis, segment by segment with the same pause.
+  Future<void> _speakInBrowser(List<String> segments, double volume) async {
+    for (var index = 0; index < segments.length; index++) {
+      if (_disposed) return;
+      final spoken = await speakInBrowser(segments[index], volume: volume);
+      if (!spoken) return;
+      if (index < segments.length - 1) await Future<void>.delayed(pause);
     }
   }
 

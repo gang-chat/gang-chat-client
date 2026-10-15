@@ -116,6 +116,15 @@ void main() {
     expect(kVoiceMessageMimeType, 'audio/mp4');
   });
 
+  test('browser WAV clips keep a .wav name and audio/wav type', () {
+    final name = voiceMessageFilename(
+      DateTime.utc(2026, 6, 1, 12, 0, 0),
+      extension: kVoiceMessageWavExtension,
+    );
+    expect(name, endsWith('.wav'));
+    expect(kVoiceMessageWavMimeType, 'audio/wav');
+  });
+
   test('bubble duration uses marked seconds and minutes', () {
     expect(formatVoiceBubbleDuration(null), '');
     expect(formatVoiceBubbleDuration(Duration.zero), '0"');

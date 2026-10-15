@@ -1,6 +1,9 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 import 'android_system_service.dart';
+import 'browser/browser_bridge.dart';
 import '../config/host_platform.dart';
 
 class FeedbackMailDraft {
@@ -38,6 +41,10 @@ class FeedbackMailService {
 
   Future<void> openMailto(Uri uri) async {
     final value = uri.toString();
+    if (kIsWeb) {
+      openBrowserMailto(value);
+      return;
+    }
     if (androidSystemService.isSupported) {
       await androidSystemService.openMailto(uri);
       return;

@@ -34,6 +34,22 @@ class SelectedFile {
     return SelectedFile._fromSelectorFile(file_selector.XFile(path));
   }
 
+  /// A file whose bytes are loaded on demand, such as one dropped or pasted
+  /// into a browser, which exposes contents but no path.
+  factory SelectedFile.deferred({
+    required String name,
+    required String mimeType,
+    required int length,
+    required Future<Uint8List> Function() readAsBytes,
+  }) {
+    return SelectedFile._(
+      name: name,
+      mimeType: mimeType.isEmpty ? null : mimeType,
+      readAsBytes: readAsBytes,
+      length: () async => length,
+    );
+  }
+
   factory SelectedFile.fromBytes({
     required String name,
     required String mimeType,

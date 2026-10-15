@@ -22,6 +22,7 @@ import '../support/native.dart';
 import '../support/native_audio.dart';
 import '../support/platform.dart';
 import '../track/audio_management.dart';
+import '../track/web/_audio_api.dart' if (dart.library.js_interop) '../track/web/_audio_html.dart' as audio;
 
 class MediaDevice {
   const MediaDevice(this.deviceId, this.label, this.kind, this.groupId);
@@ -115,6 +116,13 @@ class Hardware {
   }
 
   Future<void> selectAudioOutput(MediaDevice device) async {
+    // gang-chat fork: browsers route playback per <audio> element, so apply
+    // the choice to every remote track instead of only logging a warning.
+    if (lkPlatformIs(PlatformType.web)) {
+      selectedAudioOutput = device;
+      audio.setDefaultSinkId(device.deviceId);
+      return;
+    }
     if (!lkPlatformIsDesktop() && !lkPlatformIs(PlatformType.android)) {
       logger.warning(
         'selectAudioOutput is only supported on Desktop and Android',

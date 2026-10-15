@@ -1620,7 +1620,10 @@ extension _HomeShellMessages on _HomeShellState {
     // Bytes are buffered in memory now; the clip file is no longer needed.
     unawaited(_voiceRecorder.discardClip(path));
 
-    final filename = voice_display.voiceMessageFilename(DateTime.now());
+    final filename = voice_display.voiceMessageFilename(
+      DateTime.now(),
+      extension: _voiceRecorder.clipExtension,
+    );
     String? clientMessageId;
     try {
       final sent = await _messagesController.sendVoiceMessage(
@@ -1630,7 +1633,7 @@ extension _HomeShellMessages on _HomeShellState {
         ),
         filename: filename,
         sizeBytes: bytes.length,
-        mimeType: voice_display.kVoiceMessageMimeType,
+        mimeType: _voiceRecorder.clipMimeType,
         duration: duration,
         quotes: quotes,
         readBytes: () async => bytes,
@@ -1817,26 +1820,7 @@ extension _HomeShellMessages on _HomeShellState {
       final clipboardComponent = await _clipboardMessageComponent();
       if (clipboardComponent != null) {
         if (!mounted) return false;
-        if (_composerController.text.trim().isNotEmpty) {
-          _setHomeState(() => _sendError = '请先清空输入内容，再粘贴歌单或歌曲组件');
-          return true;
-        }
-        if (_stagedAttachments.isNotEmpty) {
-          _setHomeState(() => _sendError = '请先移除已选文件，再粘贴歌单或歌曲');
-          return true;
-        }
-        final roomId = _selectedServerId;
-        if (roomId == null) return false;
-        _setHomeState(() {
-          final next = Map<String, Message>.of(_messageComponentDrafts);
-          next[roomId] = clipboardComponent;
-          _messageComponentDrafts = Map<String, Message>.unmodifiable(next);
-          _sendError = null;
-          _saveDraftInState();
-        });
-        _composerPanelController.closePanel();
-        _composerPanelController.requestInputFocus();
-        return true;
+        return _stageClipboardComponent(clipboardComponent);
       }
       final paths = await _clipboardService.readFilePaths();
       if (!mounted) return false;
@@ -1869,8 +1853,39 @@ extension _HomeShellMessages on _HomeShellState {
     }
   }
 
+  /// Puts a pasted song or playlist into the composer. Returns false when no
+  /// room is selected; otherwise true, even when it only explains why the
+  /// component can't be added yet.
+  bool _stageClipboardComponent(Message component) {
+    if (_composerController.text.trim().isNotEmpty) {
+      _setHomeState(() => _sendError = '请先清空输入内容，再粘贴歌单或歌曲组件');
+      return true;
+    }
+    if (_stagedAttachments.isNotEmpty) {
+      _setHomeState(() => _sendError = '请先移除已选文件，再粘贴歌单或歌曲');
+      return true;
+    }
+    final roomId = _selectedServerId;
+    if (roomId == null) return false;
+    _setHomeState(() {
+      final next = Map<String, Message>.of(_messageComponentDrafts);
+      next[roomId] = component;
+      _messageComponentDrafts = Map<String, Message>.unmodifiable(next);
+      _sendError = null;
+      _saveDraftInState();
+    });
+    _composerPanelController.closePanel();
+    _composerPanelController.requestInputFocus();
+    return true;
+  }
+
   Future<Message?> _clipboardMessageComponent() async {
-    final clipboardText = await _clipboardService.readText();
+    return _messageComponentFromClipboardText(
+      await _clipboardService.readText(),
+    );
+  }
+
+  Message? _messageComponentFromClipboardText(String? clipboardText) {
     final embedded = message_display.messageComponentFromClipboardText(
       clipboardText,
     );
@@ -1903,7 +1918,62 @@ extension _HomeShellMessages on _HomeShellState {
 
   void _handleDroppedFiles(FileDropEvent event) {
     if (!_composerContainsDropPoint(event.x, event.y)) return;
+    if (event.files.isNotEmpty) {
+      _stageAttachmentFiles(event.files);
+      return;
+    }
     _stageAttachmentPaths(event.paths);
+  }
+
+  /// Web paste: browsers insert pasted content straight into the focused text
+  /// field, so the composer's own paste action never runs. While the composer
+  /// has focus, pasted files become attachments and a copied Gang Chat song or
+  /// playlist becomes a component, exactly as a desktop paste would.
+  bool _handleWebPaste(List<SelectedFile> files, String? text) {
+    if (_selectedRoom == null ||
+        _settingsOpen ||
+        _contentMode != _ContentMode.chat ||
+        !_composerHasFocus()) {
+      return false;
+    }
+    if (files.isNotEmpty) {
+      _stageAttachmentFiles([
+        for (final file in files)
+          // Pasted screenshots arrive as "image.png"; name them like a
+          // desktop clipboard image so uploads stay distinguishable.
+          if ((file.mimeType ?? '').startsWith('image/'))
+            SelectedFile.deferred(
+              name: file_display.clipboardImageUploadFilename(
+                timestamp: DateTime.now(),
+                sequence: ++_clipboardImagePasteSerial,
+                mimeType: file.mimeType!,
+              ),
+              mimeType: file.mimeType!,
+              length: 0,
+              readAsBytes: file.readAsBytes,
+            )
+          else
+            file,
+      ]);
+      return true;
+    }
+    final component = _messageComponentFromClipboardText(text);
+    if (component == null) return false;
+    _stageClipboardComponent(component);
+    return true;
+  }
+
+  bool _composerHasFocus() {
+    final composer = _composerDropKey.currentContext;
+    final focused = FocusManager.instance.primaryFocus?.context;
+    if (composer == null || focused == null) return false;
+    if (identical(focused, composer)) return true;
+    var inside = false;
+    focused.visitAncestorElements((element) {
+      inside = identical(element, composer);
+      return !inside;
+    });
+    return inside;
   }
 
   bool _composerContainsDropPoint(double x, double y) {

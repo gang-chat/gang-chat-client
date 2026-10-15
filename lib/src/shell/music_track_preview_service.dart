@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -13,7 +14,78 @@ class DefaultMusicTrackPreviewPlatformFactory
   const DefaultMusicTrackPreviewPlatformFactory();
 
   @override
-  MusicTrackPreviewPlatform create() => LocalMusicTrackPreviewPlatform();
+  MusicTrackPreviewPlatform create() => kIsWeb
+      ? BrowserMusicTrackPreviewPlatform()
+      : LocalMusicTrackPreviewPlatform();
+}
+
+/// Web previews: browsers have no cache directory, so recent previews are kept
+/// in memory and played from bytes.
+class BrowserMusicTrackPreviewPlatform implements MusicTrackPreviewPlatform {
+  static const int _maxCacheBytes = 64 << 20;
+
+  BrowserMusicTrackPreviewPlatform({AudioPlayer? player})
+    : _player = player ?? AudioPlayer() {
+    _completion = _player.onPlayerComplete.listen((_) {
+      if (!_disposed && !_completed.isClosed) _completed.add(null);
+    });
+  }
+
+  final AudioPlayer _player;
+  // Insertion order doubles as recency (oldest first).
+  final Map<String, Uint8List> _previews = {};
+  var _cachedBytes = 0;
+  final StreamController<void> _completed = StreamController<void>.broadcast(
+    sync: true,
+  );
+  late final StreamSubscription<void> _completion;
+  bool _disposed = false;
+
+  @override
+  Stream<void> get onCompleted => _completed.stream;
+
+  @override
+  Future<MusicTrackPreviewAsset?> findCached(String cacheKey) async {
+    final bytes = _previews.remove(cacheKey);
+    if (bytes == null) return null;
+    _previews[cacheKey] = bytes;
+    return MusicTrackPreviewAsset(cacheKey);
+  }
+
+  @override
+  Future<MusicTrackPreviewAsset> store(String cacheKey, Uint8List bytes) async {
+    final previous = _previews.remove(cacheKey);
+    if (previous != null) _cachedBytes -= previous.length;
+    _previews[cacheKey] = bytes;
+    _cachedBytes += bytes.length;
+    while (_cachedBytes > _maxCacheBytes && _previews.length > 1) {
+      final oldest = _previews.keys.first;
+      _cachedBytes -= _previews.remove(oldest)!.length;
+    }
+    return MusicTrackPreviewAsset(cacheKey);
+  }
+
+  @override
+  Future<void> play(MusicTrackPreviewAsset asset) async {
+    if (_disposed) return;
+    final bytes = _previews[asset.location];
+    if (bytes == null) throw StateError('试听缓存已失效');
+    await _player.setReleaseMode(ReleaseMode.stop);
+    await _player.play(BytesSource(bytes, mimeType: 'audio/mp4'));
+  }
+
+  @override
+  Future<void> stop() => _player.stop();
+
+  @override
+  Future<void> dispose() async {
+    if (_disposed) return;
+    _disposed = true;
+    await _completion.cancel();
+    await _player.dispose();
+    await _completed.close();
+    _previews.clear();
+  }
 }
 
 /// Stores authenticated preview responses in the application cache and plays

@@ -33,13 +33,16 @@ fi
 tool/pub.sh get
 
 # --no-web-resources-cdn bundles CanvasKit instead of loading it from
-# www.gstatic.com, which is blocked in mainland China. Chinese fallback fonts
-# still come from fonts.gstatic.com; see docs/web-spike.md.
+# www.gstatic.com, which is blocked in mainland China.
 flutter build web \
   --release \
   --no-web-resources-cdn \
   --base-href "$base_href" \
   ${defines[@]+"${defines[@]}"} \
   "$@"
+
+# Host the Chinese/emoji fallback fonts next to the app instead of loading
+# them from fonts.gstatic.com, which mainland China blocks.
+dart tool/mirror_web_fonts.dart build/web
 
 echo "Built build/web for base href $base_href"

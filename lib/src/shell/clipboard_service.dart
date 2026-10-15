@@ -1,7 +1,11 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 
 import 'android_system_service.dart';
+import 'browser/browser_bridge.dart';
+import 'file_selection_service.dart';
 import '../config/host_platform.dart';
 
 class ClipboardImageFile {
@@ -46,7 +50,19 @@ class ClipboardService {
               mimeType: image.mimeType,
             );
     }
-    if (kIsWeb || !(HostPlatform.isWindows || HostPlatform.isMacOS)) {
+    if (kIsWeb) {
+      // The browser may ask for clipboard permission the first time.
+      final image = await readBrowserClipboardImage();
+      if (image == null) return null;
+      final bytes = await image.read();
+      if (bytes.isEmpty) return null;
+      return ClipboardImageFile(
+        bytes: bytes,
+        filename: image.name,
+        mimeType: image.mimeType,
+      );
+    }
+    if (!(HostPlatform.isWindows || HostPlatform.isMacOS)) {
       return null;
     }
     final result = await _clipboardFilesChannel
@@ -64,6 +80,24 @@ class ClipboardService {
       mimeType: mimeType is String && mimeType.isNotEmpty
           ? mimeType
           : 'image/png',
+    );
+  }
+
+  /// Web only. Browsers paste straight into the focused text field, bypassing
+  /// the composer's paste action, so the page's paste events are offered to
+  /// [handler] instead: it receives the pasted files and plain text and returns
+  /// true to consume the paste. Pass null to stop.
+  void setWebPasteHandler(
+    bool Function(List<SelectedFile> files, String? text)? handler,
+  ) {
+    if (!kIsWeb) return;
+    setBrowserPasteHandler(
+      handler == null
+          ? null
+          : (files, text) => handler(
+              files.map(_selectedBrowserFile).toList(growable: false),
+              text,
+            ),
     );
   }
 
@@ -108,7 +142,14 @@ class ClipboardService {
         mimeType: mimeType,
       );
     }
-    if (kIsWeb || !(HostPlatform.isWindows || HostPlatform.isMacOS)) {
+    if (kIsWeb) {
+      if (bytes.isEmpty) return false;
+      // Callers may pass JPEG bytes with the default PNG type, so check the
+      // data itself.
+      final png = _isPng(bytes) ? bytes : await _reencodeAsPng(bytes);
+      return png != null && await writeBrowserClipboardImage(png);
+    }
+    if (!(HostPlatform.isWindows || HostPlatform.isMacOS)) {
       return false;
     }
     if (bytes.isEmpty) return false;
@@ -118,4 +159,46 @@ class ClipboardService {
     );
     return result ?? false;
   }
+}
+
+bool _isPng(Uint8List bytes) {
+  const signature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+  if (bytes.length < signature.length) return false;
+  for (var index = 0; index < signature.length; index++) {
+    if (bytes[index] != signature[index]) return false;
+  }
+  return true;
+}
+
+/// Browsers put only PNG on the async clipboard, so other formats (JPEG, GIF,
+/// WebP) are decoded and re-encoded first; an animated image keeps its first
+/// frame.
+Future<Uint8List?> _reencodeAsPng(Uint8List bytes) async {
+  try {
+    final codec = await ui.instantiateImageCodec(bytes);
+    try {
+      final frame = await codec.getNextFrame();
+      try {
+        final data = await frame.image.toByteData(
+          format: ui.ImageByteFormat.png,
+        );
+        return data?.buffer.asUint8List();
+      } finally {
+        frame.image.dispose();
+      }
+    } finally {
+      codec.dispose();
+    }
+  } catch (_) {
+    return null;
+  }
+}
+
+SelectedFile _selectedBrowserFile(BrowserFile file) {
+  return SelectedFile.deferred(
+    name: file.name,
+    mimeType: file.mimeType,
+    length: file.size,
+    readAsBytes: file.read,
+  );
 }

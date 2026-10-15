@@ -32,6 +32,9 @@ dependencies:
   path_provider: 2.1.5
   record: 7.1.0
   audioplayers: 6.7.1
+  # Browser APIs for the web build only (clipboard images, file drops,
+  # speech, opening links); imported behind dart.library.js_interop.
+  web: 1.1.1
 
 dev_dependencies:
   flutter_test:

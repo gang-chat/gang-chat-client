@@ -427,6 +427,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     widget.windowController.setCloseRequestHandler(_handleWindowCloseRequest);
     widget.windowController.setTrayExitHandler(_exitApplication);
     _fileDropEvents = _fileDropService.drops.listen(_handleDroppedFiles);
+    _clipboardService.setWebPasteHandler(_handleWebPaste);
     _startRealtime();
     final detectedAppUpdate = widget.detectedAppUpdate;
     if (detectedAppUpdate != null) {
@@ -585,6 +586,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     }
     final fileDropEvents = _fileDropEvents;
     if (fileDropEvents != null) unawaited(fileDropEvents.cancel());
+    _clipboardService.setWebPasteHandler(null);
     _resetLiveFullScreenForLifecycle(windowController: widget.windowController);
     _detachLiveSessionCallbacks();
     widget.windowController.setCloseRequestHandler(null);

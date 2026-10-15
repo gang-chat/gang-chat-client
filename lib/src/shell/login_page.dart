@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -635,10 +636,14 @@ class _LoginPageState extends State<LoginPage> {
             final surfaceWidth = math.min(size.width, constraints.maxWidth);
             final surfaceHeight = math.min(size.height, constraints.maxHeight);
             final verticalSlack = constraints.maxHeight - surfaceHeight;
+            // Desktop shrinks the window to the card. A browser page is
+            // usually much taller, so the card is centred there instead.
             final surfaceTop = isAndroid
                 ? (constraints.maxHeight / 2 - _authRegisterFieldsCenter)
                       .clamp(0.0, verticalSlack)
                       .toDouble()
+                : kIsWeb
+                ? verticalSlack / 2
                 : 0.0;
             return Padding(
               padding: EdgeInsets.only(top: surfaceTop),

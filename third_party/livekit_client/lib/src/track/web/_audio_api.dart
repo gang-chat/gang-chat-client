@@ -33,3 +33,7 @@ void setSinkId(String id, String deviceId) {
 void setVolume(String id, double volume) {
   // do nothing
 }
+
+void setDefaultSinkId(String deviceId) {
+  // do nothing
+}

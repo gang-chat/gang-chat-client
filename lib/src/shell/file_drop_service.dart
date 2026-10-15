@@ -2,12 +2,24 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
+
+import 'browser/browser_bridge.dart';
+import 'file_selection_service.dart';
 import '../config/host_platform.dart';
 
 class FileDropEvent {
-  const FileDropEvent({required this.paths, required this.x, required this.y});
+  const FileDropEvent({
+    this.paths = const [],
+    this.files = const [],
+    required this.x,
+    required this.y,
+  });
 
+  /// Desktop drops carry paths.
   final List<String> paths;
+
+  /// Browser drops carry contents instead, since browsers expose no paths.
+  final List<SelectedFile> files;
   final double x;
   final double y;
 }
@@ -25,11 +37,29 @@ class FileDropService {
   }
 
   static void _ensureInstalled() {
-    if (_installed ||
-        kIsWeb ||
-        !(HostPlatform.isWindows || HostPlatform.isMacOS)) {
+    if (_installed) return;
+    if (kIsWeb) {
+      _installed = true;
+      browserFileDrops().listen((drop) {
+        _events.add(
+          FileDropEvent(
+            files: [
+              for (final file in drop.files)
+                SelectedFile.deferred(
+                  name: file.name,
+                  mimeType: file.mimeType,
+                  length: file.size,
+                  readAsBytes: file.read,
+                ),
+            ],
+            x: drop.x,
+            y: drop.y,
+          ),
+        );
+      });
       return;
     }
+    if (!(HostPlatform.isWindows || HostPlatform.isMacOS)) return;
     _installed = true;
     _channel.setMethodCallHandler((call) async {
       if (call.method != 'dropFiles') return null;

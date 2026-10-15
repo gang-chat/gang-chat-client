@@ -142,9 +142,16 @@ const String kVoiceMessageMimeType = 'audio/mp4';
 const String kVoiceMessageExtension = 'm4a';
 const String kVoiceMessageAttachmentType = 'audio';
 
-String voiceMessageFilename(DateTime timestamp) {
+/// Browsers that can't record AAC send WAV instead, which every client plays.
+const String kVoiceMessageWavMimeType = 'audio/wav';
+const String kVoiceMessageWavExtension = 'wav';
+
+String voiceMessageFilename(
+  DateTime timestamp, {
+  String extension = kVoiceMessageExtension,
+}) {
   final stamp = timestamp.toUtc().millisecondsSinceEpoch;
-  return 'voice_$stamp.$kVoiceMessageExtension';
+  return 'voice_$stamp.$extension';
 }
 
 MessageAttachment? voiceMessageAttachment(Message message) {

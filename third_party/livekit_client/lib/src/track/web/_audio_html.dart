@@ -29,6 +29,9 @@ Map<String, web.Element> _audioElements = {};
 // gang-chat fork: playback volume per track id, so a level chosen before the
 // track's <audio> element exists is applied when it is created.
 Map<String, double> _audioVolumes = {};
+// gang-chat fork: the output device chosen app-wide, applied to every track's
+// <audio> element, including ones created later.
+String? _defaultSinkId;
 
 Future<dynamic> startAudio(String id, rtc.MediaStreamTrack track) async {
   if (track is! MediaStreamTrackWeb) {
@@ -50,6 +53,8 @@ Future<dynamic> startAudio(String id, rtc.MediaStreamTrack track) async {
   final audio = audioElement as web.HTMLAudioElement;
   final volume = _audioVolumes[id];
   if (volume != null) audio.volume = volume;
+  final sinkId = _defaultSinkId;
+  if (sinkId != null) _setElementSinkId(audio, sinkId);
   final audioStream = web.MediaStream();
   audioStream.addTrack(track.jsTrack);
   audioElement.srcObject = audioStream;
@@ -110,9 +115,23 @@ web.HTMLDivElement findOrCreateAudioContainer() {
 void setSinkId(String id, String deviceId) {
   final el = web.document.getElementById(audioPrefix + id);
   if (el != null && el.instanceOfString('HTMLAudioElement')) {
-    final audio = el as web.HTMLAudioElement;
-    if (audio.hasProperty('setSinkId'.toJS).toDart) {
-      audio.setSinkId(deviceId);
+    _setElementSinkId(el as web.HTMLAudioElement, deviceId);
+  }
+}
+
+// gang-chat fork: routes all remote audio to [deviceId]. Browsers without
+// setSinkId (Safari) keep the system output.
+void setDefaultSinkId(String deviceId) {
+  _defaultSinkId = deviceId;
+  for (final el in _audioElements.values) {
+    if (el.instanceOfString('HTMLAudioElement')) {
+      _setElementSinkId(el as web.HTMLAudioElement, deviceId);
     }
+  }
+}
+
+void _setElementSinkId(web.HTMLAudioElement audio, String deviceId) {
+  if (audio.hasProperty('setSinkId'.toJS).toDart) {
+    audio.setSinkId(deviceId);
   }
 }

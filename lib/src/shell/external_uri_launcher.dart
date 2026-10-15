@@ -1,6 +1,9 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 import 'android_system_service.dart';
+import 'browser/browser_bridge.dart';
 import '../config/host_platform.dart';
 
 class ExternalUriLauncher {
@@ -12,6 +15,10 @@ class ExternalUriLauncher {
 
   Future<void> open(Uri uri) async {
     final value = uri.toString();
+    if (kIsWeb) {
+      openBrowserUrl(value);
+      return;
+    }
     if (androidSystemService.isSupported) {
       await androidSystemService.openUri(uri);
       return;
