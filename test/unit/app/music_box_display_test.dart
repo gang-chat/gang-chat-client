@@ -651,6 +651,27 @@ void main() {
       },
     );
 
+    test('queue items are playable when ready or already streaming', () {
+      MusicBoxQueueItem parse(Map<String, Object?> json) =>
+          MusicBoxQueueItem.fromJson({'id': 'item', ...json});
+
+      expect(parse({'status': 'ready'}).playable, isTrue);
+      expect(parse({'status': 'downloading'}).playable, isFalse);
+      expect(parse({'status': 'pending'}).playable, isFalse);
+      final streaming = parse({
+        'status': 'downloading',
+        'playable': true,
+        'can_play_now': true,
+      });
+      expect(streaming.status, MusicBoxQueueItemStatus.downloading);
+      expect(streaming.playable, isTrue);
+      expect(streaming.canPlayNow, isTrue);
+      expect(
+        parse({'status': 'downloading', 'playable': false}).playable,
+        isFalse,
+      );
+    });
+
     test('rejects stale revision snapshots but keeps legacy compatibility', () {
       final current = MusicBoxState.fromJson({
         'enabled': true,

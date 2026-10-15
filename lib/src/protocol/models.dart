@@ -2670,8 +2670,7 @@ class MusicBoxProgressEvent {
 }
 
 /// One track in the room music box queue. [status] tracks the server-side
-/// download/transcode lifecycle; the track is only playable once it is
-/// [MusicBoxQueueItemStatus.ready].
+/// download/transcode lifecycle; see [playable] for when the room can play it.
 class MusicBoxQueueItem {
   const MusicBoxQueueItem({
     required this.id,
@@ -2688,7 +2687,8 @@ class MusicBoxQueueItem {
     this.canPlayNow = false,
     this.canRemove = true,
     this.requestedBy,
-  });
+    bool? playable,
+  }) : _playable = playable;
 
   final String id;
   final String source;
@@ -2707,6 +2707,13 @@ class MusicBoxQueueItem {
   final bool canPlayNow;
   final bool canRemove;
   final MusicBoxRequester? requestedBy;
+  final bool? _playable;
+
+  /// Whether the room can play this item now: its audio is ready, or it is
+  /// still [MusicBoxQueueItemStatus.downloading] but the server is already
+  /// streaming the transcode. Servers that predate streaming don't send the
+  /// field; for them only ready items are playable.
+  bool get playable => _playable ?? status == MusicBoxQueueItemStatus.ready;
 
   factory MusicBoxQueueItem.fromJson(Map<String, Object?> json) {
     return MusicBoxQueueItem(
@@ -2728,6 +2735,7 @@ class MusicBoxQueueItem {
       requestedBy: MusicBoxRequester.fromJson(
         _nullableMap(json['requested_by']),
       ),
+      playable: json['playable'] is bool ? json['playable'] as bool : null,
     );
   }
 }

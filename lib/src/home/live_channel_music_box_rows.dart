@@ -296,9 +296,11 @@ class _MusicBoxQueueRowLeading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // A download that is already streaming renders like a ready track.
     final loading =
-        item.status == MusicBoxQueueItemStatus.pending ||
-        item.status == MusicBoxQueueItemStatus.downloading;
+        !item.playable &&
+        (item.status == MusicBoxQueueItemStatus.pending ||
+            item.status == MusicBoxQueueItemStatus.downloading);
     if (loading) {
       return SizedBox(
         key: ValueKey<String>('music-box-queue-leading-loading:${item.id}'),

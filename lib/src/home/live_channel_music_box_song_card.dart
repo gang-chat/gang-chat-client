@@ -148,7 +148,7 @@ class _MusicBoxSongCardState extends State<_MusicBoxSongCard> {
     final canPlayNow =
         item != null &&
         item.canPlayNow &&
-        item.status == MusicBoxQueueItemStatus.ready &&
+        item.playable &&
         widget.controller != null &&
         widget.roomId != null;
     return SingleChildScrollView(
