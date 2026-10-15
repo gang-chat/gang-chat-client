@@ -880,3 +880,111 @@ jobs:
           prerelease: false
           body_path: release-signing-status.md
           files: release-assets/*
+
+  deploy-web:
+    # Runs after the GitHub Release is published, so the web client never goes
+    # live for a version whose desktop/Android release failed. Setup is in
+    # docs/web-spike.md under 部署.
+    runs-on: ubuntu-latest
+    needs: [prepare, release]
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    concurrency:
+      group: deploy-web
+      cancel-in-progress: false
+    steps:
+      - name: Check web deploy configuration
+        id: web_deploy
+        shell: bash
+        env:
+          WEB_DEPLOY_SSH: ${{ secrets.WEB_DEPLOY_SSH }}
+          WEB_DEPLOY_SSH_KEY: ${{ secrets.WEB_DEPLOY_SSH_KEY }}
+          WEB_DEPLOY_KNOWN_HOSTS: ${{ secrets.WEB_DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          configured=()
+          missing=()
+          for name in WEB_DEPLOY_SSH WEB_DEPLOY_SSH_KEY WEB_DEPLOY_KNOWN_HOSTS; do
+            if [ -n "${!name}" ]; then configured+=("$name"); else missing+=("$name"); fi
+          done
+          if [ "${#configured[@]}" -eq 0 ]; then
+            echo "::warning::Web deploy skipped: WEB_DEPLOY_SSH, WEB_DEPLOY_SSH_KEY and WEB_DEPLOY_KNOWN_HOSTS are not configured."
+            echo "- ⚠️ Web: not deployed; web deploy secrets were not configured." >> "$GITHUB_STEP_SUMMARY"
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          elif [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::Web deploy is partially configured. Missing secrets: ${missing[*]}. See docs/web-spike.md (部署)."
+            exit 1
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.web_deploy.outputs.enabled == 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        if: steps.web_deploy.outputs.enabled == 'true'
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.44.0'
+          cache: true
+
+      - name: Get dependencies
+        if: steps.web_deploy.outputs.enabled == 'true'
+        run: tool/pub.sh get
+
+      - name: Update release metadata
+        if: steps.web_deploy.outputs.enabled == 'true'
+        run: |
+          dart tool/update_release_metadata.dart \
+            --version "${{ needs.prepare.outputs.version }}" \
+            --released-at "${{ needs.prepare.outputs.released_at }}"
+
+      - name: Build web
+        if: steps.web_deploy.outputs.enabled == 'true'
+        shell: bash
+        run: tool/build_web.sh
+
+      - name: Configure SSH
+        if: steps.web_deploy.outputs.enabled == 'true'
+        shell: bash
+        env:
+          WEB_DEPLOY_SSH_KEY: ${{ secrets.WEB_DEPLOY_SSH_KEY }}
+          WEB_DEPLOY_KNOWN_HOSTS: ${{ secrets.WEB_DEPLOY_KNOWN_HOSTS }}
+          WEB_DEPLOY_SSH_PORT: ${{ vars.WEB_DEPLOY_SSH_PORT }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          umask 077
+          printf '%s\n' "$WEB_DEPLOY_SSH_KEY" > ~/.ssh/gang_chat_web_deploy
+          printf '%s\n' "$WEB_DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          # Host keys come only from the secret; an unknown or changed host
+          # key fails the deploy instead of being trusted.
+          {
+            echo 'Host *'
+            echo '  IdentityFile ~/.ssh/gang_chat_web_deploy'
+            echo '  IdentitiesOnly yes'
+            echo '  StrictHostKeyChecking yes'
+            echo '  BatchMode yes'
+            if [ -n "$WEB_DEPLOY_SSH_PORT" ]; then
+              echo "  Port $WEB_DEPLOY_SSH_PORT"
+            fi
+          } > ~/.ssh/config
+
+      - name: Deploy web
+        if: steps.web_deploy.outputs.enabled == 'true'
+        shell: bash
+        env:
+          GANG_WEB_DEPLOY_SSH: ${{ secrets.WEB_DEPLOY_SSH }}
+          GANG_WEB_DEPLOY_DIR: ${{ vars.WEB_DEPLOY_DIR || '/var/www/gang-chat-app' }}
+        run: |
+          set -euo pipefail
+          tool/deploy_web.sh --no-build
+          echo "- ✅ Web: deployed ${{ needs.prepare.outputs.version }} to https://ky-z.com/gang-chat/app/" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove SSH key
+        if: always()
+        shell: bash
+        run: rm -f ~/.ssh/gang_chat_web_deploy ~/.ssh/config

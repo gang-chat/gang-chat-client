@@ -108,11 +108,13 @@ HTTPS）。
    再用 rsync 上传到 `releases/<UTC 时间戳>/`，最后原子切换 `current` 软链接，
    默认保留最近 5 个版本以便回滚。加 `GANG_WEB_DEPLOY_DRY_RUN=1` 只打印命令。
 
-### 用 GitHub Actions 部署
+### 随发版自动部署
 
-`.github/workflows/deploy-web.yml` 只能手动触发（Actions → deploy-web →
-Run workflow），可选填写在设置页显示的版本号。它会构建并调用
-`tool/deploy_web.sh --no-build`；同一时间只允许一个部署。
+`.github/workflows/release.yml` 的 `deploy-web` 任务在每次发版（推送 `v*` 标签
+或手动运行 release）、GitHub Release 发布成功之后运行：写入版本号，调用
+`tool/build_web.sh` 构建，再用 `tool/deploy_web.sh --no-build` 部署；同一时间
+只允许一个部署。与桌面签名一样：三个部署 Secret 都没配置时跳过并在任务摘要
+里提示；只配了一部分时任务失败。
 
 首次使用前：
 
@@ -141,8 +143,8 @@ Run workflow），可选填写在设置页显示的版本号。它会构建并�
    | `WEB_DEPLOY_SSH_PORT` | Variable，可选 | SSH 端口，默认 22 |
    | `WEB_DEPLOY_DIR` | Variable，可选 | 远端目录，默认 `/var/www/gang-chat-app` |
 
-   缺少任一 Secret 时工作流会直接失败并提示。主机公钥只来自
-   `WEB_DEPLOY_KNOWN_HOSTS`，服务器主机密钥变化时部署会失败而不是自动信任。
+   主机公钥只来自 `WEB_DEPLOY_KNOWN_HOSTS`，服务器主机密钥变化时部署会失败
+   而不是自动信任。
 4. 删除本地的私钥文件。
 
 在上面"要做的事"完成之前，不要把这个地址公开给用户；可以先作为内部测试地址，
@@ -152,7 +154,7 @@ Run workflow），可选填写在设置页显示的版本号。它会构建并�
 
 - nginx 配置没有实际运行过（本机没有 nginx）；上线前先 `nginx -t`。
 - 部署脚本没有对真实服务器运行过；远端的切换和清理逻辑在本地模拟验证过。
-- GitHub Actions 部署工作流没有实际运行过。
+- `release.yml` 的 `deploy-web` 任务没有实际运行过。
 - 登录后的所有功能（没有测试账号；不能往生产服务器提交真实密码）。
 - 资源域名和对象存储的 CORS。
 - Safari / Firefox。

@@ -15,6 +15,12 @@ all required secrets are present, signing and verification are mandatory.
 Partially configured or invalid signing settings fail the affected job so a
 misconfigured release cannot be mistaken for a signed one.
 
+After the GitHub Release is published, the `deploy-web` job builds the web
+client and deploys it to `https://ky-z.com/gang-chat/app/`. It follows the same
+rule: with none of `WEB_DEPLOY_SSH`, `WEB_DEPLOY_SSH_KEY` and
+`WEB_DEPLOY_KNOWN_HOSTS` set it is skipped with a warning, and with only some of
+them set it fails. Setup is described in `docs/web-spike.md` (部署).
+
 ## Windows signing
 
 The Windows application executable is named `GangChat.exe`. The installer
