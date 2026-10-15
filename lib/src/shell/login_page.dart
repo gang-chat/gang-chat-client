@@ -50,8 +50,14 @@ const double _authErrorRememberGap = 0;
 const double _authRememberHeight = 28;
 const double _authSubmitHeight = 32;
 const double _accountHistoryItemHeight = 38;
-const double _authSegmentedControlOuterHeight = 42;
-const double _authInputOuterHeight = Input.defaultHeight + 8;
+// The segmented control draws its border inside its height, so its outer
+// height is the height it is given.
+const double _authSegmentedControlHeight = 36;
+const double _authSegmentedControlOuterHeight = _authSegmentedControlHeight;
+// [Input] draws its 1px border outside its nominal height, so each field
+// occupies its height plus the top and bottom border.
+const double _authInputHeight = Input.defaultHeight;
+const double _authInputOuterHeight = _authInputHeight + 2;
 const double _accountHistoryDropdownTop =
     _authTitleBarHeight +
     _authTitleBarGap +
@@ -675,6 +681,8 @@ class _LoginPageState extends State<LoginPage> {
                                             ),
                                             SegmentedControl<_AuthMode>(
                                               expanded: true,
+                                              height:
+                                                  _authSegmentedControlHeight,
                                               value: _registering
                                                   ? _AuthMode.register
                                                   : _AuthMode.login,
@@ -719,6 +727,7 @@ class _LoginPageState extends State<LoginPage> {
                                             ),
                                             Input(
                                               controller: _password,
+                                              height: _authInputHeight,
                                               enabled: !_submitState.busy,
                                               hintText: '密码',
                                               prefixIcon: Icons.lock_outline,
@@ -752,6 +761,7 @@ class _LoginPageState extends State<LoginPage> {
                                               ),
                                               Input(
                                                 controller: _confirmPassword,
+                                                height: _authInputHeight,
                                                 enabled: !_submitState.busy,
                                                 hintText: '确认密码',
                                                 prefixIcon: Icons.lock_outline,
@@ -922,6 +932,7 @@ class _LoginPageState extends State<LoginPage> {
   Widget _buildPrimaryIdentityInput() {
     return Input(
       controller: _login,
+      height: _authInputHeight,
       enabled: !_submitState.busy,
       hintText: _registering ? '登录用户名' : '登录用户名或邮箱地址',
       prefixIcon: Icons.person_outline,
@@ -957,6 +968,7 @@ class _LoginPageState extends State<LoginPage> {
   Widget _buildRegisterEmailInput() {
     return Input(
       controller: _email,
+      height: _authInputHeight,
       enabled: !_submitState.busy,
       hintText: '邮箱地址',
       prefixIcon: Icons.alternate_email,

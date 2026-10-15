@@ -649,9 +649,7 @@ void registerShellRealtimeLiveWidgetTests() {
       await tester.tap(find.text('Alpha Room'));
       await tester.pumpAndSettle();
       await _openLiveChannelFromHeader(tester);
-      await tester.tap(
-        find.byKey(const ValueKey<String>('live-control:join')),
-      );
+      await tester.tap(find.byKey(const ValueKey<String>('live-control:join')));
       await tester.pumpAndSettle();
       expect(liveSession.localMicMuted, isFalse);
 
@@ -1163,7 +1161,14 @@ void registerShellRealtimeLiveWidgetTests() {
 
     expect(find.text('设置'), findsOneWidget);
     expect(find.textContaining('设置 ·'), findsNothing);
-    expect(find.text('用户资料'), findsOneWidget);
+    // The open section is named both on its tile and as the section title.
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('settings-side-navigation')),
+        matching: find.text('用户资料'),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('偏好设置'), findsOneWidget);
     expect(find.byTooltip('刷新设置'), findsOneWidget);
     final displayNameField = find.byWidgetPredicate(
@@ -1213,7 +1218,12 @@ void registerShellRealtimeLiveWidgetTests() {
 
     await tester.tap(find.text('English'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ui.Button, '保存偏好设置'));
+    // The redesigned preferences section runs just past the fold of the
+    // 800x600 test window, so scroll its save button into view first.
+    final savePreferences = find.widgetWithText(ui.Button, '保存偏好设置');
+    await tester.ensureVisible(savePreferences);
+    await tester.pumpAndSettle();
+    await tester.tap(savePreferences);
     await tester.pumpAndSettle();
 
     expect(accountUpdates, hasLength(1));
@@ -1447,7 +1457,15 @@ void registerShellRealtimeLiveWidgetTests() {
       await tester.tap(find.byTooltip('设置'));
       await tester.pumpAndSettle();
 
-      expect(find.text('用户资料'), findsOneWidget);
+      // The settings page names the open section both on its tile and as the
+      // section title, so look for the tile.
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('settings-side-navigation')),
+          matching: find.text('用户资料'),
+        ),
+        findsOneWidget,
+      );
       expect(find.byKey(const ValueKey('home-narrow-room-list')), findsNothing);
 
       await tester.binding.handlePopRoute();

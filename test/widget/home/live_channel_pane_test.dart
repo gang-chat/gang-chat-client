@@ -481,13 +481,19 @@ void main() {
     );
 
     expect(currentRect.top, closeTo(remoteRect.top, 0.01));
-    expect(currentRect.height, closeTo(162 * scale, 0.01));
-    expect(remoteRect.height, closeTo(162 * scale, 0.01));
+    // The flat card reserves no hover-lift or base-depth band, so the scaled
+    // card stays square.
+    expect(currentRect.height, closeTo(154 * scale, 0.01));
+    expect(remoteRect.height, closeTo(154 * scale, 0.01));
+    expect(currentRect.height, closeTo(currentRect.width, 0.01));
+    expect(remoteRect.height, closeTo(remoteRect.width, 0.01));
     expect(remoteRect.left - currentRect.right, closeTo(12, 0.01));
     expect(currentRect.width, lessThan(154));
     expect(tester.getRect(avatar).width, closeTo(42 * scale, 0.01));
     expect(tester.getRect(activityTag).width, closeTo(24 * scale, 0.01));
-    expect(tester.getRect(micButton).width, closeTo(32.5 * scale, 0.01));
+    // Four status buttons share the 130px row less the card's 1px border on
+    // each side.
+    expect(tester.getRect(micButton).width, closeTo(32 * scale, 0.01));
     expect(
       find.ancestor(of: currentCard, matching: find.byType(FittedBox)),
       findsOneWidget,
@@ -968,7 +974,9 @@ void main() {
       );
       final buttonRect = tester.getRect(volumeButton);
       final panelRect = tester.getRect(volumePanel);
-      expect(panelRect.width, closeTo(buttonRect.width, 0.01));
+      // The panel matches the hover target, which the flat card's border
+      // insets a fraction of a pixel wider than the keyed button.
+      expect(panelRect.width, closeTo(buttonRect.width, 0.5));
       expect(panelRect.center.dx, closeTo(buttonRect.center.dx, 0.01));
 
       await tester.tapAt(
@@ -2522,7 +2530,10 @@ void main() {
       if (testCase.label == 'Android compact') {
         androidCompactPanel = panelRect;
         await tester.tap(
-          find.descendant(of: panel, matching: find.byIcon(Icons.close)),
+          find.descendant(
+            of: panel,
+            matching: find.byKey(const ValueKey<String>('music-box-close')),
+          ),
         );
         await tester.pump();
         expect(closeTaps, 1);
@@ -2958,7 +2969,10 @@ void _expectMediaMemberCard(
       : tester.getRect(stoppedThumbnailFinder!);
 
   final scale = cardRect.width / card.height;
-  expect(cardRect.height, closeTo(162 * scale, 0.01));
+  // The flat card reserves no hover-lift or base-depth band, so the scaled
+  // card stays square.
+  expect(cardRect.height, closeTo(154 * scale, 0.01));
+  expect(cardRect.height, closeTo(cardRect.width, 0.01));
   expect(
     liveVideoFinder,
     stoppedThumbnailKey == null ? findsOneWidget : findsNothing,

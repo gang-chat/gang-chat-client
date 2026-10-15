@@ -383,27 +383,35 @@ class _NotificationFooterButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The flat button is shorter than the footer row, so centre it in the row
+    // like its create-room and settings siblings, and keep the badge pinned
+    // to the button's own corner.
     return SizedBox(
       width: _footerButtonSize,
       height: _footerButtonOuterHeight,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          ButtonIcon(
-            key: const ValueKey('home-sidebar-notifications-button'),
-            tooltip: '通知',
-            icon: const Icon(Icons.notifications_none),
-            selected: selected,
-            onPressed: onPressed,
-            size: _footerButtonSize,
+      child: Center(
+        child: SizedBox.square(
+          dimension: _footerButtonSize,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              ButtonIcon(
+                key: const ValueKey('home-sidebar-notifications-button'),
+                tooltip: '通知',
+                icon: const Icon(Icons.notifications_none),
+                selected: selected,
+                onPressed: onPressed,
+                size: _footerButtonSize,
+              ),
+              if (hasPending)
+                Positioned(
+                  right: -4,
+                  top: -4,
+                  child: _UnreadBadge(count: count <= 0 ? 1 : count),
+                ),
+            ],
           ),
-          if (hasPending)
-            Positioned(
-              right: -4,
-              top: -4,
-              child: _UnreadBadge(count: count <= 0 ? 1 : count),
-            ),
-        ],
+        ),
       ),
     );
   }
