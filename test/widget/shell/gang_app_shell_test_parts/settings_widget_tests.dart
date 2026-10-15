@@ -273,7 +273,7 @@ void registerShellSettingsWidgetTests() {
 
       await _openLiveChannelFromHeader(tester);
 
-      await tester.tap(find.widgetWithText(ui.Button, '加入语音'));
+      await tester.tap(find.widgetWithText(ui.Button, '加入'));
       await tester.pumpAndSettle();
 
       final handler = windowController.closeRequestHandler;
@@ -342,10 +342,10 @@ void registerShellSettingsWidgetTests() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(_settingsPartRoomTab('server-alpha'));
+      await tester.tap(find.text('Alpha Room'));
       await tester.pumpAndSettle();
       await _openLiveChannelFromHeader(tester);
-      await tester.tap(find.widgetWithText(ui.Button, '加入语音'));
+      await tester.tap(find.widgetWithText(ui.Button, '加入'));
       await tester.pumpAndSettle();
 
       blockNextMicStateRequest = true;
@@ -1145,10 +1145,10 @@ void registerShellSettingsWidgetTests() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(_settingsPartRoomTab('server-alpha'));
+    await tester.tap(find.text('Alpha Room'));
     await tester.pumpAndSettle();
     await _openLiveChannelFromHeader(tester);
-    await tester.tap(find.widgetWithText(ui.Button, '加入语音'));
+    await tester.tap(find.widgetWithText(ui.Button, '加入'));
     await tester.pumpAndSettle();
 
     await tester.tap(_liveControl('headphones'));
@@ -1238,11 +1238,6 @@ class _MemoryStickerPackStore extends StickerPackStore {
     lastWrittenUserId = userId;
     this.packs = packs;
   }
-}
-
-/// The header room tab for [roomId]; the lobby card repeats the room name.
-Finder _settingsPartRoomTab(String roomId) {
-  return find.byKey(ValueKey<String>('home-room-tab-$roomId'));
 }
 
 class _TaskRemovalAndroidSystemService extends AndroidSystemService {

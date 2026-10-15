@@ -178,7 +178,27 @@ void registerShellHomeWidgetTests() {
 
     expect(find.text('发现新版本'), findsNothing);
     expect(find.text('设置'), findsOneWidget);
-    expect(find.text('关于Gang Chat'), findsOneWidget);
+    // The settings page names the section on its tile and as the title; the
+    // about tile is the selected one.
+    final aboutTile = find.descendant(
+      of: find.byKey(const ValueKey('settings-side-navigation')),
+      matching: find.text('关于Gang Chat'),
+    );
+    expect(aboutTile, findsOneWidget);
+    expect(
+      tester
+          .widget<ui.PressableSurface>(
+            find
+                .ancestor(
+                  of: aboutTile,
+                  matching: find.byType(ui.PressableSurface),
+                )
+                .first,
+          )
+          .selected,
+      isTrue,
+    );
+    expect(find.text('关于Gang Chat'), findsNWidgets(2));
     expect(find.text('版本信息'), findsOneWidget);
   });
 
@@ -1415,38 +1435,55 @@ void registerShellHomeWidgetTests() {
       final managedSettingsPage = find.byKey(
         const ValueKey('superuser-user-settings-user-3'),
       );
-      final settingsNavigation = find
-          .descendant(
-            of: managedSettingsPage,
-            matching: find.byType(ui.SegmentedControl<SettingsSection>),
-          )
-          .first;
-      final selectionMenu = find.descendant(
-        of: settingsNavigation,
-        matching: find.byTooltip('选择选项'),
+      final settingsNavigation = find.descendant(
+        of: managedSettingsPage,
+        matching: find.byKey(const ValueKey('settings-side-navigation')),
       );
-      if (selectionMenu.evaluate().isNotEmpty) {
-        await tester.tap(selectionMenu);
-        await tester.pump(const Duration(milliseconds: 100));
-        await tester.tap(find.text('隐私和安全').hitTestable());
-      } else {
-        await tester.tap(find.text('隐私和安全').hitTestable());
-      }
+      expect(settingsNavigation, findsOneWidget);
+      final securityNavigationItem = find.descendant(
+        of: settingsNavigation,
+        matching: find.text('隐私和安全'),
+      );
+      await tester.tap(securityNavigationItem);
       await tester.pumpAndSettle();
       expect(
         tester
-            .widget<ui.SegmentedControl<SettingsSection>>(settingsNavigation)
-            .value,
-        SettingsSection.security,
+            .widget<ui.PressableSurface>(
+              find
+                  .ancestor(
+                    of: securityNavigationItem,
+                    matching: find.byType(ui.PressableSurface),
+                  )
+                  .first,
+            )
+            .selected,
+        isTrue,
       );
+      // The section header follows the selected navigation item.
+      expect(
+        find.descendant(of: managedSettingsPage, matching: find.text('隐私和安全')),
+        findsNWidgets(2),
+      );
+      // Scroll the section content, not the side navigation column.
+      final navigationElement = settingsNavigation.evaluate().single;
+      bool insideNavigation(Element element) {
+        var inside = false;
+        element.visitAncestorElements((ancestor) {
+          inside = ancestor == navigationElement;
+          return !inside;
+        });
+        return inside;
+      }
+
       final verticalScrollable = find
           .descendant(
             of: managedSettingsPage,
-            matching: find.byWidgetPredicate(
-              (widget) =>
-                  widget is Scrollable &&
-                  axisDirectionToAxis(widget.axisDirection) == Axis.vertical,
-            ),
+            matching: find.byElementPredicate((element) {
+              final widget = element.widget;
+              return widget is Scrollable &&
+                  axisDirectionToAxis(widget.axisDirection) == Axis.vertical &&
+                  !insideNavigation(element);
+            }),
           )
           .first;
       final verticalPosition = tester
@@ -2052,10 +2089,10 @@ void registerShellHomeWidgetTests() {
       of: find.byKey(timeKey),
       matching: find.byType(Text),
     );
-    expect(tester.widgetList<Text>(timeTexts).map((text) => text.data), [
-      '2026/06/07',
-      '16:00',
-    ]);
+    expect(
+      tester.widgetList<Text>(timeTexts).map((text) => text.data),
+      _homeNotificationFixtureTimeLines(),
+    );
     final timeParagraphs = tester.renderObjectList<RenderParagraph>(timeTexts);
     expect(
       timeParagraphs.every((paragraph) => !paragraph.didExceedMaxLines),
@@ -2202,7 +2239,7 @@ void registerShellHomeWidgetTests() {
       );
       expect(
         tester.widgetList<Text>(timeTexts).map((text) => text.data),
-        ['2026/06/07', '16:00'],
+        _homeNotificationFixtureTimeLines(),
         reason: '$platform should preserve both compact timestamp lines',
       );
       expect(
@@ -3527,4 +3564,15 @@ void registerShellHomeWidgetTests() {
       expect(tester.takeException(), isNull);
     },
   );
+}
+
+/// Date and time lines of the fixture notification (created at
+/// 2026-06-07T08:00:00Z) as shown in the machine's local time zone.
+List<String> _homeNotificationFixtureTimeLines() {
+  final local = DateTime.utc(2026, 6, 7, 8).toLocal();
+  String two(int value) => value.toString().padLeft(2, '0');
+  return [
+    '${local.year}/${two(local.month)}/${two(local.day)}',
+    '${two(local.hour)}:${two(local.minute)}',
+  ];
 }
