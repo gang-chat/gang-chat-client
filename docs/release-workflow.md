@@ -152,10 +152,16 @@ It also refuses to publish an update whose signature doesn't verify against
 
 ### Each release
 
-The macOS artifact contains `GangChat_v<version>.dmg` and `appcast.xml`. Upload
-the DMG to `releases/` in the bucket first, then `appcast.xml` (replacing the
-previous one). The appcast points at the DMG's bucket URL, so uploading it
-first would offer an update that can't be downloaded yet.
+The GitHub Release carries `appcast.xml` next to the installers. Publish it with
+the gang-chat-admin S3 panel's release sync, as for the installers: the sync
+clears `releases/`, uploads the `.dmg`, `.exe` and `.apk`, and uploads
+`appcast.xml` last, because it points at the DMG. Before clearing anything the
+sync checks that the appcast downloads the DMG it is about to upload, and
+otherwise stops with `RELEASE_APPCAST_MISMATCH` and leaves the bucket unchanged.
+
+If you ever upload by hand, keep the same order: the DMG first, then
+`appcast.xml`, or installed apps will be offered an update they can't download
+yet.
 
 ### Moving existing installs to Sparkle
 
