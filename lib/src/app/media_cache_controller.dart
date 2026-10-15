@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import 'file_transfer_state.dart';
+import 'fnv_hash.dart';
 
 const _mediaCacheVersion = 'v1';
 
@@ -372,11 +373,7 @@ bool _isSafeStemUnit(int unit) {
 bool _isTrimmedStemUnit(int unit) => unit == 45 || unit == 46;
 
 String _fnv1a64Hex(String value) {
-  var hash = 0xcbf29ce484222325;
-  const prime = 0x100000001b3;
-  for (final unit in value.codeUnits) {
-    hash ^= unit;
-    hash = (hash * prime) & 0xffffffffffffffff;
-  }
-  return hash.toRadixString(16).padLeft(16, '0');
+  // Signed, so keys match the files already cached on disk (some start
+  // with '-').
+  return fnv1a64Signed(value).toRadixString(16).padLeft(16, '0');
 }

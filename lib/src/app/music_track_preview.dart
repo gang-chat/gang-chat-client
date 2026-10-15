@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import '../protocol/api_client.dart';
+import 'fnv_hash.dart';
 
 enum MusicTrackPreviewPhase { idle, loading, playing }
 
@@ -167,12 +168,7 @@ class MusicTrackPreviewController {
 
 String musicTrackPreviewCacheKey(String source, String trackId) {
   final value = '${source.trim()}\u0000${trackId.trim()}';
-  const offset = 0xcbf29ce484222325;
-  const prime = 0x100000001b3;
-  var hash = offset;
-  for (final unit in value.codeUnits) {
-    hash ^= unit;
-    hash = (hash * prime) & 0x7fffffffffffffff;
-  }
+  // The low 63 bits keep the key positive.
+  final hash = fnv1a64(value) & ((BigInt.one << 63) - BigInt.one);
   return hash.toRadixString(16).padLeft(16, '0');
 }
