@@ -108,6 +108,43 @@ HTTPS）。
    再用 rsync 上传到 `releases/<UTC 时间戳>/`，最后原子切换 `current` 软链接，
    默认保留最近 5 个版本以便回滚。加 `GANG_WEB_DEPLOY_DRY_RUN=1` 只打印命令。
 
+### 用 GitHub Actions 部署
+
+`.github/workflows/deploy-web.yml` 只能手动触发（Actions → deploy-web →
+Run workflow），可选填写在设置页显示的版本号。它会构建并调用
+`tool/deploy_web.sh --no-build`；同一时间只允许一个部署。
+
+首次使用前：
+
+1. **生成专用部署密钥**（不要复用个人密钥）：
+
+   ```bash
+   ssh-keygen -t ed25519 -N "" -C gang-chat-web-deploy -f gang_chat_web_deploy
+   ```
+
+   把 `gang_chat_web_deploy.pub` 的内容追加到服务器上部署用户的
+   `~/.ssh/authorized_keys`。
+2. **取得服务器主机公钥**，在自己电脑上运行（端口不是 22 时加 `-p <端口>`）：
+
+   ```bash
+   ssh-keyscan -t ed25519,rsa ky-z.com
+   ```
+
+   核对输出与服务器 `/etc/ssh/ssh_host_*.pub` 一致后再使用。
+3. **在仓库 Settings → Secrets and variables → Actions 中添加**：
+
+   | 名称 | 类型 | 内容 |
+   | --- | --- | --- |
+   | `WEB_DEPLOY_SSH` | Secret | 部署目标，例如 `deploy@ky-z.com` |
+   | `WEB_DEPLOY_SSH_KEY` | Secret | `gang_chat_web_deploy` 私钥全文 |
+   | `WEB_DEPLOY_KNOWN_HOSTS` | Secret | 第 2 步 `ssh-keyscan` 的输出 |
+   | `WEB_DEPLOY_SSH_PORT` | Variable，可选 | SSH 端口，默认 22 |
+   | `WEB_DEPLOY_DIR` | Variable，可选 | 远端目录，默认 `/var/www/gang-chat-app` |
+
+   缺少任一 Secret 时工作流会直接失败并提示。主机公钥只来自
+   `WEB_DEPLOY_KNOWN_HOSTS`，服务器主机密钥变化时部署会失败而不是自动信任。
+4. 删除本地的私钥文件。
+
 在上面"要做的事"完成之前，不要把这个地址公开给用户；可以先作为内部测试地址，
 登录后实际检查各功能。
 
@@ -115,7 +152,7 @@ HTTPS）。
 
 - nginx 配置没有实际运行过（本机没有 nginx）；上线前先 `nginx -t`。
 - 部署脚本没有对真实服务器运行过；远端的切换和清理逻辑在本地模拟验证过。
-
+- GitHub Actions 部署工作流没有实际运行过。
 - 登录后的所有功能（没有测试账号；不能往生产服务器提交真实密码）。
 - 资源域名和对象存储的 CORS。
 - Safari / Firefox。
