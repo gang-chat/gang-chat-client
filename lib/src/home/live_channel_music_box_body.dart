@@ -709,14 +709,15 @@ class _MusicBoxQueueSectionState extends State<_MusicBoxQueueSection> {
 
   Widget _queueRow(MusicBoxQueueItem item, int index, bool isCurrent) {
     final canWrite = widget.controller != null && widget.roomId != null;
-    // Active queue: play-now needs a ready file and the server's per-item
-    // permission. Inactive queue: any song can switch the room back to the
-    // request queue, subject to the switch capability.
+    // Active queue: play-now needs playable audio (ready, or already
+    // streaming) and the server's per-item permission. Inactive queue: any
+    // song can switch the room back to the request queue, subject to the
+    // switch capability.
     final canPlay =
         canWrite &&
         !isCurrent &&
         (_isActive
-            ? item.canPlayNow && item.status == MusicBoxQueueItemStatus.ready
+            ? item.canPlayNow && item.playable
             : widget.state.canSwitchTemporary);
     final requester = item.requestedBy;
     return _MusicBoxTrackRow(
@@ -735,6 +736,7 @@ class _MusicBoxQueueSectionState extends State<_MusicBoxQueueSection> {
       cardResetKey: Object.hash(
         item.id,
         item.status,
+        item.playable,
         item.canPlayNow,
         requester?.avatarUrl,
         requester?.avatarLabel,
@@ -1320,7 +1322,7 @@ class _MusicBoxPlaylistTracksState extends State<_MusicBoxPlaylistTracks> {
         widget.controller != null &&
         widget.roomId != null &&
         item.canPlayNow &&
-        item.status == MusicBoxQueueItemStatus.ready &&
+        item.playable &&
         !isCurrent;
     return _indented(
       _MusicBoxTrackRow(
@@ -1337,7 +1339,12 @@ class _MusicBoxPlaylistTracksState extends State<_MusicBoxPlaylistTracks> {
             ? UiColors.danger
             : UiColors.textSecondary,
         selected: isCurrent,
-        cardResetKey: Object.hash(item.id, item.status, item.canPlayNow),
+        cardResetKey: Object.hash(
+          item.id,
+          item.status,
+          item.playable,
+          item.canPlayNow,
+        ),
         cardBuilder: (_) => _MusicBoxSongCard.queue(
           item: item,
           isCurrent: isCurrent,

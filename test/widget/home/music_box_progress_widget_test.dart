@@ -299,6 +299,7 @@ MusicBoxQueueItem _track(
   bool canPlayNow = false,
   bool canRemove = true,
   MusicBoxRequester? requestedBy,
+  bool? playable,
 }) {
   return MusicBoxQueueItem(
     id: id,
@@ -315,6 +316,7 @@ MusicBoxQueueItem _track(
     canPlayNow: canPlayNow,
     canRemove: canRemove,
     requestedBy: requestedBy,
+    playable: playable,
   );
 }
 
@@ -1741,6 +1743,57 @@ void main() {
       tester.getCenter(loading).dx,
       lessThan(tester.getTopLeft(find.text('正在下载的歌曲')).dx),
     );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('streaming download is offered for play-now like a ready song', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    final state = _state(
+      playbackState: MusicBoxPlaybackState.playing,
+      positionMs: 0,
+      currentItemId: 'cur',
+      queue: [
+        _track('cur', title: '正在播放的歌', canPlayNow: true),
+        _track(
+          'streaming',
+          title: '边下边播',
+          status: MusicBoxQueueItemStatus.downloading,
+          canPlayNow: true,
+          playable: true,
+        ),
+        // An older server sends can_play_now only for ready songs, but a
+        // downloading row without `playable` must stay unplayable regardless.
+        _track(
+          'cold',
+          title: '刚开始下载',
+          status: MusicBoxQueueItemStatus.downloading,
+          canPlayNow: true,
+        ),
+      ],
+    );
+    final api = _MusicBoxApiFake(state);
+
+    await tester.pumpWidget(
+      _host(
+        state,
+        controller,
+        height: 500,
+        musicBoxController: MusicBoxController(api: api),
+        roomId: 'room-1',
+      ),
+    );
+
+    expect(_key('music-box-queue-leading-loading:streaming'), findsNothing);
+    expect(_key('music-box-queue-leading-loading:cold'), findsOneWidget);
+    expect(_key('music-box-queue-play-now:cold'), findsNothing);
+    await tester.tap(_key('music-box-queue-play-now:streaming'));
+    await tester.pump();
+
+    expect(api.action, 'play_now');
+    expect(api.itemId, 'streaming');
     expect(tester.takeException(), isNull);
   });
 
