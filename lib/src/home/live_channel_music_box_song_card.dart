@@ -712,10 +712,8 @@ Future<void> _musicBoxAddToPlaylist(
         final page = await controller.loadRoomPlaylists(roomId: roomId);
         targets.addAll(
           page.playlists.map(
-            (playlist) => MusicTrackPlaylistTarget.room(
-              playlist: playlist,
-              roomId: roomId,
-            ),
+            (playlist) =>
+                MusicTrackPlaylistTarget.room(playlist: playlist, roomId: roomId),
           ),
         );
       } catch (error) {

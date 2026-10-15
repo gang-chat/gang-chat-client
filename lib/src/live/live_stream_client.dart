@@ -96,9 +96,7 @@ class LiveStreamClient extends ChangeNotifier {
 
   Future<void> _connect() async {
     if (!_running) return;
-    _setStatus(
-      _attempt == 0 ? StreamStatus.connecting : StreamStatus.reconnecting,
-    );
+    _setStatus(_attempt == 0 ? StreamStatus.connecting : StreamStatus.reconnecting);
 
     final client = _httpClient;
     try {
@@ -145,29 +143,29 @@ class LiveStreamClient extends ChangeNotifier {
         .transform(utf8.decoder)
         .transform(const LineSplitter())
         .listen(
-          (line) {
-            _resetWatchdog();
-            if (line.isEmpty) {
-              // Blank line terminates an event.
-              if (dataBuffer.isNotEmpty) {
-                _emit(currentEvent, dataBuffer.toString());
-              }
-              currentEvent = 'message';
-              dataBuffer.clear();
-              return;
-            }
-            if (line.startsWith(':')) return; // comment / heartbeat
-            if (line.startsWith('event:')) {
-              currentEvent = line.substring(6).trim();
-            } else if (line.startsWith('data:')) {
-              if (dataBuffer.isNotEmpty) dataBuffer.write('\n');
-              dataBuffer.write(line.substring(5).trim());
-            }
-          },
-          onError: (_) => _scheduleReconnect(),
-          onDone: _scheduleReconnect,
-          cancelOnError: true,
-        );
+      (line) {
+        _resetWatchdog();
+        if (line.isEmpty) {
+          // Blank line terminates an event.
+          if (dataBuffer.isNotEmpty) {
+            _emit(currentEvent, dataBuffer.toString());
+          }
+          currentEvent = 'message';
+          dataBuffer.clear();
+          return;
+        }
+        if (line.startsWith(':')) return; // comment / heartbeat
+        if (line.startsWith('event:')) {
+          currentEvent = line.substring(6).trim();
+        } else if (line.startsWith('data:')) {
+          if (dataBuffer.isNotEmpty) dataBuffer.write('\n');
+          dataBuffer.write(line.substring(5).trim());
+        }
+      },
+      onError: (_) => _scheduleReconnect(),
+      onDone: _scheduleReconnect,
+      cancelOnError: true,
+    );
   }
 
   void _emit(String type, String dataJson) {

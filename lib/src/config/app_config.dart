@@ -37,7 +37,8 @@ class AppConfig {
 
   static const _fallbackApiBaseUrl = 'http://127.0.0.1:21116/api/v1';
   static const _fallbackAssetBaseUrl = 'http://127.0.0.1:21116';
-  static const _fallbackReleaseBucketUrl = 'https://os.ky-z.com:9000/gang-chat';
+  static const _fallbackReleaseBucketUrl =
+      'https://os.ky-z.com:9000/gang-chat';
 
   static const _defineApiBaseUrl = String.fromEnvironment('GANG_API_BASE_URL');
   static const _defineAssetBaseUrl = String.fromEnvironment(

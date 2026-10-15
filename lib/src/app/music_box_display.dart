@@ -104,10 +104,7 @@ bool musicBoxTrackIsCurrent(
 }) {
   final current = state.currentItem;
   if (current == null) return false;
-  return musicBoxTrackLinkKey(
-        source: current.source,
-        trackId: current.trackId,
-      ) ==
+  return musicBoxTrackLinkKey(source: current.source, trackId: current.trackId) ==
       musicBoxTrackLinkKey(source: source, trackId: trackId);
 }
 
