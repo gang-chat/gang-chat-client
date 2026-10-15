@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
@@ -9,6 +11,10 @@ import 'fnv_hash.dart';
 import '../config/host_platform.dart';
 
 const _mediaCacheVersion = 'v1';
+
+/// The web has no file system, so recently used media is kept in memory, up
+/// to this many bytes.
+const _webMemoryCacheMaxBytes = 64 * 1024 * 1024;
 
 typedef MediaCacheDirectoryProvider = Future<Directory> Function();
 typedef MediaCacheProgressHandler =
@@ -79,6 +85,10 @@ class MediaCacheController {
   final http.Client Function() _httpClientFactory;
   final MediaCacheDirectoryProvider _cacheDirectoryProvider;
   final Map<String, Future<File>> _inFlight = {};
+  // Web only: insertion order doubles as recency (oldest first).
+  final Map<String, Uint8List> _webMemory = {};
+  var _webMemoryBytes = 0;
+  final Map<String, Future<Uint8List>> _webInFlight = {};
 
   Future<File?> cachedFile(MediaCacheRequest request) async {
     final file = await _cacheFile(request);
@@ -117,9 +127,73 @@ class MediaCacheController {
     }
   }
 
-  Future<List<int>> readBytes({required MediaCacheRequest request}) async {
-    final file = await getOrDownload(request: request);
-    return file.readAsBytes();
+  Future<List<int>> readBytes({required MediaCacheRequest request}) {
+    return getOrDownloadBytes(request: request);
+  }
+
+  /// The media's bytes. Native builds read them through the on-disk cache;
+  /// the web has no file system, so it downloads into a bounded in-memory
+  /// cache instead. Use this rather than [getOrDownload] in code that also
+  /// runs on the web.
+  Future<Uint8List> getOrDownloadBytes({
+    required MediaCacheRequest request,
+  }) async {
+    if (!kIsWeb) {
+      final file = await getOrDownload(request: request);
+      return file.readAsBytes();
+    }
+    final key = request.cacheKey;
+    final cached = _webMemory.remove(key);
+    if (cached != null) {
+      _webMemory[key] = cached;
+      return cached;
+    }
+    final active = _webInFlight[key];
+    if (active != null) return active;
+
+    final future = _downloadBytes(request);
+    _webInFlight[key] = future;
+    try {
+      final bytes = await future;
+      _rememberWebBytes(key, bytes);
+      return bytes;
+    } finally {
+      if (identical(_webInFlight[key], future)) _webInFlight.remove(key);
+    }
+  }
+
+  Future<Uint8List> _downloadBytes(MediaCacheRequest request) async {
+    final client = _httpClientFactory();
+    try {
+      final response = await client.send(http.Request('GET', request.uri));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw StateError('下载失败 (${response.statusCode})');
+      }
+      final bytes = await response.stream.toBytes();
+      // Browsers return the decoded body, so Content-Length (the encoded
+      // size) can differ; only the size recorded for the file is reliable.
+      final expected = request.expectedBytes;
+      if (expected != null && expected > 0 && expected != bytes.length) {
+        throw StateError('下载不完整');
+      }
+      return bytes;
+    } finally {
+      client.close();
+    }
+  }
+
+  void _rememberWebBytes(String key, Uint8List bytes) {
+    // A single file larger than a quarter of the budget would evict most of
+    // the cache; serve it without keeping it.
+    if (bytes.length > _webMemoryCacheMaxBytes ~/ 4) return;
+    final previous = _webMemory.remove(key);
+    if (previous != null) _webMemoryBytes -= previous.length;
+    _webMemory[key] = bytes;
+    _webMemoryBytes += bytes.length;
+    while (_webMemoryBytes > _webMemoryCacheMaxBytes && _webMemory.isNotEmpty) {
+      final oldest = _webMemory.keys.first;
+      _webMemoryBytes -= _webMemory.remove(oldest)!.length;
+    }
   }
 
   Future<void> copyFileToPath({

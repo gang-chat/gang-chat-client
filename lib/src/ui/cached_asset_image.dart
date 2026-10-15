@@ -1,5 +1,4 @@
-import 'dart:io';
-
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../app/media_cache_controller.dart';
@@ -8,6 +7,18 @@ import 'tokens.dart';
 
 typedef CachedAssetImageErrorBuilder =
     Widget Function(BuildContext context, Object error, StackTrace? stackTrace);
+
+/// Loads [request] through [cache] as an image: from the on-disk cache on
+/// native platforms, and from memory on the web, which has no file system.
+Future<ImageProvider> cachedMediaImageProvider(
+  MediaCacheController cache,
+  MediaCacheRequest request,
+) async {
+  if (kIsWeb) {
+    return MemoryImage(await cache.getOrDownloadBytes(request: request));
+  }
+  return FileImage(await cache.getOrDownload(request: request));
+}
 
 class CachedAssetImage extends StatefulWidget {
   const CachedAssetImage({
@@ -42,7 +53,7 @@ class CachedAssetImage extends StatefulWidget {
 }
 
 class _CachedAssetImageState extends State<CachedAssetImage> {
-  Future<File>? _file;
+  Future<ImageProvider>? _image;
   MediaCacheController? _scopeCache;
 
   @override
@@ -51,7 +62,7 @@ class _CachedAssetImageState extends State<CachedAssetImage> {
     final scopeCache = MediaCacheScope.of(context);
     if (!identical(_scopeCache, scopeCache)) {
       _scopeCache = scopeCache;
-      _file = _load();
+      _image = _load();
     }
   }
 
@@ -64,11 +75,11 @@ class _CachedAssetImageState extends State<CachedAssetImage> {
         oldWidget.expectedBytes != widget.expectedBytes ||
         oldWidget.namespace != widget.namespace ||
         !identical(oldWidget.cache, widget.cache)) {
-      if (_scopeCache != null) _file = _load();
+      if (_scopeCache != null) _image = _load();
     }
   }
 
-  Future<File> _load() {
+  Future<ImageProvider> _load() {
     final request = MediaCacheRequest.tryFromUrl(
       url: widget.url,
       filename: widget.filename,
@@ -77,21 +88,21 @@ class _CachedAssetImageState extends State<CachedAssetImage> {
       namespace: widget.namespace,
     );
     if (request == null) {
-      return Future<File>.error(StateError('图片地址无效'));
+      return Future<ImageProvider>.error(StateError('图片地址无效'));
     }
     final cache = widget.cache ?? _scopeCache ?? MediaCacheScope.of(context);
-    return cache.getOrDownload(request: request);
+    return cachedMediaImageProvider(cache, request);
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<File>(
-      future: _file,
+    return FutureBuilder<ImageProvider>(
+      future: _image,
       builder: (context, snapshot) {
-        final file = snapshot.data;
-        if (file != null) {
-          return Image.file(
-            file,
+        final image = snapshot.data;
+        if (image != null) {
+          return Image(
+            image: image,
             width: widget.width,
             height: widget.height,
             fit: widget.fit,

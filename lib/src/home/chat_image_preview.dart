@@ -1,8 +1,9 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as dart_ui;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/gestures.dart' show PointerScrollEvent;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderRepaintBoundary;
@@ -434,13 +435,22 @@ class _ImagePreviewOverlayState extends State<_ImagePreviewOverlay>
     if (request == null) {
       throw StateError('图片地址无效');
     }
-    final file = await cache.getOrDownload(request: request);
-    final size = await _decodePreviewImageSize(file);
-    return _PreviewImageData(file: file, size: size);
+    final Uint8List bytes;
+    final ImageProvider image;
+    if (kIsWeb) {
+      // The web has no file system; preview straight from memory.
+      bytes = await cache.getOrDownloadBytes(request: request);
+      image = MemoryImage(bytes);
+    } else {
+      final file = await cache.getOrDownload(request: request);
+      bytes = await file.readAsBytes();
+      image = FileImage(file);
+    }
+    final size = await _decodePreviewImageSize(bytes);
+    return _PreviewImageData(image: image, size: size);
   }
 
-  Future<Size> _decodePreviewImageSize(File file) async {
-    final bytes = await file.readAsBytes();
+  Future<Size> _decodePreviewImageSize(Uint8List bytes) async {
     final codec = await dart_ui.instantiateImageCodec(bytes);
     try {
       final frame = await codec.getNextFrame();
@@ -865,8 +875,8 @@ class _ImagePreviewOverlayState extends State<_ImagePreviewOverlay>
       children: [
         Positioned.fromRect(
           rect: contentRect,
-          child: Image.file(
-            data.file,
+          child: Image(
+            image: data.image,
             key: _previewImageKey,
             fit: widget.forceSquare ? BoxFit.cover : BoxFit.contain,
             gaplessPlayback: true,
@@ -1069,9 +1079,9 @@ class _FrozenPortraitBackdrop extends StatelessWidget {
 }
 
 class _PreviewImageData {
-  const _PreviewImageData({required this.file, required this.size});
+  const _PreviewImageData({required this.image, required this.size});
 
-  final File file;
+  final ImageProvider image;
   final Size size;
 }
 

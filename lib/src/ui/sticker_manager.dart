@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -1863,11 +1862,10 @@ class _StickerPreviewImageState extends State<_StickerPreviewImage> {
       _resolving = true;
       _failed = false;
     });
-    cache
-        .getOrDownload(request: request)
-        .then((file) {
+    cachedMediaImageProvider(cache, request)
+        .then((provider) {
           if (!mounted || serial != _resolveSerial) return;
-          _listenForDimensions(file);
+          _listenForDimensions(provider);
         })
         .catchError((_) {
           if (!mounted || serial != _resolveSerial) return;
@@ -1878,9 +1876,9 @@ class _StickerPreviewImageState extends State<_StickerPreviewImage> {
         });
   }
 
-  void _listenForDimensions(File file) {
+  void _listenForDimensions(ImageProvider provider) {
     _removeListener();
-    final stream = FileImage(file).resolve(ImageConfiguration.empty);
+    final stream = provider.resolve(ImageConfiguration.empty);
     final listener = ImageStreamListener(
       (image, _) {
         if (!mounted) return;
@@ -2493,11 +2491,10 @@ class _StickerDimensionsLineState extends State<_StickerDimensionsLine> {
       _resolving = true;
       _failed = false;
     });
-    cache
-        .getOrDownload(request: request)
-        .then((file) {
+    cachedMediaImageProvider(cache, request)
+        .then((provider) {
           if (!mounted || serial != _resolveSerial) return;
-          _listenForDimensions(file);
+          _listenForDimensions(provider);
         })
         .catchError((_) {
           if (!mounted || serial != _resolveSerial) return;
@@ -2508,9 +2505,9 @@ class _StickerDimensionsLineState extends State<_StickerDimensionsLine> {
         });
   }
 
-  void _listenForDimensions(File file) {
+  void _listenForDimensions(ImageProvider provider) {
     _removeListener();
-    final stream = FileImage(file).resolve(ImageConfiguration.empty);
+    final stream = provider.resolve(ImageConfiguration.empty);
     final listener = ImageStreamListener(
       (image, _) {
         if (!mounted) return;
