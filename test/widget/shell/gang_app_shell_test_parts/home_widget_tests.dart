@@ -2754,6 +2754,58 @@ void registerShellHomeWidgetTests() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('sending keeps an open message hover card stable', (
+    WidgetTester tester,
+  ) async {
+    final sentMessageRequests = <Map<String, Object?>>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ui.uiTheme(),
+        home: HomePage(
+          app: _homeTestAppContext(
+            includeSharedMusicTrackMessage: true,
+            sentMessageRequests: sentMessageRequests,
+          ),
+          realtime: _NoopRealtimeService(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Alpha Room'));
+    await tester.pumpAndSettle();
+
+    final composerField = find.descendant(
+      of: find.byType(ui.ChatComposer),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(composerField, '悬停卡片打开时发送');
+    await tester.pump();
+
+    // Leave the mouse resting on the shared song so its hover card stays open
+    // while the sent message is inserted into the reversed message list.
+    final hover = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await hover.addPointer(location: tester.getCenter(find.text('分享歌曲完整名称')));
+    addTearDown(hover.removePointer);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('music-track-card-preview')),
+      findsOneWidget,
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(sentMessageRequests, hasLength(1));
+    expect(sentMessageRequests.single['body'], '悬停卡片打开时发送');
+    expect(find.text('悬停卡片打开时发送'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('music-track-card-preview')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('authenticated home shell opens live channel pane', (
     WidgetTester tester,
   ) async {
