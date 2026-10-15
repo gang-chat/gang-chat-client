@@ -250,10 +250,10 @@ class _HomeNotificationsPaneState extends State<HomeNotificationsPane> {
               ),
             ],
           ),
-          if (_selectionMode) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              if (_selectionMode) ...[
                 UiCheckbox(
                   key: const ValueKey('home-notifications-select-all'),
                   value:
@@ -275,46 +275,45 @@ class _HomeNotificationsPaneState extends State<HomeNotificationsPane> {
                       : '全选当前通知',
                   semanticLabel: '全选当前通知',
                 ),
-                const SizedBox(width: 10),
-                Text(
-                  'SELECT ALL · ${_selectedNotificationIds.length}',
-                  style: UiTypography.overline,
-                ),
+                const SizedBox(width: 8),
               ],
-            ),
-          ],
+              Expanded(
+                child: SegmentedControl<RoomNotificationFilter>(
+                  expanded: true,
+                  value: _filter,
+                  segments: const [
+                    Segment(
+                      value: RoomNotificationFilter.all,
+                      label: '全部',
+                      icon: Icons.inbox_outlined,
+                    ),
+                    Segment(
+                      value: RoomNotificationFilter.invites,
+                      label: '邀请',
+                      icon: Icons.mail_outline,
+                    ),
+                    Segment(
+                      value: RoomNotificationFilter.applications,
+                      label: '申请',
+                      icon: Icons.assignment_turned_in_outlined,
+                    ),
+                    Segment(
+                      value: RoomNotificationFilter.roomNotifications,
+                      label: '房间',
+                      icon: Icons.meeting_room_outlined,
+                    ),
+                  ],
+                  onChanged: (value) => setState(() {
+                    _filter = value;
+                    if (_selectionMode) {
+                      _selectedNotificationIds = <String>{};
+                    }
+                  }),
+                ),
+              ),
+            ],
+          ),
         ],
-      ),
-      navigation: SettingsNavigation<RoomNotificationFilter>(
-        value: _filter,
-        segments: const [
-          Segment(
-            value: RoomNotificationFilter.all,
-            label: '全部',
-            icon: Icons.inbox_outlined,
-          ),
-          Segment(
-            value: RoomNotificationFilter.invites,
-            label: '邀请',
-            icon: Icons.mail_outline,
-          ),
-          Segment(
-            value: RoomNotificationFilter.applications,
-            label: '申请',
-            icon: Icons.assignment_turned_in_outlined,
-          ),
-          Segment(
-            value: RoomNotificationFilter.roomNotifications,
-            label: '房间',
-            icon: Icons.meeting_room_outlined,
-          ),
-        ],
-        onChanged: (value) => setState(() {
-          _filter = value;
-          if (_selectionMode) {
-            _selectedNotificationIds = <String>{};
-          }
-        }),
       ),
       body: _NotificationsBody(
         items: visibleItems,
@@ -2874,7 +2873,7 @@ class _ProcessedInviteLabel extends StatelessWidget {
     final accepted = isAcceptedRoomInvite(invite);
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: accepted ? UiColors.selected : UiColors.dangerSurface,
+        color: accepted ? UiColors.selected : const Color(0xFF2E1F22),
         borderRadius: BorderRadius.circular(UiRadii.md),
         border: Border.all(
           color: accepted ? UiColors.accentBorder : UiColors.dangerBorder,
@@ -2916,7 +2915,7 @@ class _ProcessedApplicationLabel extends StatelessWidget {
         color: approved
             ? UiColors.selected
             : rejected
-            ? UiColors.dangerSurface
+            ? const Color(0xFF2E1F22)
             : UiColors.surfacePressed,
         borderRadius: BorderRadius.circular(UiRadii.md),
         border: Border.all(

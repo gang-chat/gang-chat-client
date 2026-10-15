@@ -197,30 +197,19 @@ void registerShellRealtimeLiveWidgetTests() {
     );
     await tester.pumpAndSettle();
 
-    await _openRealtimeLiveTestRoom(tester, 'server-alpha');
-    final contextBar = find.byKey(const ValueKey('room-context-bar'));
+    await tester.tap(find.text('Alpha Room'));
+    await tester.pumpAndSettle();
     final chatLiveButton = find.byKey(
       const ValueKey('chat-header-live-button'),
     );
     expect(chatLiveButton, findsOneWidget);
     expect(
-      find.descendant(of: contextBar, matching: chatLiveButton),
-      findsOneWidget,
-    );
-    expect(
-      tester
-          .widget<ui.PressableSurface>(
-            find.descendant(
-              of: chatLiveButton,
-              matching: find.byType(ui.PressableSurface),
-            ),
-          )
-          .tooltip,
+      tester.widget<ui.PressableSurface>(chatLiveButton).tooltip,
       isNotNull,
     );
     expect(
       find.descendant(
-        of: contextBar,
+        of: chatLiveButton,
         matching: find.byKey(const ValueKey('chat-header-room-title')),
       ),
       findsOneWidget,
@@ -243,11 +232,8 @@ void registerShellRealtimeLiveWidgetTests() {
 
     await _openLiveChannelFromHeader(tester);
 
-    final livePreviewCount = find.byKey(
-      const ValueKey('chat-header-live-preview-count'),
-    );
     expect(find.text('Riley'), findsNothing);
-    expect(tester.widget<Text>(livePreviewCount).data, '1 人正在语音');
+    expect(find.text('2 名成员 · 1 人语音'), findsOneWidget);
 
     realtime.add(
       const RealtimeEvent(
@@ -303,7 +289,7 @@ void registerShellRealtimeLiveWidgetTests() {
     await tester.pumpAndSettle();
 
     expect(find.text('Riley'), findsOneWidget);
-    expect(tester.widget<Text>(livePreviewCount).data, '2 人正在语音');
+    expect(find.text('2 名成员 · 2 人语音'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -535,10 +521,7 @@ void registerShellRealtimeLiveWidgetTests() {
     expect(joinButton.loading, isFalse);
     expect(joinButton.onPressed, isNull);
     expect(
-      find.descendant(
-        of: join,
-        matching: find.byIcon(Icons.graphic_eq_rounded),
-      ),
+      find.descendant(of: join, matching: find.byIcon(Icons.call)),
       findsOneWidget,
     );
     expect(
@@ -586,9 +569,10 @@ void registerShellRealtimeLiveWidgetTests() {
     );
     await tester.pumpAndSettle();
 
-    await _openRealtimeLiveTestRoom(tester, 'server-alpha');
+    await tester.tap(find.text('Alpha Room'));
+    await tester.pumpAndSettle();
     await _openLiveChannelFromHeader(tester);
-    await tester.tap(find.widgetWithText(ui.Button, '加入语音'));
+    await tester.tap(find.widgetWithText(ui.Button, '加入'));
     await tester.pumpAndSettle();
     await tester.tap(_liveControl('headphones'));
     await tester.pumpAndSettle();
@@ -633,26 +617,12 @@ void registerShellRealtimeLiveWidgetTests() {
     expect(liveSession.outputMutes.last, isFalse);
     final dock = find.byKey(const ValueKey<String>('home-title-live-room'));
     expect(
-      find.descendant(of: dock, matching: find.byIcon(Icons.mic_rounded)),
+      find.descendant(of: dock, matching: find.byIcon(Icons.mic)),
       findsOneWidget,
     );
     expect(
-      find.descendant(of: dock, matching: find.byIcon(Icons.mic_off_rounded)),
-      findsNothing,
-    );
-    expect(
-      find.descendant(
-        of: dock,
-        matching: find.byIcon(Icons.headphones_rounded),
-      ),
+      find.descendant(of: dock, matching: find.byIcon(Icons.headphones)),
       findsOneWidget,
-    );
-    expect(
-      find.descendant(
-        of: dock,
-        matching: find.byIcon(Icons.headset_off_rounded),
-      ),
-      findsNothing,
     );
     expect(tester.takeException(), isNull);
   });
@@ -676,19 +646,17 @@ void registerShellRealtimeLiveWidgetTests() {
       );
       await tester.pumpAndSettle();
 
-      await _openRealtimeLiveTestRoom(tester, 'server-alpha');
+      await tester.tap(find.text('Alpha Room'));
+      await tester.pumpAndSettle();
       await _openLiveChannelFromHeader(tester);
-      await tester.tap(find.byKey(const ValueKey<String>('live-control:join')));
+      await tester.tap(
+        find.byKey(const ValueKey<String>('live-control:join')),
+      );
       await tester.pumpAndSettle();
       expect(liveSession.localMicMuted, isFalse);
 
-      await _openRealtimeLiveTestRoom(tester, 'server-beta');
-      expect(
-        tester
-            .widget<Text>(find.byKey(const ValueKey('chat-header-room-title')))
-            .data,
-        'Beta Room',
-      );
+      await tester.tap(find.text('Beta Room'));
+      await tester.pumpAndSettle();
 
       realtime.add(
         RealtimeEvent(
@@ -752,7 +720,7 @@ void registerShellRealtimeLiveWidgetTests() {
       await tester.tap(find.text('Alpha Room'));
       await tester.pumpAndSettle();
       await _openLiveChannelFromHeader(tester);
-      await tester.tap(find.text('加入语音'));
+      await tester.tap(find.text('加入'));
       await tester.pumpAndSettle();
 
       expect(liveSession.micMutes, contains(false));
@@ -811,11 +779,9 @@ void registerShellRealtimeLiveWidgetTests() {
     );
     await tester.pumpAndSettle();
 
-    await _openRealtimeLiveTestRoom(tester, 'server-alpha');
+    await tester.tap(find.text('Alpha Room'));
+    await tester.pumpAndSettle();
 
-    final contextBar = find.byKey(const ValueKey('room-context-bar'));
-    final roomTitle = find.byKey(const ValueKey('chat-header-room-title'));
-    final chatTab = find.byKey(const ValueKey('room-tab-chat'));
     final chatLiveButton = find.byKey(
       const ValueKey('chat-header-live-button'),
     );
@@ -826,26 +792,13 @@ void registerShellRealtimeLiveWidgetTests() {
     final livePreviewCount = find.byKey(
       const ValueKey('chat-header-live-preview-count'),
     );
-    // The live preview sits in the room context bar between the room identity
-    // and the chat / voice / members / settings tabs.
-    void expectPreviewBetweenIdentityAndTabs() {
-      final previewRect = tester.getRect(livePreview);
-      expect(previewRect.left, greaterThan(tester.getRect(roomTitle).left));
-      expect(previewRect.right, lessThan(tester.getRect(chatTab).left));
-      expect(
-        previewRect.center.dy,
-        closeTo(tester.getRect(chatLiveButton).center.dy, 1),
-      );
-    }
-
     expect(chatLiveButton, findsOneWidget);
     expect(livePreview, findsOneWidget);
     expect(livePreviewIcon, findsOneWidget);
     expect(
-      find.descendant(of: contextBar, matching: livePreview),
-      findsOneWidget,
+      tester.getRect(chatLiveButton).right - tester.getRect(livePreview).right,
+      closeTo(10, 1),
     );
-    expectPreviewBetweenIdentityAndTabs();
     expect(
       find.descendant(of: livePreview, matching: find.byType(ui.Avatar)),
       findsOneWidget,
@@ -854,17 +807,9 @@ void registerShellRealtimeLiveWidgetTests() {
       tester.getRect(livePreviewIcon).right,
       lessThan(tester.getRect(livePreviewCount).left),
     );
-    // Not joined: the preview uses the voice presence signal colour for both
-    // the glyph and the count.
-    expect(
-      tester.widget<Icon>(livePreviewIcon).color,
-      ui.UiColors.presenceVoice,
-    );
+    expect(tester.widget<Icon>(livePreviewIcon).color, ui.UiColors.accent);
     expect(tester.widget<Text>(livePreviewCount).data, contains('1'));
-    expect(
-      tester.widget<Text>(livePreviewCount).style?.color,
-      ui.UiColors.presenceVoice,
-    );
+    expect(tester.widget<Text>(livePreviewCount).style?.color, Colors.white);
 
     realtime.add(
       liveSnapshotEvent([
@@ -888,7 +833,10 @@ void registerShellRealtimeLiveWidgetTests() {
       find.descendant(of: livePreview, matching: find.byType(ui.Avatar)),
       findsNWidgets(2),
     );
-    expectPreviewBetweenIdentityAndTabs();
+    expect(
+      tester.getRect(chatLiveButton).right - tester.getRect(livePreview).right,
+      closeTo(10, 1),
+    );
     expect(tester.widget<Text>(livePreviewCount).data, contains('2'));
 
     realtime.add(
@@ -933,12 +881,14 @@ void registerShellRealtimeLiveWidgetTests() {
     );
     await tester.pumpAndSettle();
 
-    // The stacked preview caps at four faces; the count carries the total.
     expect(
       find.descendant(of: livePreview, matching: find.byType(ui.Avatar)),
-      findsNWidgets(4),
+      findsNWidgets(5),
     );
-    expectPreviewBetweenIdentityAndTabs();
+    expect(
+      tester.getRect(chatLiveButton).right - tester.getRect(livePreview).right,
+      closeTo(10, 1),
+    );
     expect(tester.widget<Text>(livePreviewCount).data, contains('6'));
     expect(
       tester
@@ -962,11 +912,7 @@ void registerShellRealtimeLiveWidgetTests() {
     );
     await tester.pumpAndSettle();
 
-    // The presence label is shown in the account menu opened from the header
-    // avatar.
-    await _openRealtimeLiveAccountPanel(tester);
     final userSummary = find.byKey(const ValueKey('home-sidebar-user-summary'));
-    expect(userSummary, findsOneWidget);
     expect(
       find.descendant(of: userSummary, matching: find.textContaining('重连中')),
       findsNothing,
@@ -1023,9 +969,10 @@ void registerShellRealtimeLiveWidgetTests() {
       );
       await tester.pumpAndSettle();
 
-      await _openRealtimeLiveTestRoom(tester, 'server-alpha');
+      await tester.tap(find.text('Alpha Room'));
+      await tester.pumpAndSettle();
       await _openLiveChannelFromHeader(tester);
-      await tester.tap(find.widgetWithText(ui.Button, '加入语音'));
+      await tester.tap(find.widgetWithText(ui.Button, '加入'));
       await tester.pumpAndSettle();
 
       expect(liveSession.connectAttempts, 1);
@@ -1037,8 +984,6 @@ void registerShellRealtimeLiveWidgetTests() {
       expect(liveStateUpdates.last['mic_muted'], true);
       liveStateUpdates.clear();
 
-      // Presence now lives in the header account menu.
-      await _openRealtimeLiveAccountPanel(tester);
       realtime.setStatus(RealtimeConnectionStatus.reconnecting);
       await tester.pumpAndSettle();
 
@@ -1107,9 +1052,10 @@ void registerShellRealtimeLiveWidgetTests() {
       );
       await tester.pumpAndSettle();
 
-      await _openRealtimeLiveTestRoom(tester, 'server-alpha');
+      await tester.tap(find.text('Alpha Room'));
+      await tester.pumpAndSettle();
       await _openLiveChannelFromHeader(tester);
-      await tester.tap(find.widgetWithText(ui.Button, '加入语音'));
+      await tester.tap(find.widgetWithText(ui.Button, '加入'));
       await tester.pumpAndSettle();
 
       await tester.tap(_liveControl('mic'));
@@ -1173,7 +1119,7 @@ void registerShellRealtimeLiveWidgetTests() {
     },
   );
 
-  testWidgets('authenticated home shell header opens settings and logs out', (
+  testWidgets('authenticated home shell footer opens settings and logs out', (
     WidgetTester tester,
   ) async {
     final accountUpdates = <Map<String, Object?>>[];
@@ -1193,45 +1139,32 @@ void registerShellRealtimeLiveWidgetTests() {
     );
     await tester.pumpAndSettle();
 
-    // Create-room ends the header room tabs; notifications, settings and the
-    // account avatar are the global header actions on the same row. Logout
-    // moved into the avatar's account menu.
+    final userSummaryRect = tester.getRect(
+      find.byKey(const ValueKey('home-sidebar-user-summary')),
+    );
     final createRect = tester.getRect(find.byTooltip('创建房间'));
     final notificationsRect = tester.getRect(find.byTooltip('通知'));
     final settingsRect = tester.getRect(find.byTooltip('设置'));
-    final accountRect = tester.getRect(
-      find.byKey(const ValueKey('home-account-button')),
-    );
-    expect(
-      find.byKey(const ValueKey('home-sidebar-create-room-button')),
-      findsOneWidget,
-    );
-    expect(notificationsRect.top, closeTo(settingsRect.top, 0.01));
-    expect(notificationsRect.bottom, closeTo(settingsRect.bottom, 0.01));
-    expect(createRect.center.dy, closeTo(settingsRect.center.dy, 1));
-    expect(accountRect.center.dy, closeTo(settingsRect.center.dy, 1));
-    expect(createRect.right, lessThan(notificationsRect.left));
-    expect(notificationsRect.right, lessThanOrEqualTo(settingsRect.left));
-    expect(settingsRect.right, lessThan(accountRect.left));
-    expect(find.byKey(const ValueKey('home-account-logout')), findsNothing);
-    expect(find.text('退出登录'), findsNothing);
+    final logoutRect = tester.getRect(find.byTooltip('退出登录'));
+    expect(createRect.left, closeTo(userSummaryRect.left, 0.01));
+    expect(notificationsRect.top, closeTo(createRect.top, 0.01));
+    expect(notificationsRect.bottom, closeTo(createRect.bottom, 0.01));
+    expect(settingsRect.top, closeTo(createRect.top, 0.01));
+    expect(settingsRect.bottom, closeTo(createRect.bottom, 0.01));
+    // The logout control now lives inline in the top user summary bar, anchored
+    // to its right edge — not in the bottom footer alongside settings.
+    expect(logoutRect.top, greaterThanOrEqualTo(userSummaryRect.top - 0.01));
+    expect(logoutRect.bottom, lessThanOrEqualTo(userSummaryRect.bottom + 0.01));
+    expect(logoutRect.bottom, lessThan(createRect.top));
+    expect(logoutRect.right, lessThanOrEqualTo(userSummaryRect.right + 0.01));
 
     await tester.tap(find.byTooltip('设置'));
     await tester.pumpAndSettle();
 
-    // Settings is two-pane at this width: section names live in the side
-    // navigation (and the open section repeats its name as a header).
-    final settingsNav = find.byKey(const ValueKey('settings-side-navigation'));
     expect(find.text('设置'), findsOneWidget);
     expect(find.textContaining('设置 ·'), findsNothing);
-    expect(
-      find.descendant(of: settingsNav, matching: find.text('用户资料')),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: settingsNav, matching: find.text('偏好设置')),
-      findsOneWidget,
-    );
+    expect(find.text('用户资料'), findsOneWidget);
+    expect(find.text('偏好设置'), findsOneWidget);
     expect(find.byTooltip('刷新设置'), findsOneWidget);
     final displayNameField = find.byWidgetPredicate(
       (widget) => widget is TextField && widget.controller?.text == 'Kai',
@@ -1266,9 +1199,7 @@ void registerShellRealtimeLiveWidgetTests() {
 
     expect(find.text('合法'), findsOneWidget);
 
-    await tester.tap(
-      find.descendant(of: settingsNav, matching: find.text('偏好设置')),
-    );
+    await tester.tap(find.text('偏好设置'));
     await tester.pumpAndSettle();
 
     expect(find.text('语言切换'), findsOneWidget);
@@ -1289,18 +1220,10 @@ void registerShellRealtimeLiveWidgetTests() {
     expect(accountUpdates.single['language'], 'en');
     expect(find.text('偏好设置已保存'), findsOneWidget);
 
-    expect(_realtimeLiveAccountRingColor(tester), Colors.transparent);
-    await _openRealtimeLiveAccountPanel(tester);
-    final logoutItem = find.byKey(const ValueKey('home-account-logout'));
-    expect(
-      find.descendant(of: logoutItem, matching: find.text('退出登录')),
-      findsOneWidget,
-    );
-    await tester.tap(logoutItem);
+    await tester.tap(find.byTooltip('退出登录'));
     await tester.pumpAndSettle();
 
     expect(logoutCount, 0);
-    expect(logoutItem, findsNothing);
     expect(find.text('确认退出当前账号？'), findsOneWidget);
     final cancelLogout = find.widgetWithText(ui.Button, '取消');
     final confirmLogout = find.widgetWithText(ui.Button, '退出登录');
@@ -1313,18 +1236,35 @@ void registerShellRealtimeLiveWidgetTests() {
       closeTo(confirmLogoutRect.center.dy, 0.01),
     );
     expect(cancelLogoutRect.right, lessThan(confirmLogoutRect.left));
-    // The account avatar stays highlighted while the logout confirmation is
-    // open.
-    expect(_realtimeLiveAccountRingColor(tester), ui.UiColors.accent);
+    expect(
+      tester
+          .widget<Icon>(
+            find.descendant(
+              of: find.byTooltip('退出登录'),
+              matching: find.byIcon(Icons.logout),
+            ),
+          )
+          .color,
+      ui.UiColors.accent,
+    );
 
     await tester.tap(find.widgetWithText(ui.Button, '取消'));
     await tester.pumpAndSettle();
     expect(logoutCount, 0);
     expect(find.text('确认退出当前账号？'), findsNothing);
-    expect(_realtimeLiveAccountRingColor(tester), Colors.transparent);
+    expect(
+      tester
+          .widget<Icon>(
+            find.descendant(
+              of: find.byTooltip('退出登录'),
+              matching: find.byIcon(Icons.logout),
+            ),
+          )
+          .color,
+      ui.UiColors.textMuted,
+    );
 
-    await _openRealtimeLiveAccountPanel(tester);
-    await tester.tap(logoutItem);
+    await tester.tap(find.byTooltip('退出登录'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(ui.Button, '退出登录'));
     await tester.pumpAndSettle();
@@ -1332,76 +1272,58 @@ void registerShellRealtimeLiveWidgetTests() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-    'authenticated home shell compact room list scrolls without a scrollbar',
-    (WidgetTester tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: ui.uiTheme(),
-          home: Center(
-            child: SizedBox(
-              width: 360,
-              height: 320,
-              child: HomePage(
-                app: _homeTestAppContext(),
-                realtime: _NoopRealtimeService(),
-              ),
+  testWidgets('authenticated home shell lets sidebar scrollbar auto-hide', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ui.uiTheme(),
+        home: Center(
+          child: SizedBox(
+            width: 360,
+            height: 320,
+            child: HomePage(
+              app: _homeTestAppContext(),
+              realtime: _NoopRealtimeService(),
             ),
           ),
         ),
-      );
-      await tester.pumpAndSettle();
+      ),
+    );
+    await tester.pumpAndSettle();
 
-      // The sidebar is gone; on a short narrow window the compact lobby is
-      // the room list. It scrolls on its own while the voice capsule stays
-      // pinned below it, and no persistent scrollbar covers the room rows.
-      final screenRect = tester.getRect(find.byType(HomePage));
-      final roomList = find.byKey(const ValueKey('home-narrow-room-list'));
-      final lobbyScroll = find.byKey(const ValueKey('home-lobby-scroll'));
-      final voiceCapsule = find.byKey(
-        const ValueKey<String>('home-title-live-room'),
-      );
-      final alphaRow = find.byKey(
-        const ValueKey('home-lobby-room-server-alpha'),
-      );
-      expect(roomList, findsOneWidget);
-      expect(lobbyScroll, findsOneWidget);
-      expect(find.byType(Scrollbar), findsNothing);
-      expect(find.byType(RawScrollbar), findsNothing);
-      expect(
-        find.descendant(of: roomList, matching: voiceCapsule),
-        findsOneWidget,
-      );
-      final capsuleRect = tester.getRect(voiceCapsule);
-      expect(capsuleRect.bottom, lessThanOrEqualTo(screenRect.bottom));
-      expect(
-        tester.getRect(lobbyScroll).bottom,
-        lessThanOrEqualTo(capsuleRect.top),
-      );
+    final userSummaryRect = tester.getRect(
+      find.byKey(const ValueKey('home-sidebar-user-summary')),
+    );
+    final alphaCardRect = tester.getRect(
+      find.ancestor(
+        of: find.text('Alpha Room'),
+        matching: find.byType(ui.PressableSurface),
+      ),
+    );
 
-      final position = tester
-          .state<ScrollableState>(
-            find.descendant(of: lobbyScroll, matching: find.byType(Scrollable)),
-          )
-          .position;
-      expect(position.pixels, 0);
-      expect(position.maxScrollExtent, greaterThan(0));
-      final alphaTopBefore = tester.getRect(alphaRow).top;
+    expect(userSummaryRect.right - alphaCardRect.right, closeTo(0, 0.01));
+    expect(find.byType(Scrollbar), findsNothing);
+    final rawScrollbarFinder = find.byType(RawScrollbar);
+    expect(rawScrollbarFinder, findsOneWidget);
+    final rawScrollbar = tester.widget<RawScrollbar>(rawScrollbarFinder);
+    expect(rawScrollbar.radius, const Radius.circular(999));
+    expect(rawScrollbar.controller, isNotNull);
+    expect(rawScrollbar.controller!.hasClients, isTrue);
+    expect(rawScrollbar.interactive, isTrue);
+    expect(
+      tester.getRect(rawScrollbarFinder).right - alphaCardRect.right,
+      closeTo(8, 0.01),
+    );
+    await tester.dragFrom(
+      tester.getRect(rawScrollbarFinder).topRight - const Offset(3, -30),
+      const Offset(0, 30),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
 
-      await tester.drag(lobbyScroll, const Offset(0, -60));
-      await tester.pumpAndSettle();
-
-      expect(position.pixels, greaterThan(0));
-      expect(
-        tester.getRect(alphaRow).top,
-        closeTo(alphaTopBefore - position.pixels, 0.01),
-      );
-      expect(tester.getRect(voiceCapsule), capsuleRect);
-      expect(tester.takeException(), isNull);
-    },
-  );
-
-  testWidgets('authenticated home shell keeps macOS content below title bar', (
+  testWidgets('authenticated home shell keeps macOS sidebar below title bar', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -1415,34 +1337,23 @@ void registerShellRealtimeLiveWidgetTests() {
     );
     await tester.pumpAndSettle();
 
-    final brandRect = tester.getRect(
-      find.byKey(const ValueKey('home-title-brand')),
-    );
-    final lobbyTabRect = tester.getRect(
-      find.byKey(const ValueKey('home-lobby-tab')),
+    final userSummaryRect = tester.getRect(
+      find.byKey(const ValueKey('home-sidebar-user-summary')),
     );
     final searchRect = tester.getRect(
-      find.byKey(const ValueKey('home-title-search-button')),
+      find.byKey(const ValueKey('home-title-search')),
     );
     final liveDockRect = tester.getRect(
       find.byKey(const ValueKey<String>('home-title-live-room')),
     );
-    final lobbyRect = tester.getRect(find.byKey(const ValueKey('home-lobby')));
 
     expect(find.text('Gang Chat'), findsNothing);
     expect(find.byTooltip('最小化'), findsNothing);
     expect(find.byTooltip('最大化'), findsNothing);
     expect(find.byTooltip('关闭'), findsNothing);
-    // The header leaves room for the native traffic lights on the left.
-    expect(brandRect.left, greaterThanOrEqualTo(80));
-    expect(lobbyTabRect.left, greaterThan(brandRect.right));
     expect(searchRect.center.dx, greaterThan(400));
-    expect(liveDockRect.left, greaterThan(lobbyTabRect.right));
-    expect(liveDockRect.right, lessThanOrEqualTo(searchRect.left - 10));
-    expect(liveDockRect.center.dy, closeTo(searchRect.center.dy, 1));
-    // The lobby content starts below the 52px title bar.
-    expect(brandRect.bottom, lessThanOrEqualTo(52));
-    expect(lobbyRect.top, greaterThanOrEqualTo(52));
+    expect(liveDockRect.right, lessThanOrEqualTo(searchRect.left - 14));
+    expect(userSummaryRect.top, closeTo(60, 0.01));
     expect(tester.takeException(), isNull);
   });
 
@@ -1467,37 +1378,36 @@ void registerShellRealtimeLiveWidgetTests() {
       );
       await tester.pumpAndSettle();
 
-      final roomList = find.byKey(const ValueKey('home-narrow-room-list'));
-      final lobbyScroll = find.byKey(const ValueKey('home-lobby-scroll'));
-      final alphaRow = find.byKey(
-        const ValueKey('home-lobby-room-server-alpha'),
+      final compactSearchRect = tester.getRect(
+        find.byKey(const ValueKey('home-title-search')),
       );
-      final searchButton = find.byKey(
-        const ValueKey('home-title-search-button'),
+      final userSummaryRect = tester.getRect(
+        find.byKey(const ValueKey('home-sidebar-user-summary')),
       );
-      expect(roomList, findsOneWidget);
-      expect(find.descendant(of: roomList, matching: alphaRow), findsOneWidget);
+      final firstRoomCardRect = tester.getRect(
+        find.ancestor(
+          of: find.text('Alpha Room'),
+          matching: find.byType(ui.PressableSurface),
+        ),
+      );
+      final roomScrollbarFinder = find.byKey(
+        const ValueKey('home-sidebar-room-scrollbar'),
+      );
+      final roomScrollbar = tester.widget<RawScrollbar>(roomScrollbarFinder);
+
+      expect(compactSearchRect.width, closeTo(userSummaryRect.width, 0.01));
+      expect(userSummaryRect.bottom, lessThan(compactSearchRect.top));
       expect(
-        tester
-            .state<ScrollableState>(
-              find.descendant(
-                of: lobbyScroll,
-                matching: find.byType(Scrollable),
-              ),
-            )
-            .position
-            .extentBefore,
-        0,
+        tester.getRect(roomScrollbarFinder).top,
+        closeTo(firstRoomCardRect.top, 0.01),
       );
-      // The narrow header keeps search, notifications, settings and the
-      // account menu above the room list.
-      expect(searchButton, findsOneWidget);
-      expect(
-        tester.getRect(searchButton).bottom,
-        lessThanOrEqualTo(tester.getRect(lobbyScroll).top),
-      );
-      expect(find.byKey(const ValueKey('home-account-button')), findsOneWidget);
+      expect(roomScrollbar.controller!.position.extentBefore, 0);
+      expect(roomScrollbar.padding, EdgeInsets.zero);
       expect(find.text('Alpha Room'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('home-narrow-room-list')),
+        findsOneWidget,
+      );
       expect(find.byKey(const ValueKey('home-narrow-content')), findsNothing);
       expect(find.byTooltip('返回房间列表'), findsNothing);
       expect(find.byTooltip('Show servers'), findsNothing);
@@ -1505,13 +1415,10 @@ void registerShellRealtimeLiveWidgetTests() {
       expect(find.byTooltip('最大化'), findsNothing);
       expect(find.byTooltip('关闭'), findsNothing);
 
-      await tester.tap(searchButton);
-      await tester.pumpAndSettle();
       final compactSearchField = find.descendant(
         of: find.byKey(const ValueKey('home-title-search')),
         matching: find.byType(TextField),
       );
-      expect(compactSearchField, findsOneWidget);
       await tester.enterText(compactSearchField, 'Beta');
       await tester.pump(const Duration(milliseconds: 320));
       await tester.pumpAndSettle();
@@ -1521,6 +1428,10 @@ void registerShellRealtimeLiveWidgetTests() {
         find.byKey(const ValueKey('home-title-search-results')),
         findsOneWidget,
       );
+      expect(
+        find.byKey(const ValueKey('home-sidebar-user-summary')),
+        findsOneWidget,
+      );
 
       await tester.enterText(compactSearchField, '');
       await tester.pumpAndSettle();
@@ -1528,19 +1439,15 @@ void registerShellRealtimeLiveWidgetTests() {
         find.byKey(const ValueKey('home-title-search-results')),
         findsNothing,
       );
-      await _closeRealtimeLiveSearchPalette(tester);
-      expect(roomList, findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('home-sidebar-user-summary')),
+        findsOneWidget,
+      );
 
       await tester.tap(find.byTooltip('设置'));
       await tester.pumpAndSettle();
 
-      expect(
-        find.descendant(
-          of: find.byKey(const ValueKey('settings-side-navigation')),
-          matching: find.text('用户资料'),
-        ),
-        findsOneWidget,
-      );
+      expect(find.text('用户资料'), findsOneWidget);
       expect(find.byKey(const ValueKey('home-narrow-room-list')), findsNothing);
 
       await tester.binding.handlePopRoute();
@@ -1552,7 +1459,8 @@ void registerShellRealtimeLiveWidgetTests() {
       );
       expect(find.text('用户资料'), findsNothing);
 
-      await _openRealtimeLiveTestRoom(tester, 'server-alpha');
+      await tester.tap(find.text('Alpha Room'));
+      await tester.pumpAndSettle();
 
       expect(find.text('Beta Room'), findsNothing);
       expect(find.byKey(const ValueKey('home-narrow-room-list')), findsNothing);
@@ -1567,18 +1475,17 @@ void registerShellRealtimeLiveWidgetTests() {
         find.byKey(const ValueKey('chat-header-room-title')),
         findsOneWidget,
       );
-      // Compact room bar: back + identity on top, the room tabs below.
       expect(
-        tester.getRect(find.byTooltip('返回房间列表')).bottom,
-        lessThanOrEqualTo(
+        tester.getRect(find.byTooltip('返回房间列表')).left,
+        greaterThanOrEqualTo(
           tester
               .getRect(find.byKey(const ValueKey('chat-header-live-button')))
-              .top,
+              .left,
         ),
       );
       expect(
         tester.getRect(find.byTooltip('返回房间列表')).right,
-        lessThanOrEqualTo(
+        lessThan(
           tester
               .getRect(find.byKey(const ValueKey('chat-header-room-avatar')))
               .left,
@@ -1598,12 +1505,8 @@ void registerShellRealtimeLiveWidgetTests() {
       expect(find.byKey(const ValueKey('home-narrow-content')), findsNothing);
       expect(find.byTooltip('返回房间列表'), findsNothing);
 
-      for (final entry in <Finder>[
-        find.byKey(const ValueKey('home-lobby-create-room')),
-        find.byTooltip('通知'),
-        find.byTooltip('设置'),
-      ]) {
-        await tester.tap(entry);
+      for (final entry in ['创建房间', '通知', '设置']) {
+        await tester.tap(find.byTooltip(entry));
         await tester.pumpAndSettle();
 
         expect(
@@ -1623,25 +1526,20 @@ void registerShellRealtimeLiveWidgetTests() {
         expect(find.byTooltip('返回房间列表'), findsNothing);
       }
 
-      await _openRealtimeLiveTestRoom(tester, 'server-alpha');
+      await tester.tap(find.text('Alpha Room'));
+      await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('房间成员'));
       await tester.pumpAndSettle();
 
-      // Members is a room tab: the room bar (and its back button) stays while
-      // the member list replaces the chat stream.
-      expect(find.byKey(const ValueKey('room-members-list')), findsOneWidget);
-      expect(find.text('Hello from Morgan'), findsNothing);
-      expect(find.byTooltip('返回房间列表'), findsOneWidget);
+      expect(find.byTooltip('返回'), findsOneWidget);
+      expect(find.byTooltip('返回房间列表'), findsNothing);
 
-      // System back first returns from members to the room's chat...
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const ValueKey('room-members-list')), findsNothing);
-      expect(find.text('Hello from Morgan'), findsOneWidget);
       expect(find.byTooltip('返回房间列表'), findsOneWidget);
+      expect(find.byTooltip('返回'), findsNothing);
 
-      // ...and then to the room list.
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
 
@@ -1675,19 +1573,12 @@ void registerShellRealtimeLiveWidgetTests() {
 
     expect(find.byKey(const ValueKey('home-narrow-room-list')), findsNothing);
     expect(find.byKey(const ValueKey('home-narrow-content')), findsNothing);
-    // Wide layout: rooms are header tabs and lobby cards at the same time.
-    for (final roomId in ['server-alpha', 'server-beta']) {
-      expect(find.byKey(ValueKey('home-room-tab-$roomId')), findsOneWidget);
-      expect(find.byKey(ValueKey('home-lobby-room-$roomId')), findsOneWidget);
-    }
+    expect(find.text('Alpha Room'), findsOneWidget);
+    expect(find.text('Beta Room'), findsOneWidget);
 
-    await _openRealtimeLiveTestRoom(tester, 'server-alpha');
+    await tester.tap(find.text('Alpha Room'));
+    await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('home-lobby')), findsNothing);
-    expect(
-      find.byKey(const ValueKey('home-room-tab-server-beta')),
-      findsOneWidget,
-    );
     expect(find.text('Beta Room'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('chat-header-live-preview')),
@@ -1696,10 +1587,7 @@ void registerShellRealtimeLiveWidgetTests() {
     expect(
       tester
           .widget<ui.PressableSurface>(
-            find.descendant(
-              of: find.byKey(const ValueKey('chat-header-live-button')),
-              matching: find.byType(ui.PressableSurface),
-            ),
+            find.byKey(const ValueKey('chat-header-live-button')),
           )
           .tooltip,
       isNotNull,
@@ -1748,16 +1636,11 @@ void registerShellRealtimeLiveWidgetTests() {
       findsNothing,
     );
     expect(find.byKey(const ValueKey('home-narrow-room-list')), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('home-title-search-button')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const ValueKey('home-title-search')), findsOneWidget);
     expect(find.byTooltip('最小化'), findsOneWidget);
     expect(find.byTooltip('最大化'), findsOneWidget);
     expect(find.byTooltip('关闭'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('home-title-search-button')));
-    await tester.pumpAndSettle();
     final compactSearchField = find.descendant(
       of: find.byKey(const ValueKey('home-title-search')),
       matching: find.byType(TextField),
@@ -1793,13 +1676,20 @@ void registerShellRealtimeLiveWidgetTests() {
 
     await tester.enterText(compactSearchField, '');
     await tester.pumpAndSettle();
-    await _closeRealtimeLiveSearchPalette(tester);
 
-    await _openRealtimeLiveTestRoom(tester, 'server-alpha');
+    await tester.tap(find.text('Alpha Room'));
+    await tester.pumpAndSettle();
 
     expect(find.byTooltip('返回房间列表'), findsOneWidget);
     expect(find.byKey(const ValueKey('home-narrow-content')), findsOneWidget);
-    _expectRealtimeLiveTabCount(tester, '1');
+    expect(
+      find.byKey(const ValueKey('chat-header-live-preview-count')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('chat-header-live-preview')),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -1824,15 +1714,13 @@ void registerShellRealtimeLiveWidgetTests() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('home-narrow-room-list')), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('home-title-search-button')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const ValueKey('home-title-search')), findsOneWidget);
     expect(find.byTooltip('最小化'), findsNothing);
     expect(find.byTooltip('最大化'), findsNothing);
     expect(find.byTooltip('关闭'), findsNothing);
 
-    await _openRealtimeLiveTestRoom(tester, 'server-alpha');
+    await tester.tap(find.text('Alpha Room'));
+    await tester.pumpAndSettle();
 
     expect(find.byTooltip('返回房间列表'), findsOneWidget);
     expect(find.byKey(const ValueKey('home-narrow-content')), findsOneWidget);
@@ -1859,25 +1747,17 @@ void registerShellRealtimeLiveWidgetTests() {
     );
     await tester.pumpAndSettle();
 
-    await _openRealtimeLiveTestRoom(tester, 'server-alpha');
+    await tester.tap(find.text('Alpha Room'));
+    await tester.pumpAndSettle();
 
     expect(find.byTooltip('返回房间列表'), findsOneWidget);
-    final roomTitle = find.byKey(const ValueKey('chat-header-room-title'));
-    expect(roomTitle, findsOneWidget);
-    // In the compact room bar the live count rides on the voice tab, below the
-    // room identity row.
-    _expectRealtimeLiveTabCount(tester, '1');
     expect(
-      tester.getRect(roomTitle).bottom,
-      lessThanOrEqualTo(
-        tester
-            .getRect(find.byKey(const ValueKey('chat-header-live-button')))
-            .top,
-      ),
+      find.byKey(const ValueKey('chat-header-room-title')),
+      findsOneWidget,
     );
     expect(
-      tester.renderObject<RenderParagraph>(roomTitle).didExceedMaxLines,
-      isFalse,
+      find.byKey(const ValueKey('chat-header-live-preview-count')),
+      findsOneWidget,
     );
     expect(find.text('Alpha Room'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -1921,79 +1801,4 @@ void registerShellRealtimeLiveWidgetTests() {
     );
     expect(tester.takeException(), isNull);
   });
-}
-
-/// Opens a room the way a user does in the redesigned shell: through its
-/// lobby card (or compact lobby row) while the lobby is shown, otherwise
-/// through its tab in the header's scrollable room strip.
-Future<void> _openRealtimeLiveTestRoom(
-  WidgetTester tester,
-  String roomId,
-) async {
-  final lobbyCard = find.byKey(ValueKey('home-lobby-room-$roomId'));
-  final Finder target;
-  if (lobbyCard.evaluate().isNotEmpty) {
-    target = lobbyCard;
-  } else {
-    // The header tab strip is a lazily built horizontal list; scroll it the
-    // way a user would until the tab is shown.
-    target = find.byKey(ValueKey('home-room-tab-$roomId'));
-    await tester.scrollUntilVisible(
-      target,
-      60,
-      scrollable: find.descendant(
-        of: find.byKey(const ValueKey('home-room-tab-list')),
-        matching: find.byType(Scrollable),
-      ),
-    );
-  }
-  expect(target, findsOneWidget);
-  await tester.ensureVisible(target);
-  await tester.pumpAndSettle();
-  await tester.tap(target);
-  await tester.pumpAndSettle();
-}
-
-/// Opens the header account menu (presence, latency and logout).
-Future<void> _openRealtimeLiveAccountPanel(WidgetTester tester) async {
-  final panel = find.byKey(const ValueKey('home-sidebar-user-summary'));
-  if (panel.evaluate().isNotEmpty) return;
-  await tester.tap(find.byKey(const ValueKey('home-account-button')));
-  await tester.pumpAndSettle();
-  expect(panel, findsOneWidget);
-}
-
-/// Dismisses the search palette through its barrier.
-Future<void> _closeRealtimeLiveSearchPalette(WidgetTester tester) async {
-  final barrier = find.byKey(const ValueKey('home-search-palette-barrier'));
-  expect(barrier, findsOneWidget);
-  await tester.tapAt(tester.getRect(barrier).bottomLeft + const Offset(4, -4));
-  await tester.pumpAndSettle();
-  expect(find.byKey(const ValueKey('home-search-palette')), findsNothing);
-}
-
-Color _realtimeLiveAccountRingColor(WidgetTester tester) {
-  final ring = tester.widget<AnimatedContainer>(
-    find
-        .descendant(
-          of: find.byKey(const ValueKey('home-account-button')),
-          matching: find.byType(AnimatedContainer),
-        )
-        .first,
-  );
-  final border = (ring.decoration! as BoxDecoration).border! as Border;
-  return border.top.color;
-}
-
-void _expectRealtimeLiveTabCount(WidgetTester tester, String count) {
-  final liveTab = find.byKey(const ValueKey('chat-header-live-button'));
-  final liveCount = find.descendant(
-    of: liveTab,
-    matching: find.byKey(const ValueKey('room-tab-live-count')),
-  );
-  expect(liveCount, findsOneWidget);
-  expect(
-    find.descendant(of: liveCount, matching: find.text(count)),
-    findsOneWidget,
-  );
 }

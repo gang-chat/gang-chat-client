@@ -55,8 +55,7 @@ void registerShellAuthSmokeWidgetTests() {
     await tester.pumpWidget(GangApp(tokenStore: _MemoryTokenStore()));
     await tester.pump();
 
-    expect(find.text('GANG CHAT'), findsAtLeastNWidgets(1));
-    expect(find.byKey(const ValueKey('auth-brand-icon')), findsOneWidget);
+    expect(find.text('Gang Chat'), findsAtLeastNWidgets(1));
     expect(find.text('登录用户名或邮箱地址'), findsOneWidget);
     expect(find.text('密码'), findsOneWidget);
     expect(find.byTooltip('显示密码'), findsOneWidget);

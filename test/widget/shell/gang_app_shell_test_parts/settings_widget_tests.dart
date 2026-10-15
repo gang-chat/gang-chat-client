@@ -399,9 +399,10 @@ void registerShellSettingsWidgetTests() {
     );
     await tester.pumpAndSettle();
 
-    await _homeOpenRoom(tester, 'server-alpha');
+    await tester.tap(find.text('Alpha Room'));
+    await tester.pumpAndSettle();
     await _openLiveChannelFromHeader(tester);
-    await tester.tap(find.widgetWithText(ui.Button, '加入语音'));
+    await tester.tap(find.widgetWithText(ui.Button, '加入'));
     await tester.pumpAndSettle();
 
     expect(liveSession.inputVolumes.last, closeTo(0.35, 1e-9));
@@ -1056,9 +1057,10 @@ void registerShellSettingsWidgetTests() {
     );
     await tester.pumpAndSettle();
 
-    await _homeOpenRoom(tester, 'server-alpha');
+    await tester.tap(find.text('Alpha Room'));
+    await tester.pumpAndSettle();
     await _openLiveChannelFromHeader(tester);
-    await tester.tap(find.widgetWithText(ui.Button, '加入语音'));
+    await tester.tap(find.widgetWithText(ui.Button, '加入'));
     await tester.pumpAndSettle();
 
     await tester.tap(_liveControl('headphones'));
@@ -1066,14 +1068,14 @@ void registerShellSettingsWidgetTests() {
     expect(
       find.descendant(
         of: _liveControl('mic'),
-        matching: find.byIcon(Icons.mic_off_rounded),
+        matching: find.byIcon(Icons.mic_off),
       ),
       findsOneWidget,
     );
     expect(
       find.descendant(
         of: _liveControl('headphones'),
-        matching: find.byIcon(Icons.headset_off_rounded),
+        matching: find.byIcon(Icons.headset_off),
       ),
       findsOneWidget,
     );
@@ -1107,14 +1109,14 @@ void registerShellSettingsWidgetTests() {
     expect(
       find.descendant(
         of: _liveControl('mic'),
-        matching: find.byIcon(Icons.mic_rounded),
+        matching: find.byIcon(Icons.mic),
       ),
       findsOneWidget,
     );
     expect(
       find.descendant(
         of: _liveControl('headphones'),
-        matching: find.byIcon(Icons.headphones_rounded),
+        matching: find.byIcon(Icons.headphones),
       ),
       findsOneWidget,
     );
@@ -1157,14 +1159,14 @@ void registerShellSettingsWidgetTests() {
     expect(
       find.descendant(
         of: _liveControl('mic'),
-        matching: find.byIcon(Icons.mic_off_rounded),
+        matching: find.byIcon(Icons.mic_off),
       ),
       findsOneWidget,
     );
     expect(
       find.descendant(
         of: _liveControl('headphones'),
-        matching: find.byIcon(Icons.headset_off_rounded),
+        matching: find.byIcon(Icons.headset_off),
       ),
       findsOneWidget,
     );
@@ -1185,14 +1187,14 @@ void registerShellSettingsWidgetTests() {
     expect(
       find.descendant(
         of: _liveControl('mic'),
-        matching: find.byIcon(Icons.mic_rounded),
+        matching: find.byIcon(Icons.mic),
       ),
       findsOneWidget,
     );
     expect(
       find.descendant(
         of: _liveControl('headphones'),
-        matching: find.byIcon(Icons.headphones_rounded),
+        matching: find.byIcon(Icons.headphones),
       ),
       findsOneWidget,
     );
@@ -1202,14 +1204,14 @@ void registerShellSettingsWidgetTests() {
     expect(
       find.descendant(
         of: _liveControl('mic'),
-        matching: find.byIcon(Icons.mic_rounded),
+        matching: find.byIcon(Icons.mic),
       ),
       findsOneWidget,
     );
     expect(
       find.descendant(
         of: _liveControl('headphones'),
-        matching: find.byIcon(Icons.headphones_rounded),
+        matching: find.byIcon(Icons.headphones),
       ),
       findsOneWidget,
     );

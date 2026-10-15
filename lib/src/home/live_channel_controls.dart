@@ -87,14 +87,9 @@ class _LiveControlBar extends StatelessWidget {
             onChanged: onInputVolumeChanged,
             child: ButtonIcon(
               icon: Icon(
-                micControl.mutedForDisplay
-                    ? Icons.mic_off_rounded
-                    : Icons.mic_rounded,
+                micControl.mutedForDisplay ? Icons.mic_off : Icons.mic,
               ),
               selected: micControl.active,
-              tone: micControl.mutedForDisplay
-                  ? ButtonTone.danger
-                  : ButtonTone.neutral,
               onPressed: micControl.enabled ? onToggleMic : null,
               size: _controlButtonSize,
             ),
@@ -107,12 +102,9 @@ class _LiveControlBar extends StatelessWidget {
             onChanged: onOutputVolumeChanged,
             child: ButtonIcon(
               icon: Icon(
-                headphonesMuted
-                    ? Icons.headset_off_rounded
-                    : Icons.headphones_rounded,
+                headphonesMuted ? Icons.headset_off : Icons.headphones,
               ),
               selected: !headphonesMuted,
-              tone: headphonesMuted ? ButtonTone.danger : ButtonTone.neutral,
               onPressed: onToggleHeadphones,
               size: _controlButtonSize,
             ),
@@ -121,9 +113,7 @@ class _LiveControlBar extends StatelessWidget {
             message: cameraOn ? '关闭摄像头' : '开启摄像头',
             child: ButtonIcon(
               key: const ValueKey<String>('live-control:camera'),
-              icon: Icon(
-                cameraOn ? Icons.videocam_rounded : Icons.videocam_outlined,
-              ),
+              icon: Icon(cameraOn ? Icons.videocam : Icons.videocam_outlined),
               selected: cameraOn,
               onPressed: onToggleCamera,
               size: _controlButtonSize,
@@ -148,10 +138,8 @@ class _LiveControlBar extends StatelessWidget {
             message: joining ? '正在加入语音' : '离开语音频道',
             child: ButtonIcon(
               key: const ValueKey<String>('live-control:leave'),
-              icon: const Icon(Icons.call_end_rounded, color: Colors.white),
+              icon: const Icon(Icons.call_end),
               tone: ButtonTone.danger,
-              backgroundColor: UiColors.danger,
-              borderColor: Colors.transparent,
               onPressed: joining ? null : onLeave,
               size: _controlButtonSize,
             ),
@@ -184,14 +172,13 @@ class _LiveControlBar extends StatelessWidget {
                     key: const ValueKey<String>('live-control:collapse'),
                     width: double.infinity,
                     height: _controlButtonSize,
-                    icon: const Icon(Icons.chat_bubble_outline_rounded),
+                    icon: const Icon(Icons.keyboard_arrow_up),
                     onPressed: onCollapse,
-                    child: const Text('回到聊天'),
+                    child: const Text('收起'),
                   )
                 : ButtonIcon(
                     key: const ValueKey<String>('live-control:collapse'),
-                    icon: const Icon(Icons.chat_bubble_outline_rounded),
-                    ghost: true,
+                    icon: const Icon(Icons.keyboard_arrow_up),
                     onPressed: onCollapse,
                     size: _controlButtonSize,
                   ),
@@ -213,11 +200,10 @@ class _LiveControlBar extends StatelessWidget {
                         key: const ValueKey<String>('live-control:join'),
                         width: double.infinity,
                         height: _controlButtonSize,
-                        tone: ButtonTone.primary,
                         loading: joining,
-                        icon: const Icon(Icons.graphic_eq_rounded),
+                        icon: const Icon(Icons.call),
                         onPressed: onJoin,
-                        child: const Text('加入语音'),
+                        child: const Text('加入'),
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -276,12 +262,10 @@ class _LiveControlBar extends StatelessWidget {
                 child: Button(
                   key: const ValueKey<String>('live-control:join'),
                   height: _controlButtonSize,
-                  tone: ButtonTone.primary,
-                  padding: const EdgeInsets.symmetric(horizontal: 22),
                   loading: joining,
-                  icon: const Icon(Icons.graphic_eq_rounded),
+                  icon: const Icon(Icons.call),
                   onPressed: onJoin,
-                  child: const Text('加入语音'),
+                  child: const Text('加入'),
                 ),
               ),
               const SizedBox(width: 12),
@@ -291,56 +275,40 @@ class _LiveControlBar extends StatelessWidget {
             ],
             _HoverInfo(
               message: '收起语音频道',
-              child: ButtonIcon(
-                key: const ValueKey<String>('live-control:collapse'),
-                icon: const Icon(Icons.chat_bubble_outline_rounded),
-                ghost: true,
-                onPressed: onCollapse,
-                size: _controlButtonSize,
-              ),
+              child: !joined
+                  ? Button(
+                      key: const ValueKey<String>('live-control:collapse'),
+                      height: _controlButtonSize,
+                      icon: const Icon(Icons.keyboard_arrow_up),
+                      onPressed: onCollapse,
+                      child: const Text('收起'),
+                    )
+                  : ButtonIcon(
+                      key: const ValueKey<String>('live-control:collapse'),
+                      icon: const Icon(Icons.keyboard_arrow_up),
+                      onPressed: onCollapse,
+                      size: _controlButtonSize,
+                    ),
             ),
           ],
         );
 
-        final dock = _LiveControlDock(child: buttonRow);
-        if (musicBoxStrip == null) return Center(child: dock);
+        if (musicBoxStrip == null) return Center(child: buttonRow);
 
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Center(
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 320),
+                constraints: const BoxConstraints(maxWidth: 280),
                 child: musicBoxStrip,
               ),
             ),
             const SizedBox(height: 10),
-            Center(child: dock),
+            Center(child: buttonRow),
           ],
         );
       },
-    );
-  }
-}
-
-/// Floating glass-dark capsule that holds the voice controls at the bottom
-/// of the stage.
-class _LiveControlDock extends StatelessWidget {
-  const _LiveControlDock({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      key: const ValueKey<String>('live-control-dock'),
-      decoration: BoxDecoration(
-        color: UiColors.surfaceRaised.withValues(alpha: 0.94),
-        borderRadius: BorderRadius.circular(UiRadii.pill),
-        border: Border.all(color: UiColors.borderStrong),
-        boxShadow: UiShadows.popover,
-      ),
-      child: Padding(padding: const EdgeInsets.all(7), child: child),
     );
   }
 }

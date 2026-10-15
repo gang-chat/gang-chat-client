@@ -7,7 +7,6 @@ import '../protocol/models.dart';
 import '../ui/ui.dart';
 import 'chat_image_preview.dart';
 import 'hover_card_anchor.dart';
-import 'profile_pass.dart';
 
 typedef RoomProfileResolver = Future<PublicRoom> Function(PublicRoom room);
 typedef UserProfileResolver = Future<UserSummary> Function(UserSummary user);
@@ -520,163 +519,130 @@ class _UserProfileCard extends StatelessWidget {
         ? null
         : _nonEmpty(avatarUrl);
 
-    final presenceKicker = user.isSuspended
-        ? 'SUSPENDED'
-        : inLive
-        ? 'ON AIR'
-        : online
-        ? 'ONLINE'
-        : 'OFFLINE';
-    return ProfilePass(
-      color: avatarFallbackColor(user.defaultAvatarKey),
-      kicker: 'GANG PASS · $presenceKicker',
-      code: passCode(uid),
-      avatarSize: 60,
-      avatar: _ProfileImagePreview(
-        key: const ValueKey('user-profile-card-avatar-preview'),
-        imageUrl: previewAvatarUrl,
-        suggestedName: '${room_display.userPrimaryName(user)}-avatar.png',
-        child: Avatar(
-          label: room_display.userAvatarLabel(user),
-          imageUrl: avatarUrl,
-          defaultAvatarKey: user.defaultAvatarKey,
-          size: 60,
-          active: online,
-          activeBorderWidth: 2,
-          activeBorderColor: inLive ? UiColors.presenceVoice : null,
-          paintBorderOnForeground: true,
-        ),
-      ),
-      badges: Wrap(
-        spacing: 6,
-        runSpacing: 6,
-        alignment: WrapAlignment.end,
-        children: [
-          presencePill,
-          if (role != null) RoleBadge(label: role),
-        ],
-      ),
-      identity: Column(
+    return Padding(
+      padding: const EdgeInsets.all(UiSpacing.lg),
+      child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Flexible(
-                child: HoverCardSelectableText(
-                  value: name,
-                  style: UiTypography.headline.copyWith(fontSize: 20),
-                  maxLines: 12,
+              _ProfileImagePreview(
+                key: const ValueKey('user-profile-card-avatar-preview'),
+                imageUrl: previewAvatarUrl,
+                suggestedName:
+                    '${room_display.userPrimaryName(user)}-avatar.png',
+                child: Avatar(
+                  label: room_display.userAvatarLabel(user),
+                  imageUrl: avatarUrl,
+                  defaultAvatarKey: user.defaultAvatarKey,
+                  size: 48,
+                  active: online,
+                  activeBorderWidth: 2,
+                  activeBorderColor: inLive ? UiColors.presenceVoice : null,
+                  paintBorderOnForeground: true,
                 ),
               ),
-              if (gender != null) ...[
-                const SizedBox(width: 6),
-                Text(
-                  gender.symbol,
-                  maxLines: 1,
-                  style: UiTypography.title.copyWith(
-                    color: gender.color,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                  ),
+              const SizedBox(width: UiSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Flexible(
+                          child: HoverCardSelectableText(
+                            value: name,
+                            style: UiTypography.title.copyWith(fontSize: 16),
+                            maxLines: 12,
+                          ),
+                        ),
+                        if (gender != null) ...[
+                          const SizedBox(width: 5),
+                          Text(
+                            gender.symbol,
+                            maxLines: 1,
+                            style: UiTypography.title.copyWith(
+                              color: gender.color,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    HoverCardSelectableText(
+                      value: '@${user.username}',
+                      copyStartOffset: 1,
+                      maxLines: 12,
+                      style: UiTypography.label.copyWith(
+                        color: UiColors.textMuted,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ],
           ),
-          const SizedBox(height: 2),
-          HoverCardSelectableText(
-            value: '@${user.username}',
-            copyStartOffset: 1,
-            maxLines: 12,
-            style: UiTypography.mono.copyWith(
-              color: UiColors.textMuted,
-              fontSize: 11.5,
-            ),
+          const SizedBox(height: UiSpacing.md),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              presencePill,
+              if (role != null) RoleBadge(label: role),
+            ],
           ),
-        ],
-      ),
-      body: [
-        if (bio != null && bio.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          _PassQuote(
-            child: HoverCardSelectableText(
+          if (bio != null && bio.isNotEmpty) ...[
+            const SizedBox(height: UiSpacing.md),
+            HoverCardSelectableText(
               value: bio,
               maxLines: 4,
-              style: UiTypography.body.copyWith(
-                color: UiColors.textSecondary,
-                height: 1.5,
+              style: UiTypography.body.copyWith(color: UiColors.textSecondary),
+            ),
+          ],
+          if (commonRooms.isNotEmpty) ...[
+            const SizedBox(height: UiSpacing.md),
+            Text(
+              '${commonRooms.length} 个共同房间',
+              style: UiTypography.label.copyWith(color: UiColors.textMuted),
+            ),
+            const SizedBox(height: UiSpacing.xs),
+            _UserCommonRoomList(
+              rooms: commonRooms,
+              currentUser: currentUser,
+              onResolveUserProfile: onResolveUserProfile,
+              onResolveRoomProfile: onResolveRoomProfile,
+              onEnterRoom: onEnterCommonRoom,
+            ),
+          ],
+          if (uid != null && uid.isNotEmpty) ...[
+            const SizedBox(height: UiSpacing.sm),
+            HoverCardSelectableText(
+              value: 'UID: $uid',
+              copyStartOffset: 'UID: '.length,
+              style: UiTypography.label.copyWith(color: UiColors.textMuted),
+            ),
+          ],
+          if (action != null) ...[
+            const SizedBox(height: UiSpacing.md),
+            Center(
+              child: Button(
+                icon: Icon(action!.icon),
+                tone: ButtonTone.primary,
+                height: 34,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                onPressed: action!.onPressed,
+                child: Text(action!.label),
               ),
             ),
-          ),
+          ],
         ],
-        if (commonRooms.isNotEmpty) ...[
-          const SizedBox(height: 14),
-          Text(
-            '${commonRooms.length} 个共同房间',
-            style: UiTypography.overline.copyWith(letterSpacing: 1),
-          ),
-          const SizedBox(height: 4),
-          _UserCommonRoomList(
-            rooms: commonRooms,
-            currentUser: currentUser,
-            onResolveUserProfile: onResolveUserProfile,
-            onResolveRoomProfile: onResolveRoomProfile,
-            onEnterRoom: onEnterCommonRoom,
-          ),
-        ],
-      ],
-      stub: [
-        if (uid != null && uid.isNotEmpty)
-          Row(
-            children: [
-              Expanded(
-                child: HoverCardSelectableText(
-                  value: 'UID: $uid',
-                  copyStartOffset: 'UID: '.length,
-                  style: UiTypography.mono.copyWith(
-                    color: UiColors.text,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.6,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              PassBarcode(value: uid),
-            ],
-          ),
-        if (action != null) ...[
-          if (uid != null && uid.isNotEmpty) const SizedBox(height: 12),
-          Button(
-            icon: Icon(action!.icon),
-            tone: ButtonTone.primary,
-            height: 36,
-            width: double.infinity,
-            onPressed: action!.onPressed,
-            child: Text(action!.label),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-/// A quoted line (signature / description) with a signal bar on its left.
-class _PassQuote extends StatelessWidget {
-  const _PassQuote({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(10, 2, 0, 2),
-      decoration: const BoxDecoration(
-        border: Border(left: BorderSide(color: UiColors.accent, width: 2)),
       ),
-      child: child,
     );
   }
 }
@@ -686,23 +652,24 @@ class _DeletedUserProfileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ProfilePass(
-      key: const ValueKey('deleted-user-profile-card'),
-      color: UiColors.borderStrong,
-      kicker: 'GANG PASS · REVOKED',
-      code: 'VOID',
-      avatarSize: 52,
-      avatarRounded: false,
-      avatar: const Avatar(
-        label: '',
-        defaultAvatarKey: 'graphite-2',
-        size: 52,
-        rounded: false,
-        showFallbackText: false,
-      ),
-      identity: Text(
-        '用户已注销',
-        style: UiTypography.subtitle.copyWith(color: UiColors.textSecondary),
+    return Padding(
+      padding: const EdgeInsets.all(UiSpacing.lg),
+      child: Row(
+        key: const ValueKey('deleted-user-profile-card'),
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Avatar(
+            label: '',
+            defaultAvatarKey: 'graphite-2',
+            size: 42,
+            showFallbackText: false,
+          ),
+          const SizedBox(width: UiSpacing.md),
+          Text(
+            '用户已注销',
+            style: UiTypography.body.copyWith(color: UiColors.textSecondary),
+          ),
+        ],
       ),
     );
   }
@@ -971,52 +938,60 @@ class _RoomProfileCard extends StatelessWidget {
         ? null
         : _nonEmpty(roomAvatarUrl);
 
-    return ProfilePass(
-      color: avatarFallbackColor(room.defaultAvatarKey),
-      kicker: 'ROOM PASS · ${room_display.visibilityLabel(room.visibility)}',
-      code: passCode(rid),
-      avatarSize: 56,
-      avatarRounded: true,
-      avatar: _ProfileImagePreview(
-        key: const ValueKey('room-profile-card-icon-preview'),
-        imageUrl: previewRoomAvatarUrl,
-        suggestedName: '${room.name}-icon.png',
-        child: Avatar(
-          label: room_display.publicRoomAvatarLabel(room),
-          imageUrl: roomAvatarUrl,
-          defaultAvatarKey: room.defaultAvatarKey,
-          size: 56,
-          rounded: true,
-          activeBorderWidth: 2,
-        ),
-      ),
-      badges: StatusBadge(
-        label: room.joined ? '已加入' : '未加入',
-        icon: room.joined ? Icons.check_circle : Icons.circle_outlined,
-        active: room.joined,
-      ),
-      identity: Column(
+    return Padding(
+      padding: const EdgeInsets.all(UiSpacing.lg),
+      child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          HoverCardSelectableText(
-            value: room.name,
-            style: UiTypography.headline.copyWith(fontSize: 20),
-            maxLines: 12,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _ProfileImagePreview(
+                key: const ValueKey('room-profile-card-icon-preview'),
+                imageUrl: previewRoomAvatarUrl,
+                suggestedName: '${room.name}-icon.png',
+                child: Avatar(
+                  label: room_display.publicRoomAvatarLabel(room),
+                  imageUrl: roomAvatarUrl,
+                  defaultAvatarKey: room.defaultAvatarKey,
+                  size: 48,
+                  activeBorderWidth: 2,
+                ),
+              ),
+              const SizedBox(width: UiSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    HoverCardSelectableText(
+                      value: room.name,
+                      style: UiTypography.title.copyWith(fontSize: 16),
+                      maxLines: 12,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${room.memberCount} 名成员',
+                      maxLines: 2,
+                      style: UiTypography.label.copyWith(
+                        color: UiColors.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: UiSpacing.md),
           Wrap(
             spacing: 6,
             runSpacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Text(
-                '${room.memberCount} 名成员',
-                maxLines: 2,
-                style: UiTypography.mono.copyWith(
-                  color: UiColors.textSecondary,
-                  fontSize: 11.5,
-                ),
+              StatusBadge(
+                label: room.joined ? '已加入' : '未加入',
+                icon: room.joined ? Icons.check_circle : Icons.circle_outlined,
+                active: room.joined,
               ),
               StatusBadge(label: room_display.visibilityLabel(room.visibility)),
               StatusBadge(
@@ -1024,85 +999,71 @@ class _RoomProfileCard extends StatelessWidget {
               ),
             ],
           ),
-        ],
-      ),
-      body: [
-        if (description != null) ...[
-          const SizedBox(height: 12),
-          _PassQuote(
-            child: HoverCardSelectableText(
+          if (description != null) ...[
+            const SizedBox(height: UiSpacing.md),
+            HoverCardSelectableText(
               value: description,
               maxLines: 4,
-              style: UiTypography.body.copyWith(
-                color: UiColors.textSecondary,
-                height: 1.5,
-              ),
+              style: UiTypography.body.copyWith(color: UiColors.textSecondary),
             ),
-          ),
-        ],
-        if (creator != null) ...[
-          const SizedBox(height: 14),
-          Text('创建者', style: UiTypography.overline.copyWith(letterSpacing: 1)),
-          const SizedBox(height: 6),
-          _RoomCardPersonRow(
-            avatarLabel: room_display.userAvatarLabel(creator),
-            avatarUrl: creator.avatarUrl,
-            defaultAvatarKey: creator.defaultAvatarKey,
-            name: room_display.userPrimaryName(creator),
-            profileUser: creator,
-            currentUser: currentUser,
-            onResolveUserProfile: onResolveUserProfile,
-            onResolveRoomProfile: onResolveRoomProfile,
-            onEnterCommonRoom: onEnterRoom,
-          ),
-        ],
-        if (joined) ...[
-          const SizedBox(height: 14),
-          Text(
-            '我的房间内信息',
-            style: UiTypography.overline.copyWith(letterSpacing: 1),
-          ),
-          const SizedBox(height: 6),
-          _RoomCardPersonRow(
-            avatarLabel: _currentUserAvatarLabel(currentUser),
-            avatarUrl: myAvatarUrl,
-            defaultAvatarKey: myDefaultAvatarKey,
-            name: myName,
-            trailing: RoleBadge(label: myRole),
-          ),
-        ],
-      ],
-      stub: [
-        Row(
-          children: [
-            Expanded(
-              child: HoverCardSelectableText(
-                value: 'RID: $rid',
-                copyStartOffset: 'RID: '.length,
-                style: UiTypography.mono.copyWith(
-                  color: UiColors.text,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.6,
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            PassBarcode(value: rid),
           ],
-        ),
-        if (joined) ...[
-          const SizedBox(height: 12),
-          Button(
-            icon: const Icon(Icons.login_rounded),
-            tone: ButtonTone.primary,
-            height: 36,
-            width: double.infinity,
-            onPressed: onEnterRoom == null ? null : () => onEnterRoom!(room),
-            child: const Text('进入房间'),
+          if (creator != null) ...[
+            const SizedBox(height: UiSpacing.md),
+            Text(
+              '创建者',
+              style: UiTypography.label.copyWith(color: UiColors.textMuted),
+            ),
+            const SizedBox(height: UiSpacing.xs),
+            _RoomCardPersonRow(
+              avatarLabel: room_display.userAvatarLabel(creator),
+              avatarUrl: creator.avatarUrl,
+              defaultAvatarKey: creator.defaultAvatarKey,
+              name: room_display.userPrimaryName(creator),
+              profileUser: creator,
+              currentUser: currentUser,
+              onResolveUserProfile: onResolveUserProfile,
+              onResolveRoomProfile: onResolveRoomProfile,
+              onEnterCommonRoom: onEnterRoom,
+            ),
+          ],
+          if (joined) ...[
+            const SizedBox(height: UiSpacing.md),
+            Text(
+              '我的房间内信息',
+              style: UiTypography.label.copyWith(color: UiColors.textMuted),
+            ),
+            const SizedBox(height: UiSpacing.xs),
+            _RoomCardPersonRow(
+              avatarLabel: _currentUserAvatarLabel(currentUser),
+              avatarUrl: myAvatarUrl,
+              defaultAvatarKey: myDefaultAvatarKey,
+              name: myName,
+              trailing: RoleBadge(label: myRole),
+            ),
+          ],
+          const SizedBox(height: UiSpacing.sm),
+          HoverCardSelectableText(
+            value: 'RID: $rid',
+            copyStartOffset: 'RID: '.length,
+            style: UiTypography.label.copyWith(color: UiColors.textMuted),
           ),
+          if (joined) ...[
+            const SizedBox(height: UiSpacing.md),
+            Center(
+              child: Button(
+                icon: const Icon(Icons.login_rounded),
+                tone: ButtonTone.primary,
+                height: 34,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                onPressed: onEnterRoom == null
+                    ? null
+                    : () => onEnterRoom!(room),
+                child: const Text('进入房间'),
+              ),
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
@@ -1112,23 +1073,24 @@ class _DeletedRoomProfileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ProfilePass(
-      key: const ValueKey('deleted-room-profile-card'),
-      color: UiColors.borderStrong,
-      kicker: 'ROOM PASS · CLOSED',
-      code: 'VOID',
-      avatarSize: 52,
-      avatarRounded: true,
-      avatar: const Avatar(
-        label: '',
-        defaultAvatarKey: 'graphite-2',
-        size: 52,
-        rounded: true,
-        showFallbackText: false,
-      ),
-      identity: Text(
-        '房间已删除',
-        style: UiTypography.subtitle.copyWith(color: UiColors.textSecondary),
+    return Padding(
+      padding: const EdgeInsets.all(UiSpacing.lg),
+      child: Row(
+        key: const ValueKey('deleted-room-profile-card'),
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Avatar(
+            label: '',
+            defaultAvatarKey: 'graphite-2',
+            size: 42,
+            showFallbackText: false,
+          ),
+          const SizedBox(width: UiSpacing.md),
+          Text(
+            '房间已删除',
+            style: UiTypography.body.copyWith(color: UiColors.textSecondary),
+          ),
+        ],
       ),
     );
   }

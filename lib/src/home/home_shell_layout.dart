@@ -46,31 +46,38 @@ extension _HomeShellLayout on _HomeShellState {
 
   Widget _buildNarrowLayout(
     double width, {
-    required _TitleLiveRoomDockBuilder liveRoomDockBuilder,
+    _TitleLiveRoomDockBuilder? footerLiveRoomDockBuilder,
   }) {
     if (!_narrowContentOpen) {
       return KeyedSubtree(
         key: const ValueKey('home-narrow-room-list'),
-        child: _buildLobby(
-          compact: true,
-          footer: LayoutBuilder(
-            builder: (context, constraints) {
-              final dockMaxWidth = constraints.maxWidth
-                  .clamp(0.0, double.infinity)
-                  .toDouble();
-              return liveRoomDockBuilder(dockMaxWidth, fillAvailable: true);
-            },
-          ),
+        child: _buildSidebar(
+          width: width,
+          openContentOnSelect: true,
+          header: _buildCompactSearchField(),
+          bodyOverride: _hasSearchQuery && _searchExpanded
+              ? _buildSearchResultsTapRegion()
+              : null,
+          footerMiddle: footerLiveRoomDockBuilder == null
+              ? null
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    final dockMaxWidth = constraints.maxWidth
+                        .clamp(0.0, double.infinity)
+                        .toDouble();
+                    return footerLiveRoomDockBuilder(
+                      dockMaxWidth,
+                      fillAvailable: true,
+                    );
+                  },
+                ),
         ),
       );
     }
 
     return KeyedSubtree(
       key: const ValueKey('home-narrow-content'),
-      child: ColoredBox(
-        color: UiColors.background,
-        child: _buildContentPane(onNavigateBack: _showNarrowRoomList),
-      ),
+      child: _buildContentPane(onNavigateBack: _showNarrowRoomList),
     );
   }
 
@@ -81,7 +88,6 @@ extension _HomeShellLayout on _HomeShellState {
   bool _canHandleShellBack({required bool narrowLayout}) {
     return _appUpdateDownloadInProgress ||
         _fullScreenLiveTrack != null ||
-        _searchPaletteOpen ||
         (_hasSearchQuery && _searchExpanded) ||
         _settingsOpen ||
         _contentMode != _ContentMode.chat ||
@@ -92,10 +98,6 @@ extension _HomeShellLayout on _HomeShellState {
     if (_appUpdateDownloadInProgress) return;
     if (_fullScreenLiveTrack != null) {
       _exitLiveFullScreen();
-      return;
-    }
-    if (_searchPaletteOpen) {
-      _closeSearchPalette();
       return;
     }
     if (_hasSearchQuery && _searchExpanded) {
@@ -285,17 +287,9 @@ extension _HomeShellLayout on _HomeShellState {
       );
     }
 
-    if (_selectedServerId == null ||
-        (_lobbyOpen &&
-            _contentMode == _ContentMode.chat &&
-            onNavigateBack == null)) {
-      return _buildLobby(compact: onNavigateBack != null);
-    }
+    if (_selectedServerId == null) return const HomeContent();
     if (_contentMode == _ContentMode.members && _selectedRoom != null) {
-      return _wrapRoomContext(
-        RoomContextTab.members,
-        onNavigateBack: onNavigateBack,
-        child: RoomMembersDialog(
+      return RoomMembersDialog(
         controller: _roomsController,
         room: _selectedRoom!,
         currentUser: _currentUser,
@@ -308,15 +302,11 @@ extension _HomeShellLayout on _HomeShellState {
         onChanged: () => unawaited(_loadServers()),
         onPendingJoinRequestsChanged: _handleSelectedJoinRequestsChanged,
         onOpenRoom: _openNotificationRoom,
-      ),
       );
     }
     if (_contentMode == _ContentMode.roomSettings && _selectedRoom != null) {
       final room = _selectedRoom!;
-      return _wrapRoomContext(
-        RoomContextTab.settings,
-        onNavigateBack: onNavigateBack,
-        child: RoomSettingsDialog(
+      return RoomSettingsDialog(
         key: ValueKey('home-room-settings-${room.id}'),
         controller: _roomsController,
         room: room,
@@ -387,14 +377,10 @@ extension _HomeShellLayout on _HomeShellState {
           shareApi: _services.api,
           currentUser: _currentUser,
         ),
-      ),
       );
     }
     if (_contentMode == _ContentMode.live) {
-      return _wrapRoomContext(
-        RoomContextTab.live,
-        onNavigateBack: onNavigateBack,
-        child: LiveChannelPane(
+      return LiveChannelPane(
         title: _roomTitle(_selectedRoom, _selectedServer),
         avatarUrl: _selectedRoom?.avatarUrl ?? _selectedServer?.avatarUrl,
         live: _live ?? _selectedRoom?.live,
@@ -522,15 +508,11 @@ extension _HomeShellLayout on _HomeShellState {
         onResolveParticipantRoomProfile: _resolveRoomProfile,
         onEnterParticipantProfileRoom: _openNotificationRoom,
         participantProfileActionBuilder: _messageProfileAction,
-      ),
       );
     }
 
     final visibleMessages = _visibleMessagesForMe(_messages);
-    return _wrapRoomContext(
-      RoomContextTab.chat,
-      onNavigateBack: onNavigateBack,
-      child: ChatPane(
+    return ChatPane(
       currentUser: _currentUser,
       timestampNow: _serverNow,
       roomCard: _selectedServer,
@@ -576,6 +558,7 @@ extension _HomeShellLayout on _HomeShellState {
       onNavigateMentionSelection: _navigateComposerMentionSelection,
       onConfirmMentionSelection: _confirmComposerMentionSelection,
       onHighlightMentionSelection: _highlightComposerMentionSelection,
+      hasPendingJoinRequests: _selectedRoomHasPendingJoinRequests,
       onSubmit: (value) => unawaited(_sendText(value)),
       onSendSticker: (sticker) => unawaited(_sendSticker(sticker)),
       onLoadStickers: () => unawaited(_loadStickerPacks(forceReload: true)),
@@ -604,6 +587,10 @@ extension _HomeShellLayout on _HomeShellState {
       onRemoveAttachment: _removeAttachment,
       onRetryAttachment: _retryAttachment,
       onRetry: () => unawaited(_retryOpenSelectedRoom()),
+      onNavigateBack: onNavigateBack,
+      onOpenLiveChannel: _openLiveChannel,
+      onOpenRoomMembers: () => unawaited(_openRoomMembers()),
+      onOpenRoomSettings: () => unawaited(_openRoomSettings()),
       onViewedNewMessages: _clearSelectedRoomNewMessagePrompt,
       onResolveSenderProfile: _resolveSenderProfile,
       onResolveRoomProfile: _resolveRoomProfile,
@@ -611,190 +598,49 @@ extension _HomeShellLayout on _HomeShellState {
       senderProfileActionBuilder: _messageProfileAction,
       onMentionUser: _mentionUserFromAvatar,
       composerDropKey: _composerDropKey,
-    ),
     );
   }
 
-  Widget _buildContentSheet(Widget child) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        homeContentSheetInset,
-        0,
-        homeContentSheetInset,
-        homeContentSheetInset,
-      ),
-      child: DecoratedBox(
-        key: const ValueKey('home-content-sheet'),
-        decoration: BoxDecoration(
-          color: UiColors.surfaceLow,
-          borderRadius: BorderRadius.circular(UiRadii.xl),
-          border: Border.all(color: UiColors.border),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(UiRadii.xl - 1),
-          child: child,
-        ),
-      ),
-    );
-  }
-
-  bool get _roomContentVisible =>
-      !_settingsOpen &&
-      _selectedServerId != null &&
-      !_lobbyOpen &&
-      switch (_contentMode) {
-        _ContentMode.chat ||
-        _ContentMode.live ||
-        _ContentMode.members ||
-        _ContentMode.roomSettings => true,
-        _ => false,
-      };
-
-  bool get _lobbyVisible =>
-      !_settingsOpen &&
-      _contentMode == _ContentMode.chat &&
-      (_selectedServerId == null || _lobbyOpen);
-
-  Widget _buildHeader({
-    required bool compact,
-    required _TitleLiveRoomDockBuilder liveRoomDockBuilder,
+  Widget _buildSidebar({
+    required double width,
+    required bool openContentOnSelect,
+    Widget? header,
+    Widget? bodyOverride,
+    Widget? footerMiddle,
   }) {
-    return _HomeTitleBar(
-      windowController: widget.windowController,
-      compact: compact,
-      interactionLocked: _appUpdateDownloadInProgress,
-      tabStrip: compact
-          ? null
-          : HomeRoomTabStrip(
-              rooms: _servers,
-              selectedRoomId: _roomContentVisible ? _selectedServerId : null,
-              lobbyActive: _lobbyVisible,
-              joinedLiveRoomId: _joinedLiveRoomId,
-              roomDrafts: _sidebarRoomDrafts,
-              createRoomActive:
-                  !_settingsOpen && _contentMode == _ContentMode.createRoom,
-              onLobbySelected: _openLobby,
-              onRoomSelected: (room) =>
-                  _selectServer(room, openContent: false),
-              onCreateRoom: () => _openCreateRoom(openContent: false),
-            ),
-      voiceCapsule: compact ? null : liveRoomDockBuilder(320),
-      searchActive: _searchPaletteOpen,
-      onOpenSearch: _openSearchPalette,
-      notificationsActive:
-          !_settingsOpen && _contentMode == _ContentMode.notifications,
-      hasPendingNotifications: _hasPendingRoomInvites,
-      pendingNotificationCount: _pendingRoomNotificationCount,
-      onOpenNotifications: () => _openNotifications(openContent: compact),
-      settingsActive: _settingsOpen,
-      onOpenSettings: () => _toggleSettings(openContent: compact),
-      account: _HeaderAccountButton(
-        user: _currentUser,
-        inLive: _joinedLiveRoomId != null,
-        reconnecting: _realtimeStatus == RealtimeConnectionStatus.reconnecting,
-        requestRoundTrip: widget.app.serverClock.requestRoundTrip,
-        logoutActive: _logoutConfirming,
-        onOpenSettings: () =>
-            _openSettingsSection(SettingsSection.profile, openContent: compact),
-        onLogout: () => unawaited(_confirmLogout()),
-      ),
-    );
-  }
-
-  Widget _buildLobby({required bool compact, Widget? footer}) {
-    return HomeLobby(
+    return HomeSidebar(
+      width: width,
       currentUser: _currentUser,
-      rooms: _servers,
+      servers: _sidebarServers,
       timestampNow: _serverNow,
       roomDrafts: _sidebarRoomDrafts,
-      selectedRoomId: _selectedServerId,
+      selectedServerId: _selectedServerId,
       joinedLiveRoomId: _joinedLiveRoomId,
-      loading: _loadingServers,
+      realtimeReconnecting:
+          _realtimeStatus == RealtimeConnectionStatus.reconnecting,
+      requestRoundTrip: widget.app.serverClock.requestRoundTrip,
+      searchQuery: _filteringSidebarBySearch ? _searchQuery : '',
+      loading: _loadingServers || _loadingSidebarSearch,
       error: _serverLoadError,
-      compact: compact,
-      footer: footer,
-      onRoomSelected: (room) => _selectServer(room, openContent: compact),
-      onCreateRoom: () => _openCreateRoom(openContent: compact),
+      settingsActive: _settingsOpen,
+      createRoomActive:
+          !_settingsOpen && _contentMode == _ContentMode.createRoom,
+      notificationsActive:
+          !_settingsOpen && _contentMode == _ContentMode.notifications,
+      logoutActive: _logoutConfirming,
+      hasPendingNotifications: _hasPendingRoomInvites,
+      pendingNotificationCount: _pendingRoomNotificationCount,
+      includeWindowChromeOffset: false,
+      header: header,
+      bodyOverride: bodyOverride,
+      footerMiddle: footerMiddle,
+      onServerSelected: (server) =>
+          _selectServer(server, openContent: openContentOnSelect),
+      onCreateRoom: () => _openCreateRoom(openContent: openContentOnSelect),
+      onOpenNotifications: () =>
+          _openNotifications(openContent: openContentOnSelect),
+      onOpenSettings: () => _toggleSettings(openContent: openContentOnSelect),
+      onLogout: () => unawaited(_confirmLogout()),
     );
-  }
-
-  void _openLobby() {
-    _setHomeState(() {
-      _clearDeferredRoomNotificationVisualMarkersInState();
-      _settingsOpen = false;
-      _settingsAppUpdate = null;
-      _superuserSettingsTarget = null;
-      _contentMode = _ContentMode.chat;
-      _lobbyOpen = true;
-    });
-  }
-
-  Widget _wrapRoomContext(
-    RoomContextTab tab, {
-    required Widget child,
-    VoidCallback? onNavigateBack,
-  }) {
-    final room = _selectedRoom;
-    final card = _selectedServer;
-    final live = _live;
-    final liveParticipantCount =
-        live?.participantCount ??
-        room?.live.participantCount ??
-        card?.liveParticipantCount;
-    final liveAvatarPreview =
-        live?.participants
-            .map((participant) => participant.user)
-            .take(5)
-            .toList() ??
-        room?.live.participants
-            .map((participant) => participant.user)
-            .take(5)
-            .toList() ??
-        card?.liveAvatarPreview ??
-        const <UserSummary>[];
-    return Column(
-      children: [
-        RoomContextBar(
-          title: _roomTitle(room, card),
-          avatarLabel: room != null
-              ? room_display.roomAvatarLabel(room)
-              : card != null
-              ? room_display.roomCardAvatarLabel(card)
-              : '聊天',
-          avatarUrl: room?.avatarUrl ?? card?.avatarUrl,
-          defaultAvatarKey:
-              room?.defaultAvatarKey ??
-              card?.defaultAvatarKey ??
-              kDefaultAvatarPresetKey,
-          memberCount: room?.memberCount ?? card?.memberCount,
-          onlineMemberCount: room?.onlineMemberCount ?? card?.onlineMemberCount,
-          liveParticipantCount: liveParticipantCount,
-          liveAvatarPreview: liveAvatarPreview,
-          voiceJoined:
-              _joinedLiveRoomId != null &&
-              _joinedLiveRoomId == _selectedServerId,
-          activeTab: tab,
-          hasPendingJoinRequests: _selectedRoomHasPendingJoinRequests,
-          onTabSelected: (next) => _selectRoomContextTab(tab, next),
-          onBack: onNavigateBack,
-          compact: onNavigateBack != null,
-        ),
-        Expanded(child: child),
-      ],
-    );
-  }
-
-  void _selectRoomContextTab(RoomContextTab current, RoomContextTab next) {
-    if (current == next) return;
-    switch (next) {
-      case RoomContextTab.chat:
-        _openChat();
-      case RoomContextTab.live:
-        _openLiveChannel();
-      case RoomContextTab.members:
-        unawaited(_openRoomMembers());
-      case RoomContextTab.settings:
-        unawaited(_openRoomSettings());
-    }
   }
 }

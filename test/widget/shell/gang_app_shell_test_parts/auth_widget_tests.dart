@@ -12,7 +12,8 @@ void registerShellAuthWidgetTests() {
         MaterialApp(
           theme: ui.uiTheme().copyWith(platform: TargetPlatform.android),
           home: LoginPage(
-            sizeForMode: _authPartWindowSizeForMode,
+            sizeForMode: (registering, {showingError = false}) =>
+                Size(430, registering ? 436 : 368),
             consumeInitialWindowLock: () => true,
             lockAuthWindow:
                 ({
@@ -36,11 +37,10 @@ void registerShellAuthWidgetTests() {
         find.byType(AnnotatedRegion<SystemUiOverlayStyle>),
       );
 
-      // Android keeps both modes on the registration geometry.
-      expect(loginSurface.height, _authPartWindowSizeForMode(true).height);
-      expect(scaffold.backgroundColor, ui.UiColors.background);
-      expect(systemUi.value.statusBarColor, ui.UiColors.background);
-      expect(systemUi.value.systemNavigationBarColor, ui.UiColors.background);
+      expect(loginSurface.height, 436);
+      expect(scaffold.backgroundColor, ui.UiColors.surfaceLow);
+      expect(systemUi.value.statusBarColor, ui.UiColors.surfaceLow);
+      expect(systemUi.value.systemNavigationBarColor, ui.UiColors.surfaceLow);
 
       await tester.tap(find.text('注册'));
       await tester.pump();
@@ -195,7 +195,7 @@ void registerShellAuthWidgetTests() {
     await tester.pumpWidget(GangApp(tokenStore: _MemoryTokenStore()));
     await tester.pump();
 
-    expect(find.text('GANG CHAT'), findsOneWidget);
+    expect(find.text('Gang Chat'), findsOneWidget);
     expect(find.text('登录用户名或邮箱地址'), findsOneWidget);
     expect(find.text('密码'), findsOneWidget);
     expect(find.widgetWithText(ui.Button, '登录'), findsOneWidget);
@@ -212,33 +212,22 @@ void registerShellAuthWidgetTests() {
     final modeSwitchRect = tester.getRect(
       find.byWidgetPredicate((widget) => widget is ui.SegmentedControl),
     );
-    final titleRect = tester.getRect(find.text('GANG CHAT'));
-    final brandIcon = find.byKey(const ValueKey('auth-brand-icon'));
-    expect(brandIcon, findsOneWidget);
-    expect(tester.widget(brandIcon), isA<ui.BrandMark>());
-    final brandIconRect = tester.getRect(brandIcon);
-    expect(
-      tester.widget<Text>(find.text('GANG CHAT')).style?.fontFamily,
-      ui.kDotFontFamily,
-    );
-    expect(titleRect.height, greaterThanOrEqualTo(28));
-    expect(titleRect.height, lessThanOrEqualTo(36));
-    // The brand mark sits above the dot-matrix word mark, both left aligned.
-    expect(brandIconRect.bottom, lessThanOrEqualTo(titleRect.top));
-    expect(brandIconRect.left, closeTo(titleRect.left, 0.01));
-    expect(titleRect.bottom, lessThan(modeSwitchRect.top));
+    final titleRect = tester.getRect(find.text('Gang Chat'));
+    expect(titleRect.height, greaterThanOrEqualTo(20));
+    expect(titleRect.height, lessThanOrEqualTo(28));
+    expect(find.byKey(const ValueKey('auth-brand-icon')), findsOneWidget);
     expect(
       tester
           .widgetList<MouseRegion>(
             find.ancestor(
-              of: find.text('GANG CHAT'),
+              of: find.text('Gang Chat'),
               matching: find.byType(MouseRegion),
             ),
           )
           .map((region) => region.cursor),
       contains(SystemMouseCursors.basic),
     );
-    expect(modeSwitchRect.top - authSurfaceRect.top, closeTo(164, 0.01));
+    expect(modeSwitchRect.top - authSurfaceRect.top, closeTo(82, 0.01));
     _expectSubmitButtonFullWidth(tester, submitLabel: '登录');
     expect(find.text('请输入账号和密码后继续'), findsNothing);
     final normalSurfaceHeight = tester
@@ -308,10 +297,6 @@ void registerShellAuthWidgetTests() {
 
     await tester.enterText(_textFieldWithHint('登录用户名或邮箱地址'), 'kai');
     await tester.enterText(_textFieldWithHint('密码'), 'secret123');
-    // The compact surface is shorter than the form, so the submit button
-    // has to be scrolled into view.
-    await tester.ensureVisible(find.widgetWithText(ui.Button, '登录'));
-    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(ui.Button, '登录'));
     await tester.pumpAndSettle();
 
@@ -1011,7 +996,7 @@ void registerShellAuthWidgetTests() {
       MaterialApp(
         theme: ui.uiTheme(),
         home: LoginPage(
-          sizeForMode: _authPartWindowSizeForMode,
+          sizeForMode: (_, {showingError = false}) => const Size(430, 368),
           consumeInitialWindowLock: () => true,
           lockAuthWindow:
               ({
@@ -1053,7 +1038,7 @@ void registerShellAuthWidgetTests() {
         MaterialApp(
           theme: ui.uiTheme(),
           home: LoginPage(
-            sizeForMode: _authPartWindowSizeForMode,
+            sizeForMode: (_, {showingError = false}) => const Size(430, 368),
             consumeInitialWindowLock: () => true,
             lockAuthWindow:
                 ({
@@ -1107,10 +1092,9 @@ void registerShellAuthWidgetTests() {
     expect(find.text('确认密码'), findsOneWidget);
     expect(find.byTooltip('显示密码'), findsNWidgets(2));
     expect(find.widgetWithText(ui.Button, '创建账号'), findsOneWidget);
-    // The registration window keeps at least its 28 px bottom breathing room.
     expect(
       _submitBottomGap(tester, submitLabel: '创建账号'),
-      greaterThanOrEqualTo(28),
+      greaterThanOrEqualTo(34),
     );
     _expectSubmitButtonFullWidth(tester, submitLabel: '创建账号');
     expect(find.text('请输入账号和密码后继续'), findsNothing);
@@ -1214,7 +1198,7 @@ void registerShellAuthWidgetTests() {
       );
 
       final authSecondaryClick = await tester.startGesture(
-        tester.getCenter(find.text('GANG CHAT').last),
+        tester.getCenter(find.text('Gang Chat').last),
         kind: PointerDeviceKind.mouse,
         buttons: kSecondaryMouseButton,
       );
@@ -1711,12 +1695,4 @@ void registerShellAuthWidgetTests() {
     );
     expect(tester.takeException(), isNull);
   });
-}
-
-/// The real auth window geometry used by the desktop shell.
-Size _authPartWindowSizeForMode(bool registering, {bool showingError = false}) {
-  return DesktopWindowController().authWidgetSize(
-    registering,
-    showingError: showingError,
-  );
 }

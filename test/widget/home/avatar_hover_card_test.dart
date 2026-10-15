@@ -9,10 +9,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// The user pass prints a 60px round avatar; the room pass a 56px square.
-const _userCardAvatarSize = 60.0;
-const _roomCardAvatarSize = 56.0;
-
 const _user = UserSummary(
   id: 'u1',
   username: 'logan',
@@ -153,16 +149,10 @@ void main() {
       expect(commonRoomName, findsOneWidget);
       expect(tester.getSize(name).height, greaterThan(20));
       expect(tester.getSize(commonRoomName).height, lessThan(20));
-      // The pass prints the identity block below the avatar, so the long
-      // name gets the full card width to wrap in.
-      expect(avatar, findsOneWidget);
       expect(
-        tester.getTopLeft(name).dy,
-        greaterThanOrEqualTo(tester.getBottomLeft(avatar).dy),
+        tester.getTopLeft(name).dx,
+        greaterThan(tester.getTopRight(avatar).dx),
       );
-      final card = tester.getRect(find.byType(AnchoredPanel));
-      expect(tester.getRect(name).left, greaterThanOrEqualTo(card.left));
-      expect(tester.getRect(name).right, lessThanOrEqualTo(card.right));
       expect(
         tester.widget<Text>(commonRoomName).overflow,
         isNot(TextOverflow.ellipsis),
@@ -194,9 +184,7 @@ void main() {
     expect(find.text('离线'), findsNothing);
     expect(find.text('语音'), findsOneWidget);
     final avatar = tester.widget<Avatar>(
-      find.byWidgetPredicate(
-        (widget) => widget is Avatar && widget.size == _userCardAvatarSize,
-      ),
+      find.byWidgetPredicate((widget) => widget is Avatar && widget.size == 48),
     );
     expect(avatar.active, isTrue);
     expect(avatar.activeBorderColor, UiColors.presenceVoice);
@@ -231,9 +219,7 @@ void main() {
 
     expect(find.text('在线'), findsOneWidget);
     final avatar = tester.widget<Avatar>(
-      find.byWidgetPredicate(
-        (widget) => widget is Avatar && widget.size == _userCardAvatarSize,
-      ),
+      find.byWidgetPredicate((widget) => widget is Avatar && widget.size == 48),
     );
     expect(avatar.active, isTrue);
     expect(avatar.activeBorderColor, isNull);
@@ -704,9 +690,7 @@ void main() {
 
     final roomCardAvatar = find.byWidgetPredicate(
       (widget) =>
-          widget is Avatar &&
-          widget.label == 'Room One' &&
-          widget.size == _roomCardAvatarSize,
+          widget is Avatar && widget.label == 'Room One' && widget.size == 48,
     );
     await tester.tap(roomCardAvatar);
     await tester.pumpAndSettle();
@@ -717,37 +701,9 @@ void main() {
 
     final userCardAvatar = find.byWidgetPredicate(
       (widget) =>
-          widget is Avatar &&
-          widget.label == 'Logan' &&
-          widget.size == _userCardAvatarSize,
+          widget is Avatar && widget.label == 'Logan' && widget.size == 48,
     );
-    // The nested room pass opens beside its common-room anchor and overlaps
-    // the right half of the user pass's avatar, so click the part of that
-    // avatar that is still uncovered.
-    final userAvatarRect = tester.getRect(userCardAvatar);
-    // The nested pass is built inside its parent's overlay, so the nearest
-    // panel around the RID is the room pass.
-    final roomCardRect = tester.getRect(
-      find
-          .ancestor(
-            of: find.text('RID: R1'),
-            matching: find.byType(AnchoredPanel),
-          )
-          .first,
-    );
-    final userAvatarTapPoint = Offset(
-      userAvatarRect.left + 8,
-      userAvatarRect.center.dy,
-    );
-    expect(roomCardRect.contains(userAvatarTapPoint), isFalse);
-    expect(
-      tester
-          .hitTestOnBinding(userAvatarTapPoint)
-          .path
-          .any((entry) => entry.target == tester.renderObject(userCardAvatar)),
-      isTrue,
-    );
-    await tester.tapAt(userAvatarTapPoint);
+    await tester.tap(userCardAvatar);
     await tester.pumpAndSettle();
     expect(find.text('RID: R1'), findsNothing);
     expect(find.text('@logan'), findsOneWidget);
@@ -1184,7 +1140,7 @@ Future<void> _ensureUserProfileCardOpen(
 
 Finder _profileCardAvatar() {
   return find.byWidgetPredicate(
-    (widget) => widget is Avatar && widget.size == _userCardAvatarSize,
+    (widget) => widget is Avatar && widget.size == 48,
   );
 }
 

@@ -5,10 +5,10 @@ part of 'chat_pane.dart';
 const double _autoScrollFollowThreshold = 120;
 const double _chatMessageListTopPadding = 18;
 const _messageListCacheExtent = ScrollCacheExtent.pixels(1200);
-const _messageAvatarSize = 36.0;
-const _messageGutter = 50.0;
-const _messageContentInset = 10.0;
-const _messageGroupWindow = Duration(minutes: 5);
+const _messageBubblePadding = EdgeInsets.symmetric(
+  horizontal: 12,
+  vertical: 10,
+);
 
 /// A remembered scroll position for one room's message list. The list widget is
 /// torn down and rebuilt whenever the pane swaps (e.g. opening the live
@@ -1161,7 +1161,8 @@ class _MessageStageState extends State<_MessageStage> {
         widget.bottomInset,
       ),
       itemCount: widget.messages.length + 1,
-      separatorBuilder: (context, index) => const SizedBox.shrink(),
+      separatorBuilder: (context, index) =>
+          index == 0 ? const SizedBox.shrink() : const SizedBox(height: 12),
       itemBuilder: (context, index) {
         if (index == 0) return SizedBox(height: _underflowBottomSpacer);
 
@@ -1182,34 +1183,22 @@ class _MessageStageState extends State<_MessageStage> {
             : message_display.formatChatTimestamp(message.createdAt, now: now);
         final showNewMessageDivider =
             chronologicalIndex == firstNewMessageIndex;
-        final grouped =
-            !showTimestamp &&
-            !showNewMessageDivider &&
-            systemEvent == null &&
-            !message.isRemoved &&
-            previous != null &&
-            !previous.isRemoved &&
-            message_display.systemMessageEvent(previous) == null &&
-            previous.sender.id == message.sender.id &&
-            message.createdAt.difference(previous.createdAt).abs() <
-                _messageGroupWindow;
         final row = Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SizedBox(height: grouped ? 2 : 14),
             if (showNewMessageDivider) ...[
               KeyedSubtree(
                 key: _firstNewMessageKey,
                 child: const _NewMessagesDivider(),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
             ],
             if (showTimestamp) ...[
               _MessageTimeDivider(
                 label: timestamp,
                 onTap: _toggleDetailedTimestamps,
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
             ],
             if (systemEvent != null)
               ChatSystemMessageContent(
@@ -1241,7 +1230,6 @@ class _MessageStageState extends State<_MessageStage> {
             else
               _MessageRow(
                 message: message,
-                grouped: grouped,
                 outgoing: message.sender.id == widget.currentUser.id,
                 timestampNow: now,
                 showDetailedTimestamps: _showDetailedTimestamps,
@@ -1297,11 +1285,24 @@ class _MessageStageState extends State<_MessageStage> {
             switchInCurve: Curves.easeOutCubic,
             switchOutCurve: Curves.easeInCubic,
             child: _showLatestButton
-                ? _ChatFloatingJumpButton(
+                ? PressableSurface(
                     key: const ValueKey('chat-jump-to-latest'),
+                    width: 34,
+                    height: 34,
+                    backgroundColor: UiColors.selected,
+                    selectedBackgroundColor: UiColors.selected,
+                    pressedBackgroundColor: const Color(0xFF14211B),
+                    borderColor: UiColors.selectedBorder,
+                    selectedBorderColor: UiColors.selectedBorder,
                     tooltip: '跳到最新消息',
-                    icon: Icons.arrow_downward_rounded,
                     onPressed: () => _scrollToBottom(animated: true),
+                    child: const Center(
+                      child: Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: UiColors.accent,
+                        size: 18,
+                      ),
+                    ),
                   )
                 : const SizedBox.shrink(
                     key: ValueKey('chat-jump-to-latest-hidden'),
@@ -1316,16 +1317,26 @@ class _MessageStageState extends State<_MessageStage> {
             switchInCurve: Curves.easeOutCubic,
             switchOutCurve: Curves.easeInCubic,
             child: showNewMessageJump
-                ? _ChatFloatingJumpButton(
+                ? PressableSurface(
                     key: const ValueKey('chat-jump-to-first-new'),
+                    width: 34,
+                    height: 34,
+                    backgroundColor: UiColors.selected,
+                    selectedBackgroundColor: UiColors.selected,
+                    pressedBackgroundColor: const Color(0xFF14211B),
+                    borderColor: UiColors.selectedBorder,
+                    selectedBorderColor: UiColors.selectedBorder,
                     tooltip: newMessageJumpTooltip,
-                    icon: showMentionJump
-                        ? Icons.alternate_email_rounded
-                        : Icons.arrow_upward_rounded,
-                    accent: showMentionJump ? UiColors.amber : null,
                     onPressed: showMentionJump
                         ? _scrollToNextUnreadMention
                         : _scrollToFirstNewMessage,
+                    child: const Center(
+                      child: Icon(
+                        Icons.keyboard_arrow_up_rounded,
+                        color: UiColors.accent,
+                        size: 18,
+                      ),
+                    ),
                   )
                 : const SizedBox.shrink(
                     key: ValueKey('chat-jump-to-first-new-hidden'),
@@ -1337,74 +1348,29 @@ class _MessageStageState extends State<_MessageStage> {
   }
 }
 
-class _ChatFloatingJumpButton extends StatelessWidget {
-  const _ChatFloatingJumpButton({
-    super.key,
-    required this.tooltip,
-    required this.icon,
-    required this.onPressed,
-    this.accent,
-  });
-
-  final String tooltip;
-  final IconData icon;
-  final VoidCallback onPressed;
-  final Color? accent;
-
-  @override
-  Widget build(BuildContext context) {
-    final accent = this.accent ?? UiColors.accentStrong;
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        shape: BoxShape.circle,
-        boxShadow: UiShadows.popover,
-      ),
-      child: PressableSurface(
-        width: 38,
-        height: 38,
-        backgroundColor: accent,
-        selectedBackgroundColor: accent,
-        borderColor: Colors.transparent,
-        selectedBorderColor: Colors.transparent,
-        borderRadius: UiRadii.pill,
-        tooltip: tooltip,
-        onPressed: onPressed,
-        child: Center(
-          child: Icon(icon, color: UiColors.surfacePressed, size: 19),
-        ),
-      ),
-    );
-  }
-}
-
-const unreadDividerColor = UiColors.danger;
-
 class _NewMessagesDivider extends StatelessWidget {
   const _NewMessagesDivider();
 
   @override
   Widget build(BuildContext context) {
-    final lineColor = unreadDividerColor.withValues(alpha: 0.55);
+    final lineColor = UiColors.accent.withValues(alpha: 0.58);
     return Row(
       children: [
         Expanded(child: Divider(height: 1, thickness: 1, color: lineColor)),
-        const SizedBox(width: 10),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: unreadDividerColor,
-            borderRadius: BorderRadius.circular(UiRadii.pill),
-          ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
           child: Text(
             '未读消息',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: UiTypography.overline.copyWith(
-              color: Colors.white,
-              fontSize: 10,
+            style: UiTypography.label.copyWith(
+              color: UiColors.accent,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ),
+        Expanded(child: Divider(height: 1, thickness: 1, color: lineColor)),
       ],
     );
   }
@@ -1418,27 +1384,33 @@ class _MessageTimeDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const Expanded(child: Divider(height: 1, color: UiColors.border)),
-        MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: onTap,
+    return Center(
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: UiColors.surfacePressed,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: UiColors.border),
+            ),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
               child: Text(
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: UiTypography.overline.copyWith(fontSize: 10),
+                style: UiTypography.label.copyWith(
+                  color: UiColors.textMuted,
+                  fontSize: 11,
+                ),
               ),
             ),
           ),
         ),
-        const Expanded(child: Divider(height: 1, color: UiColors.border)),
-      ],
+      ),
     );
   }
 }
@@ -2192,7 +2164,6 @@ class _SystemUserChip extends StatelessWidget {
 class _MessageRow extends StatelessWidget {
   const _MessageRow({
     required this.message,
-    this.grouped = false,
     required this.outgoing,
     required this.timestampNow,
     required this.showDetailedTimestamps,
@@ -2218,10 +2189,6 @@ class _MessageRow extends StatelessWidget {
   });
 
   final Message message;
-
-  /// Continuation of the previous message from the same sender: the avatar
-  /// and name line are omitted so consecutive messages read as one block.
-  final bool grouped;
   final bool outgoing;
   final DateTime timestampNow;
   final bool showDetailedTimestamps;
@@ -2254,115 +2221,96 @@ class _MessageRow extends StatelessWidget {
       currentUser: currentUser,
       ownerUserId: ownerUserId,
     );
-    final bubble = _MessageBubble(
-      message: message,
-      outgoing: outgoing,
-      timestampNow: timestampNow,
-      showDetailedTimestamps: showDetailedTimestamps,
-      transfer: transfer,
-      fileDownloads: fileDownloads,
-      downloadActions: downloadActions,
-      voicePlaybackActions: voicePlaybackActions,
-      imagePreviewActions: imagePreviewActions,
-      messageActions: messageActions,
-      mentionHighlighted: mentionHighlighted,
-      mentionTargetsCurrentUser: mentionTargetsCurrentUser,
-      currentUser: currentUser,
-      currentUserMentionIdentity: currentUserMentionIdentity,
-      ownerUserId: ownerUserId,
-      mentionMembers: mentionMembers,
-      onResolveSenderProfile: onResolveSenderProfile,
-      onResolveRoomProfile: onResolveRoomProfile,
-      onEnterProfileRoom: onEnterProfileRoom,
-      profileActionBuilder: profileActionBuilder,
-      isUserInLive: isUserInLive,
-    );
-
-    final content = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (!grouped) ...[
-          Padding(
-            padding: const EdgeInsets.only(left: _messageContentInset),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Flexible(
-                  child: Text(
-                    sender,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: UiTypography.subtitle.copyWith(
-                      color: senderColor,
-                      fontSize: 14,
-                    ),
-                  ),
+    final bubble = Flexible(
+      child: Column(
+        crossAxisAlignment: outgoing
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: _messageMaxWidth),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Text(
+                sender,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: outgoing ? TextAlign.right : TextAlign.left,
+                style: UiTypography.label.copyWith(
+                  color: senderColor,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  message_display.formatMessageTime(message.createdAt),
-                  maxLines: 1,
-                  style: UiTypography.mono.copyWith(fontSize: 10.5),
-                ),
-              ],
+              ),
             ),
           ),
-          const SizedBox(height: 2),
-        ],
-        ConstrainedBox(
-          constraints: const BoxConstraints(
-            maxWidth: _messageMaxWidth + _messageContentInset * 2,
+          const SizedBox(height: 4),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: _messageMaxWidth),
+            child: _MessageBubble(
+              message: message,
+              outgoing: outgoing,
+              timestampNow: timestampNow,
+              showDetailedTimestamps: showDetailedTimestamps,
+              transfer: transfer,
+              fileDownloads: fileDownloads,
+              downloadActions: downloadActions,
+              voicePlaybackActions: voicePlaybackActions,
+              imagePreviewActions: imagePreviewActions,
+              messageActions: messageActions,
+              mentionHighlighted: mentionHighlighted,
+              mentionTargetsCurrentUser: mentionTargetsCurrentUser,
+              currentUser: currentUser,
+              currentUserMentionIdentity: currentUserMentionIdentity,
+              ownerUserId: ownerUserId,
+              mentionMembers: mentionMembers,
+              onResolveSenderProfile: onResolveSenderProfile,
+              onResolveRoomProfile: onResolveRoomProfile,
+              onEnterProfileRoom: onEnterProfileRoom,
+              profileActionBuilder: profileActionBuilder,
+              isUserInLive: isUserInLive,
+            ),
           ),
-          child: bubble,
-        ),
-      ],
+        ],
+      ),
     );
 
-    final Widget gutter;
-    if (grouped) {
-      gutter = const SizedBox(width: _messageAvatarSize);
-    } else {
-      final avatar = Avatar(
-        label: room_display.userAvatarLabel(message.sender),
-        imageUrl: AppConfigScope.of(
-          context,
-        ).resolveAssetUrl(message.sender.avatarUrl),
-        defaultAvatarKey: message.sender.defaultAvatarKey,
-        size: _messageAvatarSize,
-        showBorder: false,
-      );
-      final avatarWithContextMenu = _MessageAvatarMentionMenu(
-        user: message.sender,
-        onMentionUser: message.sender.id == currentUser.id
-            ? null
-            : onMentionUser,
-        child: avatar,
-      );
-      gutter = Padding(
-        padding: const EdgeInsets.only(top: 2),
-        child: _AvatarHoverCard(
-          user: message.sender,
-          currentUser: currentUser,
-          onResolveProfile: onResolveSenderProfile,
-          onResolveRoomProfile: onResolveRoomProfile,
-          onEnterCommonRoom: onEnterProfileRoom,
-          profileActionBuilder: profileActionBuilder,
-          inLive: inLive,
-          child: avatarWithContextMenu,
-        ),
-      );
-    }
+    final avatar = Avatar(
+      label: room_display.userAvatarLabel(message.sender),
+      imageUrl: AppConfigScope.of(
+        context,
+      ).resolveAssetUrl(message.sender.avatarUrl),
+      defaultAvatarKey: message.sender.defaultAvatarKey,
+      size: 32,
+      showBorder: false,
+    );
+
+    final avatarWithContextMenu = _MessageAvatarMentionMenu(
+      user: message.sender,
+      onMentionUser: message.sender.id == currentUser.id ? null : onMentionUser,
+      child: avatar,
+    );
+    final avatarHoverCard = _AvatarHoverCard(
+      user: message.sender,
+      currentUser: currentUser,
+      onResolveProfile: onResolveSenderProfile,
+      onResolveRoomProfile: onResolveRoomProfile,
+      onEnterCommonRoom: onEnterProfileRoom,
+      profileActionBuilder: profileActionBuilder,
+      inLive: inLive,
+      child: avatarWithContextMenu,
+    );
 
     return Row(
+      mainAxisAlignment: outgoing
+          ? MainAxisAlignment.end
+          : MainAxisAlignment.start,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        gutter,
-        const SizedBox(
-          width: _messageGutter - _messageAvatarSize - _messageContentInset,
-        ),
-        Flexible(child: content),
+        if (!outgoing) ...[avatarHoverCard, const SizedBox(width: 10)],
+        bubble,
+        if (outgoing) ...[const SizedBox(width: 10), avatarHoverCard],
       ],
     );
   }
@@ -2875,7 +2823,6 @@ class _MessageBubbleState extends State<_MessageBubble> {
   bool _androidLongPressEnabled = false;
   bool _textSelectionActiveAtPointerDown = false;
   bool _androidLongPressHandled = false;
-  bool _hovered = false;
 
   @override
   void dispose() {
@@ -2890,34 +2837,44 @@ class _MessageBubbleState extends State<_MessageBubble> {
         Theme.of(context).platform == TargetPlatform.android;
     final contentKind = message_display.messageContentKind(widget.message);
     final contextMenuActive = _contextMenuActive;
+    final backgroundColor = widget.outgoing ? _outgoingBubble : _incomingBubble;
+    final mentionBackgroundColor = widget.outgoing
+        ? UiColors.amber.withValues(alpha: 0.18)
+        : UiColors.amber.withValues(alpha: 0.13);
+    final contextMentionBackgroundColor = widget.outgoing
+        ? UiColors.amber.withValues(alpha: 0.28)
+        : UiColors.amber.withValues(alpha: 0.22);
     final targetsCurrentUser = widget.mentionTargetsCurrentUser;
+    final mentionHighlightColor = Color.alphaBlend(
+      mentionBackgroundColor,
+      backgroundColor,
+    );
+    final contextMentionHighlightColor = Color.alphaBlend(
+      contextMentionBackgroundColor,
+      backgroundColor,
+    );
     final mentionEmphasized =
         targetsCurrentUser && (contextMenuActive || widget.mentionHighlighted);
-    final restingColor = contentKind == message_display.MessageContentKind.voice
-        ? UiColors.surface
-        : Colors.transparent;
     final highlightColor = contextMenuActive && !targetsCurrentUser
         ? UiColors.selected
         : targetsCurrentUser
-        ? UiColors.amber.withValues(alpha: mentionEmphasized ? 0.2 : 0.11)
+        ? mentionEmphasized
+              ? contextMentionHighlightColor
+              : mentionHighlightColor
         : widget.mentionHighlighted
-        ? UiColors.selected
-        : _hovered
-        ? (restingColor == Colors.transparent
-              ? Colors.white.withValues(alpha: 0.035)
-              : UiStates.hover(restingColor))
-        : restingColor;
-    final radius = BorderRadius.circular(
-      contentKind == message_display.MessageContentKind.voice
-          ? UiRadii.pill
-          : UiRadii.md,
-    );
-    final padding = contentKind == message_display.MessageContentKind.voice
-        ? const EdgeInsets.fromLTRB(8, 7, 14, 7)
-        : const EdgeInsets.symmetric(
-            horizontal: _messageContentInset,
-            vertical: 5,
-          );
+        ? UiColors.selected.withValues(alpha: 0.86)
+        : backgroundColor;
+    final borderColor = contextMenuActive && !targetsCurrentUser
+        ? UiColors.selectedBorder
+        : targetsCurrentUser
+        ? mentionEmphasized
+              ? UiColors.amber.withValues(alpha: 0.72)
+              : UiColors.amber.withValues(alpha: 0.58)
+        : widget.mentionHighlighted
+        ? UiColors.selectedBorder
+        : widget.outgoing
+        ? UiColors.accentBorder
+        : UiColors.border;
 
     return Listener(
       onPointerDown: (event) {
@@ -2943,78 +2900,67 @@ class _MessageBubbleState extends State<_MessageBubble> {
         onLongPressStart: _androidLongPressEnabled
             ? (details) => _handleAndroidBubbleLongPress(details.globalPosition)
             : null,
-        child: MouseRegion(
-          onEnter: (_) => _setHovered(true),
-          onExit: (_) => _setHovered(false),
-          child: AnimatedContainer(
-            key: ValueKey('message-bubble-surface-${widget.message.id}'),
-            duration:
-                widget.mentionTargetsCurrentUser || widget.mentionHighlighted
-                ? Duration.zero
-                : UiMotion.fast,
-            curve: Curves.easeOutCubic,
-            decoration: BoxDecoration(
-              color: highlightColor,
-              borderRadius: radius,
-            ),
-            foregroundDecoration: targetsCurrentUser
-                ? _MentionEdgeDecoration(
-                    color: UiColors.amber.withValues(
-                      alpha: mentionEmphasized ? 0.95 : 0.75,
-                    ),
-                    radius: radius,
-                  )
-                : null,
-            child: Padding(
-              padding: padding,
-              child: DecoratedBox(
-                key: ValueKey('message-bubble-content-${widget.message.id}'),
-                decoration: const BoxDecoration(),
-                child: ChatMessageContent(
-                  message: widget.message,
-                  outgoing: widget.outgoing,
-                  timestampNow: widget.timestampNow,
-                  showDetailedTimestamps: widget.showDetailedTimestamps,
-                  transfer: widget.transfer,
-                  fileDownloads: widget.fileDownloads,
-                  downloadActions: widget.downloadActions,
-                  voicePlaybackActions: widget.voicePlaybackActions,
-                  imagePreviewActions: widget.imagePreviewActions,
-                  currentUser: widget.currentUser,
-                  currentUserMentionIdentity: widget.currentUserMentionIdentity,
-                  ownerUserId: widget.ownerUserId,
-                  mentionMembers: widget.mentionMembers,
-                  mentionHighlighted: widget.mentionHighlighted,
-                  onResolveSenderProfile: widget.onResolveSenderProfile,
-                  onResolveRoomProfile: widget.onResolveRoomProfile,
-                  onEnterProfileRoom: widget.onEnterProfileRoom,
-                  profileActionBuilder: widget.profileActionBuilder,
-                  isUserInLive: widget.isUserInLive,
-                  onSelectionActiveChanged: _handleTextSelectionActiveChanged,
-                  textSelectionResetListenable: _textSelectionReset,
-                  onOpenQuote: widget.messageActions.onOpenQuote,
-                  onViewSharedPlaylist:
-                      widget.messageActions.onViewSharedPlaylist,
-                  onEditOwnedSharedPlaylist:
-                      widget.messageActions.onEditOwnedSharedPlaylist,
-                  sharedTrackPreviewController:
-                      widget.messageActions.sharedTrackPreviewController,
-                  loadSharedTrackPlaylists:
-                      widget.messageActions.loadSharedTrackPlaylists,
-                  onAddSharedTrackToPlaylist:
-                      widget.messageActions.onAddSharedTrackToPlaylist,
+        child: AnimatedContainer(
+          key: ValueKey('message-bubble-surface-${widget.message.id}'),
+          duration:
+              widget.mentionTargetsCurrentUser || widget.mentionHighlighted
+              ? Duration.zero
+              : const Duration(milliseconds: 90),
+          curve: Curves.easeOutCubic,
+          decoration: BoxDecoration(
+            color: highlightColor,
+            borderRadius: BorderRadius.circular(UiRadii.lg),
+            border: Border.all(color: borderColor),
+          ),
+          child: Padding(
+            padding: _messageBubblePadding,
+            child: DecoratedBox(
+              key: ValueKey('message-bubble-content-${widget.message.id}'),
+              decoration: BoxDecoration(
+                color: highlightColor,
+                borderRadius: BorderRadius.circular(
+                  math.max(0, UiRadii.lg - 5),
                 ),
+              ),
+              child: ChatMessageContent(
+                message: widget.message,
+                outgoing: widget.outgoing,
+                timestampNow: widget.timestampNow,
+                showDetailedTimestamps: widget.showDetailedTimestamps,
+                transfer: widget.transfer,
+                fileDownloads: widget.fileDownloads,
+                downloadActions: widget.downloadActions,
+                voicePlaybackActions: widget.voicePlaybackActions,
+                imagePreviewActions: widget.imagePreviewActions,
+                currentUser: widget.currentUser,
+                currentUserMentionIdentity: widget.currentUserMentionIdentity,
+                ownerUserId: widget.ownerUserId,
+                mentionMembers: widget.mentionMembers,
+                mentionHighlighted: widget.mentionHighlighted,
+                onResolveSenderProfile: widget.onResolveSenderProfile,
+                onResolveRoomProfile: widget.onResolveRoomProfile,
+                onEnterProfileRoom: widget.onEnterProfileRoom,
+                profileActionBuilder: widget.profileActionBuilder,
+                isUserInLive: widget.isUserInLive,
+                onSelectionActiveChanged: _handleTextSelectionActiveChanged,
+                textSelectionResetListenable: _textSelectionReset,
+                onOpenQuote: widget.messageActions.onOpenQuote,
+                onViewSharedPlaylist:
+                    widget.messageActions.onViewSharedPlaylist,
+                onEditOwnedSharedPlaylist:
+                    widget.messageActions.onEditOwnedSharedPlaylist,
+                sharedTrackPreviewController:
+                    widget.messageActions.sharedTrackPreviewController,
+                loadSharedTrackPlaylists:
+                    widget.messageActions.loadSharedTrackPlaylists,
+                onAddSharedTrackToPlaylist:
+                    widget.messageActions.onAddSharedTrackToPlaylist,
               ),
             ),
           ),
         ),
       ),
     );
-  }
-
-  void _setHovered(bool hovered) {
-    if (_hovered == hovered || !mounted) return;
-    setState(() => _hovered = hovered);
   }
 
   void _handleAndroidBubbleLongPress(Offset position) {
@@ -3097,40 +3043,6 @@ class _MessageBubbleState extends State<_MessageBubble> {
   void _setContextMenuActive(bool active) {
     if (!mounted || _contextMenuActive == active) return;
     setState(() => _contextMenuActive = active);
-  }
-}
-
-/// Paints the amber bar on the leading edge of a message that mentions the
-/// current user, clipped to the message's rounded shape.
-class _MentionEdgeDecoration extends Decoration {
-  const _MentionEdgeDecoration({required this.color, required this.radius});
-
-  final Color color;
-  final BorderRadius radius;
-
-  @override
-  BoxPainter createBoxPainter([VoidCallback? onChanged]) =>
-      _MentionEdgePainter(color, radius);
-}
-
-class _MentionEdgePainter extends BoxPainter {
-  _MentionEdgePainter(this.color, this.radius);
-
-  final Color color;
-  final BorderRadius radius;
-
-  @override
-  void paint(Canvas canvas, Offset offset, ImageConfiguration configuration) {
-    final size = configuration.size;
-    if (size == null) return;
-    final rect = offset & size;
-    canvas.save();
-    canvas.clipRRect(radius.toRRect(rect));
-    canvas.drawRect(
-      Rect.fromLTWH(rect.left, rect.top, 3, rect.height),
-      Paint()..color = color,
-    );
-    canvas.restore();
   }
 }
 

@@ -132,7 +132,6 @@ extension _HomeShellRoomActions on _HomeShellState {
       _selectedRoomNewMessageCount = server.unreadCount;
       _clearRoomUnreadCount(server.id);
       _settingsOpen = false;
-      _lobbyOpen = false;
       _contentMode = _ContentMode.chat;
       if (openContent) _narrowContentOpen = true;
       _selectedRoom = null;
@@ -666,7 +665,6 @@ extension _HomeShellRoomActions on _HomeShellState {
     if (roomId == null) return;
     _setHomeState(() {
       _settingsOpen = false;
-      _lobbyOpen = false;
       _contentMode = _ContentMode.live;
       _narrowContentOpen = true;
     });
@@ -710,7 +708,6 @@ extension _HomeShellRoomActions on _HomeShellState {
       _selectedRoomNewMessageCount = server.unreadCount;
       _clearRoomUnreadCount(server.id);
       _settingsOpen = false;
-      _lobbyOpen = false;
       _contentMode = _ContentMode.live;
       _narrowContentOpen = true;
       _selectedRoom = snapshot.detail;
@@ -756,7 +753,6 @@ extension _HomeShellRoomActions on _HomeShellState {
     if (room == null) return;
     _setHomeState(() {
       _settingsOpen = false;
-      _lobbyOpen = false;
       _contentMode = _ContentMode.members;
       _narrowContentOpen = true;
       _membersInitialSearchQuery = initialSearchQuery.trim();
@@ -790,7 +786,6 @@ extension _HomeShellRoomActions on _HomeShellState {
     if (room == null) return;
     _setHomeState(() {
       _settingsOpen = false;
-      _lobbyOpen = false;
       _roomSettingsInitialSection = initialSection;
       _roomSettingsInitialMusicPlaylistId = initialMusicPlaylistId;
       _contentMode = _ContentMode.roomSettings;

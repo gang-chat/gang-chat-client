@@ -24,7 +24,7 @@ void registerShellRoomManagementWidgetTests() {
     );
     await tester.pumpAndSettle();
 
-    await _roomManagementPartOpenRoom(tester, 'server-alpha');
+    await tester.tap(find.text('Alpha Room'));
     await tester.pumpAndSettle();
 
     expect(
@@ -32,13 +32,13 @@ void registerShellRoomManagementWidgetTests() {
       findsOneWidget,
     );
 
-    await tester.tap(_roomManagementPartMembersTab);
+    await tester.tap(find.byIcon(Icons.groups_outlined));
     await tester.pumpAndSettle();
 
     expect(find.text('成员'), findsAtLeastNWidgets(1));
-    expect(_roomManagementPartNavItem('房间成员'), findsOneWidget);
-    expect(_roomManagementPartNavItem('新成员'), findsOneWidget);
-    expect(_roomManagementPartNavItem('黑名单'), findsOneWidget);
+    expect(find.text('房间成员'), findsOneWidget);
+    expect(find.text('新成员'), findsOneWidget);
+    expect(find.text('黑名单'), findsOneWidget);
     expect(find.byKey(const ValueKey('new-members-tab-badge')), findsOneWidget);
     expect(find.text('邀请成员'), findsNothing);
     expect(find.text('语音 1'), findsOneWidget);
@@ -77,7 +77,7 @@ void registerShellRoomManagementWidgetTests() {
       contains('/api/v1/rooms/server-alpha/join-requests'),
     );
 
-    await tester.tap(_roomManagementPartNavItem('新成员'));
+    await tester.tap(find.text('新成员'));
     await tester.pumpAndSettle();
 
     expect(find.text('邀请成员'), findsOneWidget);
@@ -117,7 +117,7 @@ void registerShellRoomManagementWidgetTests() {
     await tester.pump(const Duration(milliseconds: 320));
     await tester.pumpAndSettle();
 
-    await tester.tap(_roomManagementPartNavItem('房间成员'));
+    await tester.tap(find.text('房间成员'));
     await tester.pumpAndSettle();
 
     await tester.ensureVisible(find.byTooltip('设为管理员'));
@@ -152,7 +152,7 @@ void registerShellRoomManagementWidgetTests() {
     );
     expect(find.text('Morgan'), findsNothing);
 
-    await tester.tap(_roomManagementPartNavItem('新成员'));
+    await tester.tap(find.text('新成员'));
     await tester.pumpAndSettle();
 
     await tester.ensureVisible(_textFieldWithHint('按用户名、昵称或 UID 搜索'));
@@ -175,34 +175,23 @@ void registerShellRoomManagementWidgetTests() {
     expect(requestedPaths, contains('/api/v1/rooms/server-alpha/invites'));
     expect(find.widgetWithText(ui.Button, '已邀请'), findsOneWidget);
 
-    // Room pages are context-bar tabs now, so settings opens directly.
-    await tester.tap(_roomManagementPartSettingsTab);
+    await tester.tap(find.byTooltip('返回').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('房间设置'));
     await tester.pumpAndSettle();
 
     expect(find.text('房间设置'), findsOneWidget);
-    expect(_roomManagementPartNavItem('房间信息'), findsOneWidget);
-    expect(_roomManagementPartNavItem('个人偏好'), findsOneWidget);
-    expect(_roomManagementPartNavItem('消息记录'), findsOneWidget);
-    expect(_roomManagementPartNavItem('表情包'), findsOneWidget);
-    expect(_roomManagementPartNavItem('歌单'), findsOneWidget);
+    expect(find.text('房间信息'), findsAtLeastNWidgets(1));
     expect(find.text('个人偏好'), findsOneWidget);
     expect(find.text('消息记录'), findsOneWidget);
     expect(find.text('表情包'), findsOneWidget);
     expect(find.text('歌单'), findsOneWidget);
-    // The side navigation lists 表情包 before 歌单.
     expect(
-      tester.getCenter(_roomManagementPartNavItem('表情包')).dy,
-      lessThan(tester.getCenter(_roomManagementPartNavItem('歌单')).dy),
+      tester.getCenter(find.text('表情包')).dx,
+      lessThan(tester.getCenter(find.text('歌单')).dx),
     );
-    // The only generic '设置' label is the room context bar tab.
-    expect(find.text('设置'), findsOneWidget);
-    expect(
-      find.descendant(
-        of: find.byKey(const ValueKey('room-context-bar')),
-        matching: find.text('设置'),
-      ),
-      findsOneWidget,
-    );
+    expect(find.text('设置'), findsNothing);
     expect(find.byIcon(Icons.info_outline), findsOneWidget);
     expect(find.byType(ui.UiSwitch), findsNothing);
     expect(find.byType(Switch), findsNothing);
@@ -399,25 +388,14 @@ void registerShellRoomManagementWidgetTests() {
       historySenderName.style?.color,
       ui.roleBadgeForegroundColorForLabel('成员'),
     );
-    // The room context bar has its own 语音 tab, so scope to the history
-    // category control.
-    final historyCategories = find.ancestor(
-      of: find.text('链接'),
-      matching: find.byWidgetPredicate(
-        (widget) => widget is ui.SegmentedControl,
-      ),
-    );
-    Finder historyCategory(String label) =>
-        find.descendant(of: historyCategories, matching: find.text(label));
-    expect(historyCategories, findsOneWidget);
-    expect(historyCategory('语音'), findsOneWidget);
+    expect(find.text('语音'), findsOneWidget);
     expect(
-      tester.getCenter(historyCategory('链接')).dx,
-      lessThan(tester.getCenter(historyCategory('语音')).dx),
+      tester.getCenter(find.text('链接')).dx,
+      lessThan(tester.getCenter(find.text('语音')).dx),
     );
     expect(
-      tester.getCenter(historyCategory('语音')).dx,
-      lessThan(tester.getCenter(historyCategory('表情')).dx),
+      tester.getCenter(find.text('语音')).dx,
+      lessThan(tester.getCenter(find.text('表情')).dx),
     );
     final systemHistoryRow = find.byKey(
       const ValueKey('room-message-history-row-msg-system'),
@@ -743,26 +721,10 @@ void registerShellRoomManagementWidgetTests() {
       isNotNull,
     );
 
-    await tester.tap(find.byKey(const ValueKey('room-tab-chat')));
+    await tester.tap(find.byTooltip('返回').last);
     await tester.pumpAndSettle();
 
-    expect(
-      find.byKey(const ValueKey('message-stage-server-alpha')),
-      findsOneWidget,
-    );
-    expect(
-      tester
-          .widget<Text>(find.byKey(const ValueKey('chat-header-room-title')))
-          .data,
-      contains('Alpha Renamed'),
-    );
-    expect(
-      find.descendant(
-        of: find.byKey(const ValueKey('home-room-tab-server-alpha')),
-        matching: find.textContaining('Alpha Renamed'),
-      ),
-      findsOneWidget,
-    );
+    expect(find.textContaining('Alpha Renamed'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -869,9 +831,9 @@ void registerShellRoomManagementWidgetTests() {
       );
       await tester.pumpAndSettle();
 
-      await _roomManagementPartOpenRoom(tester, 'server-alpha');
+      await tester.tap(find.text('Alpha Room'));
       await tester.pumpAndSettle();
-      await tester.tap(_roomManagementPartSettingsTab);
+      await tester.tap(find.byTooltip('房间设置'));
       await tester.pumpAndSettle();
 
       final openJoinPolicy = find.text('开放').last;
@@ -919,9 +881,9 @@ void registerShellRoomManagementWidgetTests() {
     );
     await tester.pumpAndSettle();
 
-    await _roomManagementPartOpenRoom(tester, 'server-alpha');
+    await tester.tap(find.text('Alpha Room'));
     await tester.pumpAndSettle();
-    await tester.tap(_roomManagementPartSettingsTab);
+    await tester.tap(find.byTooltip('房间设置'));
     await tester.pumpAndSettle();
 
     final nameField = tester.widget<TextField>(_roomSettingsTextField('name'));
@@ -965,7 +927,7 @@ void registerShellRoomManagementWidgetTests() {
       );
       await tester.pumpAndSettle();
 
-      await _roomManagementPartOpenRoom(tester, 'server-alpha');
+      await tester.tap(find.text('Alpha Room'));
       await tester.pumpAndSettle();
 
       expect(
@@ -973,7 +935,7 @@ void registerShellRoomManagementWidgetTests() {
         findsNothing,
       );
 
-      await tester.tap(_roomManagementPartMembersTab);
+      await tester.tap(find.byTooltip('房间成员'));
       await tester.pumpAndSettle();
 
       expect(find.text('成员'), findsAtLeastNWidgets(1));
@@ -1085,9 +1047,9 @@ void registerShellRoomManagementWidgetTests() {
       );
       await tester.pumpAndSettle();
 
-      await _roomManagementPartOpenRoom(tester, 'server-alpha');
+      await tester.tap(find.text('Alpha Room'));
       await tester.pumpAndSettle();
-      await tester.tap(_roomManagementPartMembersTab);
+      await tester.tap(find.byTooltip('房间成员'));
       await tester.pumpAndSettle();
 
       final longName = find.text(longRoomDisplayName);
@@ -1162,9 +1124,9 @@ void registerShellRoomManagementWidgetTests() {
       );
       await tester.pumpAndSettle();
 
-      await _roomManagementPartOpenRoom(tester, 'server-alpha');
+      await tester.tap(find.text('Alpha Room'));
       await tester.pumpAndSettle();
-      await tester.tap(_roomManagementPartMembersTab);
+      await tester.tap(find.byTooltip('房间成员'));
       await tester.pumpAndSettle();
 
       final presenceFilter = find.byKey(
@@ -1224,9 +1186,9 @@ void registerShellRoomManagementWidgetTests() {
     );
     await tester.pumpAndSettle();
 
-    await _roomManagementPartOpenRoom(tester, 'server-alpha');
+    await tester.tap(find.text('Alpha Room'));
     await tester.pumpAndSettle();
-    await tester.tap(_roomManagementPartMembersTab);
+    await tester.tap(find.byTooltip('房间成员'));
     await tester.pumpAndSettle();
 
     final longName = find.text(longRoomDisplayName);
@@ -1286,7 +1248,7 @@ void registerShellRoomManagementWidgetTests() {
     );
     await tester.pumpAndSettle();
 
-    await _roomManagementPartOpenRoom(tester, 'server-alpha');
+    await tester.tap(find.text('Alpha Room'));
     await tester.pumpAndSettle();
 
     expect(
@@ -1294,12 +1256,12 @@ void registerShellRoomManagementWidgetTests() {
       findsNothing,
     );
 
-    await tester.tap(_roomManagementPartMembersTab);
+    await tester.tap(find.byTooltip('房间成员'));
     await tester.pumpAndSettle();
 
-    expect(_roomManagementPartNavItem('房间成员'), findsOneWidget);
+    expect(find.text('房间成员'), findsOneWidget);
     expect(find.text('新成员'), findsNothing);
-    expect(_roomManagementPartNavItem('黑名单'), findsOneWidget);
+    expect(find.text('黑名单'), findsOneWidget);
     expect(requestedPaths, contains('/api/v1/rooms/server-alpha/members'));
     expect(
       requestedPaths,
@@ -1328,10 +1290,10 @@ void registerShellRoomManagementWidgetTests() {
     );
     await tester.pumpAndSettle();
 
-    await _roomManagementPartOpenRoom(tester, 'server-alpha');
+    await tester.tap(find.text('Alpha Room'));
     await tester.pumpAndSettle();
 
-    await tester.tap(_roomManagementPartMembersTab);
+    await tester.tap(find.byTooltip('房间成员'));
     await tester.pumpAndSettle();
 
     expect(find.text('Morgan'), findsWidgets);
@@ -1361,10 +1323,10 @@ void registerShellRoomManagementWidgetTests() {
     );
     await tester.pumpAndSettle();
 
-    await _roomManagementPartOpenRoom(tester, 'server-alpha');
+    await tester.tap(find.text('Alpha Room'));
     await tester.pumpAndSettle();
 
-    await tester.tap(_roomManagementPartMembersTab);
+    await tester.tap(find.byTooltip('房间成员'));
     await tester.pumpAndSettle();
 
     expect(find.text('Morgan'), findsWidgets);
@@ -1407,10 +1369,10 @@ void registerShellRoomManagementWidgetTests() {
     );
     await tester.pumpAndSettle();
 
-    await _roomManagementPartOpenRoom(tester, 'server-alpha');
+    await tester.tap(find.text('Alpha Room'));
     await tester.pumpAndSettle();
 
-    await tester.tap(_roomManagementPartMembersTab);
+    await tester.tap(find.byTooltip('房间成员'));
     await tester.pumpAndSettle();
 
     expect(find.text('Morgan'), findsWidgets);
@@ -1474,7 +1436,7 @@ void registerShellRoomManagementWidgetTests() {
     );
     await tester.pumpAndSettle();
 
-    await _roomManagementPartOpenRoom(tester, 'server-alpha');
+    await tester.tap(find.text('Alpha Room'));
     await tester.pumpAndSettle();
 
     final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
@@ -1507,34 +1469,4 @@ void registerShellRoomManagementWidgetTests() {
     expect(memberSearchField.controller?.text, 'uid-2');
     expect(find.textContaining('Morgan'), findsAtLeastNWidgets(1));
   });
-}
-
-/// Opens [roomId] from its lobby card. The room name also appears on the
-/// header room tab, which can be scrolled out of a narrow tab strip.
-Future<void> _roomManagementPartOpenRoom(
-  WidgetTester tester,
-  String roomId,
-) async {
-  final card = find.byKey(ValueKey<String>('home-lobby-room-$roomId'));
-  expect(card, findsOneWidget);
-  await tester.ensureVisible(card);
-  await tester.pumpAndSettle();
-  await tester.tap(card);
-}
-
-/// The 成员 tab of the open room's context bar.
-Finder get _roomManagementPartMembersTab =>
-    find.byKey(const ValueKey('room-tab-members'));
-
-/// The 设置 tab of the open room's context bar.
-Finder get _roomManagementPartSettingsTab =>
-    find.byKey(const ValueKey('room-tab-settings'));
-
-/// A section entry in the two-pane side navigation of a room page; the
-/// selected section title is repeated as the content header.
-Finder _roomManagementPartNavItem(String label) {
-  return find.descendant(
-    of: find.byKey(const ValueKey('settings-side-navigation')),
-    matching: find.text(label),
-  );
 }
