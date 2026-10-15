@@ -286,7 +286,16 @@ bool get supportsDesktopScreenShare =>
     (HostPlatform.isWindows || HostPlatform.isMacOS || HostPlatform.isLinux);
 
 bool get supportsLocalScreenShare =>
-    supportsDesktopScreenShare || (!kIsWeb && HostPlatform.isAndroid);
+    supportsDesktopScreenShare ||
+    (!kIsWeb && HostPlatform.isAndroid) ||
+    supportsBrowserScreenShare;
+
+/// Desktop browsers share through their own getDisplayMedia picker. Mobile
+/// browsers can't share a screen, and livekit_client refuses there.
+bool get supportsBrowserScreenShare =>
+    kIsWeb &&
+    defaultTargetPlatform != TargetPlatform.android &&
+    defaultTargetPlatform != TargetPlatform.iOS;
 
 @visibleForTesting
 bool shouldRequestScreenShareAudio({
@@ -1166,14 +1175,18 @@ class LiveSession extends ChangeNotifier {
       );
       await local.setScreenShareEnabled(
         true,
-        // Never let livekit_client create an audio track on factory-1:
-        // that track would pull from the mic ADM (not SCK), get published
-        // alongside the video, and race the send-stream capture checker.
-        // Screen audio is published separately on factory-2 by our
+        // Native: never let livekit_client create an audio track on
+        // factory-1: that track would pull from the mic ADM (not SCK), get
+        // published alongside the video, and race the send-stream capture
+        // checker. Screen audio is published separately on factory-2 by our
         // ScreenAudioPublisher. SCK still captures audio for the device
         // (forced in the native getDisplayMedia), but no audio track is
         // returned in the MediaStream.
-        captureScreenAudio: false,
+        //
+        // Web: the browser returns tab/system audio in the same
+        // getDisplayMedia stream, so livekit_client publishes it with the
+        // video and the aux publisher is not used.
+        captureScreenAudio: kIsWeb,
         screenShareCaptureOptions: options,
         // Preserve the room's configured codec choice. The screen-share
         // encoding budget and single-layer publish belong to this setting.
@@ -2405,6 +2418,8 @@ class LiveSession extends ChangeNotifier {
   /// room to be connected (for the resolved LiveKit URL + room name) and a
   /// token provider to have been injected.
   Future<void> _startScreenAudioPublisher() async {
+    // Browsers publish screen audio with the getDisplayMedia stream itself.
+    if (kIsWeb) return;
     if (_screenAudioPublisher != null) return;
     final provider = _screenAudioTokenProvider;
     final url = _resolvedLiveKitUrl;
@@ -2522,7 +2537,7 @@ class LiveSession extends ChangeNotifier {
       final track = pub.track;
       if (track == null) continue;
       try {
-        await rtc.Helper.setVolume(volume, track.mediaStreamTrack);
+        await track.setVolume(volume);
       } catch (_) {}
     }
   }
@@ -2540,7 +2555,7 @@ class LiveSession extends ChangeNotifier {
         final track = pub.track;
         if (track == null) continue;
         try {
-          await rtc.Helper.setVolume(_musicBoxVolume, track.mediaStreamTrack);
+          await track.setVolume(_musicBoxVolume);
         } catch (_) {}
       }
     }
@@ -2616,9 +2631,8 @@ class LiveSession extends ChangeNotifier {
         final track = pub.track;
         if (track == null) continue;
         try {
-          await rtc.Helper.setVolume(
+          await track.setVolume(
             isOwnAux || !isWatched ? 0.0 : _screenShareVolume,
-            track.mediaStreamTrack,
           );
         } catch (_) {}
       }

@@ -26,6 +26,9 @@ const audioPrefix = 'livekit_audio_';
 
 web.AudioContext _audioContext = web.AudioContext();
 Map<String, web.Element> _audioElements = {};
+// gang-chat fork: playback volume per track id, so a level chosen before the
+// track's <audio> element exists is applied when it is created.
+Map<String, double> _audioVolumes = {};
 
 Future<dynamic> startAudio(String id, rtc.MediaStreamTrack track) async {
   if (track is! MediaStreamTrackWeb) {
@@ -45,6 +48,8 @@ Future<dynamic> startAudio(String id, rtc.MediaStreamTrack track) async {
     return;
   }
   final audio = audioElement as web.HTMLAudioElement;
+  final volume = _audioVolumes[id];
+  if (volume != null) audio.volume = volume;
   final audioStream = web.MediaStream();
   audioStream.addTrack(track.jsTrack);
   audioElement.srcObject = audioStream;
@@ -69,6 +74,18 @@ void stopAudio(String id) {
     }
     _audioElements.remove(id);
     el.remove();
+  }
+  _audioVolumes.remove(id);
+}
+
+// gang-chat fork: browsers ignore a `volume` constraint on a remote track, so
+// remote playback volume is set on the track's <audio> element instead.
+void setVolume(String id, double volume) {
+  final clamped = volume.clamp(0.0, 1.0).toDouble();
+  _audioVolumes[id] = clamped;
+  final el = web.document.getElementById(audioPrefix + id);
+  if (el != null && el.instanceOfString('HTMLAudioElement')) {
+    (el as web.HTMLAudioElement).volume = clamped;
   }
 }
 

@@ -29,3 +29,7 @@ Future<bool> startAllAudioElement() async {
 void setSinkId(String id, String deviceId) {
   // do nothing
 }
+
+void setVolume(String id, double volume) {
+  // do nothing
+}
