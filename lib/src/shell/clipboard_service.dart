@@ -1,9 +1,8 @@
-import 'dart:io' show Platform;
-
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 
 import 'android_system_service.dart';
+import '../config/host_platform.dart';
 
 class ClipboardImageFile {
   const ClipboardImageFile({
@@ -27,7 +26,7 @@ class ClipboardService {
   static const _clipboardFilesChannel = MethodChannel('gang_chat/clipboard');
 
   Future<List<String>> readFilePaths() async {
-    if (kIsWeb || !(Platform.isWindows || Platform.isMacOS)) {
+    if (kIsWeb || !(HostPlatform.isWindows || HostPlatform.isMacOS)) {
       return const <String>[];
     }
     return await _clipboardFilesChannel.invokeListMethod<String>(
@@ -47,7 +46,9 @@ class ClipboardService {
               mimeType: image.mimeType,
             );
     }
-    if (kIsWeb || !(Platform.isWindows || Platform.isMacOS)) return null;
+    if (kIsWeb || !(HostPlatform.isWindows || HostPlatform.isMacOS)) {
+      return null;
+    }
     final result = await _clipboardFilesChannel
         .invokeMapMethod<Object?, Object?>('readImageFile');
     if (result == null) return null;
@@ -79,7 +80,9 @@ class ClipboardService {
   /// Writes file paths to the system clipboard so they can be pasted as files
   /// in supported desktop apps. Returns false on unsupported platforms.
   Future<bool> writeFilePaths(List<String> paths) async {
-    if (kIsWeb || !(Platform.isWindows || Platform.isMacOS)) return false;
+    if (kIsWeb || !(HostPlatform.isWindows || HostPlatform.isMacOS)) {
+      return false;
+    }
     final normalized = paths
         .map((path) => path.trim())
         .where((path) => path.isNotEmpty)
@@ -105,7 +108,9 @@ class ClipboardService {
         mimeType: mimeType,
       );
     }
-    if (kIsWeb || !(Platform.isWindows || Platform.isMacOS)) return false;
+    if (kIsWeb || !(HostPlatform.isWindows || HostPlatform.isMacOS)) {
+      return false;
+    }
     if (bytes.isEmpty) return false;
     final result = await _clipboardFilesChannel.invokeMethod<bool>(
       'writeImageFile',

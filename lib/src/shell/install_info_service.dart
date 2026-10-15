@@ -2,6 +2,7 @@ import 'dart:io';
 
 import '../app/settings_about.dart';
 import 'android_system_service.dart';
+import '../config/host_platform.dart';
 
 class InstallInfoService {
   const InstallInfoService({
@@ -17,9 +18,9 @@ class InstallInfoService {
       if (androidSystemService.isSupported) {
         return androidSystemService.installedAt();
       }
-      final executableDir = File(Platform.resolvedExecutable).parent;
+      final executableDir = File(HostPlatform.resolvedExecutable).parent;
       final infoFile = File(
-        '${executableDir.path}${Platform.pathSeparator}$fileName',
+        '${executableDir.path}${HostPlatform.pathSeparator}$fileName',
       );
       if (!await infoFile.exists()) return null;
       return infoFile.readAsString();

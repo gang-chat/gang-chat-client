@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../app/music_track_preview.dart';
+import '../config/host_platform.dart';
 
 class DefaultMusicTrackPreviewPlatformFactory
     implements MusicTrackPreviewPlatformFactory {
@@ -32,7 +33,7 @@ class LocalMusicTrackPreviewPlatform implements MusicTrackPreviewPlatform {
            androidChannel ?? const MethodChannel('gang_chat/music_preview'),
        _cacheDirectoryProvider =
            cacheDirectoryProvider ?? getApplicationCacheDirectory {
-    if (Platform.isAndroid) {
+    if (HostPlatform.isAndroid) {
       _androidChannel.setMethodCallHandler(_handleAndroidMethod);
     } else {
       _ensureDesktopPlayer();
@@ -73,7 +74,7 @@ class LocalMusicTrackPreviewPlatform implements MusicTrackPreviewPlatform {
     return _cacheDirectory ??= () async {
       final root = await _cacheDirectoryProvider();
       final directory = Directory(
-        '${root.path}${Platform.pathSeparator}music-track-previews${Platform.pathSeparator}v1',
+        '${root.path}${HostPlatform.pathSeparator}music-track-previews${HostPlatform.pathSeparator}v1',
       );
       await directory.create(recursive: true);
       await _removeLegacyPreviews(directory);
@@ -96,7 +97,7 @@ class LocalMusicTrackPreviewPlatform implements MusicTrackPreviewPlatform {
 
   Future<File> _cacheFile(String cacheKey) async {
     final directory = await _previewDirectory();
-    return File('${directory.path}${Platform.pathSeparator}$cacheKey.m4a');
+    return File('${directory.path}${HostPlatform.pathSeparator}$cacheKey.m4a');
   }
 
   @override
@@ -162,7 +163,7 @@ class LocalMusicTrackPreviewPlatform implements MusicTrackPreviewPlatform {
   @override
   Future<void> play(MusicTrackPreviewAsset asset) async {
     if (_disposed) return;
-    if (Platform.isAndroid) {
+    if (HostPlatform.isAndroid) {
       await _androidChannel.invokeMethod<void>('play', {
         'path': asset.location,
       });
@@ -171,7 +172,7 @@ class LocalMusicTrackPreviewPlatform implements MusicTrackPreviewPlatform {
     final player = _ensureDesktopPlayer();
     if (!_desktopConfigured) {
       await player.setReleaseMode(ReleaseMode.stop);
-      if (Platform.isMacOS) {
+      if (HostPlatform.isMacOS) {
         await player.setAudioContext(
           AudioContext(
             iOS: AudioContextIOS(
@@ -188,7 +189,7 @@ class LocalMusicTrackPreviewPlatform implements MusicTrackPreviewPlatform {
 
   @override
   Future<void> stop() async {
-    if (Platform.isAndroid) {
+    if (HostPlatform.isAndroid) {
       try {
         await _androidChannel.invokeMethod<void>('stop');
       } on MissingPluginException {
@@ -203,7 +204,7 @@ class LocalMusicTrackPreviewPlatform implements MusicTrackPreviewPlatform {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
-    if (Platform.isAndroid) {
+    if (HostPlatform.isAndroid) {
       _androidChannel.setMethodCallHandler(null);
       try {
         await _androidChannel.invokeMethod<void>('dispose');

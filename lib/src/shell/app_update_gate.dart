@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 
@@ -9,6 +8,7 @@ import '../ui/ui.dart';
 import 'desktop_window_controller.dart';
 import 'local_auto_update_prompt_store.dart';
 import 'release_update_service.dart';
+import '../config/host_platform.dart';
 
 typedef AppUpdateAvailableCallback = void Function(AvailableAppUpdate update);
 
@@ -102,7 +102,7 @@ class _AppUpdateGateState extends State<AppUpdateGate> {
   AppUpdatePlatform? _currentPlatform() {
     final override = widget.platformOverride;
     if (override != null) return override;
-    return appUpdatePlatformForOperatingSystem(Platform.operatingSystem);
+    return appUpdatePlatformForOperatingSystem(HostPlatform.operatingSystem);
   }
 
   @override

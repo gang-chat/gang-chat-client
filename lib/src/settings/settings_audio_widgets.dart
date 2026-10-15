@@ -216,9 +216,7 @@ class _LevelMeter extends StatelessWidget {
                       width: 5,
                       height: 22,
                       decoration: BoxDecoration(
-                        color: i < activeCount
-                            ? _cyan
-                            : UiColors.surfaceHover,
+                        color: i < activeCount ? _cyan : UiColors.surfaceHover,
                         borderRadius: BorderRadius.circular(3),
                       ),
                     ),
@@ -250,7 +248,7 @@ class _ScreenShareQualitySection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final selectedResolution = normalizedScreenShareMaxHeight(selectedHeight);
-    final platformFrameRateCap = !kIsWeb && Platform.isAndroid
+    final platformFrameRateCap = !kIsWeb && HostPlatform.isAndroid
         ? androidScreenShareFrameRateCap
         : desktopScreenShareFrameRateCap;
     final selectedFps = normalizedScreenShareFrameRate(

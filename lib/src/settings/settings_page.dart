@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io' show Platform;
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -60,6 +59,7 @@ import '../ui/sticker_upload_adapter.dart';
 import '../ui/ui.dart';
 import '../home/music_track_profile_card.dart';
 import '../home/room_profile_card.dart';
+import '../config/host_platform.dart';
 
 part 'settings_components.dart';
 part 'settings_profile_widgets.dart';
@@ -1452,7 +1452,7 @@ class _SettingsPageState extends State<SettingsPage>
 
   AppUpdatePlatform? _currentUpdatePlatform() {
     return widget.updatePlatformOverride ??
-        appUpdatePlatformForOperatingSystem(Platform.operatingSystem);
+        appUpdatePlatformForOperatingSystem(HostPlatform.operatingSystem);
   }
 
   Future<void> _openFeedbackMail() async {
@@ -3166,7 +3166,7 @@ class _SettingsPageState extends State<SettingsPage>
       setState(() => _applyAudioVolumePatch(patch));
       widget.onVolumeChanged?.call('audioinput', patch.inputVolume);
       widget.onVolumeChanged?.call('audiooutput', patch.outputVolume);
-      final platformFrameRateCap = !kIsWeb && Platform.isAndroid
+      final platformFrameRateCap = !kIsWeb && HostPlatform.isAndroid
           ? androidScreenShareFrameRateCap
           : desktopScreenShareFrameRateCap;
       setState(() {
@@ -3188,7 +3188,7 @@ class _SettingsPageState extends State<SettingsPage>
   }
 
   Future<void> _setScreenShareFrameRate(int frameRate) async {
-    final platformFrameRateCap = !kIsWeb && Platform.isAndroid
+    final platformFrameRateCap = !kIsWeb && HostPlatform.isAndroid
         ? androidScreenShareFrameRateCap
         : desktopScreenShareFrameRateCap;
     final normalized = normalizedScreenShareFrameRate(

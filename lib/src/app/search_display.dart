@@ -3,7 +3,13 @@ import 'file_display.dart' as file_display;
 import 'room_display.dart' as room_display;
 import 'room_notifications.dart' as room_notifications;
 
-enum GlobalSearchCategory { myRooms, publicRooms, userSettings, messages, files }
+enum GlobalSearchCategory {
+  myRooms,
+  publicRooms,
+  userSettings,
+  messages,
+  files,
+}
 
 const globalSearchCategories = [
   GlobalSearchCategory.myRooms,

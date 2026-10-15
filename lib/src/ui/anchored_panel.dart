@@ -53,8 +53,7 @@ class AnchoredPanelAnchor extends StatefulWidget {
 
   /// Builds the panel with a callback that closes it, for panels whose
   /// actions should dismiss them. Takes precedence over [panel].
-  final Widget Function(BuildContext context, VoidCallback close)?
-  panelBuilder;
+  final Widget Function(BuildContext context, VoidCallback close)? panelBuilder;
   final double width;
   final double gap;
   final Color backgroundColor;

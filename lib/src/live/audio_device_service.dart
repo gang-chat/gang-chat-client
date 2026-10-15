@@ -1,10 +1,9 @@
-import 'dart:io' show Platform;
-
 import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:livekit_client/livekit_client.dart' as lk;
 
 import '../app/audio_device_info.dart';
 import 'system_audio_devices.dart';
+import '../config/host_platform.dart';
 
 class LiveAudioDeviceService {
   const LiveAudioDeviceService({
@@ -28,7 +27,7 @@ class LiveAudioDeviceService {
     return _systemAudioOnlyOverride ??
         systemAudioOnlyForPlatform(
           isWeb: kIsWeb,
-          isWindows: !kIsWeb && Platform.isWindows,
+          isWindows: !kIsWeb && HostPlatform.isWindows,
         );
   }
 

@@ -1,4 +1,4 @@
-import 'dart:io' show HttpClient, HttpOverrides, Platform, SecurityContext;
+import 'dart:io' show HttpClient, HttpOverrides, SecurityContext;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -12,6 +12,7 @@ import 'src/shell/desktop_window_controller.dart';
 import 'src/shell/gang_app.dart';
 import 'src/shell/local_preferences_migration.dart';
 import 'src/shell/windows_key_event_guard.dart';
+import 'src/config/host_platform.dart';
 
 export 'src/shell/gang_app.dart' show GangApp;
 
@@ -41,9 +42,9 @@ Future<void> main(List<String> args) async {
   // an active communications client and adjust system audio, so Windows keeps
   // lazy initialization on the first real Live action.
   if (!kIsWeb) {
-    if (Platform.isMacOS) {
+    if (HostPlatform.isMacOS) {
       await rtc.WebRTC.initialize(options: {'bypassVoiceProcessing': true});
-    } else if (Platform.isAndroid) {
+    } else if (HostPlatform.isAndroid) {
       await initializeAndroidWebRtcAudio();
     }
   }

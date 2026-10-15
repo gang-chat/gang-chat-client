@@ -1,7 +1,6 @@
-import 'dart:io' show Platform;
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import '../config/host_platform.dart';
 
 const int _windowsKeyCodeMenu = 0x12;
 const int _windowsKeyCodeLeftMenu = 0xA4;
@@ -22,7 +21,7 @@ bool _installed = false;
 /// Flutter's normal key event manager after normalizing only malformed Windows
 /// Alt key-down messages.
 void installWindowsAltKeyEventGuard() {
-  if (_installed || kIsWeb || !Platform.isWindows) return;
+  if (_installed || kIsWeb || !HostPlatform.isWindows) return;
   _installed = true;
   SystemChannels.keyEvent.setMessageHandler((message) {
     // The crash happens before HardwareKeyboard handlers run, inside the

@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import '../config/host_platform.dart';
 
 /// Android-only operating-system capabilities used by the shell adapters.
 ///
@@ -25,7 +25,7 @@ class AndroidSystemService {
   );
   static bool _methodHandlerInstalled = false;
 
-  bool get isSupported => !kIsWeb && Platform.isAndroid;
+  bool get isSupported => !kIsWeb && HostPlatform.isAndroid;
 
   Stream<String> get selectedNotificationRoomIds {
     _ensureMethodHandler();

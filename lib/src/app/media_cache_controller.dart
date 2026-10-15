@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'file_transfer_state.dart';
 import 'fnv_hash.dart';
+import '../config/host_platform.dart';
 
 const _mediaCacheVersion = 'v1';
 
@@ -253,7 +254,7 @@ class MediaCacheController {
 
   Future<File> _cacheFile(MediaCacheRequest request) async {
     final root = await _cacheDirectoryProvider();
-    final separator = Platform.pathSeparator;
+    final separator = HostPlatform.pathSeparator;
     return File(
       '${root.path}${separator}media-assets$separator$_mediaCacheVersion$separator${request.cacheFilename}',
     );

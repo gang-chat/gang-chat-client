@@ -1,10 +1,9 @@
-import 'dart:io' show Platform;
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'src/ui/ui.dart';
+import 'src/config/host_platform.dart';
 
 const _showcaseWindowSize = Size(1120, 760);
 const _showcaseMinWindowSize = Size(390, 560);
@@ -12,7 +11,8 @@ const _unboundedWindowSize = Size(100000, 100000);
 const _showcaseNarrowBreakpoint = 720.0;
 
 bool get _supportsDesktopWindowManagement =>
-    !kIsWeb && (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
+    !kIsWeb &&
+    (HostPlatform.isMacOS || HostPlatform.isWindows || HostPlatform.isLinux);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

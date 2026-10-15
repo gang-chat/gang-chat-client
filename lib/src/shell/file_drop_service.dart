@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
+import '../config/host_platform.dart';
 
 class FileDropEvent {
   const FileDropEvent({required this.paths, required this.x, required this.y});
@@ -25,7 +25,9 @@ class FileDropService {
   }
 
   static void _ensureInstalled() {
-    if (_installed || kIsWeb || !(Platform.isWindows || Platform.isMacOS)) {
+    if (_installed ||
+        kIsWeb ||
+        !(HostPlatform.isWindows || HostPlatform.isMacOS)) {
       return;
     }
     _installed = true;

@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io' show Directory, File, Platform;
+import 'dart:io' show Directory, File;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -98,6 +98,7 @@ import 'music_track_profile_card.dart';
 import 'navigation.dart';
 import 'room_profile_card.dart';
 import 'room_management.dart';
+import '../config/host_platform.dart';
 
 part 'home_shell_realtime.dart';
 part 'home_shell_room_actions.dart';
@@ -135,7 +136,8 @@ Widget _withAndroidBottomSafeArea({
 }
 
 bool get _supportsWindowManagement =>
-    !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
+    !kIsWeb &&
+    (HostPlatform.isWindows || HostPlatform.isLinux || HostPlatform.isMacOS);
 
 enum _ContentMode {
   chat,

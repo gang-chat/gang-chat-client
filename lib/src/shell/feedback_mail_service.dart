@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'android_system_service.dart';
+import '../config/host_platform.dart';
 
 class FeedbackMailDraft {
   const FeedbackMailDraft({
@@ -41,15 +42,15 @@ class FeedbackMailService {
       await androidSystemService.openMailto(uri);
       return;
     }
-    if (Platform.isWindows) {
+    if (HostPlatform.isWindows) {
       await Process.start('rundll32', ['url.dll,FileProtocolHandler', value]);
       return;
     }
-    if (Platform.isMacOS) {
+    if (HostPlatform.isMacOS) {
       await Process.start('open', [value]);
       return;
     }
-    if (Platform.isLinux) {
+    if (HostPlatform.isLinux) {
       await Process.start('xdg-open', [value]);
       return;
     }

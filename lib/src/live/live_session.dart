@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io' show HttpOverrides, Platform;
+import 'dart:io' show HttpOverrides;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -17,6 +17,7 @@ import 'camera_device_reconciler.dart';
 import 'screen_share_quality.dart';
 import 'screen_audio_publisher.dart';
 import 'system_audio_devices.dart';
+import '../config/host_platform.dart';
 
 typedef CameraVideoInputCountProvider = Future<int> Function();
 
@@ -281,10 +282,11 @@ const _ignoredShareWindowNameParts = <String>[
 ];
 
 bool get supportsDesktopScreenShare =>
-    !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+    !kIsWeb &&
+    (HostPlatform.isWindows || HostPlatform.isMacOS || HostPlatform.isLinux);
 
 bool get supportsLocalScreenShare =>
-    supportsDesktopScreenShare || (!kIsWeb && Platform.isAndroid);
+    supportsDesktopScreenShare || (!kIsWeb && HostPlatform.isAndroid);
 
 @visibleForTesting
 bool shouldRequestScreenShareAudio({
@@ -306,7 +308,7 @@ bool shouldRequestScreenShareAudio({
 const _screenThumbnailChannel = MethodChannel('gang_chat/screen_thumbnail');
 
 Future<Uint8List?> _captureNativeScreenThumbnail(String displayId) async {
-  if (kIsWeb || !Platform.isMacOS) return null;
+  if (kIsWeb || !HostPlatform.isMacOS) return null;
   try {
     final bytes = await _screenThumbnailChannel.invokeMethod<Uint8List>(
       'captureScreenThumbnail',
@@ -686,7 +688,7 @@ class LiveSession extends ChangeNotifier {
 
   int get screenShareFrameRate => _screenShareFrameRate;
 
-  int get _platformScreenShareFrameRateCap => !kIsWeb && Platform.isAndroid
+  int get _platformScreenShareFrameRateCap => !kIsWeb && HostPlatform.isAndroid
       ? androidScreenShareFrameRateCap
       : desktopScreenShareFrameRateCap;
 
@@ -1108,7 +1110,7 @@ class LiveSession extends ChangeNotifier {
   /// Returns the resulting share state. Throws if capture fails (e.g. the user
   /// cancels the OS picker) — the caller is responsible for surfacing that.
   Future<bool> setScreenShareEnabled(bool enabled, {String? sourceId}) {
-    if (kIsWeb || !Platform.isAndroid) {
+    if (kIsWeb || !HostPlatform.isAndroid) {
       return _setScreenShareEnabled(enabled, sourceId: sourceId);
     }
     return _serializeLocalVideoTransition(
@@ -1140,8 +1142,8 @@ class LiveSession extends ChangeNotifier {
       final captureScreenAudio = shouldRequestScreenShareAudio(
         sourceId: sourceId,
         isDesktopSourcePickerPlatform: supportsDesktopScreenShare,
-        isWindowsDesktop: !kIsWeb && Platform.isWindows,
-        isAndroidPlatform: !kIsWeb && Platform.isAndroid,
+        isWindowsDesktop: !kIsWeb && HostPlatform.isWindows,
+        isAndroidPlatform: !kIsWeb && HostPlatform.isAndroid,
       );
       // Capture at the selected rate. Desktop quality changes rebuild only the
       // capture track (without reopening the picker), so raising 15 -> 60 FPS
@@ -1197,7 +1199,7 @@ class LiveSession extends ChangeNotifier {
       }
     } else {
       _invalidateScreenShareQualityApplication(resetSource: true);
-      if (!kIsWeb && Platform.isAndroid) {
+      if (!kIsWeb && HostPlatform.isAndroid) {
         // Playback capture uses the active MediaProjection. Cancel and tear
         // down its auxiliary publisher before revoking that projection, or an
         // in-flight publish can create an audio track against an invalid token.
@@ -1220,7 +1222,7 @@ class LiveSession extends ChangeNotifier {
   }
 
   Future<void> _awaitAndroidScreenCaptureRelease() async {
-    if (kIsWeb || !Platform.isAndroid) return;
+    if (kIsWeb || !HostPlatform.isAndroid) return;
     // LiveKit awaits unpublishing, but Android's MediaProjection/virtual
     // display teardown crosses a native handler thread. Give that thread a
     // bounded opportunity to remove the publication, followed by a short
@@ -1709,7 +1711,7 @@ class LiveSession extends ChangeNotifier {
       return enabled;
     }
 
-    if (kIsWeb || !Platform.isAndroid) return operation();
+    if (kIsWeb || !HostPlatform.isAndroid) return operation();
     return _serializeLocalVideoTransition(operation);
   }
 
@@ -1740,12 +1742,12 @@ class LiveSession extends ChangeNotifier {
       return true;
     }
 
-    if (kIsWeb || !Platform.isAndroid) return operation();
+    if (kIsWeb || !HostPlatform.isAndroid) return operation();
     return _serializeLocalVideoTransition(operation);
   }
 
   Future<void> _refreshCameraFlipAvailability() async {
-    if (kIsWeb || !Platform.isAndroid) {
+    if (kIsWeb || !HostPlatform.isAndroid) {
       _cameraFlipAvailable = false;
       return;
     }
@@ -1937,7 +1939,7 @@ class LiveSession extends ChangeNotifier {
   // mic forces a BT headset into HFP (low sample rate); the native fork resets
   // the output device's nominal rate back to its clean value. Best-effort.
   Future<void> _resetAudioOnLeave() async {
-    if (kIsWeb || !Platform.isMacOS) return;
+    if (kIsWeb || !HostPlatform.isMacOS) return;
     try {
       await rtc.Helper.gcResetAudioOnLeave();
     } catch (_) {
@@ -2553,7 +2555,7 @@ class LiveSession extends ChangeNotifier {
   }
 
   Future<void> _reconcileAndroidMusicBoxAudioRoute() {
-    if (kIsWeb || !Platform.isAndroid) return Future<void>.value();
+    if (kIsWeb || !HostPlatform.isAndroid) return Future<void>.value();
     _androidMusicMediaRouteRequested = _hasActiveMusicBoxAudioTrack();
     _androidAudioRouteTail = _androidAudioRouteTail.catchError((_) {}).then((
       _,
@@ -2799,11 +2801,11 @@ AudioDeviceRebinder? _defaultAudioDeviceRebinderFactory(
   LiveSession session, {
   required AudioDeviceStore? audioDeviceStore,
 }) {
-  if (kIsWeb || !(Platform.isMacOS || Platform.isWindows)) return null;
+  if (kIsWeb || !(HostPlatform.isMacOS || HostPlatform.isWindows)) return null;
   final systemAudio = SystemAudioDevices();
   const audioDevices = LiveAudioDeviceService();
   return AudioDeviceRebinder(
-    deviceChanges: Platform.isWindows
+    deviceChanges: HostPlatform.isWindows
         ? systemAudio.changes.map((_) {})
         : lk.Hardware.instance.onDeviceChange.stream.map((_) {}),
     resolvePreferredDevices: () => preferredLiveAudioDevices(
@@ -2820,7 +2822,7 @@ AudioDeviceRebinder? _defaultAudioDeviceRebinderFactory(
 }
 
 CameraDeviceReconciler? _defaultCameraDeviceReconcilerFactory() {
-  if (kIsWeb || !Platform.isWindows) return null;
+  if (kIsWeb || !HostPlatform.isWindows) return null;
   final systemAudio = SystemAudioDevices();
   return CameraDeviceReconciler(
     deviceChanges: systemAudio.videoChanges,

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../app/audio_device_preferences.dart';
+import '../config/host_platform.dart';
 
 /// Migrates device-wide preferences from historical application identities.
 ///
@@ -28,17 +29,17 @@ class LocalPreferencesMigration {
   };
 
   Future<void> migrate() async {
-    if (kIsWeb || !Platform.isWindows) return;
-    final roamingAppData = Platform.environment['APPDATA']?.trim();
+    if (kIsWeb || !HostPlatform.isWindows) return;
+    final roamingAppData = HostPlatform.environment['APPDATA']?.trim();
     if (roamingAppData == null || roamingAppData.isEmpty) return;
 
     final preferences = await SharedPreferences.getInstance();
     if (preferences.getBool(_windowsMigrationMarker) == true) return;
 
     final legacyFile = File(
-      '$roamingAppData${Platform.pathSeparator}'
-      'com.gangchat${Platform.pathSeparator}'
-      'client${Platform.pathSeparator}'
+      '$roamingAppData${HostPlatform.pathSeparator}'
+      'com.gangchat${HostPlatform.pathSeparator}'
+      'client${HostPlatform.pathSeparator}'
       'shared_preferences.json',
     );
     if (!await legacyFile.exists()) return;

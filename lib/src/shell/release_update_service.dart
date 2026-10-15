@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import '../app/app_update.dart';
+import '../config/host_platform.dart';
 
 typedef ReleaseDownloadProgress =
     void Function({required int receivedBytes, int? totalBytes});
@@ -194,7 +195,7 @@ class ReleaseUpdateService {
   Future<void> startInstaller(File file, {AppUpdatePlatform? platform}) async {
     final resolvedPlatform =
         platform ??
-        appUpdatePlatformForOperatingSystem(Platform.operatingSystem);
+        appUpdatePlatformForOperatingSystem(HostPlatform.operatingSystem);
     switch (resolvedPlatform) {
       case AppUpdatePlatform.windows:
         await _startWindowsInstaller(file);
@@ -271,7 +272,7 @@ class ReleaseUpdateService {
     final temporaryDirectory = await directoryProvider();
     final directory = update.asset.platform == AppUpdatePlatform.android
         ? Directory(
-            '${temporaryDirectory.path}${Platform.pathSeparator}'
+            '${temporaryDirectory.path}${HostPlatform.pathSeparator}'
             'release-updates',
           )
         : temporaryDirectory;
@@ -288,7 +289,7 @@ class ReleaseUpdateService {
       AppUpdatePlatform.android => 'apk',
     };
     return File(
-      '${directory.path}${Platform.pathSeparator}'
+      '${directory.path}${HostPlatform.pathSeparator}'
       'GangChat_v${update.latestVersion}.$extension',
     );
   }

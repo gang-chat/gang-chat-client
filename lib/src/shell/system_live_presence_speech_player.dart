@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../app/live_presence_announcement.dart';
 import 'android_system_service.dart';
+import '../config/host_platform.dart';
 
 /// Free local TTS backed by the operating system's installed voices.
 ///
@@ -33,13 +34,13 @@ class SystemLivePresenceSpeechPlayer implements LivePresenceSpeechPlayer {
     if (segments.isEmpty) return;
 
     try {
-      if (Platform.isWindows) {
+      if (HostPlatform.isWindows) {
         await _speakOnWindows(segments, volume);
-      } else if (Platform.isMacOS) {
+      } else if (HostPlatform.isMacOS) {
         await _speakOnMacOS(segments);
-      } else if (Platform.isLinux) {
+      } else if (HostPlatform.isLinux) {
         await _speakOnLinux(segments);
-      } else if (Platform.isAndroid) {
+      } else if (HostPlatform.isAndroid) {
         await androidSystemService.speak(
           segments: segments,
           volume: volume,
@@ -139,7 +140,7 @@ for ($index = 0; $index -lt $segments.Count; $index++) {
   @override
   Future<void> dispose() async {
     _disposed = true;
-    if (!kIsWeb && Platform.isAndroid) {
+    if (!kIsWeb && HostPlatform.isAndroid) {
       try {
         await androidSystemService.disposeSpeech();
       } catch (_) {}

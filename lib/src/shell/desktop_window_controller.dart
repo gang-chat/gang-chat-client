@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io' show Platform, exit;
+import 'dart:io' show exit;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../lifecycle/shutdown_hooks.dart';
+import '../config/host_platform.dart';
 
 const appWindowBackground = Color(0xFF14171D);
 
@@ -49,16 +50,17 @@ class DesktopWindowController {
 
   bool get supportsWindowManagement =>
       !kIsWeb &&
-      !Platform.environment.containsKey('FLUTTER_TEST') &&
-      (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
+      !HostPlatform.environment.containsKey('FLUTTER_TEST') &&
+      (HostPlatform.isMacOS || HostPlatform.isWindows || HostPlatform.isLinux);
 
-  bool get supportsNativeTray => supportsWindowManagement && Platform.isWindows;
+  bool get supportsNativeTray =>
+      supportsWindowManagement && HostPlatform.isWindows;
 
   bool get supportsWindowsPowerRequests =>
-      supportsWindowManagement && Platform.isWindows;
+      supportsWindowManagement && HostPlatform.isWindows;
 
   bool get supportsWindowsCaptureExclusion =>
-      supportsWindowManagement && Platform.isWindows;
+      supportsWindowManagement && HostPlatform.isWindows;
 
   void setCloseRequestHandler(AppCloseRequestHandler? handler) {
     _closeRequestHandler = handler;
@@ -97,7 +99,7 @@ class DesktopWindowController {
 
   Future<void> showInitialWindow() {
     return _configure(() async {
-      if (Platform.isMacOS) {
+      if (HostPlatform.isMacOS) {
         await windowManager.setOpacity(1);
         return;
       }
@@ -310,7 +312,7 @@ class DesktopWindowController {
   }
 
   WindowOptions _initialWindowOptions({bool authenticated = false}) {
-    if (Platform.isMacOS) {
+    if (HostPlatform.isMacOS) {
       if (authenticated) {
         return const WindowOptions(
           backgroundColor: appWindowBackground,
@@ -361,7 +363,7 @@ class DesktopWindowController {
       await _setWindowShadow(true);
       await windowManager.setResizable(false);
       await windowManager.setAlignment(Alignment.center);
-      if (Platform.isMacOS) {
+      if (HostPlatform.isMacOS) {
         // macOS shows the window immediately; opaque-zero it until AuthGate is
         // ready so the pre-render frame stays hidden.
         await windowManager.setOpacity(0);
@@ -383,7 +385,7 @@ class DesktopWindowController {
       await windowManager.setMinimumSize(_appWindowMinSize);
       await windowManager.setSize(_appWindowSize);
       await windowManager.setAlignment(Alignment.center);
-      if (Platform.isMacOS) {
+      if (HostPlatform.isMacOS) {
         await windowManager.setOpacity(0);
       }
     });
@@ -414,11 +416,11 @@ class DesktopWindowController {
   }
 
   Future<void> _setAuthTitleBar() {
-    return _setTitleBar(windowButtonVisibility: Platform.isMacOS);
+    return _setTitleBar(windowButtonVisibility: HostPlatform.isMacOS);
   }
 
   Future<void> _setAppTitleBar() {
-    return _setTitleBar(windowButtonVisibility: Platform.isMacOS);
+    return _setTitleBar(windowButtonVisibility: HostPlatform.isMacOS);
   }
 
   Future<void> _setTitleBar({required bool windowButtonVisibility}) async {

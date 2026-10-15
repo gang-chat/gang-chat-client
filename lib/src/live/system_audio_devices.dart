@@ -1,11 +1,11 @@
 import 'dart:async';
-import 'dart:io' show Platform;
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 
 import '../app/audio_device_info.dart';
+import '../config/host_platform.dart';
 
 /// Desktop system audio-device access backed by the native
 /// `gang_chat/audio_devices` channel.
@@ -42,7 +42,7 @@ class SystemAudioDevices {
 
   bool get _supported {
     return _supportedOverride ??
-        (!kIsWeb && (Platform.isMacOS || Platform.isWindows));
+        (!kIsWeb && (HostPlatform.isMacOS || HostPlatform.isWindows));
   }
 
   /// Native input devices, or an empty list when unsupported/unavailable.

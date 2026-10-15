@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 
 import 'models.dart';
+import '../config/host_platform.dart';
 
 class StickerPackStore {
   const StickerPackStore();
@@ -89,7 +90,7 @@ class StickerPackStore {
 
   Future<File> _cacheFile(String account) async {
     final dir = await getApplicationCacheDirectory();
-    final separator = Platform.pathSeparator;
+    final separator = HostPlatform.pathSeparator;
     return File(
       '${dir.path}${separator}sticker-packs$separator$_filePrefix-$account.json',
     );

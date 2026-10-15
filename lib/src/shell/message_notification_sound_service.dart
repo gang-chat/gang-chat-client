@@ -1,9 +1,10 @@
-import 'dart:io' show File, Platform;
+import 'dart:io' show File;
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'synthesized_wav.dart';
+import '../config/host_platform.dart';
 
 abstract interface class MessageNotificationSoundPlayer {
   Future<void> play({required double volume});
@@ -38,7 +39,7 @@ class MessageNotificationSoundService
   }
 
   Future<Source> _sourceFor(Uint8List bytes) async {
-    if (kIsWeb || !Platform.isWindows) {
+    if (kIsWeb || !HostPlatform.isWindows) {
       return BytesSource(bytes, mimeType: 'audio/wav');
     }
     return DeviceFileSource(

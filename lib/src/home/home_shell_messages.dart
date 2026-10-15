@@ -1006,7 +1006,7 @@ extension _HomeShellMessages on _HomeShellState {
   }) async {
     final baseDirectory = await getTemporaryDirectory();
     final directory = Directory(
-      '${baseDirectory.path}${Platform.pathSeparator}gang-chat-clipboard',
+      '${baseDirectory.path}${HostPlatform.pathSeparator}gang-chat-clipboard',
     );
     await directory.create(recursive: true);
     final filename = _safeClipboardFilename(title);

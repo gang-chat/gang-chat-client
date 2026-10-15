@@ -51,7 +51,7 @@ extension _HomeShellImagePreview on _HomeShellState {
     String suggestedName,
   ) async {
     final bytes = await _fetchImageBytes(url);
-    if (Platform.isAndroid) {
+    if (HostPlatform.isAndroid) {
       try {
         await _fileSelectionService.saveBytesToDownloads(
           bytes: bytes,
@@ -165,7 +165,7 @@ extension _HomeShellImagePreview on _HomeShellState {
     required String directory,
     required String filename,
   }) {
-    final separator = Platform.pathSeparator;
+    final separator = HostPlatform.pathSeparator;
     final base = directory.endsWith(separator)
         ? directory.substring(0, directory.length - 1)
         : directory;

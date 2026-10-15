@@ -1,10 +1,11 @@
-import 'dart:io' show File, Platform;
+import 'dart:io' show File;
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../shell/synthesized_wav.dart';
+import '../config/host_platform.dart';
 
 enum LivePresenceSound { joined, left }
 
@@ -54,7 +55,7 @@ class LivePresenceSoundService implements LivePresenceSoundPlayer {
   }
 
   Future<Source> _sourceFor(LivePresenceSound sound, Uint8List bytes) async {
-    if (kIsWeb || !Platform.isWindows) {
+    if (kIsWeb || !HostPlatform.isWindows) {
       return BytesSource(bytes, mimeType: 'audio/wav');
     }
     final pathFuture = sound == LivePresenceSound.joined
