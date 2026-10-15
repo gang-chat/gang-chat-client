@@ -59,7 +59,7 @@ const _chatHeaderVisualTopInset = _chatHeaderHorizontalInset;
 const _chatHeaderBottomInset = 16.0;
 const _liveHeaderCardHeight = 70.0;
 const _headerActionButtonSize = 31.0;
-const _headerActionGap = 0.0;
+const _headerActionGap = 8.0;
 const _messageMaxWidth = 560.0;
 // Breathing room below the last message before the composer row begins.
 const _messageListBottomInset = 14.0;
