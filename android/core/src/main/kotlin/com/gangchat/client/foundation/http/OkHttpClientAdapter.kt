@@ -74,6 +74,10 @@ class OkHttpClientAdapter(private val client: OkHttpClient) : HttpClient {
                 call.await()
             } catch (error: IOException) {
                 activeCalls.remove(call)
+                val bodyError =
+                    generateSequence<Throwable>(error) { it.cause }
+                        .firstOrNull { it is RequestBodyException } as RequestBodyException?
+                if (bodyError != null) throw bodyError.cause
                 throw error.toClientException(request.url)
             }
         val body = response.body
@@ -154,14 +158,27 @@ class OkHttpClientAdapter(private val client: OkHttpClient) : HttpClient {
         override fun isOneShot(): Boolean = true
 
         override fun writeTo(sink: BufferedSink) {
-            runBlocking {
-                file.stream.flow
-                    .flowOn(AppCoroutines.loop)
-                    .buffer(Channel.RENDEZVOUS)
-                    .collect { chunk -> sink.write(chunk) }
+            try {
+                runBlocking {
+                    file.stream.flow
+                        .flowOn(AppCoroutines.loop)
+                        .buffer(Channel.RENDEZVOUS)
+                        .collect { chunk -> sink.write(chunk) }
+                }
+            } catch (error: IOException) {
+                throw error
+            } catch (error: Exception) {
+                // OkHttp only reports IOExceptions to the callback and rethrows
+                // anything else on its dispatcher thread. Carry the producer's
+                // own error (e.g. a cancelled upload) back to `send`, which
+                // rethrows it unchanged, as Dart's IOClient does.
+                throw RequestBodyException(error)
             }
         }
     }
+
+    /** Wraps an error thrown by a streaming request body; see [StreamingFileBody]. */
+    private class RequestBodyException(override val cause: Exception) : IOException(cause)
 
     private suspend fun Call.await(): Response =
         suspendCancellableCoroutine { continuation ->
