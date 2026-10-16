@@ -2,8 +2,7 @@ name: desktop-electron
 
 # Checks and packages the Electron desktop client (apps/desktop) and the
 # shared TypeScript packages. Builds are unsigned test packages uploaded as
-# workflow artifacts; the release workflow still publishes the Flutter
-# desktop builds until the Electron client replaces them.
+# workflow artifacts; release.yml publishes the signed release builds.
 
 on:
   push:

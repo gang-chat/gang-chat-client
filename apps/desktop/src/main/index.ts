@@ -8,6 +8,7 @@ import { registerFiles } from './files';
 import { registerMediaAccess } from './media_access';
 import { handleMediaProtocol, registerMediaScheme } from './media_protocol';
 import { registerNetBridge } from './net_bridge';
+import { registerSparkle } from './sparkle';
 import { installDisplayMediaHandler, registerScreenCapture } from './screen_capture';
 import { loadStorage, preferencesSnapshot, readSecure, registerStorage } from './storage';
 import { clearNotifications, registerSystem } from './system';
@@ -178,6 +179,7 @@ app.whenReady().then(async () => {
   registerSystem();
   registerWindowIpc();
   registerUpdater(releaseBucketUrl(config));
+  registerSparkle();
   handleMediaProtocol();
   installDisplayMediaHandler();
 

@@ -20,9 +20,12 @@ extraResources:
   - from: build/icon_256.png
     to: icon.png
 asar: true
-# electron-updater feed: the workflow uploads latest.yml / latest-mac.yml and
-# the blockmaps next to the installers in the bucket's releases/ folder. The
-# app sets the same URL at runtime from app_config.json.
+# Ad-hoc signs macOS builds so Sparkle accepts them (see the script).
+afterPack: scripts/after_pack.cjs
+# electron-updater feed (Windows): the workflow uploads latest.yml and the
+# blockmap next to the installer in the bucket's releases/ folder. The app sets
+# the same URL at runtime from app_config.json. macOS updates through Sparkle
+# from releases/appcast.xml instead, like the Flutter macOS app.
 publish:
   provider: generic
   url: https://os.ky-z.com:9000/gang-chat/releases
@@ -62,14 +65,22 @@ mac:
   icon: build/icon.png
   category: public.app-category.social-networking
   minimumSystemVersion: '12.0'
-  # The update zip; the DMG overrides this in `dmg.artifactName`.
-  artifactName: GangChat-${version}-mac.${ext}
+  # Sparkle installs updates from the DMG, so it is the only macOS target.
+  # CFBundleVersion (`buildVersion`) is set by scripts/package.mjs.
   target:
     - target: dmg
       arch: [universal]
-    # Squirrel.Mac (electron-updater) installs updates from the zip.
-    - target: zip
-      arch: [universal]
+  # Sparkle (scripts/prepare_sparkle.mjs): the framework next to Electron's,
+  # and the Node-API module the main process loads (src/main/sparkle.ts).
+  extraFiles:
+    - from: build/sparkle/Sparkle.framework
+      to: Frameworks/Sparkle.framework
+  extraResources:
+    - from: build/sparkle/sparkle.node
+      to: sparkle/sparkle.node
+  # Both are universal already and identical in the x64 and arm64 halves, which
+  # @electron/universal only accepts for files listed here.
+  x64ArchFiles: '{Contents/Frameworks/Sparkle.framework/**,Contents/Resources/sparkle/sparkle.node}'
   hardenedRuntime: true
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
@@ -78,6 +89,13 @@ mac:
     NSCameraUsageDescription: Gang Chat uses your camera in live rooms.
     NSCameraUseContinuityCameraDeviceType: true
     NSAudioCaptureUsageDescription: Gang Chat shares system audio with your screen share in live rooms.
+    # Sparkle, as in macos/Runner/Info.plist: the same appcast and signing key,
+    # so Flutter and Electron installs update from one feed. The app moves the
+    # feed to its configured release bucket at runtime.
+    SUFeedURL: https://os.ky-z.com:9000/gang-chat/releases/appcast.xml
+    SUPublicEDKey: qt5Xe3gI5E44p2fg3P+2o4VoK5wck2oy+WxpPFu/g3A=
+    SUEnableAutomaticChecks: false
+    SUShowReleaseNotes: false
 
 dmg:
   artifactName: GangChat_v${version}.${ext}

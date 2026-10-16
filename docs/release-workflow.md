@@ -3,10 +3,17 @@
 The `.github/workflows/release.yml` workflow publishes these assets for each
 `v*` tag or manual release:
 
-- `GangChat_v<version>.dmg`
-- `GangChat_v<version>.exe`
+- `GangChat_v<version>.dmg` and `appcast.xml` (macOS, Sparkle feed)
+- `GangChat_v<version>.exe`, `GangChat_v<version>.exe.blockmap` and
+  `latest.yml` (Windows, electron-updater feed)
 - `GangChat-<version>-windows.zip`
 - `GangChat_v<version>.apk`
+
+The desktop builds are the Electron client (`apps/desktop`, packaged with
+electron-builder). Android and the web client are still built from the
+Flutter project. The release version is written into
+`apps/desktop/package.json` before packaging, so the installers, the About
+page and the macOS build number all follow the tag.
 
 Desktop signing is optional while certificates are being provisioned. When all
 secrets for a desktop platform are absent, the workflow publishes an unsigned
@@ -23,9 +30,12 @@ them set it fails. Setup is described in `docs/web-spike.md` (部署).
 
 ## Windows signing
 
-The Windows application executable is named `GangChat.exe`. The installer
-recognizes and removes a legacy installation containing `client.exe`, so an
-upgrade does not leave the old executable behind.
+The Windows application executable is named `GangChat.exe`. The NSIS
+installer (`apps/desktop/build/installer.nsh`) silently runs the uninstaller of
+an earlier Flutter installation (`Uninstall\Gang Chat`) before installing, so
+an upgrade from the Flutter app does not leave its files behind or a second
+"Gang Chat" in the installed apps list. Settings and sign-in under AppData
+are kept.
 
 Configure these repository secrets:
 
@@ -35,11 +45,11 @@ Configure these repository secrets:
 - `WINDOWS_CERTIFICATE_PASSWORD`: password protecting that PFX.
 
 The certificate must be a currently valid, publicly trusted code-signing
-certificate with the Code Signing extended key usage. The workflow imports it
-into a temporary user certificate store, signs `GangChat.exe`, the embedded
-NSIS uninstaller, and the final installer using SHA-256 and an RFC 3161
-timestamp, then verifies the resulting trust status. The portable ZIP contains
-the same signed `GangChat.exe`.
+certificate with the Code Signing extended key usage. electron-builder signs
+`GangChat.exe`, the embedded NSIS uninstaller and the final installer with it,
+and the workflow then verifies the trust status. The portable ZIP contains the
+same signed `GangChat.exe`. Once releases are signed, keep signing them:
+electron-updater only installs updates from the same publisher.
 
 If both Windows signing secrets are absent, the executable, installer, and ZIP
 are still published unsigned with a prominent warning. Supplying only one of
@@ -65,9 +75,9 @@ unsigned release reports `NotSigned`.
 
 ## macOS signing and notarization
 
-The macOS job applies a hardened-runtime Developer ID signature to the app and
-DMG, submits the DMG to Apple's notary service, and staples the accepted ticket
-before publishing. Configure these repository secrets:
+With a Developer ID, electron-builder signs the app with the hardened runtime
+and notarizes it with the App Store Connect API key. Configure these
+repository secrets:
 
 - `MACOS_CERTIFICATE_BASE64`: base64-encoded P12 containing the Developer ID
   Application certificate and private key.
@@ -79,9 +89,12 @@ before publishing. Configure these repository secrets:
 - `APPLE_NOTARY_KEY_ID`: App Store Connect API key ID.
 - `APPLE_NOTARY_ISSUER_ID`: App Store Connect API issuer ID.
 
-If all six macOS signing and notarization secrets are absent, the DMG is still
-published unsigned and not notarized, with a prominent warning. Supplying only
-part of the set is treated as a configuration error and fails the macOS job.
+If all six macOS signing and notarization secrets are absent, the app is
+ad-hoc signed (`apps/desktop/scripts/after_pack.cjs`) and not notarized, with a
+prominent warning. The ad-hoc signature is required: Sparkle refuses an update
+whose code signature is invalid, and an unsigned Electron package only carries
+a broken linker signature. Supplying only part of the set is treated as a
+configuration error and fails the macOS job.
 
 For example, create single-line base64 values on macOS with:
 
@@ -94,7 +107,7 @@ Apple Developer Program membership and a Developer ID Application certificate
 are required. After downloading a release, verify it on macOS with:
 
 ```bash
-codesign --verify --deep --strict --verbose=2 /Applications/client.app
+codesign --verify --deep --strict --verbose=2 /Applications/GangChat.app
 xcrun stapler validate GangChat_v1.2.3.dmg
 spctl --assess --type open --context context:primary-signature \
   --verbose=2 GangChat_v1.2.3.dmg
@@ -102,25 +115,27 @@ spctl --assess --type open --context context:primary-signature \
 
 ## macOS in-app updates (Sparkle)
 
-The macOS app runs in the App Sandbox. Anything a sandboxed app writes is
-quarantined as "created by a sandboxed app", and macOS refuses to launch an
-app copied out of a DMG the app downloaded itself (`spctl`: "File created by an
-AppSandbox, exec/open not allowed"). The macOS client therefore updates
-through [Sparkle 2](https://sparkle-project.org): it reads an appcast, checks
-the EdDSA signature of the update and installs it with Sparkle's XPC
-installer, which runs outside the sandbox, so the installed app carries no
-quarantine flag.
+macOS installs update through [Sparkle 2](https://sparkle-project.org): it
+reads an appcast, checks the EdDSA signature of the update, installs it and
+relaunches the app. Sparkle needs no Developer ID, unlike Electron's
+Squirrel.Mac. The Flutter macOS app (sandboxed, with Sparkle's XPC installer)
+and the Electron app read the same appcast and trust the same key, so Flutter
+installs move to the Electron app through the feed that keeps it current.
+
+The Electron app ships the official Sparkle framework, pinned by version and
+checksum in `apps/desktop/scripts/prepare_sparkle.mjs`, which also builds the
+small Node-API module the main process uses to drive it
+(`apps/desktop/native/sparkle/sparkle.mm`). `npm run dist:mac` runs it.
 
 - The app checks at launch (when automatic update prompts are on) and from
   Settings → About. Sparkle shows its own update window.
 - The appcast is `releases/appcast.xml` next to the installers in the release
   bucket (`release_bucket_url` in `assets/config/app_config.json`).
 - Sparkle compares `CFBundleVersion`, so the macOS build number is
-  `major * 1000000 + minor * 1000 + patch`, the same code Android uses.
-- Builds without an update-signing key fall back to opening the DMG link in the
-  browser. A browser download carries the normal quarantine flag instead of
-  the sandbox one, so the app can launch; while builds are ad-hoc signed that
-  takes "Open Anyway" in System Settings → Privacy & Security once per update.
+  `major * 1000000 + minor * 1000 + patch`, the same code Android uses
+  (`apps/desktop/scripts/package.mjs` sets it; the release job checks it).
+- Development runs and builds without Sparkle fall back to opening the DMG
+  link in the browser.
 
 ### One-time setup
 
@@ -132,8 +147,9 @@ quarantine flag.
    macos/Pods/Sparkle/bin/generate_keys
    ```
 
-2. Put the printed public key in `SUPublicEDKey` in `macos/Runner/Info.plist`
-   and commit it. It is public and belongs in the repository.
+2. Put the printed public key in `SUPublicEDKey` in
+   `apps/desktop/electron-builder.yml` (and `macos/Runner/Info.plist` for the
+   Flutter app) and commit it. It is public and belongs in the repository.
 3. Export the private key and add the file's contents as the repository secret
    `SPARKLE_ED_PRIVATE_KEY`:
 
@@ -145,10 +161,11 @@ quarantine flag.
    file. **If the private key is lost, installed apps can never accept another
    update**, because they only trust the public key they shipped with.
 
-Like desktop signing, the release workflow skips the appcast with a warning
-when neither the secret nor `SUPublicEDKey` is set, and fails when only one is.
-It also refuses to publish an update whose signature doesn't verify against
-`SUPublicEDKey` (`tool/verify_sparkle_signature.swift`).
+The release workflow fails without the secret, because every macOS install
+updates from this appcast. It also refuses to publish an update whose
+signature doesn't verify against `SUPublicEDKey`
+(`tool/verify_sparkle_signature.swift`). Sparkle's `sign_update` comes from the
+same pinned release (`apps/desktop/build/sparkle/bin/sign_update`).
 
 ### Each release
 
@@ -163,6 +180,16 @@ If you ever upload by hand, keep the same order: the DMG first, then
 `appcast.xml`, or installed apps will be offered an update they can't download
 yet.
 
+## Windows in-app updates (electron-updater)
+
+The Windows app reads `latest.yml` from `releases/` and downloads the installer
+it names, using the blockmap for differential downloads, then runs it. Until
+the release sync also uploads `latest.yml` and the `.blockmap` (it uploads only
+the installers today), the app falls back to listing the installers in
+`releases/` and downloading the newest one in full, as the Flutter app does.
+Flutter installs find the Electron installer the same way, since it keeps the
+`GangChat_v<version>.exe` name.
+
 ### Moving existing installs to Sparkle
 
 Versions up to 0.10.0 still use the old in-app download, which leaves an app
@@ -174,11 +201,10 @@ stuck can repair the installed app with:
 xattr -drs com.apple.quarantine /Applications/GangChat.app
 ```
 
-Sparkle works with the current ad-hoc signed builds, because it verifies
-updates with its own EdDSA key. Developer ID signing (above) is still worth
-setting up: ad-hoc builds change signature with every release, so macOS asks
-again for microphone, camera, screen recording and keychain access after each
-update.
+Sparkle works with ad-hoc signed builds, because it verifies updates with its
+own EdDSA key. Developer ID signing (above) is still worth setting up: ad-hoc
+builds change signature with every release, so macOS asks again for
+microphone, camera, screen recording and keychain access after each update.
 
 ## Android signing
 

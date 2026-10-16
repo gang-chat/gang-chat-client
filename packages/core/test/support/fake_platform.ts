@@ -25,6 +25,7 @@ import type {
   ProcessBridge,
   ScreenCaptureBridge,
   SecureStorage,
+  SparkleBridge,
   SpeechBridge,
   SystemNotificationOptions,
   UpdaterBridge,
@@ -574,6 +575,7 @@ export interface FakePlatformOptions {
   updater?: FakeUpdater | null;
   screenCapture?: ScreenCaptureBridge | null;
   mediaAccess?: MediaAccessBridge | null;
+  sparkle?: SparkleBridge | null;
   /** Answer of [Platform.openExternal]. */
   openExternalResult?: boolean;
 }
@@ -622,6 +624,7 @@ export function createFakePlatform(options: FakePlatformOptions = {}): FakePlatf
     speech: options.speech !== undefined ? options.speech : new FakeSpeech(),
     updater: options.updater ?? null,
     mediaAccess: options.mediaAccess ?? null,
+    sparkle: options.sparkle ?? null,
     openedUrls,
     openExternalResult: options.openExternalResult ?? true,
     async openExternal(url: string): Promise<boolean> {

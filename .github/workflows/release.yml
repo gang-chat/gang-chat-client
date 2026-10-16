@@ -62,6 +62,8 @@ jobs:
           echo "released_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
           echo "Resolved version: $VERSION"
 
+  # Desktop releases are the Electron client (apps/desktop). Android and the
+  # web build below stay on Flutter.
   build-macos:
     runs-on: macos-latest
     needs: [prepare]
@@ -71,29 +73,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          channel: stable
-          flutter-version: '3.44.0'
-          cache: true
+          node-version: '22'
+          cache: npm
 
-      - name: Flutter sanity check
-        run: flutter --version
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Get dependencies
-        run: flutter pub get
+      - name: Set the release version
+        # electron-builder, the About page and CFBundleVersion all read it from
+        # apps/desktop/package.json.
+        run: npm version "${{ needs.prepare.outputs.version }}" --no-git-tag-version --allow-same-version -w @gang-chat/desktop
 
-      - name: UTF-8 encoding check
-        run: dart tool/check_utf8.dart
-
-      - name: Update release metadata
-        run: |
-          dart tool/update_release_metadata.dart \
-            --version "${{ needs.prepare.outputs.version }}" \
-            --released-at "${{ needs.prepare.outputs.released_at }}"
-
-      - name: Resolve and prepare macOS Developer ID signing
+      - name: Resolve macOS Developer ID signing
         id: macos_signing
         shell: bash
         env:
@@ -105,8 +99,8 @@ jobs:
           APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
         run: |
           set -euo pipefail
-          signing_secret_count=0
-          missing_secrets=()
+          configured=0
+          missing=()
           for name in \
             MACOS_CERTIFICATE_BASE64 \
             MACOS_CERTIFICATE_PASSWORD \
@@ -115,197 +109,75 @@ jobs:
             APPLE_NOTARY_KEY_ID \
             APPLE_NOTARY_ISSUER_ID; do
             if [ -n "${!name:-}" ]; then
-              signing_secret_count=$((signing_secret_count + 1))
+              configured=$((configured + 1))
             else
-              missing_secrets+=("$name")
+              missing+=("$name")
             fi
           done
 
-          if [ "$signing_secret_count" -eq 0 ]; then
+          if [ "$configured" -eq 0 ]; then
             echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "::warning title=Unsigned macOS release::Developer ID signing secrets are not configured; the DMG will be published unsigned and will not be notarized."
+            echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+            echo "::warning title=Unsigned macOS release::Developer ID signing secrets are not configured; the app is ad-hoc signed and not notarized. Sparkle still verifies updates with its EdDSA key."
             {
-              echo "### ⚠️ Unsigned macOS artifact"
+              echo "### ⚠️ Ad-hoc signed macOS artifact"
               echo
-              echo "Developer ID signing secrets are not configured."
-              echo "The DMG will be built without Developer ID signing or Apple notarization."
+              echo "Developer ID signing secrets are not configured, so the DMG is not notarized."
+              echo "Installed apps still update through Sparkle, which checks the EdDSA signature."
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-
-          if [ "$signing_secret_count" -ne 6 ]; then
-            printf 'macOS signing is only partially configured; missing secret: %s\n' \
-              "${missing_secrets[@]}" >&2
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::macOS signing is only partially configured; missing secret: ${missing[*]}"
             exit 1
           fi
 
+          # electron-builder imports the certificate into a temporary keychain,
+          # signs with the hardened runtime and notarizes with the API key.
+          printf '%s' "$MACOS_CERTIFICATE_BASE64" | base64 --decode > "$RUNNER_TEMP/developer-id.p12"
+          printf '%s' "$APPLE_NOTARY_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/notary-key.p8"
+          {
+            echo "CSC_LINK=$RUNNER_TEMP/developer-id.p12"
+            echo "CSC_KEY_PASSWORD=$MACOS_CERTIFICATE_PASSWORD"
+            echo "CSC_NAME=${MACOS_SIGNING_IDENTITY#Developer ID Application: }"
+            echo "APPLE_API_KEY=$RUNNER_TEMP/notary-key.p8"
+            echo "APPLE_API_KEY_ID=$APPLE_NOTARY_KEY_ID"
+            echo "APPLE_API_ISSUER=$APPLE_NOTARY_ISSUER_ID"
+          } >> "$GITHUB_ENV"
           echo "enabled=true" >> "$GITHUB_OUTPUT"
-          case "$MACOS_SIGNING_IDENTITY" in
-            "Developer ID Application:"*) ;;
-            *)
-              echo "MACOS_SIGNING_IDENTITY must be a Developer ID Application identity" >&2
-              exit 1
-              ;;
-          esac
 
-          CERTIFICATE_PATH="$RUNNER_TEMP/gang-chat-developer-id.p12"
-          NOTARY_KEY_PATH="$RUNNER_TEMP/AuthKey_${APPLE_NOTARY_KEY_ID}.p8"
-          KEYCHAIN_PATH="$RUNNER_TEMP/gang-chat-signing.keychain-db"
-          KEYCHAIN_PASSWORD="$(uuidgen)"
+      - name: Package macOS
+        env:
+          GANG_CHAT_RELEASED_AT: ${{ needs.prepare.outputs.released_at }}
+        run: npm run dist:mac -w @gang-chat/desktop
 
-          printf '%s' "$MACOS_CERTIFICATE_BASE64" \
-            | base64 -D > "$CERTIFICATE_PATH"
-          printf '%s' "$APPLE_NOTARY_KEY_BASE64" \
-            | base64 -D > "$NOTARY_KEY_PATH"
-          if [ ! -s "$CERTIFICATE_PATH" ] || [ ! -s "$NOTARY_KEY_PATH" ]; then
-            echo "decoded macOS signing material is empty" >&2
-            exit 1
-          fi
-          chmod 600 "$CERTIFICATE_PATH" "$NOTARY_KEY_PATH"
-
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security import "$CERTIFICATE_PATH" \
-            -P "$MACOS_CERTIFICATE_PASSWORD" \
-            -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-          security set-key-partition-list \
-            -S apple-tool:,apple:,codesign: \
-            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security list-keychains -d user -s "$KEYCHAIN_PATH"
-          if ! security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
-            | grep -F -- "$MACOS_SIGNING_IDENTITY"; then
-            echo "configured Developer ID identity was not imported" >&2
-            exit 1
-          fi
-
-          echo "MACOS_CERTIFICATE_PATH=$CERTIFICATE_PATH" >> "$GITHUB_ENV"
-          echo "MACOS_KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
-          echo "MACOS_SIGNING_IDENTITY=$MACOS_SIGNING_IDENTITY" >> "$GITHUB_ENV"
-          echo "APPLE_NOTARY_KEY_PATH=$NOTARY_KEY_PATH" >> "$GITHUB_ENV"
-          echo "APPLE_NOTARY_KEY_ID=$APPLE_NOTARY_KEY_ID" >> "$GITHUB_ENV"
-          echo "APPLE_NOTARY_ISSUER_ID=$APPLE_NOTARY_ISSUER_ID" >> "$GITHUB_ENV"
-
-      - name: Build macOS (release)
-        # Sparkle compares CFBundleVersion, so it must grow with every release.
-        # Reuse the monotonic major*1000000 + minor*1000 + patch code that
-        # Android already uses as its version code.
-        run: |
-          flutter build macos --release \
-            --build-name="${{ needs.prepare.outputs.version }}" \
-            --build-number="${{ needs.prepare.outputs.android_version_code }}"
-
-      - name: Sign and verify macOS app
-        if: steps.macos_signing.outputs.enabled == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          APP="build/macos/Build/Products/Release/GangChat.app"
-          [ -d "$APP" ] || { echo "app bundle not found at $APP"; exit 1; }
-
-          # Re-sign with the entitlements Xcode embedded, where build settings
-          # such as $(PRODUCT_BUNDLE_IDENTIFIER) in Sparkle's mach-lookup
-          # exceptions are already expanded; the source file is not.
-          ENTITLEMENTS="$RUNNER_TEMP/GangChat.entitlements"
-          codesign -d --entitlements - --xml "$APP" > "$ENTITLEMENTS"
-          plutil -lint "$ENTITLEMENTS"
-
-          while IFS= read -r -d '' item; do
-            if [ -f "$item" ] && ! file -b "$item" | grep -q 'Mach-O'; then
-              continue
-            fi
-            codesign \
-              --force \
-              --timestamp \
-              --options runtime \
-              --preserve-metadata=identifier,requirements,entitlements \
-              --sign "$MACOS_SIGNING_IDENTITY" \
-              "$item"
-          done < <(
-            find "$APP/Contents" -depth \
-              \( \
-                -type d \( \
-                  -name '*.framework' -o \
-                  -name '*.app' -o \
-                  -name '*.xpc' -o \
-                  -name '*.appex' -o \
-                  -name '*.bundle' \
-                \) -o \
-                -type f \( -name '*.dylib' -o -perm -111 \) \
-              \) -print0
-          )
-
-          codesign \
-            --force \
-            --timestamp \
-            --options runtime \
-            --entitlements "$ENTITLEMENTS" \
-            --sign "$MACOS_SIGNING_IDENTITY" \
-            "$APP"
-          codesign --verify --deep --strict --verbose=2 "$APP"
-          codesign --display --verbose=4 "$APP" 2>&1
-
-      - name: Package DMG
+      - name: Check the packaged app
         id: dmg
         shell: bash
         run: |
           set -euo pipefail
-          APP="build/macos/Build/Products/Release/GangChat.app"
-          [ -d "$APP" ] || { echo "app bundle not found at $APP"; exit 1; }
-          DMG="GangChat_v${{ needs.prepare.outputs.version }}.dmg"
-          STAGING="$(mktemp -d)"
-          trap 'rm -rf "$STAGING"' EXIT
-          cp -R "$APP" "$STAGING/"
-          ln -s /Applications "$STAGING/Applications"
-          hdiutil create -volname "Gang Chat" -srcfolder "$STAGING" \
-            -ov -format UDZO "$DMG"
-          echo "name=$DMG" >> "$GITHUB_OUTPUT"
-          ls -lh "$DMG"
-
-      - name: Sign, notarize, and staple macOS DMG
-        if: steps.macos_signing.outputs.enabled == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          DMG="${{ steps.dmg.outputs.name }}"
-          RESULT="$RUNNER_TEMP/gang-chat-notary-result.json"
-          LOG="$RUNNER_TEMP/gang-chat-notary-log.json"
-
-          codesign \
-            --force \
-            --timestamp \
-            --sign "$MACOS_SIGNING_IDENTITY" \
-            "$DMG"
-          codesign --verify --verbose=2 "$DMG"
-
-          xcrun notarytool submit "$DMG" \
-            --key "$APPLE_NOTARY_KEY_PATH" \
-            --key-id "$APPLE_NOTARY_KEY_ID" \
-            --issuer "$APPLE_NOTARY_ISSUER_ID" \
-            --wait \
-            --output-format json | tee "$RESULT"
-
-          STATUS="$(plutil -extract status raw "$RESULT")"
-          SUBMISSION_ID="$(plutil -extract id raw "$RESULT")"
-          if [ "$STATUS" != "Accepted" ]; then
-            xcrun notarytool log "$SUBMISSION_ID" \
-              --key "$APPLE_NOTARY_KEY_PATH" \
-              --key-id "$APPLE_NOTARY_KEY_ID" \
-              --issuer "$APPLE_NOTARY_ISSUER_ID" \
-              "$LOG" || true
-            [ ! -f "$LOG" ] || cat "$LOG"
-            echo "Apple notarization failed with status: $STATUS" >&2
+          APP="apps/desktop/dist/mac-universal/GangChat.app"
+          DMG="apps/desktop/dist/GangChat_v${{ needs.prepare.outputs.version }}.dmg"
+          if [ ! -d "$APP" ] || [ ! -f "$DMG" ]; then
+            echo "::error::expected $APP and $DMG"
+            ls -la apps/desktop/dist
             exit 1
           fi
-
-          xcrun stapler staple "$DMG"
-          xcrun stapler validate "$DMG"
-          codesign --verify --verbose=2 "$DMG"
-          spctl --assess \
-            --type open \
-            --context context:primary-signature \
-            --verbose=2 \
-            "$DMG"
+          # Sparkle compares CFBundleVersion: it must be the same growing
+          # version code the Flutter macOS app and Android use.
+          BUILD_NUMBER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist")"
+          if [ "$BUILD_NUMBER" != "${{ needs.prepare.outputs.android_version_code }}" ]; then
+            echo "::error::CFBundleVersion is $BUILD_NUMBER, expected ${{ needs.prepare.outputs.android_version_code }}"
+            exit 1
+          fi
+          # Sparkle refuses updates whose code signature is invalid.
+          codesign --verify --deep --strict "$APP"
+          test -d "$APP/Contents/Frameworks/Sparkle.framework"
+          test -f "$APP/Contents/Resources/sparkle/sparkle.node"
+          echo "app=$APP" >> "$GITHUB_OUTPUT"
+          echo "path=$DMG" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$DMG")" >> "$GITHUB_OUTPUT"
+          ls -lh "$DMG"
 
       - name: Sign the update and write the Sparkle appcast
         shell: bash
@@ -313,37 +185,33 @@ jobs:
           SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
         run: |
           set -euo pipefail
-          APP="build/macos/Build/Products/Release/GangChat.app"
+          APP="${{ steps.dmg.outputs.app }}"
+          DMG_PATH="${{ steps.dmg.outputs.path }}"
           DMG="${{ steps.dmg.outputs.name }}"
           VERSION="${{ needs.prepare.outputs.version }}"
           BUILD_NUMBER="${{ needs.prepare.outputs.android_version_code }}"
           PUBLIC_KEY="$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$APP/Contents/Info.plist" 2>/dev/null || true)"
 
-          # Like desktop signing: skip when neither half is configured, fail
-          # when only one is. An app with a public key but no signed appcast
-          # would never see another update.
-          if [ -z "$SPARKLE_ED_PRIVATE_KEY" ] && [ -z "$PUBLIC_KEY" ]; then
-            echo "::warning::Sparkle appcast skipped: SPARKLE_ED_PRIVATE_KEY and SUPublicEDKey are not configured. macOS updates fall back to a browser download."
-            echo "- ⚠️ macOS: no Sparkle appcast; in-app updates fall back to a browser download." >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
+          # Every macOS install, Flutter or Electron, updates from this feed,
+          # so a release without it would strand them.
           if [ -z "$SPARKLE_ED_PRIVATE_KEY" ] || [ -z "$PUBLIC_KEY" ]; then
-            echo "::error::Sparkle is half configured: set both the SPARKLE_ED_PRIVATE_KEY secret and SUPublicEDKey in macos/Runner/Info.plist. See docs/release-workflow.md."
+            echo "::error::Sparkle needs both the SPARKLE_ED_PRIVATE_KEY secret and SUPublicEDKey (apps/desktop/electron-builder.yml). See docs/release-workflow.md."
             exit 1
           fi
 
-          SIGN_UPDATE=macos/Pods/Sparkle/bin/sign_update
-          ATTRIBUTES="$(printf '%s' "$SPARKLE_ED_PRIVATE_KEY" | "$SIGN_UPDATE" --ed-key-file - "$DMG")"
+          SIGN_UPDATE=apps/desktop/build/sparkle/bin/sign_update
+          ATTRIBUTES="$(printf '%s' "$SPARKLE_ED_PRIVATE_KEY" | "$SIGN_UPDATE" --ed-key-file - "$DMG_PATH")"
           SIGNATURE="$(printf '%s' "$ATTRIBUTES" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')"
           LENGTH="$(printf '%s' "$ATTRIBUTES" | sed -n 's/.*length="\([0-9]*\)".*/\1/p')"
           [ -n "$SIGNATURE" ] && [ -n "$LENGTH" ] || { echo "unexpected sign_update output: $ATTRIBUTES"; exit 1; }
           # Installed apps verify with SUPublicEDKey; refuse to publish an
           # update they would reject.
-          swift tool/verify_sparkle_signature.swift "$PUBLIC_KEY" "$SIGNATURE" "$DMG"
+          swift tool/verify_sparkle_signature.swift "$PUBLIC_KEY" "$SIGNATURE" "$DMG_PATH"
 
           BUCKET_URL="$(python3 -c 'import json; print(json.load(open("assets/config/app_config.json"))["release_bucket_url"].rstrip("/"))')"
           PUB_DATE="$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S +0000')"
-          cat > appcast.xml <<EOF
+          mkdir -p release-staging
+          cat > release-staging/appcast.xml <<EOF
           <?xml version="1.0" encoding="utf-8"?>
           <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
             <channel>
@@ -360,36 +228,23 @@ jobs:
           </rss>
           EOF
           # Sign the feed too, so Sparkle can detect a tampered appcast.
-          printf '%s' "$SPARKLE_ED_PRIVATE_KEY" | "$SIGN_UPDATE" --ed-key-file - appcast.xml
-          xmllint --noout appcast.xml
-          cat appcast.xml
+          printf '%s' "$SPARKLE_ED_PRIVATE_KEY" | "$SIGN_UPDATE" --ed-key-file - release-staging/appcast.xml
+          xmllint --noout release-staging/appcast.xml
+          cat release-staging/appcast.xml
+          cp "$DMG_PATH" release-staging/
           echo "- ✅ macOS: Sparkle update signed; upload appcast.xml next to $DMG in releases/." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
           name: macos-dmg
-          path: |
-            ${{ steps.dmg.outputs.name }}
-            appcast.xml
+          path: release-staging/
           if-no-files-found: error
 
       - name: Clean up macOS signing material
         if: always()
         shell: bash
-        run: |
-          if [ -n "${MACOS_KEYCHAIN_PATH:-}" ]; then
-            security delete-keychain "$MACOS_KEYCHAIN_PATH" || true
-          fi
-          for path in \
-            "${MACOS_CERTIFICATE_PATH:-}" \
-            "${APPLE_NOTARY_KEY_PATH:-}" \
-            "$RUNNER_TEMP/gang-chat-notary-result.json" \
-            "$RUNNER_TEMP/gang-chat-notary-log.json"; do
-            if [ -n "$path" ]; then
-              rm -f "$path"
-            fi
-          done
+        run: rm -f "$RUNNER_TEMP/developer-id.p12" "$RUNNER_TEMP/notary-key.p8"
 
   build-windows:
     runs-on: windows-latest
@@ -397,368 +252,105 @@ jobs:
     outputs:
       signing_enabled: ${{ steps.windows_signing.outputs.enabled }}
     steps:
-      - name: Enable long paths
-        shell: powershell
-        run: git config --global core.longpaths true
-
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          channel: stable
-          flutter-version: '3.44.0'
-          cache: true
+          node-version: '22'
+          cache: npm
 
-      # Install NSIS from the official portable release instead of Chocolatey:
-      # the community feed can reject requests (406) while `choco install`
-      # still exits 0, which left packaging without makensis. The archive is
-      # pinned by SHA-256 and the step fails here if makensis is missing.
-      - name: Setup NSIS
-        shell: powershell
-        env:
-          NSIS_VERSION: '3.11'
-          NSIS_SHA256: 'c7d27f780ddb6cffb4730138cd1591e841f4b7edb155856901cdf5f214394fa1'
-        run: |
-          $ErrorActionPreference = "Stop"
-          $ProgressPreference = "SilentlyContinue"
-          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          $zip = Join-Path $env:RUNNER_TEMP "nsis-$env:NSIS_VERSION.zip"
-          $url = "https://downloads.sourceforge.net/project/nsis/NSIS%203/$env:NSIS_VERSION/nsis-$env:NSIS_VERSION.zip"
-          for ($attempt = 1; $attempt -le 4; $attempt++) {
-            try {
-              Invoke-WebRequest -Uri $url -OutFile $zip -UserAgent "Wget" -MaximumRedirection 10 -UseBasicParsing
-              $hash = (Get-FileHash -Path $zip -Algorithm SHA256).Hash
-              if ($hash -ne $env:NSIS_SHA256) {
-                throw "NSIS archive SHA-256 mismatch: $hash"
-              }
-              break
-            } catch {
-              if ($attempt -eq 4) { throw }
-              Write-Host "NSIS download attempt $attempt failed: $_"
-              Start-Sleep -Seconds ([math]::Pow(2, $attempt))
-            }
-          }
-          Expand-Archive -Path $zip -DestinationPath $env:RUNNER_TEMP -Force
-          $makensis = Join-Path $env:RUNNER_TEMP "nsis-$env:NSIS_VERSION\makensis.exe"
-          if (-not (Test-Path $makensis)) { throw "makensis.exe not found at $makensis" }
-          & $makensis /VERSION
-          if ($LASTEXITCODE -ne 0) { throw "makensis /VERSION failed" }
-          [IO.File]::AppendAllText($env:GITHUB_ENV, "MAKENSIS=$makensis`n")
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Flutter sanity check
-        shell: powershell
-        run: flutter --version
+      - name: Set the release version
+        run: npm version "${{ needs.prepare.outputs.version }}" --no-git-tag-version --allow-same-version -w @gang-chat/desktop
 
-      - name: Get dependencies
-        shell: powershell
-        run: flutter pub get
-
-      - name: UTF-8 encoding check
-        shell: powershell
-        run: dart tool/check_utf8.dart
-
-      - name: Update release metadata
-        shell: powershell
-        run: |
-          dart tool/update_release_metadata.dart `
-            --version "${{ needs.prepare.outputs.version }}" `
-            --released-at "${{ needs.prepare.outputs.released_at }}"
-
-      - name: Resolve and prepare Windows Authenticode signing
+      - name: Resolve Windows Authenticode signing
         id: windows_signing
-        shell: powershell
+        shell: bash
         env:
           WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: |
-          $ErrorActionPreference = "Stop"
-          $signingSecretNames = @(
-            "WINDOWS_CERTIFICATE_BASE64",
-            "WINDOWS_CERTIFICATE_PASSWORD"
-          )
-          $configuredSecrets = @(
-            $signingSecretNames | Where-Object {
-              -not [string]::IsNullOrWhiteSpace(
-                [Environment]::GetEnvironmentVariable($_)
-              )
-            }
-          )
-          if ($configuredSecrets.Count -eq 0) {
-            "enabled=false" |
-              Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-            Write-Warning (
-              "Authenticode signing secrets are not configured; " +
-              "Windows artifacts will be published unsigned."
-            )
-            @(
-              "### WARNING: Unsigned Windows artifacts"
-              ""
-              "Authenticode signing secrets are not configured."
-              "GangChat.exe, the installer, and the portable ZIP will be published unsigned."
-            ) | Out-File `
-              -FilePath $env:GITHUB_STEP_SUMMARY `
-              -Encoding utf8 `
-              -Append
+          set -euo pipefail
+          if [ -z "${WINDOWS_CERTIFICATE_BASE64:-}" ] && [ -z "${WINDOWS_CERTIFICATE_PASSWORD:-}" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+            echo "::warning::Authenticode signing secrets are not configured; Windows artifacts will be published unsigned."
+            {
+              echo "### WARNING: Unsigned Windows artifacts"
+              echo
+              echo "Authenticode signing secrets are not configured."
+            } >> "$GITHUB_STEP_SUMMARY"
             exit 0
-          }
-          if ($configuredSecrets.Count -ne $signingSecretNames.Count) {
-            $missingSecrets = @(
-              $signingSecretNames | Where-Object {
-                [string]::IsNullOrWhiteSpace(
-                  [Environment]::GetEnvironmentVariable($_)
-                )
-              }
-            )
-            throw (
-              "Windows signing is only partially configured; missing secret: " +
-              ($missingSecrets -join ", ")
-            )
-          }
+          fi
+          if [ -z "${WINDOWS_CERTIFICATE_BASE64:-}" ] || [ -z "${WINDOWS_CERTIFICATE_PASSWORD:-}" ]; then
+            echo "::error::Windows signing is only partially configured; set both WINDOWS_CERTIFICATE_BASE64 and WINDOWS_CERTIFICATE_PASSWORD."
+            exit 1
+          fi
+          # electron-builder signs GangChat.exe, the installer and the
+          # uninstaller with this PFX (electron-updater then checks that every
+          # update comes from the same publisher).
+          printf '%s' "$WINDOWS_CERTIFICATE_BASE64" | base64 --decode > "$RUNNER_TEMP/authenticode.pfx"
+          {
+            echo "CSC_LINK=$RUNNER_TEMP/authenticode.pfx"
+            echo "CSC_KEY_PASSWORD=$WINDOWS_CERTIFICATE_PASSWORD"
+          } >> "$GITHUB_ENV"
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
 
-          "enabled=true" |
-            Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          $certificatePath = Join-Path $env:RUNNER_TEMP "gang-chat-authenticode.pfx"
-          try {
-            $certificateBytes = [Convert]::FromBase64String(
-              $env:WINDOWS_CERTIFICATE_BASE64
-            )
-          } catch {
-            throw "WINDOWS_CERTIFICATE_BASE64 is not valid base64"
-          }
-          [IO.File]::WriteAllBytes($certificatePath, $certificateBytes)
-          if ((Get-Item $certificatePath).Length -eq 0) {
-            throw "decoded Windows signing certificate is empty"
-          }
+      - name: Package Windows
+        env:
+          GANG_CHAT_RELEASED_AT: ${{ needs.prepare.outputs.released_at }}
+        run: npm run dist:win -w @gang-chat/desktop
 
-          $password = ConvertTo-SecureString `
-            $env:WINDOWS_CERTIFICATE_PASSWORD `
-            -AsPlainText `
-            -Force
-          $imported = @(
-            Import-PfxCertificate `
-              -FilePath $certificatePath `
-              -CertStoreLocation Cert:\CurrentUser\My `
-              -Password $password `
-              -Exportable:$false
-          )
-          $certificate = $imported |
-            Where-Object { $_.HasPrivateKey } |
-            Select-Object -First 1
-          if ($null -eq $certificate) {
-            throw "the Windows signing certificate has no private key"
-          }
-
-          $codeSigningOid = "1.3.6.1.5.5.7.3.3"
-          $hasCodeSigningUsage = $false
-          foreach ($extension in $certificate.Extensions) {
-            if (
-              $extension -is
-              [System.Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension]
-            ) {
-              foreach ($usage in $extension.EnhancedKeyUsages) {
-                if ($usage.Value -eq $codeSigningOid) {
-                  $hasCodeSigningUsage = $true
-                }
-              }
-            }
-          }
-          if (-not $hasCodeSigningUsage) {
-            throw "the Windows certificate is not valid for code signing"
-          }
-          $now = Get-Date
-          if ($certificate.NotBefore -gt $now -or $certificate.NotAfter -le $now) {
-            throw "the Windows code-signing certificate is not currently valid"
-          }
-
-          $kitsRoot = Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\bin"
-          $signTool = Get-ChildItem `
-              -Path $kitsRoot `
-              -Recurse `
-              -Filter signtool.exe `
-              -File |
-            Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } |
-            Sort-Object FullName -Descending |
-            Select-Object -First 1
-          if ($null -eq $signTool) {
-            throw "signtool.exe was not found under $kitsRoot"
-          }
-
-          "WINDOWS_CERTIFICATE_PATH=$certificatePath" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "WINDOWS_CERTIFICATE_THUMBPRINT=$($certificate.Thumbprint)" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "WINDOWS_SIGNTOOL_PATH=$($signTool.FullName)" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "WINDOWS_TIMESTAMP_URL=http://timestamp.digicert.com" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "Imported code-signing certificate: $($certificate.Subject)"
-
-      - name: Build Windows (release)
-        shell: powershell
-        run: flutter build windows --release --build-name="${{ needs.prepare.outputs.version }}"
-
-      - name: Prepare Windows package files
-        id: windows_package
-        shell: powershell
+      - name: Stage Windows artifacts
+        shell: bash
         run: |
-          $SRC = "build\windows\x64\runner\Release"
-          $STAGING = "build\windows\x64\runner\Package"
-          if (-not (Test-Path $SRC)) { Write-Error "build output not found at $SRC"; exit 1 }
-          if (-not (Test-Path (Join-Path $SRC "GangChat.exe"))) { Write-Error "build executable not found at $SRC\GangChat.exe"; exit 1 }
-          if (Test-Path $STAGING) { Remove-Item -Recurse -Force $STAGING }
-          New-Item -ItemType Directory -Force -Path $STAGING | Out-Null
-          Copy-Item -Path "$SRC\*" -Destination $STAGING -Recurse -Force
-          $legacyExecutable = Join-Path $STAGING "client.exe"
-          if (Test-Path $legacyExecutable) {
-            Remove-Item -LiteralPath $legacyExecutable -Force
-          }
+          set -euo pipefail
+          VERSION="${{ needs.prepare.outputs.version }}"
+          DIST=apps/desktop/dist
+          mkdir -p release-staging
+          # The installer and the portable zip, plus electron-updater's feed:
+          # latest.yml and the installer's blockmap (differential downloads).
+          for file in \
+            "GangChat_v$VERSION.exe" \
+            "GangChat_v$VERSION.exe.blockmap" \
+            "GangChat-$VERSION-windows.zip" \
+            latest.yml; do
+            test -f "$DIST/$file" || { echo "::error::missing $DIST/$file"; ls -la "$DIST"; exit 1; }
+            cp "$DIST/$file" release-staging/
+          done
+          grep -q "path: GangChat_v$VERSION.exe" release-staging/latest.yml
+          ls -l release-staging
 
-          $excludePatterns = @("*.pdb", "*.ilk", "*.exp", "*.lib", "*.iobj", "*.ipdb")
-          foreach ($pattern in $excludePatterns) {
-            Get-ChildItem -Path $STAGING -Recurse -File -Filter $pattern | Remove-Item -Force
-          }
-          if (-not (Test-Path (Join-Path $STAGING "GangChat.exe"))) { Write-Error "staged executable not found at $STAGING\GangChat.exe"; exit 1 }
-
-          $totalBytes = (Get-ChildItem -Path $STAGING -Recurse -File | Measure-Object -Property Length -Sum).Sum
-          Write-Host ("Staged Windows runtime size: {0:N0} bytes" -f $totalBytes)
-          [IO.File]::AppendAllText($env:GITHUB_OUTPUT, "dir=$STAGING`n")
-
-      - name: Sign and verify Windows application
+      - name: Verify Windows signatures
         if: steps.windows_signing.outputs.enabled == 'true'
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
-          $executable = Join-Path `
-            "${{ steps.windows_package.outputs.dir }}" `
-            "GangChat.exe"
-          if (-not (Test-Path $executable)) {
-            throw "Windows executable not found at $executable"
-          }
-
-          & $env:WINDOWS_SIGNTOOL_PATH sign `
-            /fd SHA256 `
-            /td SHA256 `
-            /tr $env:WINDOWS_TIMESTAMP_URL `
-            /s My `
-            /sha1 $env:WINDOWS_CERTIFICATE_THUMBPRINT `
-            /d "Gang Chat" `
-            /du "https://ky-z.com/gang-chat/home/" `
-            $executable
-          if ($LASTEXITCODE -ne 0) {
-            throw "signtool failed for $executable"
-          }
-
-          & $env:WINDOWS_SIGNTOOL_PATH verify /pa /all /v $executable
-          if ($LASTEXITCODE -ne 0) {
-            throw "Authenticode verification failed for $executable"
-          }
-          $signature = Get-AuthenticodeSignature $executable
-          if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
-            throw "Windows executable signature status is $($signature.Status)"
-          }
-
-      - name: Package NSIS installer
-        id: installer
-        shell: powershell
-        run: |
-          $VERSION = "${{ needs.prepare.outputs.version }}"
-          $SRC = "${{ steps.windows_package.outputs.dir }}"
-          if (-not (Test-Path $SRC)) { Write-Error "build output not found at $SRC"; exit 1 }
-          if (-not (Test-Path (Join-Path $SRC "GangChat.exe"))) { Write-Error "build executable not found at $SRC"; exit 1 }
-          $MAKENSIS = $env:MAKENSIS
-          if (-not $MAKENSIS -or -not (Test-Path $MAKENSIS)) { Write-Error "makensis.exe not found at '$MAKENSIS' (set by the Setup NSIS step)"; exit 1 }
-          $VERSION_QUAD = "$VERSION.0"
-          $INSTALLER = "GangChat_v$VERSION.exe"
-          $ROOT = (Resolve-Path ".").Path
-          $SRC_ABS = (Resolve-Path $SRC).Path
-          $OUT_ABS = Join-Path $ROOT $INSTALLER
-          $makensisArguments = @(
-            "/INPUTCHARSET"
-            "UTF8"
-            "/DAPP_VERSION=$VERSION"
-            "/DAPP_VERSION_QUAD=$VERSION_QUAD"
-            "/DPROJECT_ROOT=$ROOT"
-            "/DSOURCE_DIR=$SRC_ABS"
-            "/DOUTPUT_FILE=$OUT_ABS"
-          )
-          $signingEnabled = (
-            "${{ steps.windows_signing.outputs.enabled }}" -eq "true"
-          )
-          if ($signingEnabled) {
-            $makensisArguments += @(
-              "/DSIGNTOOL_PATH=$env:WINDOWS_SIGNTOOL_PATH"
-              "/DSIGN_CERT_THUMBPRINT=$env:WINDOWS_CERTIFICATE_THUMBPRINT"
-              "/DSIGN_TIMESTAMP_URL=$env:WINDOWS_TIMESTAMP_URL"
-            )
-          }
-          $makensisArguments += "installer\windows\gang_chat.nsi"
-          & $MAKENSIS @makensisArguments
-          if ($LASTEXITCODE -ne 0) { Write-Error "makensis failed"; exit 1 }
-          if (-not (Test-Path $INSTALLER)) { Write-Error "installer not created: $INSTALLER"; exit 1 }
-
-          if ($signingEnabled) {
-            & $env:WINDOWS_SIGNTOOL_PATH verify /pa /all /v $INSTALLER
-            if ($LASTEXITCODE -ne 0) {
-              throw "Authenticode verification failed for $INSTALLER"
-            }
-            $signature = Get-AuthenticodeSignature $INSTALLER
-            if (
-              $signature.Status -ne
-              [System.Management.Automation.SignatureStatus]::Valid
-            ) {
-              throw "Windows installer signature status is $($signature.Status)"
+          foreach ($file in @(
+            "apps/desktop/dist/win-unpacked/GangChat.exe",
+            "release-staging/GangChat_v${{ needs.prepare.outputs.version }}.exe"
+          )) {
+            $signature = Get-AuthenticodeSignature $file
+            if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+              throw "$file signature status is $($signature.Status)"
             }
           }
-
-          [IO.File]::AppendAllText($env:GITHUB_OUTPUT, "name=$INSTALLER`n")
-          Get-Item $INSTALLER | Select-Object Name, @{n='Size';e={'{0:N0} bytes' -f $_.Length}}
-
-      - name: Package Windows zip
-        id: windows_zip
-        shell: powershell
-        run: |
-          $VERSION = "${{ needs.prepare.outputs.version }}"
-          $SRC = "${{ steps.windows_package.outputs.dir }}"
-          if (-not (Test-Path $SRC)) { Write-Error "build output not found at $SRC"; exit 1 }
-          if (-not (Test-Path (Join-Path $SRC "GangChat.exe"))) { Write-Error "build executable not found at $SRC"; exit 1 }
-          $ZIP = "GangChat-$VERSION-windows.zip"
-          if (Test-Path $ZIP) { Remove-Item -Force $ZIP }
-          Compress-Archive -Path "$SRC\*" -DestinationPath $ZIP -Force
-          if (-not (Test-Path $ZIP)) { Write-Error "zip not created: $ZIP"; exit 1 }
-          [IO.File]::AppendAllText($env:GITHUB_OUTPUT, "name=$ZIP`n")
-          Get-Item $ZIP | Select-Object Name, @{n='Size';e={'{0:N0} bytes' -f $_.Length}}
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-assets
-          path: |
-            ${{ steps.installer.outputs.name }}
-            ${{ steps.windows_zip.outputs.name }}
+          path: release-staging/
           if-no-files-found: error
 
       - name: Clean up Windows signing material
         if: always()
-        shell: powershell
-        run: |
-          if (-not [string]::IsNullOrWhiteSpace(
-            $env:WINDOWS_CERTIFICATE_THUMBPRINT
-          )) {
-            $certificate = Join-Path `
-              Cert:\CurrentUser\My `
-              $env:WINDOWS_CERTIFICATE_THUMBPRINT
-            if (Test-Path $certificate) {
-              Remove-Item -LiteralPath $certificate -Force
-            }
-          }
-          if (
-            -not [string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PATH) -and
-            (Test-Path -LiteralPath $env:WINDOWS_CERTIFICATE_PATH)
-          ) {
-            Remove-Item -LiteralPath $env:WINDOWS_CERTIFICATE_PATH -Force
-          }
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/authenticode.pfx"
 
   build-android:
     runs-on: ubuntu-latest
@@ -936,9 +528,9 @@ jobs:
               echo "- ⚠️ Windows: unsigned; Authenticode secrets were not configured."
             fi
             if [ "${{ needs['build-macos'].outputs.signing_enabled }}" = "true" ]; then
-              echo "- ✅ macOS: Developer ID signed, notarized, and stapled."
+              echo "- ✅ macOS: Developer ID signed and notarized."
             else
-              echo "- ⚠️ macOS: unsigned and not notarized; Apple signing secrets were not configured."
+              echo "- ⚠️ macOS: ad-hoc signed, not notarized (no Developer ID); Sparkle verifies updates with EdDSA."
             fi
             echo "- ✅ Android: release-key signed and verified."
           } | tee release-signing-status.md

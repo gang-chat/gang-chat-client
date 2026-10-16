@@ -13,6 +13,7 @@ import type {
   ScreenCaptureSource,
   SecureStorage,
   NativeUpdateInfo,
+  SparkleBridge,
   SpeechBridge,
   SystemNotificationOptions,
   UpdaterBridge,
@@ -263,6 +264,13 @@ export function createDesktopPlatform(bridge: DesktopBridge): Platform {
     requestAccess: (kind) => bridge.invoke(IpcChannels.mediaAccessInvoke, 'requestAccess', kind) as Promise<boolean>,
   };
 
+  const sparkle: SparkleBridge = {
+    isAvailable: () => bridge.invoke(IpcChannels.sparkleInvoke, 'isAvailable') as Promise<boolean>,
+    checkForUpdates: async ({ feedUrl, background }) => {
+      await bridge.invoke(IpcChannels.sparkleInvoke, 'checkForUpdates', feedUrl, background);
+    },
+  };
+
   const updater: UpdaterBridge = {
     isAvailable: () => invokeUpdater<boolean>('isAvailable'),
     checkForUpdate: () => invokeUpdater<NativeUpdateInfo | null>('checkForUpdate'),
@@ -304,6 +312,7 @@ export function createDesktopPlatform(bridge: DesktopBridge): Platform {
     process,
     speech,
     updater,
+    sparkle,
     mediaAccess,
     openExternal: (url) => bridge.invoke(IpcChannels.openExternal, url) as Promise<boolean>,
     cachedMediaUrl(url) {

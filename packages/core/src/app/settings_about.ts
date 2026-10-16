@@ -12,7 +12,18 @@ const _gangChatClientBuildVersion =
 // version is only defined for release builds, so the fallback covers both.
 export const gangChatClientVersion = _gangChatClientBuildVersion;
 
-export const gangChatClientReleaseTimestamp = '2026-07-12T20:34:27.126Z';
+/**
+ * Build-time release timestamp, which `tool/update_release_metadata.dart`
+ * writes into the Dart source for Flutter releases. The release workflow sets
+ * `GANG_CHAT_RELEASED_AT`, which the host's bundler defines as
+ * `__GANG_CHAT_RELEASED_AT__`; other builds keep the fixed fallback.
+ */
+declare const __GANG_CHAT_RELEASED_AT__: string | undefined;
+
+export const gangChatClientReleaseTimestamp =
+  typeof __GANG_CHAT_RELEASED_AT__ === 'string' && __GANG_CHAT_RELEASED_AT__.length > 0
+    ? __GANG_CHAT_RELEASED_AT__
+    : '2026-07-12T20:34:27.126Z';
 export const gangChatOfficialTimeZoneLabel = 'UTC+08:00';
 export const gangChatClientInstallInfoFileName = 'gang_chat_install_info.txt';
 export const gangChatSupportEmail = 'gang-chat@outlook.com';

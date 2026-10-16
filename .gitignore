@@ -54,4 +54,5 @@ AuthKey_*.p8
 node_modules/
 /apps/desktop/out/
 /apps/desktop/dist/
+/apps/desktop/build/sparkle/
 *.tsbuildinfo

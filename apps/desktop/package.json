@@ -13,9 +13,9 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "dist:win": "electron-vite build && electron-builder --win --publish never",
-    "dist:mac": "electron-vite build && electron-builder --mac --publish never",
-    "dist:dir": "electron-vite build && electron-builder --dir --publish never"
+    "dist:win": "node scripts/package.mjs --win",
+    "dist:mac": "node scripts/package.mjs --mac",
+    "dist:dir": "node scripts/package.mjs --dir"
   },
   "dependencies": {
     "electron-updater": "6.8.10"

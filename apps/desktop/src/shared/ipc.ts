@@ -47,9 +47,10 @@ export const IpcChannels = {
   // OS camera / microphone access.
   mediaAccessInvoke: 'media-access:invoke',
 
-  // In-app updates (electron-updater).
+  // In-app updates: electron-updater (Windows), Sparkle (macOS).
   updaterInvoke: 'updater:invoke',
   updaterProgress: 'updater:progress',
+  sparkleInvoke: 'sparkle:invoke',
 
   // Processes & shell.
   processInvoke: 'process:invoke',

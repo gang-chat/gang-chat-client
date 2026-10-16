@@ -4,17 +4,16 @@ import { autoUpdater, CancellationToken, type UpdateInfo } from 'electron-update
 import { IpcChannels } from '../shared/ipc';
 import { markQuitting } from './window';
 
-declare const __GANG_MAC_UPDATES_SIGNED__: boolean;
-
 /**
- * In-app updates through electron-updater (built on Electron's autoUpdater).
+ * Windows in-app updates through electron-updater (built on Electron's
+ * autoUpdater).
  *
  * The feed is the release bucket's `releases/` folder, where the release
- * workflow uploads the installers next to electron-builder's `latest.yml` /
- * `latest-mac.yml`. Windows installs the NSIS package (differential download
- * via blockmaps); macOS installs through Squirrel.Mac, which only accepts
- * updates for a code-signed app — unsigned macOS builds report the updater
- * unavailable and keep the Flutter client's "download the DMG" flow.
+ * workflow uploads the installer next to electron-builder's `latest.yml` and
+ * blockmap (differential downloads). macOS updates through Sparkle instead
+ * (`sparkle.ts`): Squirrel.Mac only installs updates for a Developer ID
+ * signed app, while Sparkle verifies the same EdDSA signature the Flutter
+ * macOS app already uses.
  */
 
 let configured = false;
@@ -22,10 +21,7 @@ let lastInfo: UpdateInfo | null = null;
 let downloadToken: CancellationToken | null = null;
 
 function available(): boolean {
-  if (!app.isPackaged) return false;
-  if (process.platform === 'win32') return true;
-  if (process.platform === 'darwin') return __GANG_MAC_UPDATES_SIGNED__;
-  return false;
+  return app.isPackaged && process.platform === 'win32';
 }
 
 function configure(feedBaseUrl: string): void {

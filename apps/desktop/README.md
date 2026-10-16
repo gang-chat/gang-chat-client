@@ -45,20 +45,25 @@ node tool/js/mock_server/server.mjs --port 21116
 ## 打包
 
 ```bash
-npm run dist:win -w @gang-chat/desktop    # GangChat_v<version>.exe + GangChat-<version>-windows.zip
-npm run dist:mac -w @gang-chat/desktop    # GangChat_v<version>.dmg + GangChat-<version>-mac.zip（更新用）
+npm run dist:win -w @gang-chat/desktop    # GangChat_v<version>.exe（+ .blockmap、latest.yml）+ GangChat-<version>-windows.zip
+npm run dist:mac -w @gang-chat/desktop    # GangChat_v<version>.dmg
 ```
 
-版本号取 `apps/desktop/package.json` 的 `version`。CI 工作流 `.github/workflows/desktop-electron.yml`
-在每次推送时做类型检查、单元测试，并打出未签名的 Windows / macOS 测试包（作为 workflow artifact
-下载）。
+版本号取 `apps/desktop/package.json` 的 `version`；macOS 的 `CFBundleVersion` 由
+`scripts/package.mjs` 算成 `主*1000000 + 次*1000 + 补丁`，和 Flutter macOS 版、Android 一致。
+macOS 打包前 `scripts/prepare_sparkle.mjs` 会下载固定版本、校验过的 Sparkle 并编译
+`native/sparkle/sparkle.mm`（需要 Xcode 命令行工具）。CI 工作流
+`.github/workflows/desktop-electron.yml` 在每次推送时做类型检查、单元测试，并打出测试包；
+正式发布由 `.github/workflows/release.yml` 打包桌面版（见 `docs/release-workflow.md`）。
 
-签名：Windows 用 electron-builder 的 `CSC_LINK` / `CSC_KEY_PASSWORD`（与 Flutter 版同一张 PFX）；
-macOS 需要 Developer ID 签名和公证，签名后构建时设置 `GANG_MAC_UPDATES_SIGNED=1` 才会启用应用内
-自动更新（Squirrel.Mac 只接受已签名应用的更新）。
+签名：Windows 用 electron-builder 的 `CSC_LINK` / `CSC_KEY_PASSWORD`（与 Flutter 版同一张 PFX）。
+macOS 有 Developer ID 时由 electron-builder 签名并公证；没有时 `scripts/after_pack.cjs` 做 ad-hoc
+签名——Sparkle 不接受代码签名无效的更新，而未签名的 Electron 包只带一个失效的链接器签名。
 
 ## 应用内更新
 
-使用 `electron-updater`，读取存储桶 `releases/` 下的 `latest.yml` / `latest-mac.yml`。发布时需要把
-安装包、`latest*.yml`、`*.blockmap` 和 macOS 的 zip 一起上传到 `releases/`。正式发布流程
-（`.github/workflows/release.yml`）目前仍发布 Flutter 桌面版，切换到 Electron 是后续工作。
+- Windows：`electron-updater` 读取存储桶 `releases/` 下的 `latest.yml`，按 blockmap 差分下载安装包。
+  桶里没有 `latest.yml` 时退回 Flutter 版的做法：列出 `releases/` 里的安装包，下载最新的整包。
+- macOS：Sparkle（`src/main/sparkle.ts`），和 Flutter macOS 版读同一个 `releases/appcast.xml`、
+  用同一把 EdDSA 公钥，不需要 Developer ID。Sparkle 自己弹窗、下载、校验、安装并重启应用；
+  Flutter 用户也经由同一个 appcast 升级到 Electron 版。开发版没有 Sparkle，退回在浏览器里下载 DMG。

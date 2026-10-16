@@ -228,6 +228,22 @@ export interface ScreenCaptureBridge {
   openPermissionSettings?(): Promise<void>;
 }
 
+/**
+ * macOS in-app updates through Sparkle, the Flutter runner's
+ * `gang_chat/updater` channel. Sparkle shows its own windows and installs the
+ * update itself.
+ */
+export interface SparkleBridge {
+  /** Whether this build carries an update-signing key and Sparkle started. */
+  isAvailable(): Promise<boolean>;
+  /**
+   * A background check shows Sparkle's window only when an update exists; a
+   * user check always reports back, including "up to date". Rejects when
+   * Sparkle is not configured.
+   */
+  checkForUpdates(opts: { feedUrl: string | null; background: boolean }): Promise<void>;
+}
+
 /** OS-level camera / microphone access (the macOS and Windows privacy switches). */
 export interface MediaAccessBridge {
   /**
@@ -306,8 +322,10 @@ export interface Platform {
   readonly screenCapture: ScreenCaptureBridge | null;
   readonly process: ProcessBridge | null;
   readonly speech: SpeechBridge | null;
-  /** Native self-updater (electron-updater on desktop); absent/null elsewhere. */
+  /** Native self-updater (electron-updater on Windows); absent/null elsewhere. */
   readonly updater?: UpdaterBridge | null;
+  /** Sparkle on macOS; absent/null elsewhere. */
+  readonly sparkle?: SparkleBridge | null;
   /** OS camera / microphone access; absent where the browser asks on its own. */
   readonly mediaAccess?: MediaAccessBridge | null;
   /** Opens a URL (http/https/mailto) with the system handler. */

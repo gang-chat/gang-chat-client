@@ -125,8 +125,6 @@ class _AppUpdateGateState extends ViewState<AppUpdateGateProps> {
 
     // Sparkle checks the appcast and shows its own window when an update
     // exists, so the release bucket prompt isn't used.
-    // PORT: Sparkle is always unavailable in Electron; electron-updater runs
-    // inside ReleaseUpdateService.checkForUpdate below on macOS too.
     const sparkleUpdater = this.widget.sparkleUpdater ?? _defaultSparkleUpdater;
     if (platform === AppUpdatePlatform.macos && (await sparkleUpdater.isAvailable())) {
       try {
