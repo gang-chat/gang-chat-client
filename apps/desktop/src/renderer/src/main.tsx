@@ -1,6 +1,6 @@
 import './global.css';
+import '@gang-chat/ui/ui/ui.css';
 
-import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { setAudioRecorderFactory } from '@gang-chat/core/app/voice_recorder_controller';
 import { setPlatform } from '@gang-chat/core/platform/platform';
@@ -16,8 +16,7 @@ const bridge = desktopBridge();
 setPlatform(createDesktopPlatform(bridge));
 setAudioRecorderFactory(() => new MediaRecorderAudioRecorder());
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <DesktopRoot />
-  </StrictMode>,
-);
+// No <StrictMode>: its development-only unmount/remount of every effect
+// would dispose each ViewState (Flutter State semantics: initState and
+// dispose run exactly once), leaving the remounted view inert.
+createRoot(document.getElementById('root')!).render(<DesktopRoot />);
