@@ -2,6 +2,10 @@
 // points at a server that does not exist (default ws://127.0.0.1:7880), so the
 // client's media connection fails and its error path can be exercised while
 // the roster, mute toggles and moderation still round-trip through this mock.
+// With --livekit-api-key/--livekit-api-secret the tokens are signed, so a
+// local `livekit-server --dev` accepts them and real media flows.
+import { createHmac } from 'node:crypto';
+
 import { emitLiveSnapshot, postSystemMessage } from '../lib/events.mjs';
 import { badRequest, conflict, forbidden, notFound, ok } from '../lib/http.mjs';
 import { optionalBool } from '../lib/input.mjs';
@@ -11,18 +15,23 @@ import { clampInt, iso } from '../lib/util.mjs';
 
 const TOKEN_TTL_MS = 6 * 60 * 60 * 1000;
 
-/** A JWT-shaped (unsigned) LiveKit access token; nothing ever verifies it. */
-function fakeLiveKitToken({ identity, name, roomName, expiresAt, canPublishOnly = false }) {
+/**
+ * A LiveKit access token. Unsigned (JWT-shaped, nothing verifies it) unless
+ * the server was started with a LiveKit API key and secret.
+ */
+function liveKitToken(config, { identity, name, roomName, expiresAt, canPublishOnly = false }) {
   const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
   const claims = {
-    iss: 'gang-chat-mock',
+    iss: config.livekitApiKey ?? 'gang-chat-mock',
     sub: identity,
     name,
     nbf: Math.floor(Date.now() / 1000),
     exp: Math.floor(expiresAt / 1000),
     video: { room: roomName, roomJoin: true, canPublish: true, canSubscribe: !canPublishOnly },
   };
-  return `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode(claims)}.mock-signature`;
+  const unsigned = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode(claims)}`;
+  if (config.livekitApiKey == null || config.livekitApiSecret == null) return `${unsigned}.mock-signature`;
+  return `${unsigned}.${createHmac('sha256', config.livekitApiSecret).update(unsigned).digest('base64url')}`;
 }
 
 const roomNameFor = (room) => `gang-${room.id}`;
@@ -59,11 +68,12 @@ function joinLive(c) {
 
   const expiresAt = Date.now() + TOKEN_TTL_MS;
   const roomName = roomNameFor(room);
-  c.app.log(`[live] ${c.user.username} joined ${room.id}; LiveKit ${c.config.livekitUrl} (expected to fail)`);
+  const signed = c.config.livekitApiKey != null;
+  c.app.log(`[live] ${c.user.username} joined ${room.id}; LiveKit ${c.config.livekitUrl}${signed ? '' : ' (expected to fail)'}`);
   return {
     livekit: {
       server_url: c.config.livekitUrl,
-      token: fakeLiveKitToken({ identity: c.user.id, name: c.user.displayName, roomName, expiresAt }),
+      token: liveKitToken(c.config, { identity: c.user.id, name: c.user.displayName, roomName, expiresAt }),
       token_expires_at: iso(expiresAt),
       room_name: roomName,
     },
@@ -125,7 +135,7 @@ function screenAudioToken(c) {
   const expiresAt = Date.now() + TOKEN_TTL_MS;
   return {
     server_url: c.config.livekitUrl,
-    token: fakeLiveKitToken({ identity, name: identity, roomName: roomNameFor(room), expiresAt, canPublishOnly: true }),
+    token: liveKitToken(c.config, { identity, name: identity, roomName: roomNameFor(room), expiresAt, canPublishOnly: true }),
     token_expires_at: iso(expiresAt),
     room_name: roomNameFor(room),
     identity,

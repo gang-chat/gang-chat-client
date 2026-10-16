@@ -15,6 +15,8 @@ const USAGE = `Usage: node tool/js/mock_server/server.mjs [options]
   --host <addr>            Interface to bind (default ${DEFAULT_OPTIONS.host})
   --public-url <url>       Origin used in asset URLs (default http://<host>:<port>)
   --livekit-url <url>      LiveKit URL handed out by live/join (default ${DEFAULT_OPTIONS.livekitUrl})
+  --livekit-api-key <key>  Sign LiveKit tokens for a real server (\`livekit-server --dev\`: devkey)
+  --livekit-api-secret <s> Secret for --livekit-api-key (\`livekit-server --dev\`: secret)
   --token-ttl <seconds>    Access-token lifetime (default ${DEFAULT_OPTIONS.tokenTtlMs / 1000})
   --chatter-interval <s>   Simulated incoming message interval, 0 disables (default ${DEFAULT_OPTIONS.chatterIntervalMs / 1000})
   --heartbeat <seconds>    SSE ": ping" interval (default ${DEFAULT_OPTIONS.heartbeatMs / 1000})
@@ -28,6 +30,8 @@ const CLI_OPTIONS = {
   host: { type: 'string' },
   'public-url': { type: 'string' },
   'livekit-url': { type: 'string' },
+  'livekit-api-key': { type: 'string' },
+  'livekit-api-secret': { type: 'string' },
   'token-ttl': { type: 'string' },
   'chatter-interval': { type: 'string' },
   heartbeat: { type: 'string' },
@@ -63,6 +67,8 @@ function parseCli(argv) {
     host: values.host ?? DEFAULT_OPTIONS.host,
     publicUrl: values['public-url'] ?? null,
     livekitUrl: values['livekit-url'] ?? DEFAULT_OPTIONS.livekitUrl,
+    livekitApiKey: values['livekit-api-key'] ?? process.env.MOCK_LIVEKIT_API_KEY ?? null,
+    livekitApiSecret: values['livekit-api-secret'] ?? process.env.MOCK_LIVEKIT_API_SECRET ?? null,
     tokenTtlMs: number('token-ttl', values['token-ttl'], DEFAULT_OPTIONS.tokenTtlMs / 1000) * 1000,
     chatterIntervalMs: number('chatter-interval', values['chatter-interval'], DEFAULT_OPTIONS.chatterIntervalMs / 1000) * 1000,
     heartbeatMs: number('heartbeat', values.heartbeat, DEFAULT_OPTIONS.heartbeatMs / 1000) * 1000,
@@ -70,6 +76,10 @@ function parseCli(argv) {
     latestVersion: values['latest-version'] ?? DEFAULT_OPTIONS.latestVersion,
     quiet: Boolean(values.quiet),
   };
+  if ((options.livekitApiKey == null) !== (options.livekitApiSecret == null)) {
+    console.error('--livekit-api-key and --livekit-api-secret go together');
+    process.exit(2);
+  }
   if (options.tokenTtlMs < 1000 || options.heartbeatMs < 1000) {
     console.error('--token-ttl and --heartbeat must be at least 1 second');
     process.exit(2);
