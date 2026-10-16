@@ -2,7 +2,7 @@ import { Completer, Timer, delay } from '../lib/async';
 import { restoreStoredAudioDevices } from '../live/audio_device_restorer';
 import { resolveLiveKitServerUrl } from '../live/livekit_url';
 import { LiveSession } from '../live/live_session';
-import type { LiveParticipantDepartureKind, LiveVideoTrack } from '../live/live_session';
+import type { LiveParticipantDepartureKind, LiveVideoTrack, ScreenSource } from '../live/live_session';
 import type { ScreenAudioTokenProvider } from '../live/screen_audio_publisher';
 import { SystemAudioDevices } from '../live/system_audio_devices';
 import type { LiveJoinResult } from '../protocol/models';
@@ -63,7 +63,7 @@ export class LiveSessionController {
   private readonly _restoringParticipantVoiceVolumeIds = new Set<string>();
   private readonly _participantVoiceVolumeBeforeMute = new Map<string, number>();
 
-  listScreenSources(): ReturnType<typeof LiveSession.listScreenSources> {
+  listScreenSources(): Promise<ScreenSource[]> {
     return LiveSession.listScreenSources();
   }
 
@@ -95,19 +95,19 @@ export class LiveSessionController {
     return this.session.isAttachedToRoom(roomName);
   }
 
-  get speakingIdentities(): LiveSession['speakingIdentities'] {
+  get speakingIdentities(): ReadonlySet<string> {
     return this.session.speakingIdentities;
   }
 
-  get connectedParticipantIdentities(): LiveSession['connectedParticipantIdentities'] {
+  get connectedParticipantIdentities(): ReadonlySet<string> {
     return this.session.connectedParticipantIdentities;
   }
 
-  get micMutedByIdentity(): LiveSession['micMutedByIdentity'] {
+  get micMutedByIdentity(): ReadonlyMap<string, boolean> {
     return this.session.micMutedByIdentity;
   }
 
-  get videoTracks(): LiveSession['videoTracks'] {
+  get videoTracks(): LiveVideoTrack[] {
     return this.session.videoTracks;
   }
 
