@@ -1,8 +1,10 @@
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 import react from '@vitejs/plugin-react';
 
 const repoRoot = resolve(__dirname, '../..');
+const appVersion = (JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf8')) as { version: string }).version;
 const isProduction = process.env.NODE_ENV === 'production';
 
 // Build-time server overrides, the equivalent of the Flutter
@@ -47,6 +49,8 @@ export default defineConfig({
     define: {
       __DEV__: JSON.stringify(!isProduction),
       __GANG_CONFIG_OVERRIDES__: JSON.stringify(configOverrides),
+      // `gangChatClientVersion` (Flutter: --dart-define=GANG_CHAT_VERSION).
+      __GANG_CHAT_VERSION__: JSON.stringify(appVersion),
     },
     server: {
       fs: { allow: [repoRoot] },

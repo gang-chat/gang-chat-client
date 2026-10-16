@@ -288,10 +288,12 @@ export class MediaCacheController {
     }
     this._webMemory.set(key, bytes);
     this._webMemoryBytes += bytes.length;
-    while (this._webMemoryBytes > _webMemoryCacheMaxBytes && this._webMemory.size > 0) {
-      const oldest = this._webMemory.keys().next().value as string;
-      this._webMemoryBytes -= this._webMemory.get(oldest)!.length;
-      this._webMemory.delete(oldest);
+    while (this._webMemoryBytes > _webMemoryCacheMaxBytes) {
+      const oldest = this._webMemory.entries().next();
+      if (oldest.done === true) break;
+      const [oldestKey, oldestBytes] = oldest.value;
+      this._webMemoryBytes -= oldestBytes.length;
+      this._webMemory.delete(oldestKey);
     }
   }
 

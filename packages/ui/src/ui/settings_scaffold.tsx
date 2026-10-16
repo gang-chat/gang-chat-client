@@ -402,9 +402,14 @@ function _buildTileLayout(props: SettingsScaffoldProps, navigation: SettingsTile
       >
         {onBack != null ? (
           <>
-            <span data-testid="settings-back-button" style={{ display: 'contents' }}>
-              <ButtonIcon tooltip="返回" icon={<Icon icon={Icons.arrow_back_rounded} />} onPressed={onBack} size={36} ghost />
-            </span>
+            <ButtonIcon
+              data-testid="settings-back-button"
+              tooltip="返回"
+              icon={<Icon icon={Icons.arrow_back_rounded} />}
+              onPressed={onBack}
+              size={36}
+              ghost
+            />
             <SizedBox width={6} />
           </>
         ) : null}

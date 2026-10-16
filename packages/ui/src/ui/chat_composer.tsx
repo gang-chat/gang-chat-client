@@ -258,6 +258,9 @@ class _ChatComposerState extends ViewState<ChatComposerProps> {
     if ((oldWidget.controller ?? null) === (this.widget.controller ?? null)) return;
 
     if (this.widget.controller == null) {
+      // The build that saw the controller go away already made an empty
+      // local one; replace it with one that keeps the old text.
+      this._localController?.dispose();
       this._localController = TextEditingController.fromValue(oldWidget.controller?.value ?? null);
       this.setState();
       return;

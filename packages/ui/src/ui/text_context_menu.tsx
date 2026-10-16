@@ -284,6 +284,7 @@ export function TextFieldEditingShortcuts(props: TextFieldEditingShortcutsProps)
     event.preventDefault();
     const anchor = { x: event.clientX, y: event.clientY };
     const field = _editableTarget(event.target, event.currentTarget);
+    if (field != null) _applySecondaryClickSelection(field, propsRef.current);
     const state =
       field != null
         ? _fieldState(field, anchor, () => pasteRef.current?.action ?? null)
@@ -324,6 +325,27 @@ export function TextFieldEditingShortcuts(props: TextFieldEditingShortcutsProps)
       {props.children}
     </div>
   );
+}
+
+/**
+ * A secondary click keeps a non-collapsed selection; otherwise the field
+ * takes [TextFieldEditingShortcutsProps.secondaryClickSelection] (e.g. a
+ * hover card's UID digits) before the menu reads it, as the Flutter
+ * protection restored it into the controller.
+ */
+function _applySecondaryClickSelection(field: _EditableField, props: TextFieldEditingShortcutsProps): void {
+  const current = _fieldSelection(field);
+  if (current != null && current.start !== current.end) return;
+  const selection = props.secondaryClickSelection?.() ?? null;
+  if (selection == null || !selection.isValid || selection.end > field.value.length) return;
+  if (document.activeElement !== field) field.focus({ preventScroll: true });
+  try {
+    field.setSelectionRange(selection.start, selection.end, selection.baseOffset > selection.extentOffset ? 'backward' : 'forward');
+  } catch {
+    return;
+  }
+  const controller = props.controller ?? null;
+  if (controller != null && controller.text === field.value) controller.selection = selection;
 }
 
 export interface BuildTextFieldContextMenuOptions {
@@ -988,6 +1010,9 @@ function _hideMenu(): void {
 
 function _showMenu(build: (state: EditableTextState) => ReactNode, state: EditableTextState): void {
   _hideMenu();
+  // A builder that returns null (e.g. `enableInteractiveSelection: false`)
+  // means no menu at all.
+  if (build(state) == null) return;
   const entry = insertOverlay(() => build(state));
   const inPanel = (event: MouseEvent) =>
     (_contextMenuPanel != null && event.target instanceof Node && _contextMenuPanel.contains(event.target)) ||
@@ -1007,14 +1032,16 @@ function _showMenu(build: (state: EditableTextState) => ReactNode, state: Editab
   };
   const onWindowChange = () => _hideMenu();
   document.addEventListener('pointerdown', onPointerDown, true);
-  document.addEventListener('keydown', onKeyDown, true);
+  // Window capture runs before the overlay host's document-level Escape
+  // handling, so Escape closes the menu rather than the dialog under it.
+  window.addEventListener('keydown', onKeyDown, true);
   window.addEventListener('blur', onWindowChange);
   window.addEventListener('resize', onWindowChange);
   _open = {
     entry,
     detach: () => {
       document.removeEventListener('pointerdown', onPointerDown, true);
-      document.removeEventListener('keydown', onKeyDown, true);
+      window.removeEventListener('keydown', onKeyDown, true);
       window.removeEventListener('blur', onWindowChange);
       window.removeEventListener('resize', onWindowChange);
     },

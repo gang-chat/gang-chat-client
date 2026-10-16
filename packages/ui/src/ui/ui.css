@@ -34,3 +34,9 @@
   overflow: hidden !important;
   text-overflow: ellipsis !important;
 }
+
+/* Text fields (ui/input.tsx): Flutter `hintStyle` colour via a custom property. */
+.gang-input::placeholder {
+  color: var(--gang-placeholder-color, #66666d);
+  opacity: 1;
+}

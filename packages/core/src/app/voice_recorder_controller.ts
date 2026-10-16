@@ -158,12 +158,16 @@ export class VoiceRecorderController {
       });
       return;
     }
-    this._recordingWav = false;
+    // PORT: the Flutter `record` plugin always had a native AAC encoder on
+    // desktop. Chromium's MediaRecorder encodes AAC through the OS (Windows,
+    // macOS); elsewhere fall back to the same 16 kHz WAV the web build used.
+    const aac = await recorder.isEncoderSupported(AudioEncoder.aacLc);
+    this._recordingWav = !aac;
     const files = platform().files;
     const dir = (await files.directories()).temporary;
-    const path = files.joinPath(dir, `voice_${stamp}.${kVoiceMessageExtension}`);
+    const path = files.joinPath(dir, `voice_${stamp}.${this.clipExtension}`);
     this._currentPath = path;
-    await recorder.start(VoiceRecorderController._config, { path });
+    await recorder.start(aac ? VoiceRecorderController._config : VoiceRecorderController._webWavConfig, { path });
   }
 
   /**

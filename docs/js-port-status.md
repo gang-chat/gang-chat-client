@@ -57,3 +57,30 @@ Flutter。约定见 `docs/js-port-conventions.md`。本文记录各模块的移�
   `GangChat-<version>-mac.zip` 一起上传到 `releases/`。
 - 偏好迁移：保留 Flutter 版的迁移逻辑；音量类键一律按 double 写入（JSON 里 1.0 和 1 无法区分）。
 - Android 专用服务（推送、屏幕旋转、系统 UI）在桌面端是空实现，Android 仍用 Flutter 版。
+
+### 应用层：账号、设置、文件传输、语音录制（`packages/core/src/app`）
+
+- 时长一律用毫秒数（`ServerClock.requestRoundTrip`、语音录制时长、网络延迟等）。
+- `gangChatClientVersion` 读取打包时注入的 `__GANG_CHAT_VERSION__`（对应
+  `--dart-define=GANG_CHAT_VERSION`），未注入时为 `1.0.0`；桌面打包配置需加上这个 define。
+- `DateTime.tryParse` 由 `settings_about.ts` 的 `_tryParseDateTime` 按 Dart 的 ISO-8601 规则实现
+  （不接受 `Date.parse` 的宽松格式，无时区按本地时间）。
+- 文件下载与媒体缓存：磁盘读写经 `platform().files`；新增可选的
+  `FileSystemBridge.openRead`（流式读取，缺省时退回 `readFile`）。默认 HTTP 客户端是
+  `platform().http` 的单次下载包装（`_AbortableHttpClient`），`close()` 只中止本次下载，
+  不关闭共享连接。`MediaCacheController` 返回 `MediaCacheFile`（代替 `dart:io` 的 `File`）。
+- 语音录制：`VoiceRecorderController` 依赖 `AudioRecorder` 接口（`record` 插件的子集），由宿主经
+  `setAudioRecorderFactory()` 安装，首次使用时才创建（Dart 版在构造时创建）。
+- `CloseBehaviorStorage.storageValue` 扩展 getter 改为函数 `closeBehaviorStorageValue(behavior)`。
+
+### 业务逻辑层（`packages/core/src/app`）
+
+- 时长统一为毫秒、`Uri` 为字符串；下载表是 `Map<string, FileTransferState>`。
+- 版本号来自构建时常量 `__GANG_CHAT_VERSION__`（桌面端取 `apps/desktop/package.json` 的
+  `version`）；未定义时为 `1.0.0`，与 Dart 调试版一致。
+- `MediaCacheController` 返回 `MediaCacheFile`（路径、`readAsBytes`、`copy`、`length`），
+  替代 Dart 的 `File`。
+- 语音消息录制：`AudioRecorder` 接口对应 `record` 插件，桌面端由
+  `MediaRecorderAudioRecorder` 实现。Windows / macOS 用系统 AAC 编码器录 m4a；
+  没有 AAC 编码器时退回 16 kHz 单声道 WAV（与 Flutter Web 版相同）。
+- `StateError` 改为 `Error`，错误文案前缀是 "Error:" 而不是 "Bad state:"。
