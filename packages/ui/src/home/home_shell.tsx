@@ -35,6 +35,7 @@ import * as sticker_display from '@gang-chat/core/app/sticker_display';
 import type { StickerPacksController } from '@gang-chat/core/app/sticker_packs_controller';
 import * as voice_display from '@gang-chat/core/app/voice_message_display';
 import type { VoiceRecorderController } from '@gang-chat/core/app/voice_recorder_controller';
+import type { AppConfig } from '@gang-chat/core/config/app_config';
 import { HostPlatform } from '@gang-chat/core/config/host_platform';
 import { Timer, unawaited, type PeriodicTimer } from '@gang-chat/core/lib/async';
 import type { StreamSubscription } from '@gang-chat/core/lib/event_stream';
@@ -85,6 +86,7 @@ import {
 import type { ElementSize } from '../lib/use_element_size';
 import { ViewState, useViewState } from '../lib/view_state';
 import { FullScreenMediaOrientation } from '../shell/full_screen_media_orientation';
+import { useAppConfig } from '../ui/app_config_scope';
 import { ChatComposerController } from '../ui/chat_composer';
 import { MediaCacheScope } from '../ui/media_cache_scope';
 import { UiColors, argb } from '../ui/tokens';
@@ -243,6 +245,8 @@ export class HomeShellState extends ViewState<ResolvedHomeShellProps> {
   readonly _composerDropKey: RefObject<HTMLDivElement | null> = createRef<HTMLDivElement>();
   /** Dart `Object _searchTapRegionGroup` (a `TapRegion` group id). */
   readonly _searchTapRegionGroup: object = {};
+  /** The `AppConfigScope` value, refreshed by [HomeShell] on every render. */
+  _appConfig: AppConfig | null = null;
   _realtimeEvents: StreamSubscription | null = null;
   _accountSuspensionLogoutInProgress = false;
   _realtimeStatusEvents: StreamSubscription | null = null;
@@ -1108,6 +1112,9 @@ function _useShellBoxSize(): [(node: HTMLDivElement | null) => void, ElementSize
 export function HomeShell(props: HomeShellProps) {
   const widget = useMemo(() => _resolveHomeShellProps(props), [props]);
   const state = useViewState(() => new HomeShellState(), widget);
+  // Dart read AppConfigScope.of(context) inside the state's methods; publish
+  // the scoped config so the message/attachment actions can resolve URLs.
+  state._appConfig = useAppConfig();
   const [shellRef, shellSize] = _useShellBoxSize();
   return state.build(shellSize, shellRef);
 }

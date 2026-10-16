@@ -54,6 +54,7 @@ import { UiTypography } from '../ui/tokens';
 import { ChatMessageActions } from './chat_messages';
 import type { HomeShellState } from './home_shell';
 import { _ContentMode, _StagedAttachment } from './home_shell';
+import { _homeTitleBarAppConfig } from './home_shell_title_bar';
 import { MusicPlaylistSnapshotDialog } from './music_playlist_snapshot_dialog';
 import { MusicTrackCardData, MusicTrackPlaylistTarget } from './music_track_profile_card';
 
@@ -105,13 +106,13 @@ export function _isSharedMusicPlaylistCloneApi<T extends object>(api: T): api is
 
 /**
  * PORT: Dart read `AppConfigScope.of(context)` from the message bubble that
- * invoked the action. A ViewState has no BuildContext, so the shell's render
- * publishes the scope's config as `_appConfig` (HomeShell reads
- * `useAppConfig()`); the defaults apply when it has not.
+ * invoked the action. A ViewState has no BuildContext: this prefers an
+ * `_appConfig` the shell's render may publish (`useAppConfig()`), then the
+ * scope config recorded by the mounted home title bar, then the defaults.
  */
 export function _homeAppConfig(state: HomeShellState): AppConfig {
   const scoped = (state as unknown as { _appConfig?: AppConfig | null })._appConfig;
-  return scoped ?? AppConfig.defaults();
+  return scoped ?? _homeTitleBarAppConfig() ?? AppConfig.defaults();
 }
 
 function _replaceRange(text: string, start: number, end: number, replacement: string): string {

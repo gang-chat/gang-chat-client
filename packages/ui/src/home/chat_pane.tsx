@@ -64,7 +64,7 @@ export const _incomingBubble = UiColors.surface;
  * only passes through take its declared types, so `Map` vs `ReadonlyMap`
  * (or `readonly` arrays) cannot drift between the two modules.
  */
-type _MessageStageProps = ComponentProps<typeof _MessageStage>;
+type _StageProps = ComponentProps<typeof _MessageStage>;
 
 export interface ChatPaneProps {
   currentUser: CurrentUser;
@@ -72,12 +72,12 @@ export interface ChatPaneProps {
   roomCard: RoomCard | null;
   room: RoomDetail | null;
   live: LiveState | null;
-  messages: _MessageStageProps['messages'];
+  messages: _StageProps['messages'];
   newMessageCount: number;
   focusMessageId?: string | null;
   onFocusMessageHandled?: ((messageId: string) => void) | null;
-  fileTransfers: _MessageStageProps['fileTransfers'];
-  fileDownloads: _MessageStageProps['fileDownloads'];
+  fileTransfers: _StageProps['fileTransfers'];
+  fileDownloads: _StageProps['fileDownloads'];
   downloadActions: ChatFileDownloadActions;
   voicePlaybackActions: ChatVoicePlaybackActions;
   imagePreviewActions: ChatImagePreviewActions;
@@ -99,7 +99,7 @@ export interface ChatPaneProps {
   onRemoveComposerComponent?: (() => void) | null;
   fileActionHighlighted: boolean;
   mentionOptions?: readonly MessageMentionOption[];
-  mentionMembers?: _MessageStageProps['mentionMembers'];
+  mentionMembers?: _StageProps['mentionMembers'];
   mentionMembersReady?: boolean;
   mentionLoading?: boolean;
   mentionSelectedIndex?: number;

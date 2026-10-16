@@ -1200,7 +1200,8 @@ export function _MaterialIconButton({
       type="button"
       data-testid={testId}
       aria-label={tooltip ?? undefined}
-      disabled={!enabled}
+      // Not `disabled`: a disabled control would swallow the tooltip's hover.
+      aria-disabled={!enabled}
       onPointerEnter={(event) => {
         if (event.pointerType === 'mouse') setHovered(true);
       }}

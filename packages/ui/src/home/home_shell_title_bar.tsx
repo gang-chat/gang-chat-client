@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 
+import type { AppConfig } from '@gang-chat/core/config/app_config';
 import { HostPlatform } from '@gang-chat/core/config/host_platform';
 import * as live_display from '@gang-chat/core/app/live_display';
 import * as room_display from '@gang-chat/core/app/room_display';
@@ -219,6 +220,17 @@ export function _SearchTapRegion({ groupId, onTapOutside, children, style, 'data
 // ---------------------------------------------------------------------------
 // Title bar.
 
+// PORT: the shell's message actions read `AppConfigScope.of(context)` in Dart
+// (see `_homeAppConfig` in home_shell_messages). The title bar is always
+// mounted inside the shell's scope, so it records the scope's config for the
+// ViewState, which has no BuildContext.
+let _titleBarAppConfig: AppConfig | null = null;
+
+/** The [AppConfig] of the mounted home title bar's `AppConfigScope`, if any. */
+export function _homeTitleBarAppConfig(): AppConfig | null {
+  return _titleBarAppConfig;
+}
+
 export interface _HomeTitleBarProps {
   windowController: DesktopWindowController;
   searchController: TextEditingController;
@@ -233,6 +245,8 @@ export interface _HomeTitleBarProps {
 
 export function _HomeTitleBar(props: _HomeTitleBarProps) {
   const { windowController } = props;
+  const appConfig = useAppConfig();
+  _titleBarAppConfig = appConfig;
   const [maximized, setMaximized] = useState(false);
   const mountedRef = useRef(false);
   const boxRef = useRef<HTMLDivElement | null>(null);

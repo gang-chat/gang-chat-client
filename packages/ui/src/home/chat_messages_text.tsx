@@ -1,4 +1,4 @@
-import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from 'react';
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 
 import * as message_mentions from '@gang-chat/core/app/message_mentions';
 import { HostPlatform } from '@gang-chat/core/config/host_platform';
@@ -125,6 +125,10 @@ class _TextBodyState extends ViewState<_TextBodyProps> {
             this._textRef.current = node;
           }}
           data-testid={`message-text-layout-${message.id}`}
+          // Focusable like the read-only field it replaces, so the field's
+          // select-all shortcut applies to this message only.
+          tabIndex={-1}
+          onKeyDown={this._handleKeyDown}
           onPointerDown={this._handlePointerDown}
           style={_textBodyStyle}
         >
@@ -184,6 +188,20 @@ class _TextBodyState extends ViewState<_TextBodyProps> {
     if ((event.buttons & 1) !== 0) {
       this._lastPointerDownPosition = { x: event.clientX, y: event.clientY };
     }
+  };
+
+  /** Ctrl/⌘+A in the focused field selects its whole text (not the page). */
+  _handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    if (event.defaultPrevented || event.altKey || event.shiftKey) return;
+    if (event.key.toLowerCase() !== 'a' || !(HostPlatform.isMacOS ? event.metaKey : event.ctrlKey)) return;
+    const node = this._textRef.current;
+    const selection = typeof window === 'undefined' ? null : window.getSelection();
+    if (node == null || selection == null) return;
+    event.preventDefault();
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    selection.removeAllRanges();
+    selection.addRange(range);
   };
 
   _handleTextContextMenuActionPressed = (): void => {
@@ -388,6 +406,7 @@ const _textBodyStyle: CSSProperties = {
   userSelect: 'text',
   WebkitUserSelect: 'text',
   cursor: SystemMouseCursors.text,
+  outline: 'none',
 };
 
 export function _displayMessageBody(message: Message): string {

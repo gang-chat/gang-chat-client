@@ -473,9 +473,8 @@ export class _RoomMessageHistoryPaneState extends ViewState<_RoomMessageHistoryP
         }}
       >
         <Row style={{ flexShrink: 0 }}>
-          <Expanded>
+          <Expanded data-testid="room-message-history-search">
             <Input
-              aria-label="room-message-history-search"
               controller={this._searchController}
               hintText="搜索消息记录"
               prefixIcon={Icons.search}
@@ -799,13 +798,13 @@ export function _HistoryMessageRow(props: _HistoryMessageRowProps) {
           <SizedBox width={34} height={34} />
         </Row>
         <Positioned left={0} top={0} bottom={0} width={timestampColumnWidth}>
-          <Center style={{ width: '100%', height: '100%' }}>
+          {/* The key sits on the Center so the compact timestamp's FittedBox
+              measures the full column width as its available width. */}
+          <Center data-testid={`room-message-history-time-${message.id}`} style={{ width: '100%', height: '100%' }}>
             {useCompactLayout ? (
-              <div data-testid={`room-message-history-time-${message.id}`} style={{ display: 'flex', justifyContent: 'center', minWidth: 0, maxWidth: '100%' }}>
-                <CompactActivityTimestamp timestamp={timestamp} style={timestampStyle} />
-              </div>
+              <CompactActivityTimestamp timestamp={timestamp} style={timestampStyle} />
             ) : (
-              <Text data-testid={`room-message-history-time-${message.id}`} textAlign="center" style={timestampStyle}>
+              <Text textAlign="center" style={timestampStyle}>
                 {timestamp}
               </Text>
             )}
@@ -954,13 +953,9 @@ export function _HistoryMemberFilterDialog(props: _HistoryMemberFilterDialogProp
       }
     >
       <div style={{ height: viewportHeight, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <Input
-          aria-label="message-history-member-search"
-          controller={controller}
-          hintText="搜索成员"
-          prefixIcon={Icons.search}
-          showClearButton
-        />
+        <div data-testid="message-history-member-search" style={{ flexShrink: 0 }}>
+          <Input controller={controller} hintText="搜索成员" prefixIcon={Icons.search} showClearButton />
+        </div>
         <SizedBox height={12} />
         {/* PORT: RawScrollbar(thickness: 7, radius: 999, thumb textMuted 82%)
             → the document scrollbar style; inline styles cannot theme it. */}

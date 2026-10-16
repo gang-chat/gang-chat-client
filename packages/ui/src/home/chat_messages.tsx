@@ -1,4 +1,12 @@
-import { useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from 'react';
 
 import type { FileTransferState } from '@gang-chat/core/app/file_transfer_state';
 import * as live_display from '@gang-chat/core/app/live_display';
@@ -1095,8 +1103,17 @@ export class _MessageStageState extends ViewState<_MessageStageProps> {
     this._firstNewMessageElement = node;
   };
 
-  private _handleUserScrollIntent = (): void => {
+  // A wheel tick, a touch hold or a scrollbar drag interrupts a programmatic
+  // scroll animation (Flutter `pointerScroll` → goIdle / drag `hold`). Mouse
+  // presses on the content do not: desktop Flutter does not drag with a mouse.
+  private _handleWheel = (): void => {
     this._scrollController.cancelAnimation();
+  };
+
+  private _handleListPointerDown = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    if (event.pointerType !== 'mouse' || event.target === event.currentTarget) {
+      this._scrollController.cancelAnimation();
+    }
   };
 
   build(): ReactNode {
@@ -1254,8 +1271,8 @@ export class _MessageStageState extends ViewState<_MessageStageProps> {
         ref={this._attachMessageList}
         data-testid="chat-message-list"
         onScroll={this._handleScrollEvent}
-        onWheel={this._handleUserScrollIntent}
-        onPointerDown={this._handleUserScrollIntent}
+        onWheel={this._handleWheel}
+        onPointerDown={this._handleListPointerDown}
         style={_messageListStyle}
       >
         <div
