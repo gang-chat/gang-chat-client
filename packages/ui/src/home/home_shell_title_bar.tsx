@@ -41,7 +41,7 @@ import { UiTooltip } from '../ui/tooltip';
 import { WindowChromeInsets } from '../ui/window_chrome';
 import { AppWindowControls, AppWindowDragRegion, appWindowControlGap, appWindowControlsWidth } from '../shell/window_controls';
 import { HomeAdaptiveLayout } from './adaptive_layout';
-import { narrowBreakpoint, sidebarWidth } from './navigation';
+import { sidebarWidth, usesNarrowHomeLayout } from './navigation';
 import { tapRegionGroupContains, useTapRegionGroupMember } from './hover_card_anchor';
 import { RoomHoverCard, UserHoverCard, type RoomProfileResolver, type UserProfileResolver } from './room_profile_card';
 
@@ -84,7 +84,7 @@ function _homeTitleBarIsMobilePlatform(): boolean {
 
 function _homeTitleBarBrandWidth(maxWidth: number): number {
   const showWindowControls = _homeTitleBarShowsCustomWindowControls();
-  const wide = maxWidth >= narrowBreakpoint;
+  const wide = !usesNarrowHomeLayout(maxWidth);
   const compactBrandWidth = _clamp(
     maxWidth - (showWindowControls ? _homeTitleBarControlsWidth : 0) - _homeTitleBarMinSearchWidth,
     118,
@@ -94,7 +94,7 @@ function _homeTitleBarBrandWidth(maxWidth: number): number {
 }
 
 function _homeTitleBarCanShowSearch(maxWidth: number): boolean {
-  return maxWidth >= narrowBreakpoint;
+  return !usesNarrowHomeLayout(maxWidth);
 }
 
 function _homeTitleBarPlacesLiveRoomOnRight(): boolean {
@@ -296,7 +296,7 @@ export function _HomeTitleBar(props: _HomeTitleBarProps) {
     const showWindowControls = _homeTitleBarShowsCustomWindowControls();
     const brandWidth = _homeTitleBarBrandWidth(maxWidth);
     const searchLayout = _homeTitleBarSearchLayout(maxWidth, { hasLiveRoom: true });
-    const narrow = maxWidth < narrowBreakpoint;
+    const narrow = usesNarrowHomeLayout(maxWidth);
     const showLiveRoom = !(narrow && HostPlatform.isAndroid);
     const placeLiveRoomOnRight = _homeTitleBarPlacesLiveRoomOnRight();
     const liveRoomLeft = _homeTitleBarLiveRoomLeft();

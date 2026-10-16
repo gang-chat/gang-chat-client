@@ -21,6 +21,7 @@ import type {
   WindowEvent,
 } from '@gang-chat/core/platform/platform';
 
+import { appWindowMinSize } from '@gang-chat/core/shell/desktop_window_controller';
 import { createBrowserSpeech } from '@gang-chat/ui/platform/browser_speech';
 
 import { IpcChannels, type FileEntry, type PickedFile, type PreferenceValue, type ScreenSourceInfo } from '../../../shared/ipc';
@@ -180,7 +181,9 @@ export function createDesktopPlatform(bridge: DesktopBridge): Platform {
         await invokeWindow('setResizable', true);
         await invokeWindow('setMaximizable', true);
         await invokeWindow('setMaximumSize', 100000, 100000);
-        await invokeWindow('setMinimumSize', layout.minWidth ?? 360, layout.minHeight ?? 600);
+        const minWidth = layout.minWidth ?? appWindowMinSize.width;
+        const minHeight = layout.minHeight ?? appWindowMinSize.height;
+        await invokeWindow('setMinimumSize', minWidth, minHeight);
         if (layout.restore) {
           if (await invokeWindow<boolean>('isFullScreen')) await invokeWindow('setFullScreen', false);
           if (await invokeWindow<boolean>('isMaximized')) await invokeWindow('unmaximize');
@@ -190,7 +193,7 @@ export function createDesktopPlatform(bridge: DesktopBridge): Platform {
           // Initial logged-in layout: keep a size the user may have chosen,
           // only growing a window still at the login-card size.
           const size = await invokeWindow<{ width: number; height: number }>('getSize');
-          if (size.width < 360 || size.height < 600) {
+          if (size.width < minWidth || size.height < minHeight) {
             await invokeWindow('setSize', width, height);
             await invokeWindow('center');
           }

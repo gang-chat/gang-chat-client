@@ -14,10 +14,15 @@ export interface Size {
 /** `Color(0xFF14171D)`: the native window background behind the first frame. */
 export const appWindowBackground = '#14171D';
 
-// The authenticated desktop shell can use the same compact navigation as a
-// phone, so its minimum width should match that layout instead of the old
-// desktop-only floor.
-const _responsiveAppWindowMinSize: Size = { width: 360, height: 600 };
+/**
+ * Smallest window the authenticated desktop app accepts.
+ *
+ * PORT: the Flutter shell allowed 360×600 because desktop windows could fall
+ * back to the compact phone-width layout. The desktop app keeps the wide
+ * layout instead and is never narrower than this; only the web build still
+ * adapts to narrow screens (phone browsers), see `usesNarrowHomeLayout`.
+ */
+export const appWindowMinSize: Size = { width: 960, height: 600 };
 const _appWindowSize: Size = { width: 1180, height: 760 };
 const _authWidgetWidth = 430.0;
 const _authBottomBreathingRoom = 24.0;
@@ -362,7 +367,7 @@ export class DesktopWindowController {
   }
 
   private get _appWindowMinSize(): Size {
-    return _responsiveAppWindowMinSize;
+    return appWindowMinSize;
   }
 
   private async _configure(configure: (window: WindowBridge) => Promise<void>): Promise<void> {

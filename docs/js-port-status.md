@@ -32,6 +32,9 @@
 - 刷新令牌用 Electron `safeStorage`（macOS 钥匙串 / Windows DPAPI）加密保存在用户目录；
   Flutter 版存在系统钥匙串/凭据管理器里，切换后需要重新登录一次。
 - 偏好设置（SharedPreferences）保存在用户目录的 `preferences.json`，键名不变。
+- 窗口最小 960×600（`appWindowMinSize`），桌面端始终是宽屏布局。Flutter 版桌面窗口最小
+  360×600，窄于 720 时切到和手机一样的紧凑布局；桌面端不再这样做，紧凑布局只在 Web 版
+  （手机浏览器）上启用（`usesNarrowHomeLayout`）。
 - 远端图片经 `gang-media://` 协议走主进程磁盘缓存（512MB LRU）。
 - 屏幕共享系统声音：Windows 用 Chromium 的 WASAPI loopback；macOS 依赖 Chromium 的
   ScreenCaptureKit loopback（macOS 14.2+），更早的系统共享时没有声音。Flutter 版在
@@ -64,6 +67,8 @@
   浏览器（Firefox）录 WAV。
 - Flutter 版可能注册过 `flutter_service_worker.js`：新构建在同名路径放了一个只做清理的
   Service Worker，浏览器更新到它时删除 Flutter 的缓存、注销自己并刷新页面。
+- 窄屏：页面窄于 720 时仍切到紧凑布局（单栏，房间列表和内容来回切换），供手机浏览器使用；
+  桌面端窗口有最小尺寸，不会进入这个布局。
 - 体积：JS 2.3MB（gzip 0.62MB），没有 CanvasKit，中文/emoji 用系统字体，不再需要
   `tool/mirror_web_fonts.dart`。
 

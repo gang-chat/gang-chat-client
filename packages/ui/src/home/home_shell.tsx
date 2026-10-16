@@ -106,7 +106,7 @@ import { HomeShellSearch } from './home_shell_search';
 import { _HomeTitleBar, _TitleLiveRoomDock, _homeTitleBarHeight, _homeTitleBarSearchLayout } from './home_shell_title_bar';
 import { LiveFullScreenStage, liveStageTrackLabel } from './live_channel_media';
 import type { LiveStageSelection } from './live_channel_pane';
-import { narrowBreakpoint, sidebarWidth } from './navigation';
+import { sidebarWidth, usesNarrowHomeLayout } from './navigation';
 import { RoomSettingsSection } from './room_settings_dialog';
 
 // The extension tables (`extension _HomeShellX on _HomeShellState` in the
@@ -898,13 +898,13 @@ export class HomeShellState extends ViewState<ResolvedHomeShellProps> {
     );
 
     const maxWidth = shellSize?.width ?? (typeof window === 'undefined' ? 0 : Math.max(0, window.innerWidth - 2));
-    const narrowLayout = maxWidth < narrowBreakpoint;
+    const narrowLayout = usesNarrowHomeLayout(maxWidth);
     this._compactLayout = narrowLayout;
     const titleSearchLayout = _homeTitleBarSearchLayout(maxWidth, { hasLiveRoom: true });
     const showSearchOverlay = titleSearchLayout != null && !this._appUpdateDownloadInProgress;
     // The inner LayoutBuilder (below the title bar) sees the same width as
     // the outer one: both sit inside the shell border at full width.
-    const narrow = maxWidth < narrowBreakpoint;
+    const narrow = usesNarrowHomeLayout(maxWidth);
     const content = (
       <Stack style={{ flex: '1 1 0', minWidth: 0, minHeight: 0 }}>
         <Column key={this.widget.app.currentUser.id} crossAxisAlignment="stretch" style={{ position: 'absolute', inset: 0 }}>

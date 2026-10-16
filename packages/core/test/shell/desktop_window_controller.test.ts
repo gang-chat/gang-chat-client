@@ -142,10 +142,10 @@ describe('DesktopWindowController (bridge mapping)', () => {
 
     expect(window.calls.filter((call) => call.method === 'setLayout').map((call) => call.args[0])).toEqual([
       { kind: 'auth', width: 430, height: 368, center: true },
-      { kind: 'app', restore: false, width: 1180, height: 760, minWidth: 360, minHeight: 600 },
+      { kind: 'app', restore: false, width: 1180, height: 760, minWidth: 960, minHeight: 600 },
       { kind: 'auth', width: 430, height: 436, center: true },
       { kind: 'auth', width: 500, height: 400, center: false },
-      { kind: 'app', restore: true, width: 1180, height: 760, minWidth: 360, minHeight: 600 },
+      { kind: 'app', restore: true, width: 1180, height: 760, minWidth: 960, minHeight: 600 },
     ]);
   });
 

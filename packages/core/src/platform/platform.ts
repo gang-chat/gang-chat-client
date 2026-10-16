@@ -156,7 +156,7 @@ export interface WindowBridge {
       | {
           kind: 'app';
           restore: boolean;
-          /** App window size / minimum size from `DesktopWindowController` (1180×760, min 360×600). */
+          /** App window size / minimum size from `DesktopWindowController` (1180×760, min 960×600). */
           width?: number;
           height?: number;
           minWidth?: number;
