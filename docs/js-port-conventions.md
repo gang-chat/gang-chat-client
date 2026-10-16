@@ -32,6 +32,23 @@ apps/desktop/           Electron：main / preload / renderer 入口和桌面平�
   不建 barrel 文件（`app.dart` 这种 export 汇总不移植），直接从定义处导入。
 - `part` / `part of` 文件拆成独立模块，被其它部分用到的私有成员改为导出
   （名字保留前导下划线以示"包内私有"，例如 `export function _buildHeader`）。
+- `extension _Foo on _BarState { ... }` 形式的 part 文件（`home_shell_*.dart`）：State 的
+  字段全部留在主文件的类里；每个 part 文件导出一个方法表，主类用声明合并 + `Object.assign`
+  挂到原型上，调用处仍写 `this._foo()`：
+  ```ts
+  // home_shell_realtime.ts
+  import type { HomeShellState } from './home_shell';
+  export const HomeShellRealtime = {
+    _handleRealtimeEvent(this: HomeShellState, event: RealtimeEvent): void { ... },
+  };
+  // home_shell.tsx
+  export class HomeShellState extends ViewState<HomeShellProps> { /* 字段、initState、dispose */ }
+  export interface HomeShellState extends HomeShellMethods {}
+  type HomeShellMethods = typeof HomeShellRealtime & typeof HomeShellRoomActions & ...;
+  Object.assign(HomeShellState.prototype, HomeShellRealtime, HomeShellRoomActions, ...);
+  ```
+  方法表的对象名 = Dart extension 名去掉前导下划线；方法名保持 Dart 原名（包括下划线）。
+  part 文件里的私有 Widget 类导出为组件（保留下划线名，例如 `export function _JoinDialog`）。
 - 平台差异：同名文件加后缀 `foo.web.tsx`（Electron / 浏览器）和 `foo.tsx`
   （React Native 原生实现或占位）。导入时写 `./foo`，打包器按平台选择。两者导出
   完全相同的签名。
@@ -164,6 +181,13 @@ react-native-web 渲染它们。**不要**写 `<div>`、CSS 文件或 className
 - Flutter 的 `TextStyle.height` 是倍数，RN 要绝对 `lineHeight`：tokens 已换算好；
   自定义时写 `lineHeight: fontSize * height`。
 - 尺寸数值（宽高、间距、断点）保持 Dart 原值，像素级一致是目标。
+
+### 窗口拖拽区
+
+Flutter 的 `AppWindowDragRegion` / `windowManager.startDragging()` 在 Electron 里是 CSS
+`-webkit-app-region`。react-native-web 会丢掉未知样式属性，所以用 `dataSet` 标记：
+拖拽区 `<View dataSet={{ gangDrag: 'true' }}>`，其中可点击的控件 `dataSet={{ gangNoDrag: 'true' }}`
+（`apps/desktop/src/renderer/src/global.css` 里有对应规则；原生端忽略）。
 
 ### 只有 Web 才有的交互
 

@@ -71,6 +71,12 @@ export interface FileSystemBridge {
   writeFile(path: string, bytes: Uint8Array): Promise<void>;
   appendFile(path: string, bytes: Uint8Array): Promise<void>;
   readFile(path: string): Promise<Uint8Array>;
+  /**
+   * Streams a file in chunks (`File.openRead()`), for copies that report
+   * progress and can pause/cancel without loading the whole file. Hosts
+   * without it fall back to [readFile].
+   */
+  openRead?(path: string): AsyncIterable<Uint8Array>;
   deleteFile(path: string): Promise<void>;
   rename(from: string, to: string): Promise<void>;
   exists(path: string): Promise<boolean>;
@@ -83,7 +89,14 @@ export interface FileSystemBridge {
     applicationSupport: string;
     applicationCache: string;
     downloads: string | null;
+    /**
+     * Windows `%APPDATA%` (roaming); null/absent elsewhere. Used by
+     * `LocalPreferencesMigration` to find the Flutter-era preferences file.
+     */
+    roamingAppData?: string | null;
   }>;
+  /** Sets a file's modification time (`File.setLastModified`); LRU caches use it. */
+  setLastModified?(path: string, modifiedMs: number): Promise<void>;
   joinPath(...segments: string[]): string;
   /** Opens a file with the default application. */
   openPath(path: string): Promise<boolean>;
@@ -113,6 +126,8 @@ export interface ClipboardBridge {
 export type WindowEvent =
   | { type: 'close-requested' }
   | { type: 'tray-exit-requested' }
+  /** The tray icon's "open" item / click: `DesktopWindowController.restoreHiddenAppWindow`. */
+  | { type: 'tray-open-requested' }
   | { type: 'maximized-changed'; maximized: boolean }
   | { type: 'fullscreen-changed'; fullScreen: boolean }
   | { type: 'focus-changed'; focused: boolean }
@@ -135,8 +150,27 @@ export interface WindowBridge {
   /** Hides to the tray (Windows) / hides the window (macOS). */
   minimizeToTray(): Promise<void>;
   /** Lays the window out for the login card or for the main app. */
-  setLayout(layout: { kind: 'auth'; width: number; height: number; center: boolean } | { kind: 'app'; restore: boolean }): Promise<void>;
+  setLayout(
+    layout:
+      | { kind: 'auth'; width: number; height: number; center: boolean }
+      | {
+          kind: 'app';
+          restore: boolean;
+          /** App window size / minimum size from `DesktopWindowController` (1180×760, min 360×600). */
+          width?: number;
+          height?: number;
+          minWidth?: number;
+          minHeight?: number;
+        },
+  ): Promise<void>;
   setMinimumSize(width: number, height: number): Promise<void>;
+  /**
+   * Window opacity 0..1 (window_manager `setOpacity`). Used to hide the
+   * window while it is resized between the auth card and the app layout.
+   */
+  setOpacity?(opacity: number): Promise<void>;
+  /** Removes / restores the taskbar entry (window_manager `setSkipTaskbar`). */
+  setSkipTaskbar?(skip: boolean): Promise<void>;
   setResizable(resizable: boolean): Promise<void>;
   /** Taskbar flash / dock bounce for a new message. */
   requestAttention(): Promise<void>;
@@ -207,6 +241,21 @@ export interface SpeechBridge {
   cancel(): Promise<void>;
 }
 
+/**
+ * Native in-app updater (macOS Sparkle in the Flutter app: it downloads,
+ * verifies and installs outside the App Sandbox). Hosts without one leave
+ * `Platform.updater` null and the release-bucket download flow is used.
+ */
+export interface UpdaterBridge {
+  /** False for builds without an update-signing key. */
+  isAvailable(): Promise<boolean>;
+  /**
+   * Checks [feedUrl] (Sparkle appcast). A background check shows UI only when
+   * an update exists; a user-initiated one always reports back.
+   */
+  checkForUpdates(options: { feedUrl: string; background: boolean }): Promise<void>;
+}
+
 export interface AppInfo {
   name: string;
   version: string;
@@ -233,6 +282,8 @@ export interface Platform {
   readonly screenCapture: ScreenCaptureBridge | null;
   readonly process: ProcessBridge | null;
   readonly speech: SpeechBridge | null;
+  /** macOS native updater (`SparkleUpdater`); absent/null elsewhere. */
+  readonly updater?: UpdaterBridge | null;
   /** Opens a URL (http/https/mailto) with the system handler. */
   openExternal(url: string): Promise<boolean>;
   /**

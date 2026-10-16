@@ -112,3 +112,14 @@ textarea {
 .gang-no-drag {
   -webkit-app-region: no-drag;
 }
+
+/*
+ * react-native-web drops unknown style props, so components mark drag regions
+ * with `dataSet={{ gangDrag: 'true' }}` / `dataSet={{ gangNoDrag: 'true' }}`.
+ */
+[data-gang-drag='true'] {
+  -webkit-app-region: drag;
+}
+[data-gang-no-drag='true'] {
+  -webkit-app-region: no-drag;
+}
