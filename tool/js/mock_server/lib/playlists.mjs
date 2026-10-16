@@ -33,7 +33,7 @@ export function createPlaylist(store, ownerKey, { name, description = '', items 
     items: [],
   };
   store.playlists.set(playlist.id, playlist);
-  for (const item of items) addItem(playlist, item, createdAt);
+  copyItems(playlist, items);
   return playlist;
 }
 

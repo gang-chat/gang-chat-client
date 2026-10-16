@@ -192,7 +192,7 @@ function _SettingsTile<T>({ index, segment, summary, selected, compact, width, o
           <Spacer />
           {segment.showBadge ? (
             <>
-              <BadgeDot size={7} borderColor={UiColors.transparent} />
+              <_SegmentBadge badgeKey={segment.badgeKey} />
               <SizedBox width={6} />
             </>
           ) : null}
@@ -213,6 +213,15 @@ function _SettingsTile<T>({ index, segment, summary, selected, compact, width, o
         </Column>
       </Column>
     </PressableSurface>
+  );
+}
+
+/** `BadgeDot(key: segment.badgeKey, size: 7, borderColor: transparent)`. */
+function _SegmentBadge({ badgeKey }: { badgeKey: string | null }) {
+  return (
+    <span data-testid={badgeKey ?? undefined} style={{ display: 'contents' }}>
+      <BadgeDot size={7} borderColor={UiColors.transparent} />
+    </span>
   );
 }
 
@@ -257,7 +266,7 @@ function _SettingsNavTile<T>({ segment, selected, onPressed }: _SettingsNavItemP
             {segment.label}
           </Text>
         </Expanded>
-        {segment.showBadge ? <BadgeDot size={7} borderColor={UiColors.transparent} /> : null}
+        {segment.showBadge ? <_SegmentBadge badgeKey={segment.badgeKey} /> : null}
       </Row>
     </PressableSurface>
   );
@@ -296,7 +305,7 @@ function _SettingsNavPill<T>({ segment, selected, onPressed }: _SettingsNavItemP
         {segment.showBadge ? (
           <>
             <SizedBox width={6} />
-            <BadgeDot size={7} borderColor={UiColors.transparent} />
+            <_SegmentBadge badgeKey={segment.badgeKey} />
           </>
         ) : null}
       </Row>

@@ -105,3 +105,64 @@ Flutter。约定见 `docs/js-port-conventions.md`。本文记录各模块的移�
   `LiveScreenSourcePickerState`）：不传或传 `undefined` 保持原值，传 `null` 清空。
 - `ArgumentError.value(delta, ...)` 改为 `Error`，文案沿用 Dart 的 `Invalid argument (delta): ...`。
 
+
+### 界面层：文本菜单、输入栏、表情包管理、头像裁剪、设置外壳（`packages/ui/src/ui`）
+
+- 文本右键菜单（`text_context_menu.tsx`）：Flutter 由 `TextField.contextMenuBuilder` 触发；移植后
+  由 `TextFieldEditingShortcuts` 接管 DOM `contextmenu`，按指针下的 `<input>` / `<textarea>`
+  （或可选文本的 DOM 选区）构造 `EditableTextState`，菜单画在 overlay 里，`contextMenuBuilder`
+  改为 `TextFieldEditingShortcuts` 的属性。剪切/复制/粘贴走 `platform().clipboard`，插入文本用
+  `execCommand('insertText')`，保留浏览器撤销栈并触发输入框自己的 `onChange`。
+  `buildTextFieldContextMenu` 去掉了 `BuildContext` 参数，`tapRegionGroupId` 保留但不再使用（点
+  外部总会关闭菜单）。DOM 输入框右键不会丢失选区和焦点，所以右键保护只保留两点：右键时没有选区则
+  套用 `secondaryClickSelection`；保护期间下一次（输入框以外的）主键按下回调
+  `onGlobalPrimaryPointerDownDuringSecondaryClickProtection`。Esc 先关菜单，不会顺带关掉下面的对话框。
+- `PasteTextIntent` 覆盖改为 `PasteTextIntentActions`：快捷键粘贴是 DOM `paste` 事件，先同步取出
+  剪贴板文本并 `preventDefault()`，再异步等 `onPasteFiles` 判断是否已作为附件消费，未消费才插入
+  文本。与 `ClipboardService.dispatchWebPaste` 的页面级监听并存时，以先 `preventDefault()` 的一方为准。
+- 输入栏（`chat_composer.tsx`）：`HardwareKeyboard` 全局处理器改为输入框子树的 capture 阶段
+  `keydown`（只在输入框有焦点时生效）；输入法组字中的 Enter 交给输入法；Shift/Ctrl+Enter 的换行用
+  `execCommand` 插入，失败时才回退到 Dart 的改控制器写法。`AnimatedSize` 用高度过渡实现，只在动画期间裁剪。
+- 头像裁剪（`avatar_crop_dialog.tsx`）：`<img>`（object URL）+ `<canvas>` 生成 512×512 PNG；缩放滑杆
+  是按 Material `Slider` 主题手写还原的；遮罩用 SVG even-odd 路径。
+- 表情包管理（`sticker_manager.tsx`）：`Button.withoutIcon()` 改为 `cloneElement(button, { showIcon: false })`；
+  预览图与尺寸行通过加载 `cachedMediaImageProvider` 返回的 URL 读取图片原始尺寸。
+- 设置外壳（`settings_scaffold.tsx`）：`SettingsList.physics` 只支持 `'clamping'`
+  （`overscroll-behavior: contain`）；`LayoutBuilder` 用 `useElementSize` 测宽。
+
+### 界面层：基础组件（`packages/ui/src/ui`、`packages/ui/src/lib`）
+
+- 新增的框架级辅助：`lib/text_editing.ts`（`TextEditingController` / `TextSelection` /
+  `TextEditingValue` / `FocusNode` / `UndoHistoryController` / `TextInputFormatter` 及
+  `TextInputAction`、`TextInputType`、`AutofillHints`）、`lib/edge_insets.ts`（`EdgeInsets.*` +
+  `paddingStyle`）、`lib/mouse_cursors.ts`（`SystemMouseCursors`、`kTouchSlop`）、`lib/text_measure.ts`
+  （canvas 同步测宽，代替 `TextPainter`）、`lib/use_element_size.ts`（`LayoutBuilder`）、
+  `lib/tap_region.ts`（`TapRegion.onTapOutside`）、`lib/progress_indicator.tsx`
+  （`CircularProgressIndicator`，关键帧在 `ui/ui.css`）。`Icon` 支持 `IconTheme`。
+- 所有带 `BuildContext` 的顶层函数去掉该参数：`showUiContextMenu({ position, sections })`、
+  `showFloatingNotice(message, { tone, duration })`、`showUiDialog({ title, child, icon })`、
+  `Button.minimumWidthForLabel({ label, hasIcon, padding })`；`AppNotificationHost.maybeOf()` /
+  `of()` 返回最近挂载的宿主（组件里用 `useAppNotificationController()`）；`AppConfigScope.of` /
+  `MediaCacheScope.of` 是 hook（`useAppConfig` / `useMediaCache`）。`Duration` 一律毫秒，
+  `null` 表示常驻。位置用窗口坐标 `{ x, y }`。
+- `PressableSurface`：只有主键触发按下/点击（Dart 的 `Listener` 对右键也生效，DOM 右键交给菜单）；
+  按下后在 window 上跟踪指针，嵌套的可按压面与 Flutter 一样各自收到完整手势。内容层是纵向 flex 并
+  垂直居中（Flutter 给子组件紧约束高度）。`cornerCut` 用 CSS `clip-path`。
+- `Button`：Flutter 里按钮在有界父级中撑满、在 `Row` 里收缩；移植用 `align-self: stretch` 得到同样
+  的分界（`Center`/`Wrap` 里因此会收缩，`DialogFrame.actions` 改为纵向排列以保持整行按钮）。
+  `withoutIcon()` 改为 `showIcon={false}`。按钮文字强制单行省略（`ui.css` 的 `.gang-button-label`）。
+- `UiTooltip`：按 Material 桌面行为实现（悬停 380ms、其它提示打开时立即显示、离开 100ms、任意按下
+  关闭、`positionDependentBox` 定位）；`triggerMode` 只影响触屏，桌面忽略。提示气泡不可悬停停留。
+- `Input`：桌面 Flutter 版把文字/图标下移 4–5px 来补偿自身排版，浏览器本身垂直居中，故按 Android
+  分支对称留白。`onTapOutside` 有值时浏览器仍会让输入框失焦；`tapRegionGroupId` 仅保留参数。
+  Enter 提交时按 Flutter 默认行为失焦（`next`/`previous` 除外，且不移动焦点）。
+- `SegmentedControl`：溢出布局用横向滚动容器；滚轮转横向滚动、鼠标拖动滚动（1px 判定，拖动后吞掉点击）；
+  `animateTo` 用 rAF 缓动实现。`FittedBox(scaleDown)` 未实现（宽度计算已保证标签放得下）。
+- `Sidebar`：不再区分有界/无界高度，统一用"中间可滚动"布局（页脚间距 16）。
+- `CachedAssetImage` / `cachedMediaImageProvider`：图片直接用 `platform().cachedMediaUrl(url)`，
+  `cache` 参数只为保持签名；仍用 `MediaCacheRequest.tryFromUrl` 校验地址（无效时报"图片地址无效"）。
+- `UiContextMenuTriggerRegion`：DOM `contextmenu`（最内层处理并阻止冒泡）；`onTap` 是普通点击，
+  不再与子组件的点击竞争。菜单的淡出动画（60ms）未实现。
+- `GangScrollBehavior`：DOM 用经典滚动条（占位），不需要额外的右侧留白。
+- `WindowChromeInsets.of()`：移动端 `viewPadding.top` 分支为 0；`DotGridBackground` 用 canvas 按设备像素绘制。
+- `AnchoredPanelAnchor`：浮层内容渲染在 `OverlayHost` 中，位于两者之间的 React context 不会传入面板。
