@@ -1,5 +1,9 @@
 part of 'settings_page.dart';
 
+/// Space between the bordered single-choice rows (audio devices, screen-share
+/// resolution / frame rate).
+const double _settingsOptionRowGap = 8;
+
 class _DeviceSection extends StatelessWidget {
   const _DeviceSection({
     required this.title,
@@ -51,7 +55,11 @@ class _DeviceSection extends StatelessWidget {
             ? _EmptyDeviceRow(text: emptyText)
             : Column(
                 children: [
-                  for (final entry in devices.asMap().entries)
+                  for (final entry in devices.asMap().entries) ...[
+                    // Space the bordered rows apart so each device reads as
+                    // its own choice.
+                    if (entry.key > 0)
+                      const SizedBox(height: _settingsOptionRowGap),
                     _DeviceRow(
                       device: entry.value,
                       label: labels[entry.key],
@@ -69,6 +77,7 @@ class _DeviceSection extends StatelessWidget {
                       ),
                       onTap: () => onSelect(entry.value),
                     ),
+                  ],
                 ],
               ),
       ],
@@ -257,6 +266,10 @@ class _ScreenShareQualitySection extends StatelessWidget {
       selectedFrameRate,
       maxFrameRate: platformFrameRateCap,
     );
+    final frameRates = [
+      for (final frameRate in screenShareFrameRateOptions)
+        if (frameRate <= platformFrameRateCap) frameRate,
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -295,12 +308,15 @@ class _ScreenShareQualitySection extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 6),
-              for (final height in screenShareHeightOptions)
+              for (final entry in screenShareHeightOptions.asMap().entries) ...[
+                if (entry.key > 0)
+                  const SizedBox(height: _settingsOptionRowGap),
                 _ScreenShareResolutionRow(
-                  label: screenShareResolutionLabel(height),
-                  selected: height == selectedResolution,
-                  onTap: () => onHeightSelected(height),
+                  label: screenShareResolutionLabel(entry.value),
+                  selected: entry.value == selectedResolution,
+                  onTap: () => onHeightSelected(entry.value),
                 ),
+              ],
               const SizedBox(height: 12),
               const Text(
                 '帧率',
@@ -311,14 +327,16 @@ class _ScreenShareQualitySection extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 6),
-              for (final frameRate in screenShareFrameRateOptions)
-                if (frameRate <= platformFrameRateCap)
-                  _ScreenShareResolutionRow(
-                    label: screenShareFrameRateLabel(frameRate),
-                    selected: frameRate == selectedFps,
-                    unselectedIcon: Icons.speed_outlined,
-                    onTap: () => onFrameRateSelected(frameRate),
-                  ),
+              for (final entry in frameRates.asMap().entries) ...[
+                if (entry.key > 0)
+                  const SizedBox(height: _settingsOptionRowGap),
+                _ScreenShareResolutionRow(
+                  label: screenShareFrameRateLabel(entry.value),
+                  selected: entry.value == selectedFps,
+                  unselectedIcon: Icons.speed_outlined,
+                  onTap: () => onFrameRateSelected(entry.value),
+                ),
+              ],
             ],
           ),
       ],

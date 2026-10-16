@@ -38,9 +38,15 @@ import { useElementSize } from '../lib/use_element_size';
 import { Button, ButtonTone } from '../ui/button';
 import { Icon, Icons, type IconData } from '../ui/icon';
 import { PressableSurface } from '../ui/surface';
-import { UiColors, withAlpha } from '../ui/tokens';
+import { UiColors, UiSpacing, withAlpha } from '../ui/tokens';
 import { _borderColor, _cyan, _primaryDark, _primaryDarkLow, _textMuted, _textPrimary, _textSecondary } from './settings_page';
 import { _SettingsEmptyState } from './settings_profile_widgets';
+
+/**
+ * Space between the bordered single-choice rows (audio devices, screen-share
+ * resolution / frame rate). The Flutter layout stacked them edge to edge.
+ */
+const _settingsOptionRowGap = UiSpacing.sm;
 
 // ---------------------------------------------------------------------------
 // _DeviceSection
@@ -83,8 +89,9 @@ export function _DeviceSection({
         <_EmptyDeviceRow text={emptyText} />
       ) : (
         // The rows ask for `width: double.infinity`, so the column is as
-        // wide as the panel.
-        <Column crossAxisAlignment="stretch" style={{ alignSelf: 'stretch' }}>
+        // wide as the panel. The bordered rows are spaced apart so each
+        // device reads as its own choice.
+        <Column crossAxisAlignment="stretch" gap={_settingsOptionRowGap} style={{ alignSelf: 'stretch' }}>
           {devices.map((device, index) => (
             <_DeviceRow
               key={`${device.kind}:${device.deviceId}:${index}`}
@@ -405,28 +412,32 @@ export function _ScreenShareQualitySection({
         <Column crossAxisAlignment="start" style={{ alignSelf: 'stretch' }}>
           <Text style={subheadingStyle}>分辨率</Text>
           <SizedBox height={6} />
-          {screenShareHeightOptions.map((height) => (
-            <_ScreenShareResolutionRow
-              key={`height-${height}`}
-              label={screenShareResolutionLabel(height)}
-              selected={height === selectedResolution}
-              onTap={() => onHeightSelected(height)}
-            />
-          ))}
+          <Column crossAxisAlignment="start" gap={_settingsOptionRowGap} style={{ alignSelf: 'stretch' }}>
+            {screenShareHeightOptions.map((height) => (
+              <_ScreenShareResolutionRow
+                key={`height-${height}`}
+                label={screenShareResolutionLabel(height)}
+                selected={height === selectedResolution}
+                onTap={() => onHeightSelected(height)}
+              />
+            ))}
+          </Column>
           <SizedBox height={12} />
           <Text style={subheadingStyle}>帧率</Text>
           <SizedBox height={6} />
-          {screenShareFrameRateOptions
-            .filter((frameRate) => frameRate <= platformFrameRateCap)
-            .map((frameRate) => (
-              <_ScreenShareResolutionRow
-                key={`fps-${frameRate}`}
-                label={screenShareFrameRateLabel(frameRate)}
-                selected={frameRate === selectedFps}
-                unselectedIcon={Icons.speed_outlined}
-                onTap={() => onFrameRateSelected(frameRate)}
-              />
-            ))}
+          <Column crossAxisAlignment="start" gap={_settingsOptionRowGap} style={{ alignSelf: 'stretch' }}>
+            {screenShareFrameRateOptions
+              .filter((frameRate) => frameRate <= platformFrameRateCap)
+              .map((frameRate) => (
+                <_ScreenShareResolutionRow
+                  key={`fps-${frameRate}`}
+                  label={screenShareFrameRateLabel(frameRate)}
+                  selected={frameRate === selectedFps}
+                  unselectedIcon={Icons.speed_outlined}
+                  onTap={() => onFrameRateSelected(frameRate)}
+                />
+              ))}
+          </Column>
         </Column>
       )}
     </Column>
