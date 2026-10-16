@@ -1,4 +1,4 @@
-import { Fragment, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 
 import {
   MusicBoxQueueItemStatus,
@@ -197,6 +197,35 @@ export function _MusicBoxScaleDown({
   );
 }
 
+/**
+ * Dart `MouseRegion(onEnter:, onExit:)` on [ref]'s element.
+ *
+ * PORT: native listeners rather than React's onMouseEnter/Leave, which
+ * follow the React tree through portals: a row would otherwise stay hovered
+ * while the pointer is over its hover card, which Flutter draws in the
+ * separate overlay tree.
+ */
+function _useMouseRegion(ref: RefObject<HTMLElement | null>, onChanged: (hovered: boolean) => void): void {
+  const callback = useRef(onChanged);
+  callback.current = onChanged;
+  useEffect(() => {
+    const node = ref.current;
+    if (node == null) return;
+    const enter = (event: PointerEvent) => {
+      if (event.pointerType !== 'touch') callback.current(true);
+    };
+    const leave = (event: PointerEvent) => {
+      if (event.pointerType !== 'touch') callback.current(false);
+    };
+    node.addEventListener('pointerenter', enter);
+    node.addEventListener('pointerleave', leave);
+    return () => {
+      node.removeEventListener('pointerenter', enter);
+      node.removeEventListener('pointerleave', leave);
+    };
+  }, [ref]);
+}
+
 // ---------------------------------------------------------------------------
 
 export interface _MusicBoxTrackRowProps {
@@ -241,6 +270,7 @@ export function _MusicBoxTrackRow({
   // The LayoutBuilder constraint: the full row width.
   const layoutRef = useRef<HTMLDivElement | null>(null);
   const layoutSize = useElementSize(layoutRef);
+  _useMouseRegion(layoutRef, setHovered);
 
   const actionCount = trailing.length;
   const titleStyle: CSSProperties = {
@@ -275,8 +305,6 @@ export function _MusicBoxTrackRow({
     <div
       ref={layoutRef}
       data-testid={testId}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
       style={{ boxSizing: 'border-box' }}
     >
       <Row
@@ -499,6 +527,8 @@ export function _MusicBoxPlaylistRow({
     if (hovered === next) return;
     setHoveredState(next);
   };
+  const regionRef = useRef<HTMLDivElement | null>(null);
+  _useMouseRegion(regionRef, setHovered);
   const icon = (
     <Icon
       icon={playing ? Icons.graphic_eq : iconData}
@@ -519,11 +549,10 @@ export function _MusicBoxPlaylistRow({
     );
   return (
     <div
+      ref={regionRef}
       role="button"
       aria-label={name}
       data-testid={testId}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
       onClick={(event) => {
         if (event.button !== 0) return;
         onOpen();

@@ -1729,7 +1729,7 @@ export function _LiveMemberRemoveConfirmDialog({ member, onClose }: _LiveMemberR
         new ResponsiveDialogAction({ label: '踢出', tone: ButtonTone.danger, onPressed: () => onClose(true) }),
       ]}
     >
-      <Text style={UiTypography.body}>确定要将 {member_filter.roomMemberDisplayName(member)} 踢出语音频道吗？</Text>
+      <Text style={UiTypography.body}>{`确定要将 ${member_filter.roomMemberDisplayName(member)} 踢出语音频道吗？`}</Text>
     </DialogFrame>
   );
 }

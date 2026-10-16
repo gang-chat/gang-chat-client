@@ -620,7 +620,7 @@ function _HoverVolumePanel(props: _HoverVolumePanelProps) {
   const volumePercentText = valueFormatter?.(normalized) ?? audioVolumePercentText(normalized);
   return (
     <div
-      role="group"
+      role="slider"
       aria-label={semanticLabel}
       aria-valuetext={volumePercentText}
       data-testid={`live-volume-panel:${semanticLabel}`}
