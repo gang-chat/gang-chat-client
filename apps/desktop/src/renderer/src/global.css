@@ -1,0 +1,114 @@
+/*
+ * Document-level styles for the react-native-web renderer: the fonts the
+ * Flutter app bundled, the Material icon fonts, the dark canvas and the
+ * scrollbar look from `uiTheme().scrollbarTheme`.
+ */
+@import 'material-icons/iconfont/material-icons.css';
+
+@font-face {
+  font-family: 'Doto';
+  font-weight: 800;
+  font-style: normal;
+  font-display: block;
+  src: url('@repo-assets/fonts/doto/Doto-Bold.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-weight: 500;
+  font-style: normal;
+  font-display: block;
+  src: url('@repo-assets/fonts/jetbrains_mono/JetBrainsMono-Medium.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+  src: url('@repo-assets/fonts/jetbrains_mono/JetBrainsMono-Bold.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Space Grotesk';
+  font-weight: 500;
+  font-style: normal;
+  font-display: block;
+  src: url('@repo-assets/fonts/space_grotesk/SpaceGrotesk-Medium.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Space Grotesk';
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+  src: url('@repo-assets/fonts/space_grotesk/SpaceGrotesk-Bold.ttf') format('truetype');
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #060607;
+  color: #f4f4f1;
+}
+
+body {
+  font-family: 'Microsoft YaHei', 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans SC', 'Noto Sans CJK SC', system-ui, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#root {
+  display: flex;
+}
+
+::selection {
+  background: rgba(204, 244, 58, 0.3);
+}
+
+input,
+textarea {
+  caret-color: #d4ff3f;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* Thin rounded scrollbars (Flutter scrollbarTheme: 6px, borderStrong thumb). */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #323238;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  background: #66666d;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Focus rings come from the kit's own focus styles. */
+*:focus {
+  outline: none;
+}
+
+/* Window drag regions (the Flutter `AppWindowDragRegion`). */
+.gang-drag-region {
+  -webkit-app-region: drag;
+}
+.gang-no-drag {
+  -webkit-app-region: no-drag;
+}

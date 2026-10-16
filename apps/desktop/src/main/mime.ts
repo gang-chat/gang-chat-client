@@ -1,0 +1,46 @@
+import path from 'node:path';
+
+const mimeByExtension: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.bmp': 'image/bmp',
+  '.svg': 'image/svg+xml',
+  '.heic': 'image/heic',
+  '.ico': 'image/x-icon',
+  '.mp3': 'audio/mpeg',
+  '.m4a': 'audio/mp4',
+  '.aac': 'audio/aac',
+  '.wav': 'audio/wav',
+  '.ogg': 'audio/ogg',
+  '.opus': 'audio/opus',
+  '.flac': 'audio/flac',
+  '.webm': 'video/webm',
+  '.mp4': 'video/mp4',
+  '.mov': 'video/quicktime',
+  '.mkv': 'video/x-matroska',
+  '.pdf': 'application/pdf',
+  '.zip': 'application/zip',
+  '.txt': 'text/plain',
+  '.json': 'application/json',
+  '.csv': 'text/csv',
+  '.md': 'text/markdown',
+  '.html': 'text/html',
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xls': 'application/vnd.ms-excel',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.ppt': 'application/vnd.ms-powerpoint',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.7z': 'application/x-7z-compressed',
+  '.rar': 'application/vnd.rar',
+  '.exe': 'application/vnd.microsoft.portable-executable',
+  '.dmg': 'application/x-apple-diskimage',
+  '.apk': 'application/vnd.android.package-archive',
+};
+
+export function mimeTypeForPath(filePath: string): string | null {
+  return mimeByExtension[path.extname(filePath).toLowerCase()] ?? null;
+}
