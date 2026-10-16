@@ -205,3 +205,28 @@ Flutter。约定见 `docs/js-port-conventions.md`。本文记录各模块的移�
 - `GangScrollBehavior`：DOM 用经典滚动条（占位），不需要额外的右侧留白。
 - `WindowChromeInsets.of()`：移动端 `viewPadding.top` 分支为 0；`DotGridBackground` 用 canvas 按设备像素绘制。
 - `AnchoredPanelAnchor`：浮层内容渲染在 `OverlayHost` 中，位于两者之间的 React context 不会传入面板。
+
+### 界面层：主界面、聊天、语音频道、设置、登录（`packages/ui/src/home`、`settings`、`shell`）
+
+- 生命周期：`ViewState` 的 `initState` 在首次渲染之后运行（React effect），所以首帧先画空背景，
+  `initState` 结束时再 `setState()`；`didUpdateProps` 同理在新 props 渲染后运行，需要重置的状态
+  经 `setState` 再渲染一次。React `StrictMode` 不启用：它在开发模式下的重复挂载会让 Flutter 式的
+  一次性生命周期被提前 `dispose`。
+- `home_shell_*` 的 extension 方法表在首次构造时按属性描述符复制到 `HomeShellState` 原型上
+  （保留 getter，并避开模块循环导入），调用处仍是 `this._foo()`。
+- 布局测量：`LayoutBuilder` / `MediaQuery.sizeOf` 改为 `ResizeObserver` 和窗口尺寸 hook；通知行等
+  需要"按最小内在宽度切换宽窄布局"的地方，先隐藏渲染一次测量，再决定布局，避免 CSS 与 Flutter
+  选出不同的布局。
+- 输入框：`TextField` 的局部着色（聊天输入里的 @提及 高亮）在 `<textarea>` 上无法显示；提及的识别、
+  整体退格删除照常工作。（待办：用镜像层实现高亮。）
+- 浮层：用户/房间/歌曲/歌单名片有淡入，没有淡出；右键菜单没有 60ms 淡出。浮层只能读取
+  `OverlayHost` 以上提供的 React context（与 Flutter 中对话框只能看到 MaterialApp 以上的
+  InheritedWidget 一致）。
+- 滚动条统一用全局细滚动条样式，不再逐处设置 Flutter `RawScrollbar` 的 7px 内边距。
+- 窗口拖拽区改用 CSS `-webkit-app-region`，拖拽区内的双击不一定能传到页面。Linux 下窗口无边框，
+  登录页也显示自绘窗口按钮。
+- 仅 Android 的路径（返回手势、系统安全区、软键盘、横竖屏）在桌面端不会触发，保留分支便于对照。
+- 设置页与更新提示共用一个 `ReleaseUpdateService`（`sharedReleaseUpdateService`），
+  以便识别 electron-updater 找到的更新并走应用内下载安装。
+- 音乐盒唱片用 SVG + `element.animate()` 旋转，暂停时停在当前角度；固定高光用锥形渐变遮罩。
+- Flutter 的 `ValueKey` 改为 `data-testid`。

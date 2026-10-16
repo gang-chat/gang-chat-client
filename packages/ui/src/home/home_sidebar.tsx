@@ -249,7 +249,8 @@ function _ServerList({
         ref={controller}
         data-testid="home-sidebar-room-list"
         style={{
-          height: '100%',
+          flex: '1 1 0',
+          minHeight: 0,
           overflowX: 'hidden',
           overflowY: 'auto',
           scrollbarWidth: 'none',
