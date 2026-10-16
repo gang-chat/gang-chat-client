@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { CloseBehavior, defaultCloseBehavior } from '@gang-chat/core/app/close_behavior';
 import { userFacingErrorMessage } from '@gang-chat/core/app/error_display';
@@ -7,7 +7,7 @@ import * as member_filter from '@gang-chat/core/app/room_members_filter';
 import type { RoomOpenSnapshot } from '@gang-chat/core/app/rooms_controller';
 import { SettingsSection } from '@gang-chat/core/app/settings_shell_state';
 import * as sticker_display from '@gang-chat/core/app/sticker_display';
-import { unawaited, withTimeout } from '@gang-chat/core/lib/async';
+import { unawaited } from '@gang-chat/core/lib/async';
 import type { CurrentUser, RoomCard, RoomDetail, UserSummary } from '@gang-chat/core/protocol/models';
 import type { AndroidTaskRemovalRequest } from '@gang-chat/core/shell/android_system_service';
 import type { ReleaseDownloadCancellationToken } from '@gang-chat/core/shell/release_update_service';
@@ -26,7 +26,6 @@ import { RoomManagementResultKind, type RoomManagementResult } from './room_mana
 import { UserProfileAction } from './room_profile_card';
 import { RoomSettingsSection } from './room_settings_dialog';
 
-import { useRef } from 'react';
 
 export const HomeShellRoomActions = {
   /**
@@ -920,7 +919,3 @@ export function _CloseBehaviorDialog({ onClose }: { onClose: (result?: _ClosePro
     </DialogFrame>
   );
 }
-
-// `withTimeout` is re-exported for parity with the Dart `Future.timeout` users
-// in the sibling tables; kept referenced so the import list mirrors Dart's.
-void withTimeout;
