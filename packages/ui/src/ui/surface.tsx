@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 
 import { marginStyle, paddingStyle, type EdgeInsetsValue } from '../lib/edge_insets';
 import { SystemMouseCursors, kTouchSlop, type MouseCursor } from '../lib/mouse_cursors';
@@ -155,63 +155,77 @@ export function PressableSurface(props: PressableSurfaceProps) {
     l.onPressed?.();
   };
 
+  const hitTarget = useRef<HTMLDivElement | null>(null);
+  const detachRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => detachRef.current?.(), []);
+
+  const clearPointerTracking = () => {
+    tracking.current = null;
+    detachRef.current?.();
+    detachRef.current = null;
+  };
+
+  // Like the Dart Listener, the press is followed with raw pointer events on
+  // the window (not pointer capture), so nested surfaces each see the whole
+  // gesture exactly as they did in Flutter's hit-test path.
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     // PORT: only the primary button presses (the Flutter Listener also reacted
     // to secondary buttons, which the DOM routes to context menus instead).
     if (event.button !== 0) return;
     const l = latest.current;
     if (!l.interactive || l.loading || tracking.current != null) return;
+    const pointerId = event.pointerId;
     tracking.current = {
-      pointerId: event.pointerId,
+      pointerId,
       originX: event.clientX,
       originY: event.clientY,
       trackingTouchDrag: cancelTouchPressOnDrag && event.pointerType !== 'mouse',
       touchDragCancelled: false,
     };
-    try {
-      event.currentTarget.setPointerCapture(event.pointerId);
-    } catch {
-      // Capture is best effort (synthetic events in tests).
-    }
-    setPressed(true);
-  };
-
-  const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const t = tracking.current;
-    if (t == null || t.pointerId !== event.pointerId) return;
-    if (t.trackingTouchDrag && !t.touchDragCancelled) {
-      const dx = event.clientX - t.originX;
-      const dy = event.clientY - t.originY;
-      if (dx * dx + dy * dy > kTouchSlop * kTouchSlop) {
-        t.touchDragCancelled = true;
-        setPressed(false);
-        return;
+    const onMove = (e: PointerEvent) => {
+      const t = tracking.current;
+      if (t == null || t.pointerId !== e.pointerId) return;
+      if (t.trackingTouchDrag && !t.touchDragCancelled) {
+        const dx = e.clientX - t.originX;
+        const dy = e.clientY - t.originY;
+        if (dx * dx + dy * dy > kTouchSlop * kTouchSlop) {
+          t.touchDragCancelled = true;
+          setPressed(false);
+          return;
+        }
       }
-    }
-    if (t.touchDragCancelled) return;
-    // Keep the pressed effect for the whole hold, even if the pointer wanders
-    // outside the hit target. Whether the tap actually fires is decided at
-    // pointer-up from the release position.
+      if (t.touchDragCancelled) return;
+      // Keep the pressed effect for the whole hold, even if the pointer wanders
+      // outside the hit target. Whether the tap actually fires is decided at
+      // pointer-up from the release position.
+      setPressed(true);
+    };
+    const onUp = (e: PointerEvent) => {
+      const t = tracking.current;
+      if (t == null || t.pointerId !== e.pointerId) return;
+      const rect = hitTarget.current?.getBoundingClientRect();
+      const inside =
+        rect != null && e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
+      const shouldPress = !t.touchDragCancelled && inside;
+      clearPointerTracking();
+      setPressed(false);
+      if (shouldPress) handleTap();
+    };
+    const onCancel = (e: PointerEvent) => {
+      const t = tracking.current;
+      if (t == null || t.pointerId !== e.pointerId) return;
+      clearPointerTracking();
+      setPressed(false);
+    };
+    window.addEventListener('pointermove', onMove, true);
+    window.addEventListener('pointerup', onUp, true);
+    window.addEventListener('pointercancel', onCancel, true);
+    detachRef.current = () => {
+      window.removeEventListener('pointermove', onMove, true);
+      window.removeEventListener('pointerup', onUp, true);
+      window.removeEventListener('pointercancel', onCancel, true);
+    };
     setPressed(true);
-  };
-
-  const onPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const t = tracking.current;
-    if (t == null || t.pointerId !== event.pointerId) return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    const inside =
-      event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom;
-    const shouldPress = !t.touchDragCancelled && inside;
-    tracking.current = null;
-    setPressed(false);
-    if (shouldPress) handleTap();
-  };
-
-  const onPointerCancel = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const t = tracking.current;
-    if (t == null || t.pointerId !== event.pointerId) return;
-    tracking.current = null;
-    setPressed(false);
   };
 
   const radius = borderRadius <= 0 ? 0 : borderRadius;
@@ -245,10 +259,8 @@ export function PressableSurface(props: PressableSurfaceProps) {
       onPointerLeave={(event) => {
         if (event.pointerType === 'mouse') setHover(false);
       }}
+      ref={hitTarget}
       onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerCancel}
       style={{
         ...marginStyle(margin),
         boxSizing: 'content-box',

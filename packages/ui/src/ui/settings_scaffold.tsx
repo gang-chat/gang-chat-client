@@ -1,16 +1,7 @@
-import { createContext, useContext, useState, type ReactNode } from 'react';
-import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  useWindowDimensions,
-  type LayoutChangeEvent,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native';
+import { createContext, useContext, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 
 import { EdgeInsets, paddingStyle, type EdgeInsetsValue } from '../lib/edge_insets';
+import { Column, Expanded, Row, SizedBox, Spacer, Text } from '../lib/layout';
 import { BadgeDot } from './badge_dot';
 import { ButtonIcon } from './button';
 import { Icon, Icons, type IconData } from './icon';
@@ -61,37 +52,31 @@ export class SettingsNavigation<T> extends SettingsNavigationBase {
 
   override buildVertical(): ReactNode {
     return (
-      <View style={styles.stretchColumn}>
+      <Column crossAxisAlignment="stretch">
         {this.segments.map((segment, index) => (
-          <View key={index}>
-            <_SettingsNavTile
-              segment={segment}
-              selected={segment.value === this.value}
-              onPressed={() => this.onChanged(segment.value)}
-            />
-            <View style={{ height: 2 }} />
-          </View>
+          <Column key={index} crossAxisAlignment="stretch">
+            <_SettingsNavTile segment={segment} selected={segment.value === this.value} onPressed={() => this.onChanged(segment.value)} />
+            <SizedBox height={2} />
+          </Column>
         ))}
-      </View>
+      </Column>
     );
   }
 
   override buildHorizontal(): ReactNode {
     return (
-      <View style={{ height: 34 }}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+      <div style={{ height: 34, overflowX: 'auto', overflowY: 'hidden', scrollbarWidth: 'none' }}>
+        <Row mainAxisSize="min" gap={6} style={{ height: '100%' }}>
           {this.segments.map((segment, index) => (
-            <View key={index} style={styles.row}>
-              {index > 0 ? <View style={{ width: 6 }} /> : null}
-              <_SettingsNavPill
-                segment={segment}
-                selected={segment.value === this.value}
-                onPressed={() => this.onChanged(segment.value)}
-              />
-            </View>
+            <_SettingsNavPill
+              key={index}
+              segment={segment}
+              selected={segment.value === this.value}
+              onPressed={() => this.onChanged(segment.value)}
+            />
           ))}
-        </ScrollView>
-      </View>
+        </Row>
+      </div>
     );
   }
 }
@@ -146,32 +131,23 @@ export class SettingsTileNavigation<T> extends SettingsNavigation<T> {
 
     if (fits) {
       return (
-        <View style={[styles.row, styles.fill, { paddingHorizontal: horizontalPadding }]}>
+        <Row gap={gap} crossAxisAlignment="stretch" style={{ height: '100%', padding: `0 ${horizontalPadding}px`, boxSizing: 'border-box' }}>
           {this.segments.map((_, i) => (
-            <View key={i} style={[styles.row, styles.expanded]}>
-              {i > 0 ? <View style={{ width: gap }} /> : null}
-              <View style={styles.expanded}>{tile(i)}</View>
-            </View>
+            <Expanded key={i}>{tile(i)}</Expanded>
           ))}
-        </View>
+        </Row>
       );
     }
     // Only a handful of tiles: build them all so every section stays
     // reachable (and findable) even while scrolled out of view.
     return (
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.fill}
-        contentContainerStyle={[styles.row, { paddingHorizontal: horizontalPadding }]}
-      >
-        {this.segments.map((_, i) => (
-          <View key={i} style={styles.row}>
-            {i > 0 ? <View style={{ width: gap }} /> : null}
-            {tile(i, minTileWidth + 12)}
-          </View>
-        ))}
-      </ScrollView>
+      <div style={{ height: '100%', overflowX: 'auto', overflowY: 'hidden', scrollbarWidth: 'none' }}>
+        <Row mainAxisSize="min" gap={gap} style={{ height: '100%', padding: `0 ${horizontalPadding}px` }}>
+          {this.segments.map((_, i) => (
+            <div key={i}>{tile(i, minTileWidth + 12)}</div>
+          ))}
+        </Row>
+      </div>
     );
   }
 }
@@ -207,40 +183,34 @@ function _SettingsTile<T>({ index, segment, summary, selected, compact, width, o
       borderRadius={UiRadii.lg}
       padding={EdgeInsets.fromLTRB(12, compact ? 9 : 11, 10, compact ? 9 : 11)}
     >
-      <View style={[styles.fill, { justifyContent: 'space-between' }]}>
-        <View style={[styles.row, styles.centerRow]}>
-          <Text
-            numberOfLines={1}
-            style={[UiTypography.dot, { fontSize: 13, lineHeight: 13, color: selected ? UiColors.onInverse : UiColors.accent }]}
-          >
+      <Column mainAxisAlignment="spaceBetween" crossAxisAlignment="start" style={{ flex: '1 1 0' }}>
+        <Row>
+          <Text style={{ ...UiTypography.dot, fontSize: 13, lineHeight: 1, color: selected ? UiColors.onInverse : UiColors.accent }}>
             {String(index + 1).padStart(2, '0')}
           </Text>
-          <View style={styles.expanded} />
+          <Spacer />
           {segment.showBadge ? (
             <>
               <BadgeDot size={7} borderColor={UiColors.transparent} />
-              <View style={{ width: 6 }} />
+              <SizedBox width={6} />
             </>
           ) : null}
           {icon != null ? <Icon icon={icon} size={15} color={muted} /> : null}
-        </View>
-        <View>
-          <Text
-            numberOfLines={1}
-            style={[UiTypography.body, { color: foreground, fontSize: 13, fontWeight: '700', lineHeight: 13 * 1.25 }]}
-          >
+        </Row>
+        <Column crossAxisAlignment="start" mainAxisSize="min" style={{ alignSelf: 'stretch' }}>
+          <Text maxLines={1} style={{ ...UiTypography.body, color: foreground, fontSize: 13, fontWeight: 700, lineHeight: 1.25, maxWidth: '100%' }}>
             {segment.label}
           </Text>
           {summary != null && summary.length > 0 ? (
             <>
-              <View style={{ height: 2 }} />
-              <Text numberOfLines={1} style={[UiTypography.mono, { color: muted, fontSize: 10, lineHeight: 10 * 1.3 }]}>
+              <SizedBox height={2} />
+              <Text maxLines={1} style={{ ...UiTypography.mono, color: muted, fontSize: 10, maxWidth: '100%' }}>
                 {summary}
               </Text>
             </>
           ) : null}
-        </View>
-      </View>
+        </Column>
+      </Column>
     </PressableSurface>
   );
 }
@@ -266,30 +236,28 @@ function _SettingsNavTile<T>({ segment, selected, onPressed }: _SettingsNavItemP
       borderRadius={UiRadii.pill}
       padding={EdgeInsets.symmetric({ horizontal: 14 })}
     >
-      <View style={[styles.row, styles.centerRow, styles.fill]}>
+      <Row>
         {icon != null ? (
           <>
             <Icon icon={icon} size={17} color={selected ? UiColors.onInverse : UiColors.textMuted} />
-            <View style={{ width: 10 }} />
+            <SizedBox width={10} />
           </>
         ) : null}
-        <Text
-          numberOfLines={1}
-          style={[
-            UiTypography.body,
-            styles.expanded,
-            {
+        <Expanded>
+          <Text
+            maxLines={1}
+            style={{
+              ...UiTypography.body,
               fontSize: 13.5,
-              lineHeight: 13.5 * 1.4,
               color: selected ? UiColors.onInverse : UiColors.textSecondary,
-              fontWeight: selected ? '700' : '500',
-            },
-          ]}
-        >
-          {segment.label}
-        </Text>
+              fontWeight: selected ? 700 : 500,
+            }}
+          >
+            {segment.label}
+          </Text>
+        </Expanded>
         {segment.showBadge ? <BadgeDot size={7} borderColor={UiColors.transparent} /> : null}
-      </View>
+      </Row>
     </PressableSurface>
   );
 }
@@ -311,29 +279,26 @@ function _SettingsNavPill<T>({ segment, selected, onPressed }: _SettingsNavItemP
       borderRadius={UiRadii.pill}
       padding={EdgeInsets.symmetric({ horizontal: 14 })}
     >
-      <View style={[styles.row, styles.centerRow, styles.fill]}>
+      <Row mainAxisSize="min">
         {icon != null ? (
           <>
             <Icon icon={icon} size={15} color={selected ? UiColors.onInverse : UiColors.textMuted} />
-            <View style={{ width: 6 }} />
+            <SizedBox width={6} />
           </>
         ) : null}
         <Text
-          numberOfLines={1}
-          style={[
-            UiTypography.label,
-            { fontSize: 13, lineHeight: 13 * 1.35, color: selected ? UiColors.onInverse : UiColors.textSecondary, fontWeight: '600' },
-          ]}
+          softWrap={false}
+          style={{ ...UiTypography.label, fontSize: 13, color: selected ? UiColors.onInverse : UiColors.textSecondary, fontWeight: 600 }}
         >
           {segment.label}
         </Text>
         {segment.showBadge ? (
           <>
-            <View style={{ width: 6 }} />
+            <SizedBox width={6} />
             <BadgeDot size={7} borderColor={UiColors.transparent} />
           </>
         ) : null}
-      </View>
+      </Row>
     </PressableSurface>
   );
 }
@@ -384,6 +349,21 @@ const _twoPaneMinWidth = 720;
 const _contentTopGap = 16;
 const _horizontalPadding = 28;
 
+/** `LayoutBuilder`'s max width: the element's width, tracked with a ResizeObserver. */
+function _useLayoutWidth(ref: RefObject<HTMLElement | null>): number {
+  const [width, setWidth] = useState(() => (typeof window === 'undefined' ? 0 : window.innerWidth));
+  useLayoutEffect(() => {
+    const node = ref.current;
+    if (node == null) return;
+    setWidth(node.clientWidth);
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => setWidth(node.clientWidth));
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [ref]);
+  return width;
+}
+
 /**
  * 统一的设置类页面外壳。
  *
@@ -392,14 +372,8 @@ const _horizontalPadding = 28;
  * 标题、内容和可选的右侧操作，版式由模版统一管理。
  */
 export function SettingsScaffold(props: SettingsScaffoldProps) {
-  const window = useWindowDimensions();
-  // LayoutBuilder: the window width stands in until the first layout pass.
-  const [measuredWidth, setMeasuredWidth] = useState<number | null>(null);
-  const maxWidth = measuredWidth ?? window.width;
-  const onLayout = (event: LayoutChangeEvent) => {
-    const width = event.nativeEvent.layout.width;
-    if (width !== measuredWidth) setMeasuredWidth(width);
-  };
+  const ref = useRef<HTMLDivElement | null>(null);
+  const maxWidth = _useLayoutWidth(ref);
   const navigation = props.navigation ?? null;
   let content: ReactNode;
   if (navigation instanceof SettingsTileNavigation) {
@@ -410,9 +384,9 @@ export function SettingsScaffold(props: SettingsScaffoldProps) {
     content = _buildSinglePane(props, navigation);
   }
   return (
-    <View style={styles.scaffold} onLayout={onLayout}>
+    <div ref={ref} style={_scaffoldStyle}>
       {content}
-    </View>
+    </div>
   );
 }
 
@@ -430,87 +404,79 @@ function _buildTileLayout(props: SettingsScaffoldProps, navigation: SettingsTile
   const total = navigation.segments.length;
   const sectionMeta = props.sectionMetaOverride ?? `${String(index).padStart(2, '0')} / ${String(total).padStart(2, '0')}`;
   return (
-    <View style={styles.fill}>
-      <View
-        style={[
-          styles.row,
-          styles.centerRow,
-          {
-            paddingLeft: onBack == null ? padding : padding - 8,
-            paddingTop: compact ? 14 : 20,
-            paddingRight: padding - 4,
-          },
-        ]}
+    <Column crossAxisAlignment="stretch" style={_fillStyle}>
+      <Row
+        style={{
+          paddingLeft: onBack == null ? padding : padding - 8,
+          paddingTop: compact ? 14 : 20,
+          paddingRight: padding - 4,
+          boxSizing: 'border-box',
+        }}
       >
         {onBack != null ? (
           <>
-            <ButtonIcon
-              tooltip="返回"
-              icon={<Icon icon={Icons.arrow_back_rounded} />}
-              onPressed={onBack}
-              size={36}
-              ghost
-            />
-            <View style={{ width: 6 }} />
+            <span data-testid="settings-back-button" style={{ display: 'contents' }}>
+              <ButtonIcon tooltip="返回" icon={<Icon icon={Icons.arrow_back_rounded} />} onPressed={onBack} size={36} ghost />
+            </span>
+            <SizedBox width={6} />
           </>
         ) : null}
-        <View style={{ flexShrink: 1, minWidth: 0 }}>
-          <Text
-            numberOfLines={1}
-            style={[UiTypography.dot, { fontSize: compact ? 18 : 22, lineHeight: (compact ? 18 : 22) * 1.05, letterSpacing: 1 }]}
-          >
+        <Column crossAxisAlignment="start" mainAxisSize="min" style={{ flex: '0 1 auto', minWidth: 0 }}>
+          <Text maxLines={1} overflow="clip" style={{ ...UiTypography.dot, fontSize: compact ? 18 : 22, lineHeight: 1.05, letterSpacing: 1 }}>
             SETTINGS
           </Text>
           {showTitle ? (
             <>
-              <View style={{ height: 3 }} />
-              <Text numberOfLines={1} style={[UiTypography.label, { color: UiColors.textMuted }]}>
+              <SizedBox height={3} />
+              <Text maxLines={1} style={{ ...UiTypography.label, color: UiColors.textMuted, maxWidth: '100%' }}>
                 {title}
               </Text>
             </>
           ) : null}
-        </View>
-        <View style={{ width: 16 }} />
-        <View style={[styles.expanded, { alignItems: 'flex-end' }]}>
-          {search == null || compact ? null : <View style={{ maxWidth: 340, width: '100%' }}>{search}</View>}
-        </View>
+        </Column>
+        <SizedBox width={16} />
+        <Expanded style={{ alignItems: 'flex-end' }}>
+          {search == null || compact ? null : <div style={{ maxWidth: 340, width: '100%' }}>{search}</div>}
+        </Expanded>
         {headerAction != null ? (
           <>
-            <View style={{ width: 8 }} />
+            <SizedBox width={8} />
             {headerAction}
           </>
         ) : null}
-      </View>
+      </Row>
       {search != null && compact ? (
         <>
-          <View style={{ height: 12 }} />
-          <View style={{ paddingHorizontal: padding }}>{search}</View>
+          <SizedBox height={12} />
+          <div style={{ padding: `0 ${padding}px` }}>{search}</div>
         </>
       ) : null}
-      <View style={{ height: compact ? 14 : 18 }} />
-      <View testID="settings-side-navigation" style={{ height: compact ? 64 : 84 }}>
+      <SizedBox height={compact ? 14 : 18} />
+      <SizedBox data-testid="settings-side-navigation" height={compact ? 64 : 84}>
         {navigation.buildTiles({ compact, horizontalPadding: padding, maxWidth })}
-      </View>
-      <View
-        style={[
-          styles.row,
-          { alignItems: 'flex-end', paddingLeft: padding, paddingTop: compact ? 16 : 22, paddingRight: padding, paddingBottom: 14 },
-        ]}
+      </SizedBox>
+      <Row
+        crossAxisAlignment="end"
+        style={{ padding: `${compact ? 16 : 22}px ${padding}px 14px`, boxSizing: 'border-box' }}
       >
-        <Text numberOfLines={1} style={[compact ? UiTypography.title : UiTypography.headline, styles.expanded]}>
-          {sectionTitle}
+        <Expanded>
+          <Text maxLines={1} style={compact ? UiTypography.title : UiTypography.headline}>
+            {sectionTitle}
+          </Text>
+        </Expanded>
+        <SizedBox width={12} />
+        <Text softWrap={false} style={UiTypography.overline}>
+          {sectionMeta}
         </Text>
-        <View style={{ width: 12 }} />
-        <Text style={UiTypography.overline}>{sectionMeta}</Text>
-      </View>
+      </Row>
       {pinned != null ? (
         <>
-          <View style={{ paddingHorizontal: padding }}>{pinned}</View>
-          <View style={{ height: _contentTopGap }} />
+          <div style={{ padding: `0 ${padding}px` }}>{pinned}</div>
+          <SizedBox height={_contentTopGap} />
         </>
       ) : null}
       <_SettingsBodyInsets horizontal={padding}>{body}</_SettingsBodyInsets>
-    </View>
+    </Column>
   );
 }
 
@@ -518,53 +484,56 @@ function _buildTwoPane(props: SettingsScaffoldProps, navigation: SettingsNavigat
   const { showTitle = true, icon, iconColor = null, title, onBack = null, headerAction = null, pinned = null, body } = props;
   const sectionTitle = navigation.selectedLabel ?? title;
   return (
-    <View style={[styles.row, styles.fill, { alignItems: 'stretch' }]}>
-      <View testID="settings-side-navigation" style={styles.sideNav}>
+    <Row crossAxisAlignment="stretch" style={_fillStyle}>
+      <Column data-testid="settings-side-navigation" crossAxisAlignment="stretch" style={_sideNavStyle}>
         {showTitle ? (
           <>
-            <View style={[styles.row, styles.centerRow, { paddingHorizontal: 6 }]}>
+            <Row style={{ padding: '0 6px' }}>
               <_TitleIcon icon={icon} color={iconColor} />
-              <View style={{ width: 10 }} />
-              <Text numberOfLines={1} style={[UiTypography.title, styles.expanded]}>
-                {title}
-              </Text>
-            </View>
-            <View style={{ height: 18 }} />
+              <SizedBox width={10} />
+              <Expanded>
+                <Text maxLines={1} style={UiTypography.title}>
+                  {title}
+                </Text>
+              </Expanded>
+            </Row>
+            <SizedBox height={18} />
           </>
         ) : null}
-        <ScrollView style={styles.expanded}>{navigation.buildVertical()}</ScrollView>
+        <div style={{ flex: '1 1 0', minHeight: 0, overflowY: 'auto' }}>{navigation.buildVertical()}</div>
         {onBack != null ? (
           <>
-            <View style={{ height: 10 }} />
+            <SizedBox height={10} />
             <_BackLink onPressed={onBack} />
           </>
         ) : null}
-      </View>
-      <View style={[styles.expanded, { minWidth: 0 }]}>
-        <View style={{ height: 72 }}>
-          <View
-            style={[
-              styles.row,
-              styles.centerRow,
-              styles.fill,
-              { paddingLeft: _horizontalPadding, paddingTop: 18, paddingRight: _horizontalPadding - 4 },
-            ]}
+      </Column>
+      <Expanded>
+        <SizedBox height={72}>
+          <Row
+            style={{
+              height: '100%',
+              padding: `18px ${_horizontalPadding - 4}px 0 ${_horizontalPadding}px`,
+              boxSizing: 'border-box',
+            }}
           >
-            <Text numberOfLines={1} style={[UiTypography.headline, styles.expanded]}>
-              {sectionTitle}
-            </Text>
+            <Expanded>
+              <Text maxLines={1} style={UiTypography.headline}>
+                {sectionTitle}
+              </Text>
+            </Expanded>
             {headerAction}
-          </View>
-        </View>
+          </Row>
+        </SizedBox>
         {pinned != null ? (
           <>
-            <View style={{ paddingHorizontal: _horizontalPadding }}>{pinned}</View>
-            <View style={{ height: _contentTopGap }} />
+            <div style={{ padding: `0 ${_horizontalPadding}px` }}>{pinned}</div>
+            <SizedBox height={_contentTopGap} />
           </>
         ) : null}
         <_SettingsBodyInsets horizontal={_horizontalPadding}>{body}</_SettingsBodyInsets>
-      </View>
-    </View>
+      </Expanded>
+    </Row>
   );
 }
 
@@ -577,53 +546,51 @@ function _buildSinglePane(props: SettingsScaffoldProps, navigation: SettingsNavi
   const { onBack = null, showTitle = true, icon, iconColor = null, title, headerAction = null, pinned = null, body } = props;
   const horizontalPadding = 22;
   return (
-    <View style={styles.fill}>
-      <View
-        style={[
-          styles.row,
-          styles.centerRow,
-          {
-            height: titleBarHeight + 16 + _singlePaneHeaderContentHeight,
-            paddingLeft: horizontalPadding,
-            paddingTop: titleBarHeight + 16,
-            paddingRight: horizontalPadding,
-          },
-        ]}
+    <Column crossAxisAlignment="stretch" style={_fillStyle}>
+      <Row
+        style={{
+          height: titleBarHeight + 16 + _singlePaneHeaderContentHeight,
+          padding: `${titleBarHeight + 16}px ${horizontalPadding}px 0`,
+          boxSizing: 'border-box',
+          flexShrink: 0,
+        }}
       >
         {onBack != null ? (
           <>
             <ButtonIcon tooltip="返回" icon={<Icon icon={Icons.arrow_back} />} onPressed={onBack} size={38} />
-            <View style={{ width: 16 }} />
+            <SizedBox width={16} />
           </>
         ) : null}
         {showTitle ? (
           <>
             <Icon icon={icon} color={iconColor ?? UiColors.accent} size={19} />
-            <View style={{ width: 8 }} />
-            <Text numberOfLines={1} style={[UiTypography.headline, styles.expanded, { fontSize: 20, lineHeight: 20 * 1.25 }]}>
-              {title}
-            </Text>
+            <SizedBox width={8} />
+            <Expanded>
+              <Text maxLines={1} style={{ ...UiTypography.headline, fontSize: 20 }}>
+                {title}
+              </Text>
+            </Expanded>
           </>
         ) : (
-          <View style={styles.expanded} />
+          <Spacer />
         )}
         {headerAction}
-      </View>
+      </Row>
       {navigation != null ? (
         <>
-          <View style={{ height: _singlePaneContentTopGap }} />
-          <View style={{ paddingHorizontal: horizontalPadding }}>{navigation.buildHorizontal()}</View>
+          <SizedBox height={_singlePaneContentTopGap} />
+          <div style={{ padding: `0 ${horizontalPadding}px` }}>{navigation.buildHorizontal()}</div>
         </>
       ) : null}
       {pinned != null ? (
         <>
-          <View style={{ height: _singlePaneContentTopGap }} />
-          <View style={{ paddingHorizontal: horizontalPadding }}>{pinned}</View>
+          <SizedBox height={_singlePaneContentTopGap} />
+          <div style={{ padding: `0 ${horizontalPadding}px` }}>{pinned}</div>
         </>
       ) : null}
-      <View style={{ height: _singlePaneContentTopGap }} />
+      <SizedBox height={_singlePaneContentTopGap} />
       <_SettingsBodyInsets horizontal={horizontalPadding}>{body}</_SettingsBodyInsets>
-    </View>
+    </Column>
   );
 }
 
@@ -633,10 +600,11 @@ function _buildSinglePane(props: SettingsScaffoldProps, navigation: SettingsNavi
  */
 const _SettingsBodyInsetsContext = createContext<number | null>(null);
 
+/** Port of `_SettingsBodyInsets` (wrapped in the `Expanded` the scaffold puts around the body). */
 function _SettingsBodyInsets({ horizontal, children }: { horizontal: number; children: ReactNode }) {
   return (
     <_SettingsBodyInsetsContext.Provider value={horizontal}>
-      <View style={styles.body}>{children}</View>
+      <Expanded style={{ alignItems: 'stretch' }}>{children}</Expanded>
     </_SettingsBodyInsetsContext.Provider>
   );
 }
@@ -649,24 +617,28 @@ function _useSettingsBodyInset(fallback: number): number {
 function _TitleIcon({ icon, color }: { icon: IconData; color?: string | null }) {
   const resolved = color ?? UiColors.accent;
   return (
-    <View
+    <div
       style={{
         width: 32,
         height: 32,
+        flexShrink: 0,
         backgroundColor: withAlpha(resolved, 0.14),
         borderRadius: UiRadii.md,
+        // Container hands the Icon tight 32×32 constraints, which centre the glyph.
+        display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
       }}
     >
       <Icon icon={icon} color={resolved} size={18} />
-    </View>
+    </div>
   );
 }
 
 function _BackLink({ onPressed }: { onPressed: () => void }) {
   return (
     <PressableSurface
+      data-testid="settings-back-button"
       height={36}
       tooltip="返回"
       onPressed={onPressed}
@@ -676,11 +648,13 @@ function _BackLink({ onPressed }: { onPressed: () => void }) {
       borderRadius={UiRadii.md - 2}
       padding={EdgeInsets.symmetric({ horizontal: 10 })}
     >
-      <View testID="settings-back-button" style={[styles.row, styles.centerRow, styles.fill]}>
+      <Row>
         <Icon icon={Icons.arrow_back_rounded} size={16} color={UiColors.textSecondary} />
-        <View style={{ width: 8 }} />
-        <Text style={[UiTypography.label, { color: UiColors.textSecondary, fontSize: 13, lineHeight: 13 * 1.35 }]}>返回</Text>
-      </View>
+        <SizedBox width={8} />
+        <Text softWrap={false} style={{ ...UiTypography.label, color: UiColors.textSecondary, fontSize: 13 }}>
+          返回
+        </Text>
+      </Row>
     </PressableSurface>
   );
 }
@@ -697,8 +671,8 @@ export interface SettingsListProps {
 
   /**
    * Optional scroll physics for surfaces that need stricter edge behavior.
-   * PORT: Flutter `ScrollPhysics`; only `'clamping'` (`ClampingScrollPhysics`,
-   * no overscroll bounce) is meaningful in React Native.
+   * PORT: Flutter `ScrollPhysics`; `'clamping'` (`ClampingScrollPhysics`)
+   * keeps the scroll from chaining past its edges.
    */
   physics?: 'clamping' | null;
 }
@@ -707,21 +681,23 @@ export interface SettingsListProps {
 export function SettingsList({ children, padding = null, spacing = 14, physics = null }: SettingsListProps) {
   const inset = _useSettingsBodyInset(24);
   const resolvedPadding = padding ?? EdgeInsets.fromLTRB(inset, 0, inset, 24);
-  const items = children.filter((child) => child != null && child !== false);
   return (
-    <ScrollView
-      style={styles.expanded}
-      contentContainerStyle={paddingStyle(resolvedPadding)}
-      bounces={physics !== 'clamping'}
-      overScrollMode={physics === 'clamping' ? 'never' : 'auto'}
+    <div
+      style={{
+        flex: '1 1 0',
+        minHeight: 0,
+        overflowY: 'auto',
+        overscrollBehavior: physics === 'clamping' ? 'contain' : undefined,
+        boxSizing: 'border-box',
+        ...paddingStyle(resolvedPadding),
+      }}
     >
-      {items.map((child, index) => (
-        <View key={index}>
-          {index > 0 ? <View style={{ height: spacing }} /> : null}
+      {children.map((child, index) => (
+        <div key={index} style={{ display: 'flex', flexDirection: 'column', marginTop: index > 0 ? spacing : 0 }}>
           {child}
-        </View>
+        </div>
       ))}
-    </ScrollView>
+    </div>
   );
 }
 
@@ -744,58 +720,48 @@ export interface SettingsCardProps {
   /** 相邻内容项之间的固定间距。 */
   spacing?: number;
 
-  /** Extra style for the card (e.g. `flex: 1` when a child must fill it). */
-  style?: StyleProp<ViewStyle>;
+  /** DOM addition: outer style (e.g. `flex: 1` when an `Expanded` child must fill the card). */
+  style?: CSSProperties;
 }
 
 /** 带卡片边框与小标题的分区。内部 children 之间自动插入固定间距。 */
 export function SettingsCard({ title, titleWidget = null, children, trailing = null, danger = false, spacing = 12, style }: SettingsCardProps) {
   const items: ReactNode[] = [];
   children.forEach((child, i) => {
-    if (i > 0) items.push(<View key={`gap-${i}`} style={{ height: spacing }} />);
-    items.push(<_SettingsCardChild key={`item-${i}`}>{child}</_SettingsCardChild>);
+    if (i > 0) items.push(<SizedBox key={`gap-${i}`} height={spacing} />);
+    items.push(<_Keyed key={`item-${i}`}>{child}</_Keyed>);
   });
   return (
-    <View
-      style={[
-        styles.card,
-        {
-          backgroundColor: danger ? argb(0xff1c1418) : UiColors.card,
-          borderColor: danger ? UiColors.dangerBorder : UiColors.border,
-        },
-        style,
-      ]}
+    <Column
+      crossAxisAlignment="stretch"
+      style={{
+        backgroundColor: danger ? argb(0xff1c1418) : UiColors.card,
+        borderRadius: UiRadii.lg,
+        border: `1px solid ${danger ? UiColors.dangerBorder : UiColors.border}`,
+        // Flutter paints the DecoratedBox border over the 18/16/18/18 padding,
+        // so the content inset from the outer edge stays the same here.
+        padding: '15px 17px 17px',
+        boxSizing: 'border-box',
+        ...style,
+      }}
     >
-      <View style={[styles.row, styles.centerRow]}>
-        <View style={styles.expanded}>
-          {titleWidget ?? <Text style={[UiTypography.subtitle, { color: danger ? UiColors.danger : UiColors.text }]}>{title}</Text>}
-        </View>
+      <Row>
+        <Expanded>
+          {titleWidget ?? <Text style={{ ...UiTypography.subtitle, color: danger ? UiColors.danger : UiColors.text }}>{title}</Text>}
+        </Expanded>
         {trailing}
-      </View>
+      </Row>
       {items.length > 0 ? (
         <>
-          <View style={{ height: 14 }} />
+          <SizedBox height={14} />
           {items}
         </>
       ) : null}
-    </View>
+    </Column>
   );
 }
 
-/** Marks a [SettingsCard] child that fills the remaining height (Flutter `Expanded`). */
-const _ExpandedChildMarker = Symbol('SettingsCardExpanded');
-
-interface _ExpandedCardChild {
-  [_ExpandedChildMarker]: true;
-  child: ReactNode;
-}
-
-function _isExpandedCardChild(child: unknown): child is _ExpandedCardChild {
-  return typeof child === 'object' && child != null && _ExpandedChildMarker in child;
-}
-
-function _SettingsCardChild({ children }: { children: ReactNode }) {
-  if (_isExpandedCardChild(children)) return <View style={[styles.expanded, { minHeight: 0 }]}>{children.child}</View>;
+function _Keyed({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
@@ -824,48 +790,34 @@ export function SettingsFixedHeaderCard({
   padding = null,
 }: SettingsFixedHeaderCardProps) {
   const inset = _useSettingsBodyInset(24);
-  const expandedBody: _ExpandedCardChild = { [_ExpandedChildMarker]: true, child: body };
   return (
-    <View style={[styles.expanded, paddingStyle(padding ?? EdgeInsets.fromLTRB(inset, 0, inset, 24))]}>
-      <SettingsCard
-        title={title}
-        titleWidget={titleWidget}
-        trailing={trailing}
-        spacing={spacing}
-        style={styles.expanded}
-        // eslint-disable-next-line react/no-children-prop
-        children={[...headerChildren, expandedBody as unknown as ReactNode]}
-      />
-    </View>
+    <Column
+      crossAxisAlignment="stretch"
+      style={{ flex: '1 1 0', minHeight: 0, boxSizing: 'border-box', ...paddingStyle(padding ?? EdgeInsets.fromLTRB(inset, 0, inset, 24)) }}
+    >
+      <SettingsCard title={title} titleWidget={titleWidget} trailing={trailing} spacing={spacing} style={{ flex: '1 1 0', minHeight: 0 }}>
+        {[...headerChildren, <Expanded key="body">{body}</Expanded>]}
+      </SettingsCard>
+    </Column>
   );
 }
 
-const styles = StyleSheet.create({
-  scaffold: { flex: 1, minHeight: 0, backgroundColor: UiColors.surfaceLow },
-  fill: { flex: 1, minHeight: 0 },
-  expanded: { flex: 1, minWidth: 0 },
-  row: { flexDirection: 'row' },
-  centerRow: { alignItems: 'center' },
-  stretchColumn: { alignItems: 'stretch' },
-  body: { flex: 1, minHeight: 0 },
-  sideNav: {
-    width: _sideNavWidth,
-    backgroundColor: UiColors.background,
-    borderRightWidth: 1,
-    borderRightColor: UiColors.border,
-    paddingLeft: 12,
-    paddingTop: 18,
-    paddingRight: 12,
-    paddingBottom: 14,
-  },
-  card: {
-    borderRadius: UiRadii.lg,
-    borderWidth: 1,
-    // Flutter paints the DecoratedBox border over the 18/16/18/18 padding, so
-    // the content inset from the outer edge stays the same here.
-    paddingLeft: 17,
-    paddingTop: 15,
-    paddingRight: 17,
-    paddingBottom: 17,
-  },
-});
+const _scaffoldStyle: CSSProperties = {
+  flex: '1 1 0',
+  minWidth: 0,
+  minHeight: 0,
+  display: 'flex',
+  flexDirection: 'column',
+  backgroundColor: UiColors.surfaceLow,
+};
+
+const _fillStyle: CSSProperties = { flex: '1 1 0', minHeight: 0, minWidth: 0 };
+
+const _sideNavStyle: CSSProperties = {
+  width: _sideNavWidth,
+  flexShrink: 0,
+  backgroundColor: UiColors.background,
+  borderRight: `1px solid ${UiColors.border}`,
+  padding: '18px 12px 14px',
+  boxSizing: 'border-box',
+};
