@@ -1,0 +1,105 @@
+name: desktop-electron
+
+# Checks and packages the Electron desktop client (apps/desktop) and the
+# shared TypeScript packages. Builds are unsigned test packages uploaded as
+# workflow artifacts; the release workflow still publishes the Flutter
+# desktop builds until the Electron client replaces them.
+
+on:
+  push:
+    paths:
+      - 'apps/**'
+      - 'packages/**'
+      - 'tool/js/**'
+      - 'assets/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.base.json'
+      - 'vitest.config.ts'
+      - '.github/workflows/desktop-electron.yml'
+  pull_request:
+    paths:
+      - 'apps/**'
+      - 'packages/**'
+      - 'tool/js/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/desktop-electron.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-electron-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Mock server self-check
+        run: node tool/js/mock_server/check.mjs
+
+  package:
+    needs: [check]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            script: dist:win
+            artifact: gang-chat-electron-windows
+            files: |
+              apps/desktop/dist/*.exe
+              apps/desktop/dist/*.zip
+          - os: macos-latest
+            script: dist:mac
+            artifact: gang-chat-electron-macos
+            files: |
+              apps/desktop/dist/*.dmg
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Package (unsigned)
+        env:
+          # Test packages are unsigned; signing is configured in the release workflow.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run ${{ matrix.script }} -w @gang-chat/desktop
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.files }}
+          if-no-files-found: error
+          retention-days: 14
