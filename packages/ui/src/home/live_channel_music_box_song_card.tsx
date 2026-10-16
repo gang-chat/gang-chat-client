@@ -160,7 +160,10 @@ function _MusicBoxSongCardImpl(props: _MusicBoxSongCardProps) {
   const isBilibili = source.trim().toLowerCase() === 'bilibili';
   const canPlayNow = item != null && item.canPlayNow && item.playable && props.controller != null && props.roomId != null;
   return (
-    <div style={{ overflowY: 'auto', maxHeight: '100%', boxSizing: 'border-box' }}>
+    // SingleChildScrollView. PORT: Flutter bounded it by the hover-card
+    // overlay (the window on desktop); the card panel only has a max-height,
+    // so the bound is spelled out (window height minus the panel border).
+    <div style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 2px)', boxSizing: 'border-box' }}>
       <Column
         data-testid={
           isSearchResult ? `music-box-song-card:search:${result.source}:${result.trackId}` : `music-box-song-card:${item!.id}`

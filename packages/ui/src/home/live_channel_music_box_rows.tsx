@@ -653,6 +653,9 @@ export function _MusicBoxEmpty({ icon, message, hint, actionKey, actionLabel, on
               height={34}
               padding={EdgeInsets.symmetric({ horizontal: 13 })}
               onPressed={onAction}
+              // Under the FittedBox the button gets unbounded constraints and
+              // shrink-wraps, centred by the Column (not stretched).
+              style={{ alignSelf: 'center' }}
             >
               {actionLabel}
             </Button>
