@@ -368,6 +368,27 @@ test('an unavailable native updater falls back to the bucket listing', async () 
   expect(service.isNativeUpdate(found!)).toBe(false);
 });
 
+test('a feed without latest.yml falls back to the bucket listing', async () => {
+  const updater = new FakeUpdater();
+  updater.checkForUpdate = async () => {
+    throw new Error('Cannot find latest.yml in the latest release artifacts');
+  };
+  const client = new MockClient(async () =>
+    mockResponse('<ListBucketResult><Contents><Key>releases/GangChat_v0.5.2.exe</Key></Contents></ListBucketResult>', 200),
+  );
+  const service = new ReleaseUpdateService({ httpClient: client, updater });
+
+  const found = await service.checkForUpdate({
+    bucketUrl: 'https://os.example.test/gang-chat',
+    currentVersion: '0.5.0',
+    platform: AppUpdatePlatform.windows,
+  });
+
+  expect(found?.latestVersion).toBe('0.5.2');
+  expect(found?.asset.key).toBe('releases/GangChat_v0.5.2.exe');
+  expect(service.isNativeUpdate(found!)).toBe(false);
+});
+
 test('native download reports progress and installing quits through the updater after shutdown hooks', async () => {
   const updater = new FakeUpdater();
   const service = new ReleaseUpdateService({ updater });

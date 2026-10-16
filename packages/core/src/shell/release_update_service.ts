@@ -241,8 +241,11 @@ export class ReleaseUpdateService {
   }): Promise<AvailableAppUpdate | null> {
     const { bucketUrl, currentVersion } = opts;
     const nativeUpdater = await this._nativeUpdater(opts.platform);
-    if (nativeUpdater != null) {
-      const info = await nativeUpdater.checkForUpdate();
+    // PORT: a bucket without electron-updater's latest.yml (it only holds the
+    // installers) fails the native check; listing the installers below still
+    // finds the update, installed the way the Flutter client does.
+    const info = nativeUpdater == null ? undefined : await nativeUpdater.checkForUpdate().catch(() => undefined);
+    if (info !== undefined) {
       if (info == null || !isNewerAppVersion({ currentVersion, latestVersion: info.version })) {
         this._nativeUpdateVersion = null;
         return null;
