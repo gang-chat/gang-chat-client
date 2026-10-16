@@ -3,6 +3,7 @@ import type {
   ClipboardBridge,
   ClipboardImage,
   FileSystemBridge,
+  MediaAccessBridge,
   NotificationBridge,
   Platform,
   PlatformFile,
@@ -258,6 +259,10 @@ export function createDesktopPlatform(bridge: DesktopBridge): Platform {
   const speech: SpeechBridge = createBrowserSpeech();
 
   const invokeUpdater = <T>(op: string) => bridge.invoke(IpcChannels.updaterInvoke, op) as Promise<T>;
+  const mediaAccess: MediaAccessBridge = {
+    requestAccess: (kind) => bridge.invoke(IpcChannels.mediaAccessInvoke, 'requestAccess', kind) as Promise<boolean>,
+  };
+
   const updater: UpdaterBridge = {
     isAvailable: () => invokeUpdater<boolean>('isAvailable'),
     checkForUpdate: () => invokeUpdater<NativeUpdateInfo | null>('checkForUpdate'),
@@ -299,6 +304,7 @@ export function createDesktopPlatform(bridge: DesktopBridge): Platform {
     process,
     speech,
     updater,
+    mediaAccess,
     openExternal: (url) => bridge.invoke(IpcChannels.openExternal, url) as Promise<boolean>,
     cachedMediaUrl(url) {
       if (!/^https?:\/\//i.test(url)) return url;

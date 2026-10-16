@@ -5,6 +5,7 @@ import path from 'node:path';
 import { IpcChannels, kMediaScheme, type BootSnapshot, type HostOsName } from '../shared/ipc';
 import { registerClipboard } from './clipboard';
 import { registerFiles } from './files';
+import { registerMediaAccess } from './media_access';
 import { handleMediaProtocol, registerMediaScheme } from './media_protocol';
 import { registerNetBridge } from './net_bridge';
 import { installDisplayMediaHandler, registerScreenCapture } from './screen_capture';
@@ -173,6 +174,7 @@ app.whenReady().then(async () => {
   registerFiles();
   registerClipboard();
   registerScreenCapture();
+  registerMediaAccess();
   registerSystem();
   registerWindowIpc();
   registerUpdater(releaseBucketUrl(config));

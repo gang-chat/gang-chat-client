@@ -62,6 +62,7 @@ import { AudioDeviceRebinder, preferredLiveAudioDevices } from './audio_device_r
 import { LiveAudioDeviceService } from './audio_device_service';
 import type { AudioInputRebinder } from './audio_input_rebinder';
 import type { AudioOutputRebinder } from './audio_output_rebinder';
+import { ensureCameraAccess } from './camera_access';
 import { CameraDeviceReconciler } from './camera_device_reconciler';
 import {
   createLiveInputGain,
@@ -1908,6 +1909,8 @@ export class LiveSession extends ChangeNotifier {
     const operation = async (): Promise<boolean> => {
       const local = this._room?.localParticipant ?? null;
       if (local == null) return false;
+      // Before stopping a screen share, so a refused camera leaves it running.
+      if (enabled) await ensureCameraAccess();
       if (enabled && this._screenSharing) {
         await this._setScreenShareEnabled(false);
       }

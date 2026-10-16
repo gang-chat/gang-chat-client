@@ -16,6 +16,7 @@ import type {
   ClipboardImage,
   FileSystemBridge,
   HostOs,
+  MediaAccessBridge,
   NotificationBridge,
   Platform,
   PlatformFile,
@@ -572,6 +573,7 @@ export interface FakePlatformOptions {
   speech?: FakeSpeech | null;
   updater?: FakeUpdater | null;
   screenCapture?: ScreenCaptureBridge | null;
+  mediaAccess?: MediaAccessBridge | null;
   /** Answer of [Platform.openExternal]. */
   openExternalResult?: boolean;
 }
@@ -619,6 +621,7 @@ export function createFakePlatform(options: FakePlatformOptions = {}): FakePlatf
     process: options.process !== undefined ? options.process : isDesktop ? new FakeProcess() : null,
     speech: options.speech !== undefined ? options.speech : new FakeSpeech(),
     updater: options.updater ?? null,
+    mediaAccess: options.mediaAccess ?? null,
     openedUrls,
     openExternalResult: options.openExternalResult ?? true,
     async openExternal(url: string): Promise<boolean> {

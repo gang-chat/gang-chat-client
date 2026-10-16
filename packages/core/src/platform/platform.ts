@@ -228,6 +228,16 @@ export interface ScreenCaptureBridge {
   openPermissionSettings?(): Promise<void>;
 }
 
+/** OS-level camera / microphone access (the macOS and Windows privacy switches). */
+export interface MediaAccessBridge {
+  /**
+   * Whether capture of [kind] may start. Asks the user when they have never
+   * decided (macOS shows the system prompt), and resolves false when access
+   * is switched off.
+   */
+  requestAccess(kind: 'camera' | 'microphone'): Promise<boolean>;
+}
+
 export interface ProcessBridge {
   /** Launches an installer / helper process detached from the app. */
   spawnDetached(executable: string, args: string[]): Promise<void>;
@@ -298,6 +308,8 @@ export interface Platform {
   readonly speech: SpeechBridge | null;
   /** Native self-updater (electron-updater on desktop); absent/null elsewhere. */
   readonly updater?: UpdaterBridge | null;
+  /** OS camera / microphone access; absent where the browser asks on its own. */
+  readonly mediaAccess?: MediaAccessBridge | null;
   /** Opens a URL (http/https/mailto) with the system handler. */
   openExternal(url: string): Promise<boolean>;
   /**

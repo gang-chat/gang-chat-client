@@ -36,6 +36,7 @@ Flutter。约定见 `docs/js-port-conventions.md`。本文记录各模块的移�
   ScreenCaptureKit loopback（macOS 14.2+），更早的系统共享时没有声音。Flutter 版在
   macOS 上用自己的 ScreenCaptureKit 采集。
 - 系统朗读用 Chromium `speechSynthesis`（同样调用系统语音），不再调用 PowerShell / `say`。
+- 摄像头：开启前先经主进程向系统要摄像头权限（macOS 弹系统授权框，Windows 读隐私设置），被拒绝时提示去系统设置里打开，而不是推一个没有画面的摄像头（`live/camera_access.ts`、`main/media_access.ts`）。Flutter 版由采集插件自己弹框。
 - 屏幕共享声音会请求 Chromium 排除本应用自己的声音（`restrictOwnAudio`）。Flutter 的 Windows
   版用进程级 loopback 排除了自身进程；如果 Electron 的 loopback 不支持排除，观看者会在共享声音里
   听到其他成员的语音，需要在 Windows 上实测确认。

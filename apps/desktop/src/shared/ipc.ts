@@ -44,6 +44,9 @@ export const IpcChannels = {
   // Screen capture.
   screenInvoke: 'screen:invoke',
 
+  // OS camera / microphone access.
+  mediaAccessInvoke: 'media-access:invoke',
+
   // In-app updates (electron-updater).
   updaterInvoke: 'updater:invoke',
   updaterProgress: 'updater:progress',
