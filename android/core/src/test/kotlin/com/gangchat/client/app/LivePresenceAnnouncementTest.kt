@@ -1,5 +1,6 @@
 package com.gangchat.client.app
 
+import com.gangchat.client.protocol.UserSummary
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -31,10 +32,25 @@ class LivePresenceAnnouncementTest {
         )
     }
 
-    // 'presence announcement uses role and room display name as segments' and
-    // 'presence announcement falls back to account display name' test
-    // livePresenceAnnouncementForUser (room_display.dart) with UserSummary
-    // (protocol/models.dart); they move with room_display's port.
+    @Test
+    fun `presence announcement uses role and room display name as segments`() {
+        val announcement =
+            livePresenceAnnouncementForUser(
+                user =
+                    UserSummary(
+                        id = "user-2",
+                        username = "morgan",
+                        displayName = "Morgan Account",
+                        roomDisplayName = "房间里的 Morgan",
+                        roomRole = "admin",
+                        avatarUrl = null,
+                        defaultAvatarKey = "blue-1",
+                    ),
+                action = LivePresenceAnnouncementAction.joined,
+            )
+
+        assertEquals(listOf("管理员", "房间里的 Morgan", "进入了语音频道"), announcement.segments)
+    }
 
     @Test
     fun `presence announcement distinguishes leave from removal`() {
@@ -53,5 +69,23 @@ class LivePresenceAnnouncementTest {
 
         assertEquals("离开了语音频道", left.actionLabel)
         assertEquals("被踢出了语音频道", removed.actionLabel)
+    }
+
+    @Test
+    fun `presence announcement falls back to account display name`() {
+        val announcement =
+            livePresenceAnnouncementForUser(
+                user =
+                    UserSummary(
+                        id = "user-2",
+                        username = "morgan",
+                        displayName = "Morgan",
+                        avatarUrl = null,
+                        defaultAvatarKey = "blue-1",
+                    ),
+                action = LivePresenceAnnouncementAction.left,
+            )
+
+        assertEquals(listOf("成员", "Morgan", "离开了语音频道"), announcement.segments)
     }
 }
