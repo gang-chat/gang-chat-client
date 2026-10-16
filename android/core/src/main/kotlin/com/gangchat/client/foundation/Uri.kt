@@ -233,6 +233,9 @@ class Uri private constructor(
 
         /** Dart's `Uri.tryParse(uri)`. */
         fun tryParse(uri: String): Uri? {
+            // Dart reads a leading ':' as the end of an empty scheme and fails
+            // ("Invalid empty scheme"); the RFC 3986 regex would take it as a path.
+            if (uri.startsWith(":")) return null
             val match = rfc3986.matchEntire(uri) ?: return null
             val g = match.groups
             val scheme = g[2]?.value ?: ""
