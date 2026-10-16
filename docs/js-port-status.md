@@ -105,6 +105,40 @@ Flutter。约定见 `docs/js-port-conventions.md`。本文记录各模块的移�
   `LiveScreenSourcePickerState`）：不传或传 `undefined` 保持原值，传 `null` 清空。
 - `ArgumentError.value(delta, ...)` 改为 `Error`，文案沿用 Dart 的 `Invalid argument (delta): ...`。
 
+### 语音（`packages/core/src/live`、`packages/ui/src/live`）
+
+- LiveKit 换成官方 JS SDK `livekit-client`（`@livekit/react-native` 包装的也是它）。房间事件先转成
+  `LiveRoomEvent`（`debugHandleRoomEvent` 的入参）再交给与 Dart 一致的处理函数。完整重连时
+  `livekit-client` 先拆掉所有远端参与者、再发 `Reconnecting`，与 Flutter SDK 的顺序相反；事件按微任务
+  批量处理，`_coalesceLiveRoomEventBatch` 把 `reconnecting` 提前，并丢弃这次拆除产生的远端
+  取消发布事件，避免误报离开、误清正在观看的共享/摄像头。
+- 闭麦仍是"Option A"：采集和已发布的轨道保持不动，只把输出增益置 0。增益是挂在麦克风轨道上的
+  Web Audio `TrackProcessor`（`live_audio_platform.web.ts`）；React Native 版只能用
+  `MediaStreamTrack.enabled` 做开/关。新麦克风先采集、装好增益再发布，所以闭麦状态下不会漏出原声。
+- 远端音频需要显式播放：订阅到的音频轨道挂到隐藏的 `<audio>` 上；房间开启 `webAudioMix`，让单人
+  音量能超过 100%。输出设备用 `room.switchActiveDevice('audiooutput')`。Flutter 的
+  `lk.Hardware` 全局选择改为 `live_hardware.ts` 记录，会话跟随输出选择。
+- 换麦克风或热插拔恢复改为对现有轨道 `restartTrack`（先 exact，失败退回 ideal），不再关掉再开麦克风；
+  断线续连后的麦克风重发会重新发布同一条轨道（新建 sender 并重新协商），不重新打开设备。
+- 屏幕共享：`platform().screenCapture.selectSource(id, { audio })` 后调用一次 `getDisplayMedia`，
+  视频约束是高度上限 + 帧率上限（宽度按源比例），`contentHint` 在 60 FPS 时是 `motion`，
+  其余是 `detail`。主房间只发布视频（单层、`priority: 'high'`）；系统声音由
+  `<userId>--screen-audio` 辅助参与者在第二个 `Room` 里发布（发布的是 loopback 轨道的副本）。
+  宿主没有返回音频轨道时只共享画面。调整画质时对正在采集的轨道 `applyConstraints`，不重新弹选择器。
+  `livekit-client` 没有 Flutter 分支版的 `updatePublishedVideoTrackDimensions`，不再向 SFU 重报尺寸。
+- 设备枚举（`system_audio_devices.ts`）改用 `navigator.mediaDevices`：去掉 Chromium 的
+  `default` / `communications` 伪设备，并把它们解析成真实设备 id 作为"系统默认"；原生通道的
+  默认设备变更、拓扑变更、摄像头变更通知，改为在每次 `devicechange` 时对比前后两次设备快照得出；
+  不再有监听重试。
+- 麦克风测试仍用本地回环 `RTCPeerConnection` 的统计取电平（不依赖 Web Audio）；扬声器测试音
+  通过所选输出设备（`setSinkId`）播放。
+- 无对应能力、改为空操作的：macOS 通话结束后恢复蓝牙 A2DP 采样率、macOS 原生屏幕缩略图、Android
+  音频路由与 WebRTC 初始化（`android_audio_initialization.ts` 只保留参数）。LiveKit 信令"直连不走代理"
+  由主进程统一处理。
+- `ScreenSource.thumbnail` 由字节改为 PNG data URL 字符串（另有别名 `thumbnailDataUrl`）；
+  `LiveVideoTrack.track` 是 `livekit-client` 的 `VideoTrack`。`supportsDesktopScreenShare` 等 Dart
+  顶层 getter 改为函数。`LiveVideoTrackView` 是 `<video>` 元素（`track.attach` / `detach`、
+  `object-fit`、镜像用 `scaleX(-1)`）。
 
 ### 界面层：文本菜单、输入栏、表情包管理、头像裁剪、设置外壳（`packages/ui/src/ui`）
 
