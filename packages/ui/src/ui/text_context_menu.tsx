@@ -664,6 +664,8 @@ function _ContextMenuToolbar({ anchors, children }: { anchors: TextSelectionTool
         left: position?.left ?? 0,
         top: position?.top ?? 0,
         visibility: position == null ? 'hidden' : 'visible',
+        // Overlay layers let pointers through; the menu itself takes them.
+        pointerEvents: 'auto',
         zIndex: 1,
       }}
     >
