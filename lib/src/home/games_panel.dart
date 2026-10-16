@@ -3,15 +3,17 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:flutter_inappwebview_platform_interface/flutter_inappwebview_platform_interface.dart';
 
 import '../app/error_display.dart';
 import '../config/host_platform.dart';
 import '../protocol/api_client.dart' show ApiException, GamesTicketApi;
 import '../ui/ui.dart';
 
-/// flutter_inappwebview has no Linux implementation.
-bool get gamesPanelSupported => !HostPlatform.isLinux;
+/// Games are for desktop and the web; the app only bundles
+/// flutter_inappwebview for macOS, Windows and the web.
+bool get gamesPanelSupported =>
+    kIsWeb || HostPlatform.isMacOS || HostPlatform.isWindows;
 
 /// The lobby page of gang-games-server for one signed-in visit. The ticket
 /// rides in the fragment so it never reaches a server log; the page reads it
@@ -52,7 +54,9 @@ class GamesPanelSession {
     // Flutter.
     SchedulerBinding.instance
       ..addPostFrameCallback((_) {
-        unawaited(InAppWebViewController.disposeKeepAlive(keepAlive));
+        unawaited(
+          PlatformInAppWebViewController.static().disposeKeepAlive(keepAlive),
+        );
       })
       ..scheduleFrame();
   }
@@ -160,28 +164,30 @@ class _GamesPanelState extends State<GamesPanel> {
   Widget _buildContent() {
     final url = _url;
     if (url != null) {
-      return InAppWebView(
+      return _LobbyWebView(
         key: ValueKey(url),
-        keepAlive: widget.session._keepAlive,
-        initialUrlRequest: URLRequest(url: WebUri.uri(url)),
-        initialSettings: InAppWebViewSettings(
-          // On the web the page is an iframe; keep it from navigating or
-          // popping up over the chat app. The games inside it run in a
-          // narrower sandbox of their own, which these flags must cover.
-          iframeSandbox: {
-            Sandbox.ALLOW_SCRIPTS,
-            Sandbox.ALLOW_SAME_ORIGIN,
-            Sandbox.ALLOW_MODALS,
-            Sandbox.ALLOW_POINTER_LOCK,
-          },
-          transparentBackground: true,
-          supportZoom: false,
-          mediaPlaybackRequiresUserGesture: false,
-          allowsInlineMediaPlayback: true,
-          isInspectable: kDebugMode,
+        params: PlatformInAppWebViewWidgetCreationParams(
+          keepAlive: widget.session._keepAlive,
+          initialUrlRequest: URLRequest(url: WebUri.uri(url)),
+          initialSettings: InAppWebViewSettings(
+            // On the web the page is an iframe; keep it from navigating or
+            // popping up over the chat app. The games inside it run in a
+            // narrower sandbox of their own, which these flags must cover.
+            iframeSandbox: {
+              Sandbox.ALLOW_SCRIPTS,
+              Sandbox.ALLOW_SAME_ORIGIN,
+              Sandbox.ALLOW_MODALS,
+              Sandbox.ALLOW_POINTER_LOCK,
+            },
+            transparentBackground: true,
+            supportZoom: false,
+            mediaPlaybackRequiresUserGesture: false,
+            allowsInlineMediaPlayback: true,
+            isInspectable: kDebugMode,
+          ),
+          onReceivedError: (controller, request, error) =>
+              _handleLoadError(request, error),
         ),
-        onReceivedError: (controller, request, error) =>
-            _handleLoadError(request, error),
       );
     }
     final error = _error;
@@ -229,5 +235,30 @@ class _GamesPanelState extends State<GamesPanel> {
         ),
       ),
     );
+  }
+}
+
+/// flutter_inappwebview's InAppWebView, built straight on the platform
+/// interface: the app-facing package would pull in its Android and iOS
+/// plugins too.
+class _LobbyWebView extends StatefulWidget {
+  const _LobbyWebView({super.key, required this.params});
+
+  final PlatformInAppWebViewWidgetCreationParams params;
+
+  @override
+  State<_LobbyWebView> createState() => _LobbyWebViewState();
+}
+
+class _LobbyWebViewState extends State<_LobbyWebView> {
+  late final _platform = PlatformInAppWebViewWidget(widget.params);
+
+  @override
+  Widget build(BuildContext context) => _platform.build(context);
+
+  @override
+  void dispose() {
+    _platform.dispose();
+    super.dispose();
   }
 }
