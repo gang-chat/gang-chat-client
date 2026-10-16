@@ -65,5 +65,12 @@ Android 客户端正在从 Flutter 一比一移植为原生 Kotlin + Jetpack Com
   目前没有代码从 `RoomCard` 读这两个字段），保持原样并加了 `PORT` 注释。
 - `room_display` 里的 `\s+` 用显式字符类实现 JavaScript `\s` 的范围（含全角空格 U+3000、U+00A0），
   Java 默认的 `\s` 不包含它们。
+- `LocalPreferencesMigration.migrate()` 在 Android 上是空操作：Dart 版只在 Windows 上迁移旧的
+  ProductName 偏好；`migrateLegacyPreferences` 已完整移植并测试。
+- `storedAudioVolumeFromStorageValue` 用按 Dart `double.tryParse` 规则实现的解析（不接受 Java 的
+  `d`/`f` 后缀和十六进制浮点）。
+- `AuthSessionController` 共享的刷新 Future 改为 `Deferred`；定时刷新的错误静默丢弃，与 Dart 的
+  `catchError((_) => '')` 一致。
+- 为了让测试能像 Dart 一样继承替身，`AuthClient`、`TokenStore` 改为 `open`。
 - `RoomNotificationDateRange` 起止颠倒时抛 `IllegalArgumentException`，消息文字与 Dart 的
   `ArgumentError.value` 略有不同。
