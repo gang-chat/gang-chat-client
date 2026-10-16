@@ -22,7 +22,8 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
-class AuthClient(
+/** Open like the Dart class, which tests subclass to fake single requests. */
+open class AuthClient(
     val baseUrl: String,
     val userAgent: String? = null,
     httpClient: HttpClient? = null,
@@ -38,7 +39,7 @@ class AuthClient(
         environmentProxyClientFactory ?: ::createEnvironmentProxyAuthHttpClient
     private var _environmentProxyClient: HttpClient? = null
 
-    suspend fun register(
+    open suspend fun register(
         username: String,
         email: String,
         password: String,
@@ -54,10 +55,10 @@ class AuthClient(
             ),
         )
 
-    suspend fun login(login: String, password: String): AuthSession =
+    open suspend fun login(login: String, password: String): AuthSession =
         _postAuth("/auth/login", linkedMapOf("login" to login, "password" to password))
 
-    suspend fun isUsernameAvailable(username: String): Boolean {
+    open suspend fun isUsernameAvailable(username: String): Boolean {
         val uri =
             _uri(
                 "/auth/username-availability",
@@ -71,7 +72,7 @@ class AuthClient(
         return body["available"] as Boolean? ?: false
     }
 
-    suspend fun isEmailAvailable(email: String): Boolean {
+    open suspend fun isEmailAvailable(email: String): Boolean {
         val uri =
             _uri(
                 "/auth/email-availability",
@@ -85,7 +86,7 @@ class AuthClient(
         return body["available"] as Boolean? ?: false
     }
 
-    suspend fun inspectEmailVerification(
+    open suspend fun inspectEmailVerification(
         email: String,
         accessToken: String? = null,
     ): EmailVerificationInspection {
@@ -103,7 +104,7 @@ class AuthClient(
         return EmailVerificationInspection.fromJson(_jsonMap(decodeJsonBody(response)!!))
     }
 
-    suspend fun startEmailVerification(
+    open suspend fun startEmailVerification(
         email: String,
         accessToken: String? = null,
     ): EmailVerificationChallenge {
@@ -121,7 +122,7 @@ class AuthClient(
         return EmailVerificationChallenge.fromJson(_jsonMap(decodeJsonBody(response)!!))
     }
 
-    suspend fun resendEmailVerificationCode(challengeId: String): EmailVerificationChallenge {
+    open suspend fun resendEmailVerificationCode(challengeId: String): EmailVerificationChallenge {
         val response =
             _postAuthWithHandshakeRetry(
                 "/auth/email-verification/resend",
@@ -131,7 +132,7 @@ class AuthClient(
         return EmailVerificationChallenge.fromJson(_jsonMap(decodeJsonBody(response)!!))
     }
 
-    suspend fun verifyEmailVerificationCode(
+    open suspend fun verifyEmailVerificationCode(
         challengeId: String,
         code: String,
     ): String {
@@ -145,10 +146,10 @@ class AuthClient(
         return body["verification_token"] as String
     }
 
-    suspend fun refresh(refreshToken: String): AuthSession =
+    open suspend fun refresh(refreshToken: String): AuthSession =
         _postAuth("/auth/refresh", mapOf("refresh_token" to refreshToken))
 
-    suspend fun logout(accessToken: String? = null, refreshToken: String? = null) {
+    open suspend fun logout(accessToken: String? = null, refreshToken: String? = null) {
         val response =
             _httpClient.post(
                 _uri("/auth/logout"),
@@ -158,7 +159,7 @@ class AuthClient(
         _throwIfFailed(response)
     }
 
-    suspend fun me(accessToken: String): CurrentUser {
+    open suspend fun me(accessToken: String): CurrentUser {
         val response =
             _httpClient.get(
                 _uri("/me"),
@@ -168,7 +169,7 @@ class AuthClient(
         return CurrentUser.fromJson(_jsonMap(decodeJsonBody(response)!!))
     }
 
-    suspend fun listSessions(accessToken: String): List<UserSession> {
+    open suspend fun listSessions(accessToken: String): List<UserSession> {
         val response =
             _httpClient.get(
                 _uri("/auth/sessions"),
@@ -179,7 +180,7 @@ class AuthClient(
         return decoded.map { UserSession.fromJson(_jsonMap(it)) }
     }
 
-    suspend fun revokeSession(
+    open suspend fun revokeSession(
         accessToken: String,
         sessionId: String,
     ) {
@@ -191,7 +192,7 @@ class AuthClient(
         _throwIfFailed(response)
     }
 
-    suspend fun changePassword(
+    open suspend fun changePassword(
         accessToken: String,
         currentPassword: String,
         newPassword: String,
@@ -213,7 +214,7 @@ class AuthClient(
         _throwIfFailed(response)
     }
 
-    suspend fun startPasswordReset(login: String): PasswordResetChallenge {
+    open suspend fun startPasswordReset(login: String): PasswordResetChallenge {
         val response =
             _postAuthWithHandshakeRetry(
                 "/auth/password-reset/start",
@@ -223,7 +224,7 @@ class AuthClient(
         return PasswordResetChallenge.fromJson(_jsonMap(decodeJsonBody(response)!!))
     }
 
-    suspend fun inspectPasswordReset(login: String): PasswordResetInspection {
+    open suspend fun inspectPasswordReset(login: String): PasswordResetInspection {
         val response =
             _postAuthWithHandshakeRetry(
                 "/auth/password-reset/inspect",
@@ -233,7 +234,7 @@ class AuthClient(
         return PasswordResetInspection.fromJson(_jsonMap(decodeJsonBody(response)!!))
     }
 
-    suspend fun resendPasswordResetCode(challengeId: String): PasswordResetChallenge {
+    open suspend fun resendPasswordResetCode(challengeId: String): PasswordResetChallenge {
         val response =
             _postAuthWithHandshakeRetry(
                 "/auth/password-reset/resend",
@@ -243,7 +244,7 @@ class AuthClient(
         return PasswordResetChallenge.fromJson(_jsonMap(decodeJsonBody(response)!!))
     }
 
-    suspend fun verifyPasswordResetCode(
+    open suspend fun verifyPasswordResetCode(
         challengeId: String,
         code: String,
     ): String {
@@ -257,7 +258,7 @@ class AuthClient(
         return body["reset_token"] as String
     }
 
-    suspend fun completePasswordReset(
+    open suspend fun completePasswordReset(
         resetToken: String,
         newPassword: String,
     ) {
@@ -269,7 +270,7 @@ class AuthClient(
         _throwIfFailed(response)
     }
 
-    suspend fun claimPasswordResetForSession(
+    open suspend fun claimPasswordResetForSession(
         accessToken: String,
         resetToken: String,
     ) {
@@ -349,7 +350,7 @@ class AuthClient(
         }
     }
 
-    fun close() {
+    open fun close() {
         _httpClient.close()
         val environmentProxyClient = _environmentProxyClient
         if (environmentProxyClient != null &&

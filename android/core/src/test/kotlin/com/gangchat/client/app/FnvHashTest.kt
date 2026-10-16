@@ -32,6 +32,17 @@ class FnvHashTest {
         }
     }
 
-    // 'music preview cache keys are unchanged' tests musicTrackPreviewCacheKey
-    // from music_track_preview.dart; it moves with that file's port.
+    @Test
+    fun `music preview cache keys are unchanged`() {
+        assertEquals(
+            "5335af98ca736eff",
+            musicTrackPreviewCacheKey("netease", "1901371647"),
+        )
+        assertEquals(
+            "70491d7ea7d1c24f",
+            musicTrackPreviewCacheKey("bilibili", "BV1xx411c7mD"),
+        )
+        assertEquals("2f63bd4c8601b7df", musicTrackPreviewCacheKey("", ""))
+        assertEquals("604c8e206fcf16c9", musicTrackPreviewCacheKey("tencent", "歌曲 id"))
+    }
 }
