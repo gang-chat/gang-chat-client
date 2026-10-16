@@ -1,0 +1,13 @@
+{
+  "name": "@gang-chat/core",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Platform-agnostic Gang Chat logic: protocol, auth, app controllers and the LiveKit session. No React, no DOM-only or Electron-only APIs.",
+  "type": "module",
+  "devDependencies": {
+    "livekit-client": "2.22.3"
+  },
+  "peerDependencies": {
+    "livekit-client": "^2.22.3"
+  }
+}

@@ -49,3 +49,9 @@ app.*.map.json
 *.p12
 *.pfx
 AuthKey_*.p8
+
+# TypeScript clients (npm workspaces under apps/ and packages/)
+node_modules/
+/apps/desktop/out/
+/apps/desktop/dist/
+*.tsbuildinfo

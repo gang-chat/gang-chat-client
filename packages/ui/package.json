@@ -1,0 +1,20 @@
+{
+  "name": "@gang-chat/ui",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Gang Chat UI written with React Native primitives. Electron renders it through react-native-web; a React Native app renders it natively.",
+  "type": "module",
+  "dependencies": {
+    "@gang-chat/core": "1.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.2",
+    "react": "19.2.0",
+    "react-native": "0.82.1",
+    "react-native-web": "0.21.3"
+  },
+  "peerDependencies": {
+    "react": "^19.1.0",
+    "react-native": "*"
+  }
+}

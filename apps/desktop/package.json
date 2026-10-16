@@ -1,0 +1,34 @@
+{
+  "name": "@gang-chat/desktop",
+  "productName": "Gang Chat",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Gang Chat desktop client for Windows and macOS.",
+  "author": "Gang Chat",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "dist:win": "electron-vite build && electron-builder --win --publish never",
+    "dist:mac": "electron-vite build && electron-builder --mac --publish never",
+    "dist:dir": "electron-vite build && electron-builder --dir --publish never"
+  },
+  "devDependencies": {
+    "@gang-chat/core": "1.0.0",
+    "@gang-chat/ui": "1.0.0",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.2",
+    "@vitejs/plugin-react": "5.1.4",
+    "electron": "43.7.11",
+    "electron-builder": "26.0.12",
+    "electron-vite": "5.0.0",
+    "livekit-client": "2.22.3",
+    "material-icons": "1.13.14",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-native-web": "0.21.3",
+    "vite": "7.3.7"
+  }
+}
