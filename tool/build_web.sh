@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Builds the web client for https://ky-z.com/gang-chat/app/ into build/web.
+# Builds the web client (apps/web: the shared React UI, like the Electron
+# desktop app) for https://ky-z.com/gang-chat/app/ into build/web.
 #
 # The app is served from the same origin as the API
 # (https://ky-z.com/gang-chat/api/v1), so it needs no CORS setup and inherits
@@ -11,7 +12,10 @@
 #   GANG_WEB_BASE_HREF=/staging/ tool/build_web.sh
 #   GANG_CHAT_VERSION=1.2.3 tool/build_web.sh   # version shown in Settings
 #
-# Extra arguments are passed through to `flutter build web`.
+# GANG_API_BASE_URL / GANG_ASSET_BASE_URL / GANG_RELEASE_BUCKET_URL override
+# assets/config/app_config.json, and GANG_CHAT_RELEASED_AT sets the release
+# time shown in Settings (the release workflow sets both version variables).
+# Extra arguments are passed through to `vite build`.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -24,25 +28,15 @@ case "$base_href" in
     exit 1
     ;;
 esac
+export GANG_WEB_BASE_HREF="$base_href"
 
-defines=()
-if [ -n "${GANG_CHAT_VERSION:-}" ]; then
-  defines+=("--dart-define=GANG_CHAT_VERSION=$GANG_CHAT_VERSION")
+# Install the npm workspaces once; CI runs `npm ci` itself first.
+if [ ! -f node_modules/.package-lock.json ]; then
+  npm ci
 fi
 
-tool/pub.sh get
-
-# --no-web-resources-cdn bundles CanvasKit instead of loading it from
-# www.gstatic.com, which is blocked in mainland China.
-flutter build web \
-  --release \
-  --no-web-resources-cdn \
-  --base-href "$base_href" \
-  ${defines[@]+"${defines[@]}"} \
-  "$@"
-
-# Host the Chinese/emoji fallback fonts next to the app instead of loading
-# them from fonts.gstatic.com, which mainland China blocks.
-dart tool/mirror_web_fonts.dart build/web
+# Fonts, icons and the Material icon font are bundled into build/web/assets,
+# so the page loads nothing from Google's CDNs (blocked in mainland China).
+npm run build -w @gang-chat/web -- "$@"
 
 echo "Built build/web for base href $base_href"

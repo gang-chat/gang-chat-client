@@ -1,16 +1,19 @@
 {
   "name": "gang-chat-js",
   "private": true,
-  "description": "Gang Chat TypeScript clients: the Electron desktop app plus the shared core and UI packages a future React Native mobile app reuses.",
+  "description": "Gang Chat TypeScript clients: the Electron desktop app and the web app, plus the shared core and UI packages a future React Native mobile app reuses.",
   "workspaces": [
     "packages/core",
     "packages/ui",
-    "apps/desktop"
+    "apps/desktop",
+    "apps/web"
   ],
   "scripts": {
     "dev": "npm run dev -w @gang-chat/desktop",
+    "dev:web": "npm run dev -w @gang-chat/web",
     "build": "npm run build -w @gang-chat/desktop",
-    "typecheck": "tsc --noEmit -p packages/core && tsc --noEmit -p packages/ui && npm run typecheck -w @gang-chat/desktop",
+    "build:web": "npm run build -w @gang-chat/web",
+    "typecheck": "tsc --noEmit -p packages/core && tsc --noEmit -p packages/ui && npm run typecheck -w @gang-chat/desktop && npm run typecheck -w @gang-chat/web",
     "test": "vitest run"
   },
   "devDependencies": {

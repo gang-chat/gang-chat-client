@@ -1,7 +1,7 @@
 # TypeScript / Electron 移植状态
 
-桌面端（Windows、macOS）从 Flutter 一比一移植到 Electron + React；Android 暂时保持
-Flutter。约定见 `docs/js-port-conventions.md`。本文记录各模块的移植状态，以及与 Flutter
+桌面端（Windows、macOS）从 Flutter 一比一移植到 Electron + React，Web 版用同一套 React
+界面；Android 暂时保持 Flutter。约定见 `docs/js-port-conventions.md`。本文记录各模块的移植状态，以及与 Flutter
 实现有意不同的地方（代码里以 `// PORT:` 注释标出）。
 
 ## 架构
@@ -11,6 +11,7 @@ Flutter。约定见 `docs/js-port-conventions.md`。本文记录各模块的移�
 | 逻辑层 | `packages/core` | 协议、鉴权、业务控制器、LiveKit 会话（`livekit-client`）、平台服务。平台无关，未来 React Native 移动端直接复用 |
 | 界面层 | `packages/ui` | React DOM 组件，按 Flutter Widget 一比一移植 |
 | 桌面壳 | `apps/desktop` | Electron main / preload / renderer；实现 `Platform` 接口 |
+| Web 壳 | `apps/web` | Vite 页面；用浏览器 API 实现 `Platform` 接口，部署在 `https://ky-z.com/gang-chat/app/` |
 | 联调用模拟服务端 | `tool/js/mock_server` | 本地模拟 `/api/v1`，用于无法连接真实服务器时的冒烟测试 |
 
 ## 与 Flutter 实现的差异
@@ -42,6 +43,29 @@ Flutter。约定见 `docs/js-port-conventions.md`。本文记录各模块的移�
   听到其他成员的语音，需要在 Windows 上实测确认。
 - LiveKit 连接：Flutter 版对 LiveKit 主机强制直连。桌面端默认整个会话直连（不读系统代理），
   只有设置了 `http(s)_proxy` 环境变量时，LiveKit 主机（加入语音时才知道）会经过该代理。
+
+### Web 壳（`apps/web`）
+
+替换 Flutter Web 版（`docs/web-spike.md`），同源部署、同一部署脚本和发版任务。`os` 为
+`web`，共享代码里原有的 `kIsWeb` 分支照旧生效（无窗口/托盘/标题栏按钮、无应用内更新、
+屏幕共享用浏览器自己的选择框、上传/下载走内存）。
+
+- 存储与 Flutter Web 版同格式：偏好设置写 `localStorage` 的 `flutter.<键>`（JSON），刷新令牌按
+  `flutter_secure_storage_web` 的格式加密写在 `FlutterSecureStorage.<键>`。同一域名下从 Flutter
+  版切过来不用重新登录，设置也保留（`apps/web/test/web_storage.test.ts`）。
+- HTTP 用 `fetch`：响应流式读取（SSE、下载进度）；请求体先收集完整再发送（与 Flutter 的
+  `BrowserClient` 相同），所以上传进度会先走到 100% 再等服务器响应。
+- 键盘粘贴：页面级 `paste` 监听（`packages/ui/src/shell/browser_paste_listener.ts`，移植自
+  `setBrowserPasteHandler`）直接从粘贴事件取文件和图片，不读异步剪贴板，因此不会弹剪贴板权限；
+  文字粘贴交给浏览器。右键菜单的“粘贴”仍走 `navigator.clipboard`（可能弹一次权限）。
+- 文件：选择用 `<input type="file">`，保存交给浏览器下载；共享代码里少量按路径读写的缓存
+  （表情包列表、临时文件）落在页面内存里，刷新即清空，上限 64MB。
+- 语音消息：录音结果是 `blob:` URL（与 `record` 插件的 Web 实现相同）；不支持 AAC 录音的
+  浏览器（Firefox）录 WAV。
+- Flutter 版可能注册过 `flutter_service_worker.js`：新构建在同名路径放了一个只做清理的
+  Service Worker，浏览器更新到它时删除 Flutter 的缓存、注销自己并刷新页面。
+- 体积：JS 2.3MB（gzip 0.62MB），没有 CanvasKit，中文/emoji 用系统字体，不再需要
+  `tool/mirror_web_fonts.dart`。
 
 ### 平台服务（`packages/core/src/shell`）
 

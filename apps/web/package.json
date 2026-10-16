@@ -1,0 +1,24 @@
+{
+  "name": "@gang-chat/web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Gang Chat web client: the shared React UI in the browser, served from https://ky-z.com/gang-chat/app/.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@gang-chat/core": "1.0.0",
+    "@gang-chat/ui": "1.0.0",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.2",
+    "@vitejs/plugin-react": "5.1.4",
+    "livekit-client": "2.22.3",
+    "material-icons": "1.13.14",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  }
+}

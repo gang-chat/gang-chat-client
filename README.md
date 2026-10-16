@@ -6,8 +6,9 @@ Gang Chat 是一个使用 Flutter 构建的跨平台房间聊天客户端，面�
 
 > 本 README 以当前 `master` 分支的实际实现为准。仓库中虽然保留了 Linux、iOS 和 Web 的 Flutter 平台目录，但当前自动发布和主要回归范围是 Windows、macOS 与 Android。
 
-> **Electron 桌面端（移植中）**：Windows / macOS 客户端正在一比一移植到 Electron + React，
-> 代码在 `apps/desktop`、`packages/core`、`packages/ui`，说明见 [`apps/desktop/README.md`](apps/desktop/README.md)。
+> **Electron 桌面端与 React Web 版**：Windows / macOS 客户端一比一移植到 Electron + React，
+> Web 版（`apps/web`）用同一套 React 界面，代码在 `apps/desktop`、`apps/web`、`packages/core`、
+> `packages/ui`，说明见 [`apps/desktop/README.md`](apps/desktop/README.md) 和 [`docs/web-spike.md`](docs/web-spike.md)。
 > Android 暂时保持 Flutter。
 
 ## 目录

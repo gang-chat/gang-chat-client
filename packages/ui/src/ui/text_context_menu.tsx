@@ -171,13 +171,20 @@ export interface PasteTextIntentActionsProps {
  * Port of `Actions(actions: {PasteTextIntent: action}, child: …)`.
  *
  * Both the keyboard paste (Cmd/Ctrl+V — the DOM `paste` event) and the
- * context-menu 粘贴 of any field below run through [action]. The wrapper is
+ * context-menu 粘贴 of any field below run through [action]; on the web only
+ * the context-menu one does, as in the Flutter web build. The wrapper is
  * `display: contents`, so it does not take part in layout.
  */
 export function PasteTextIntentActions({ action, canPasteNonText = null, children }: PasteTextIntentActionsProps) {
   const value = useMemo(() => (action == null ? null : { action, canPasteNonText }), [action, canPasteNonText]);
   const onPaste = (event: ReactClipboardEvent<HTMLDivElement>) => {
     if (action == null || event.defaultPrevented) return;
+    // Like Flutter web, a browser's keyboard paste goes straight into the
+    // field: pasted files were already taken from the event by the page's
+    // paste listener (`browser_paste_listener.ts`), and asking the async
+    // clipboard for an image here would prompt for clipboard permission on
+    // every paste. The context-menu 粘贴 still runs [action].
+    if (HostPlatform.isWeb) return;
     const field = _editableTarget(event.target, event.currentTarget);
     if (field == null || field.readOnly || field.disabled) return;
     // The override decides asynchronously whether it consumed the paste, so

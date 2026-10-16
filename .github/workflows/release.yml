@@ -62,8 +62,8 @@ jobs:
           echo "released_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
           echo "Resolved version: $VERSION"
 
-  # Desktop releases are the Electron client (apps/desktop). Android and the
-  # web build below stay on Flutter.
+  # Desktop releases are the Electron client (apps/desktop) and the web
+  # deploy below is the React web client (apps/web); Android stays on Flutter.
   build-macos:
     runs-on: macos-latest
     needs: [prepare]
@@ -589,28 +589,24 @@ jobs:
         if: steps.web_deploy.outputs.enabled == 'true'
         uses: actions/checkout@v4
 
-      - name: Setup Flutter
+      - name: Setup Node
         if: steps.web_deploy.outputs.enabled == 'true'
-        uses: subosito/flutter-action@v2
+        uses: actions/setup-node@v4
         with:
-          channel: stable
-          flutter-version: '3.44.0'
-          cache: true
+          node-version: '22'
+          cache: npm
 
-      - name: Get dependencies
+      - name: Install dependencies
         if: steps.web_deploy.outputs.enabled == 'true'
-        run: tool/pub.sh get
-
-      - name: Update release metadata
-        if: steps.web_deploy.outputs.enabled == 'true'
-        run: |
-          dart tool/update_release_metadata.dart \
-            --version "${{ needs.prepare.outputs.version }}" \
-            --released-at "${{ needs.prepare.outputs.released_at }}"
+        run: npm ci
 
       - name: Build web
         if: steps.web_deploy.outputs.enabled == 'true'
         shell: bash
+        env:
+          # Shown in Settings → 关于Gang Chat, like the desktop builds.
+          GANG_CHAT_VERSION: ${{ needs.prepare.outputs.version }}
+          GANG_CHAT_RELEASED_AT: ${{ needs.prepare.outputs.released_at }}
         run: tool/build_web.sh
 
       - name: Configure SSH

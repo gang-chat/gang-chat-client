@@ -1,8 +1,9 @@
 name: desktop-electron
 
-# Checks and packages the Electron desktop client (apps/desktop) and the
-# shared TypeScript packages. Builds are unsigned test packages uploaded as
-# workflow artifacts; release.yml publishes the signed release builds.
+# Checks and packages the Electron desktop client (apps/desktop), builds the
+# web client (apps/web) and checks the shared TypeScript packages. Desktop
+# builds are unsigned test packages uploaded as workflow artifacts; release.yml
+# publishes the signed release builds and deploys the web client.
 
 on:
   push:
@@ -10,6 +11,7 @@ on:
       - 'apps/**'
       - 'packages/**'
       - 'tool/js/**'
+      - 'tool/build_web.sh'
       - 'assets/**'
       - 'package.json'
       - 'package-lock.json'
@@ -57,6 +59,9 @@ jobs:
 
       - name: Mock server self-check
         run: node tool/js/mock_server/check.mjs
+
+      - name: Build web
+        run: tool/build_web.sh
 
   package:
     needs: [check]
