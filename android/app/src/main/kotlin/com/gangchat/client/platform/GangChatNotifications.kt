@@ -1,4 +1,4 @@
-package com.gangchat.client
+package com.gangchat.client.platform
 
 import android.Manifest
 import android.app.Notification
@@ -12,15 +12,21 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import com.gangchat.client.MainActivity
 
+/**
+ * Notification channels and notifications. Channel ids, notification ids,
+ * request codes and intent extras are the Flutter build's, so notifications
+ * posted before an in-place upgrade still route correctly afterwards.
+ */
 object GangChatNotifications {
     const val backgroundChannelId = "gang_chat_background"
     const val messageChannelId = "gang_chat_messages"
     const val updateChannelId = "gang_chat_updates"
     const val backgroundNotificationId = 1001
-    private const val summaryNotificationId = 1002
-    private const val updateReadyNotificationId = 1003
-    private const val messageNotificationIdBase = 20_000
+    const val summaryNotificationId = 1002
+    const val updateReadyNotificationId = 1003
+    const val messageNotificationIdBase = 20_000
     private const val messageGroup = "gang_chat_room_messages"
     private const val lastMessageIdPrefix = "last_notified_message_id:"
 
@@ -124,10 +130,7 @@ object GangChatNotifications {
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
                 .build()
-        NotificationManagerCompat.from(context).notify(
-            updateReadyNotificationId,
-            notification,
-        )
+        notify(context, updateReadyNotificationId, notification)
         return true
     }
 
@@ -178,8 +181,7 @@ object GangChatNotifications {
                 .setNumber(unreadCount.coerceAtLeast(1))
                 .setBadgeIconType(NotificationCompat.BADGE_ICON_SMALL)
                 .build()
-        NotificationManagerCompat.from(context)
-            .notify(roomNotificationId(roomId), notification)
+        notify(context, roomNotificationId(roomId), notification)
         syncBadge(context, unreadCount)
     }
 
@@ -214,7 +216,7 @@ object GangChatNotifications {
                 .setBadgeIconType(NotificationCompat.BADGE_ICON_SMALL)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .build()
-        manager.notify(summaryNotificationId, summary)
+        notify(context, summaryNotificationId, summary)
     }
 
     fun cancelMessages(context: Context) {
@@ -222,7 +224,15 @@ object GangChatNotifications {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val systemManager = context.getSystemService(NotificationManager::class.java)
             systemManager.activeNotifications
-                .filter { it.notification.channelId == messageChannelId }
+                .filter {
+                    // Channels exist from Android 8; before that the message
+                    // notifications are recognised by their group.
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        it.notification.channelId == messageChannelId
+                    } else {
+                        NotificationCompat.getGroup(it.notification) == messageGroup
+                    }
+                }
                 .forEach { manager.cancel(it.id) }
         } else {
             manager.cancel(summaryNotificationId)
@@ -237,7 +247,7 @@ object GangChatNotifications {
         if (!preferenceEnabled) return false
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
-                PackageManager.PERMISSION_GRANTED
+            PackageManager.PERMISSION_GRANTED
         ) {
             return false
         }
@@ -248,7 +258,7 @@ object GangChatNotifications {
         ensureChannels(context)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
-                PackageManager.PERMISSION_GRANTED
+            PackageManager.PERMISSION_GRANTED
         ) {
             return false
         }
@@ -264,7 +274,7 @@ object GangChatNotifications {
         return true
     }
 
-    private fun roomNotificationId(roomId: String): Int =
+    fun roomNotificationId(roomId: String): Int =
         messageNotificationIdBase + ((roomId.hashCode() and Int.MAX_VALUE) % 100_000)
 
     @Synchronized
@@ -284,6 +294,19 @@ object GangChatNotifications {
         if (preferences.getString(key, null) == cleanMessageId) return false
         preferences.edit().putString(key, cleanMessageId).apply()
         return true
+    }
+
+    /**
+     * Posts [notification]. The callers above have already checked the
+     * notification permission (the Flutter host did the same without the
+     * lint-required explicit check).
+     */
+    private fun notify(context: Context, id: Int, notification: Notification) {
+        try {
+            NotificationManagerCompat.from(context).notify(id, notification)
+        } catch (_: SecurityException) {
+            // The permission was revoked between the check and the post.
+        }
     }
 
     private fun pendingIntentFlags(): Int =
