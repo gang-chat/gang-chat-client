@@ -15,6 +15,7 @@ class _RoomHeader extends StatelessWidget {
     required this.onLivePressed,
     required this.onMembersPressed,
     required this.onSettingsPressed,
+    this.onGamesPressed,
   });
 
   final VoidCallback? onNavigateBack;
@@ -30,6 +31,7 @@ class _RoomHeader extends StatelessWidget {
   final VoidCallback onLivePressed;
   final VoidCallback onMembersPressed;
   final VoidCallback onSettingsPressed;
+  final VoidCallback? onGamesPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -60,6 +62,10 @@ class _RoomHeader extends StatelessWidget {
                 onPressed: onLivePressed,
               ),
             ),
+            if (onGamesPressed != null) ...[
+              const SizedBox(width: 10),
+              _RoomHeaderGamesButton(onPressed: onGamesPressed!),
+            ],
             const SizedBox(width: 10),
             _RoomHeaderActions(
               hasPendingJoinRequests: hasPendingJoinRequests,
@@ -511,6 +517,45 @@ class _LiveHeaderAvatarPreview extends StatelessWidget {
     );
   }
 }
+
+/// A tile as tall as the voice card, so the header keeps one height.
+class _RoomHeaderGamesButton extends StatelessWidget {
+  const _RoomHeaderGamesButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return PressableSurface(
+      key: const ValueKey('chat-header-games-button'),
+      width: _headerGamesButtonWidth,
+      height: _liveHeaderCardHeight,
+      borderRadius: UiRadii.md,
+      tooltip: '小游戏',
+      padding: EdgeInsets.zero,
+      onPressed: onPressed,
+      backgroundColor: UiColors.surface,
+      borderColor: UiColors.border,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(
+            Icons.sports_esports_outlined,
+            size: 20,
+            color: UiColors.textSecondary,
+          ),
+          const SizedBox(height: 5),
+          Text(
+            '游戏',
+            style: UiTypography.label.copyWith(color: UiColors.textSecondary),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+const _headerGamesButtonWidth = 56.0;
 
 class _RoomHeaderActions extends StatelessWidget {
   const _RoomHeaderActions({

@@ -1,4 +1,7 @@
 PODS:
+  - flutter_inappwebview_macos (0.0.1):
+    - FlutterMacOS
+    - OrderedSet (~> 6.0.3)
   - flutter_webrtc (1.4.0):
     - FlutterMacOS
     - WebRTC-SDK (= 144.7559.01)
@@ -7,10 +10,12 @@ PODS:
     - flutter_webrtc
     - FlutterMacOS
     - WebRTC-SDK (= 144.7559.01)
+  - OrderedSet (6.0.3)
   - Sparkle (2.9.6)
   - WebRTC-SDK (144.7559.01)
 
 DEPENDENCIES:
+  - flutter_inappwebview_macos (from `Flutter/ephemeral/.symlinks/plugins/flutter_inappwebview_macos/macos`)
   - flutter_webrtc (from `Flutter/ephemeral/.symlinks/plugins/flutter_webrtc/macos`)
   - FlutterMacOS (from `Flutter/ephemeral`)
   - livekit_client (from `Flutter/ephemeral/.symlinks/plugins/livekit_client/macos`)
@@ -19,10 +24,13 @@ DEPENDENCIES:
 
 SPEC REPOS:
   trunk:
+    - OrderedSet
     - Sparkle
     - WebRTC-SDK
 
 EXTERNAL SOURCES:
+  flutter_inappwebview_macos:
+    :path: Flutter/ephemeral/.symlinks/plugins/flutter_inappwebview_macos/macos
   flutter_webrtc:
     :path: Flutter/ephemeral/.symlinks/plugins/flutter_webrtc/macos
   FlutterMacOS:
@@ -31,9 +39,11 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/livekit_client/macos
 
 SPEC CHECKSUMS:
+  flutter_inappwebview_macos: c2d68649f9f8f1831bfcd98d73fd6256366d9d1d
   flutter_webrtc: f1fb1a00c6080461bb2bc6caa5b93d07ddb68466
-  FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
+  FlutterMacOS: c232990155153907050900a2e175c7773903ba4e
   livekit_client: 3e024a31e364d4a2e0deda1b3908e93933dbf6dc
+  OrderedSet: e539b66b644ff081c73a262d24ad552a69be3a94
   Sparkle: b8c9cf4ced217ffc708a1ca5f988a7ba877658db
   WebRTC-SDK: ab9b5319e458c2bfebdc92b3600740da35d5630d
 

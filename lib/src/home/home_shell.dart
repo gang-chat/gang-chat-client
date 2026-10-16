@@ -61,6 +61,7 @@ import '../live/live_presence_audio_coordinator.dart';
 import '../protocol/api_client.dart'
     show
         ApiException,
+        GamesTicketApi,
         MessagePage,
         MusicTrackPreviewApi,
         PersonalMusicPlaylistApi,
@@ -86,6 +87,7 @@ import '../ui/ui.dart';
 import 'adaptive_layout.dart';
 import 'chat_pane.dart';
 import 'compact_activity_layout.dart';
+import 'games_panel.dart';
 import 'home_content.dart';
 import 'home_keyboard_layout.dart';
 import 'hover_card_anchor.dart';
@@ -144,6 +146,7 @@ enum _ContentMode {
   live,
   members,
   roomSettings,
+  games,
   createRoom,
   notifications,
   superuserUserSettings,
@@ -286,6 +289,8 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   bool _compactLayout = false;
   bool _auxiliaryOpenedFromNarrowSidebar = false;
   _ContentMode _contentMode = _ContentMode.chat;
+  // The games lobby of one room, kept while the user flips back to chat.
+  GamesPanelSession? _gamesSession;
   RoomSettingsSection _roomSettingsInitialSection = RoomSettingsSection.info;
   String? _roomSettingsInitialMusicPlaylistId;
   UserSummary? _superuserSettingsTarget;
@@ -611,6 +616,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     if (sharedTrackPreview != null) unawaited(sharedTrackPreview.dispose());
     widget.app.serverClock.removeListener(_handleServerClockChanged);
     _cancelActiveDownloads();
+    _gamesSession?.clear();
     _services.close();
     super.dispose();
   }

@@ -122,6 +122,7 @@ extension _HomeShellLayout on _HomeShellState {
       case _ContentMode.live:
       case _ContentMode.members:
       case _ContentMode.roomSettings:
+      case _ContentMode.games:
         _openChat();
         return;
       case _ContentMode.chat:
@@ -379,6 +380,19 @@ extension _HomeShellLayout on _HomeShellState {
         ),
       );
     }
+    final gamesSession = _gamesSession;
+    final gamesApi = _gamesTicketApi;
+    if (_contentMode == _ContentMode.games &&
+        gamesSession != null &&
+        gamesSession.roomId == _selectedServerId &&
+        gamesApi != null) {
+      return GamesPanel(
+        api: gamesApi,
+        baseUrl: AppConfigScope.of(context).gamesBaseUrl,
+        session: gamesSession,
+        onClose: _openChat,
+      );
+    }
     if (_contentMode == _ContentMode.live) {
       return LiveChannelPane(
         title: _roomTitle(_selectedRoom, _selectedServer),
@@ -591,6 +605,7 @@ extension _HomeShellLayout on _HomeShellState {
       onOpenLiveChannel: _openLiveChannel,
       onOpenRoomMembers: () => unawaited(_openRoomMembers()),
       onOpenRoomSettings: () => unawaited(_openRoomSettings()),
+      onOpenGames: _gamesTicketApi != null ? _openGames : null,
       onViewedNewMessages: _clearSelectedRoomNewMessagePrompt,
       onResolveSenderProfile: _resolveSenderProfile,
       onResolveRoomProfile: _resolveRoomProfile,

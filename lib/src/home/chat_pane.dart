@@ -131,6 +131,7 @@ class ChatPane extends StatelessWidget {
     required this.onOpenLiveChannel,
     required this.onOpenRoomMembers,
     required this.onOpenRoomSettings,
+    this.onOpenGames,
     required this.onViewedNewMessages,
     this.onResolveSenderProfile,
     this.onResolveRoomProfile,
@@ -202,6 +203,9 @@ class ChatPane extends StatelessWidget {
   final VoidCallback onOpenLiveChannel;
   final VoidCallback onOpenRoomMembers;
   final VoidCallback onOpenRoomSettings;
+
+  /// Opens the room's games lobby; null hides the entry.
+  final VoidCallback? onOpenGames;
   final VoidCallback onViewedNewMessages;
 
   /// Resolves a richer profile for a message sender on demand (gender, common
@@ -263,6 +267,7 @@ class ChatPane extends StatelessWidget {
             onLivePressed: onOpenLiveChannel,
             onMembersPressed: onOpenRoomMembers,
             onSettingsPressed: onOpenRoomSettings,
+            onGamesPressed: onOpenGames,
           ),
           Expanded(
             child: _MessageStage(

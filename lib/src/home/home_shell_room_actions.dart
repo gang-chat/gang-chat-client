@@ -778,6 +778,30 @@ extension _HomeShellRoomActions on _HomeShellState {
     );
   }
 
+  /// The games lobby needs its URL in the app config, a server that issues
+  /// tickets, and a platform with a WebView.
+  GamesTicketApi? get _gamesTicketApi {
+    if (!gamesPanelSupported) return null;
+    if (AppConfigScope.of(context).gamesBaseUrl.isEmpty) return null;
+    return _services.api is GamesTicketApi
+        ? _services.api as GamesTicketApi
+        : null;
+  }
+
+  void _openGames() {
+    final roomId = _selectedServerId;
+    if (roomId == null) return;
+    if (_gamesSession?.roomId != roomId) {
+      _gamesSession?.clear();
+      _gamesSession = GamesPanelSession(roomId);
+    }
+    _setHomeState(() {
+      _settingsOpen = false;
+      _contentMode = _ContentMode.games;
+      _narrowContentOpen = true;
+    });
+  }
+
   Future<void> _openRoomSettings({
     RoomSettingsSection initialSection = RoomSettingsSection.info,
     String? initialMusicPlaylistId,
