@@ -621,7 +621,9 @@ export function _UserProfileCard({
       {action != null ? (
         <>
           <SizedBox height={UiSpacing.md} />
-          <div style={{ display: 'flex', justifyContent: 'center' }}>
+          {/* Center(child: Button): the Button fills the loose width Center
+              hands it, like Flutter's bounded Button row. */}
+          <div>
             <Button
               icon={<Icon icon={action.icon} />}
               tone={ButtonTone.primary}
@@ -1080,7 +1082,9 @@ export function _RoomProfileCard({
       {joined ? (
         <>
           <SizedBox height={UiSpacing.md} />
-          <div style={{ display: 'flex', justifyContent: 'center' }}>
+          {/* Center(child: Button): the Button fills the loose width Center
+              hands it, like Flutter's bounded Button row. */}
+          <div>
             <Button
               icon={<Icon icon={Icons.login_rounded} />}
               tone={ButtonTone.primary}
