@@ -61,3 +61,9 @@ Android 客户端正在从 Flutter 一比一移植为原生 Kotlin + Jetpack Com
   4.x（数据描述符、重名条目、目录/链接判断、非 zip 报错文案）；只支持 stored / deflate，
   加密条目和其他压缩方式（`archive` 还支持 bzip2）跳过。
 - `LocalLoginAccountHistoryStore` 去掉了只对 macOS 钥匙串有意义的选项。
+- `roomCardWithLive` 与 Dart 一样不复制 `gangBotAvailable` / `gangBotEnabled`（疑似 Dart 端的遗漏，
+  目前没有代码从 `RoomCard` 读这两个字段），保持原样并加了 `PORT` 注释。
+- `room_display` 里的 `\s+` 用显式字符类实现 JavaScript `\s` 的范围（含全角空格 U+3000、U+00A0），
+  Java 默认的 `\s` 不包含它们。
+- `RoomNotificationDateRange` 起止颠倒时抛 `IllegalArgumentException`，消息文字与 Dart 的
+  `ArgumentError.value` 略有不同。
