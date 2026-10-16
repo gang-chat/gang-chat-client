@@ -74,9 +74,7 @@ import {
 } from '@gang-chat/core/app/account_state';
 import {
   AppUpdatePlatform,
-  downloadsUpdateInBrowser,
   shouldTerminateApplicationAfterInstallerLaunch,
-  updateDownloadConfirmationBody,
   type AvailableAppUpdate,
 } from '@gang-chat/core/app/app_update';
 import { registerEmailValidationError } from '@gang-chat/core/app/auth_form';
@@ -253,7 +251,12 @@ import { Center, SizedBox, Text } from '../lib/layout';
 import { CircularProgressIndicator } from '../lib/progress_indicator';
 import { TextEditingController, TextInputType } from '../lib/text_editing';
 import { ViewState, useViewState } from '../lib/view_state';
-import { AppUpdatePage } from '../shell/app_update_gate';
+import {
+  AppUpdatePage,
+  sharedReleaseUpdateService,
+  updateDownloadConfirmationBodyFor,
+  updateDownloadsInBrowser,
+} from '../shell/app_update_gate';
 import {
   EmailVerificationInputAction,
   emailVerificationErrorMessage,
@@ -422,7 +425,9 @@ function _defaultServices(): _SettingsPageDefaultServices {
     androidSystemService: new AndroidSystemService(),
     autoUpdatePromptStore: new LocalAutoUpdatePromptStore(),
     installInfoService: new InstallInfoService(),
-    releaseUpdateService: new ReleaseUpdateService(),
+    // The gate and this page share one service: `isNativeUpdate` only knows
+    // updates found through the same instance.
+    releaseUpdateService: sharedReleaseUpdateService,
     sparkleUpdater: new SparkleUpdater(),
     externalUriLauncher: new ExternalUriLauncher(),
     closeBehaviorStore: new LocalCloseBehaviorStore(),
@@ -1640,7 +1645,7 @@ export class _SettingsPageState extends ViewState<_SettingsPageWidget> {
     const confirmed = await this._confirmAppUpdateAction({
       title: '下载新版本',
       icon: Icons.download_for_offline_outlined,
-      body: updateDownloadConfirmationBody(update.asset.platform),
+      body: updateDownloadConfirmationBodyFor(update, this.widget.releaseUpdateService),
       confirmLabel: '下载新版本',
     });
     if (!confirmed || !this.mounted) return;
@@ -1684,7 +1689,7 @@ export class _SettingsPageState extends ViewState<_SettingsPageWidget> {
   async _downloadAndInstallAvailableUpdate(): Promise<void> {
     const update = this._availableAppUpdate;
     if (update == null || this._downloadingAppUpdate) return;
-    if (downloadsUpdateInBrowser(update.asset.platform)) {
+    if (updateDownloadsInBrowser(update, this.widget.releaseUpdateService)) {
       await this._openAvailableUpdateInBrowser(update);
       return;
     }

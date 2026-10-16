@@ -83,7 +83,6 @@ function _FittedBoxScaleDown({ children }: { children: ReactNode }) {
         maxWidth: '100%',
         width: fit == null ? undefined : fit.width * scale,
         height: fit == null ? undefined : fit.height * scale,
-        alignSelf: 'center',
         flexShrink: 0,
       }}
     >
