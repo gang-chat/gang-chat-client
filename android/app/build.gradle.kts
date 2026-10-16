@@ -1,13 +1,17 @@
+import java.util.Properties
+import org.jetbrains.kotlin.compose.compiler.gradle.ComposeFeatureFlag
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
-    id("com.android.application")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
-    id("dev.flutter.flutter-gradle-plugin")
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.roborazzi)
 }
 
 // Keep local/debug builds usable before a Firebase project is configured.
 // Release CI injects this file from a secret when offline push is enabled.
 if (file("google-services.json").exists()) {
-    apply(plugin = "com.google.gms.google-services")
+    apply(plugin = libs.plugins.google.services.get().pluginId)
 }
 
 val releaseKeystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
@@ -26,25 +30,44 @@ require(releaseSigningValues.none { !it.isNullOrBlank() } || hasReleaseSigning) 
     "Android release signing requires all ANDROID_KEYSTORE_* and ANDROID_KEY_* environment variables."
 }
 
+// The version comes from android/version.properties (CI rewrites it from the
+// release tag). versionCode = major*1000000 + minor*1000 + patch, the same
+// scheme the Flutter build and the desktop clients use, so installed Flutter
+// APKs upgrade to the native build in place.
+val versionProperties =
+    Properties().apply {
+        rootProject.file("version.properties").inputStream().use { load(it) }
+    }
+val appVersionName: String = versionProperties.getProperty("versionName")
+val appVersionCode: Int =
+    appVersionName
+        .substringBefore('+')
+        .split('.')
+        .map { it.toInt() }
+        .let { (major, minor, patch) -> major * 1_000_000 + minor * 1_000 + patch }
+
 android {
     namespace = "com.gangchat.client"
-    compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    compileSdk = 37
+
+    defaultConfig {
+        applicationId = "com.gangchat.client"
+        minSdk = 24
+        targetSdk = 36
+        versionCode = appVersionCode
+        versionName = appVersionName
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
     }
 
-    defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.gangchat.client"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
+    buildFeatures {
+        compose = true
+        buildConfig = true
     }
 
     signingConfigs {
@@ -65,21 +88,83 @@ android {
             // published APKs can upgrade one another across versions.
             signingConfig =
                 signingConfigs.getByName(if (hasReleaseSigning) "release" else "debug")
+            isMinifyEnabled = false
         }
+    }
+
+    sourceSets {
+        // Server config, branding and fonts live in the repository-level assets/
+        // directory that the desktop client also reads.
+        getByName("main").assets.directories.add("../../assets")
+    }
+
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            all {
+                it.systemProperty("user.timezone", "UTC")
+                it.maxHeapSize = "2g"
+            }
+        }
+    }
+
+    packaging {
+        resources.excludes += setOf("META-INF/{AL2.0,LGPL2.1}", "META-INF/versions/9/OSGI-INF/MANIFEST.MF")
     }
 }
 
 kotlin {
     compilerOptions {
-        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+        jvmTarget = JvmTarget.JVM_17
     }
 }
 
-flutter {
-    source = "../.."
+composeCompiler {
+    // Flutter rebuilds every child widget when a parent State calls setState.
+    // The ported screens keep their state in plain fields of ViewState classes
+    // (see docs/android-port-conventions.md), so children must recompose when
+    // their parent does even if they receive the same controller instance.
+    featureFlags.add(ComposeFeatureFlag.StrongSkipping.disabled())
 }
 
 dependencies {
-    implementation(platform("com.google.firebase:firebase-bom:34.16.0"))
-    implementation("com.google.firebase:firebase-messaging")
+    implementation(project(":core"))
+
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
+
+    implementation(platform(libs.compose.bom))
+    implementation(libs.compose.ui)
+    implementation(libs.compose.ui.graphics)
+    implementation(libs.compose.foundation)
+    implementation(libs.compose.animation)
+    implementation(libs.compose.material3)
+    implementation(libs.compose.material.icons.extended)
+    implementation(libs.compose.ui.tooling.preview)
+    debugImplementation(libs.compose.ui.tooling)
+    debugImplementation(libs.compose.ui.test.manifest)
+
+    implementation(libs.activity.compose)
+    implementation(libs.core.ktx)
+    implementation(libs.lifecycle.runtime.compose)
+    implementation(libs.lifecycle.process)
+    implementation(libs.kotlinx.coroutines.android)
+
+    implementation(libs.livekit.android)
+    implementation(libs.coil.compose)
+    implementation(libs.coil.gif)
+    implementation(libs.media3.exoplayer)
+
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
+
+    testImplementation(testFixtures(project(":core")))
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.junit)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.roborazzi.junit.rule)
 }
