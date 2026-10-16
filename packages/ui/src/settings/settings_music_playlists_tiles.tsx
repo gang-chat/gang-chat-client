@@ -66,7 +66,8 @@ export function _MusicPlaylistSummaryList({
   onShare,
 }: _MusicPlaylistSummaryListProps) {
   // LayoutBuilder: the list's own width. Unmeasured counts as unbounded, like
-  // Flutter's non-finite `maxWidth` branch.
+  // Flutter's non-finite `maxWidth` branch. PORT: `clientWidth` excludes a
+  // classic (non-overlay) scrollbar, which is also the width the rows get.
   const ref = useRef<HTMLDivElement | null>(null);
   const size = useElementSize(ref);
   const subPanelHorizontalPadding = 28.0;

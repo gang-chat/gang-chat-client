@@ -108,7 +108,7 @@ export interface RoomMembersDialogProps {
   onOpenRoom?: ((room: PublicRoom) => void) | null;
 }
 
-const _inviteSearchDebounceDuration = 260;
+const _searchDebounceDuration = 260;
 
 export class _RoomMembersDialogState extends ViewState<RoomMembersDialogProps> {
   readonly _memberSearchController = new TextEditingController();
@@ -333,7 +333,7 @@ export class _RoomMembersDialogState extends ViewState<RoomMembersDialogProps> {
       return;
     }
     const seq = ++this._inviteSearchSeq;
-    this._inviteSearchDebounce = new Timer(_inviteSearchDebounceDuration, () => {
+    this._inviteSearchDebounce = new Timer(_searchDebounceDuration, () => {
       unawaited(this._searchInviteCandidates(query, seq));
     });
   };
@@ -358,7 +358,7 @@ export class _RoomMembersDialogState extends ViewState<RoomMembersDialogProps> {
       return;
     }
     const seq = ++this._blockSearchSeq;
-    this._blockSearchDebounce = new Timer(_inviteSearchDebounceDuration, () => {
+    this._blockSearchDebounce = new Timer(_searchDebounceDuration, () => {
       unawaited(this._searchBlockCandidates(query, seq));
     });
   };

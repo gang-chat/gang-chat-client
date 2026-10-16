@@ -1,4 +1,4 @@
-import { createRef, useEffect, useMemo, type CSSProperties, type ReactNode, type RefObject } from 'react';
+import { createRef, useEffect, useLayoutEffect, useMemo, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 
 import type { AvailableAppUpdate } from '@gang-chat/core/app/app_update';
 import type { AudioDeviceStore } from '@gang-chat/core/app/audio_device_store';
@@ -83,7 +83,7 @@ import {
   type TextEditingValue,
   type TextInputFormatter,
 } from '../lib/text_editing';
-import { useElementSize, type ElementSize } from '../lib/use_element_size';
+import type { ElementSize } from '../lib/use_element_size';
 import { ViewState, useViewState } from '../lib/view_state';
 import { FullScreenMediaOrientation } from '../shell/full_screen_media_orientation';
 import { ChatComposerController } from '../ui/chat_composer';
@@ -413,9 +413,6 @@ export class HomeShellState extends ViewState<ResolvedHomeShellProps> {
   _searchPendingPublicRoomIds: Set<string> = new Set();
   _showingJoinApplicationDialog = false;
   _realtimeStatus: RealtimeConnectionStatus = RealtimeConnectionStatus.offline;
-
-  /** The bordered shell box measured in place of the outer `LayoutBuilder`. */
-  readonly _shellRef: RefObject<HTMLDivElement | null> = createRef<HTMLDivElement>();
 
   // PORT: Dart tear-offs (`addListener(_handleX)` / `removeListener(_handleX)`)
   // compare equal per instance. These bound listeners give the add/remove
@@ -857,10 +854,10 @@ export class HomeShellState extends ViewState<ResolvedHomeShellProps> {
 
   /**
    * Port of `build(BuildContext)`. [shellSize] is the measured inner size of
-   * the bordered shell box (the outer `LayoutBuilder`'s constraints); null
-   * before the first measurement.
+   * the bordered shell box (the outer `LayoutBuilder`'s constraints; null
+   * before the first measurement) and [shellRef] attaches that box.
    */
-  build(shellSize: ElementSize | null): ReactNode {
+  build(shellSize: ElementSize | null, shellRef: (node: HTMLDivElement | null) => void): ReactNode {
     const useAndroidLayout = HostPlatform.isAndroid;
     const liveMusicBoxVisible =
       this._contentMode === _ContentMode.live &&
@@ -871,25 +868,9 @@ export class HomeShellState extends ViewState<ResolvedHomeShellProps> {
     // decision is kept for parity but the page never resizes for an IME here.
     shouldResizeHomeForKeyboard({ platform: HostPlatform.operatingSystem, liveMusicBoxVisible });
 
-    const shellFrame = (child: ReactNode): ReactNode => (
-      <MediaCacheScope cache={this.mounted ? this._mediaCacheController : _fallbackMediaCache()}>
-        <div style={_scaffoldStyle}>
-          {_withAndroidBottomSafeArea({
-            enabled: useAndroidLayout,
-            preserveKeyboardViewport: liveMusicBoxVisible,
-            child: (
-              <div ref={this._shellRef} style={_shellBorderStyle}>
-                {child}
-              </div>
-            ),
-          })}
-        </div>
-      </MediaCacheScope>
-    );
-
     // PORT: Flutter runs initState before the first build; ViewState mounts
-    // after the first render, so that render only lays out the empty shell.
-    if (!this.mounted) return shellFrame(null);
+    // after the first render, so that render only paints the empty scaffold.
+    if (!this.mounted) return <div style={_scaffoldStyle} />;
 
     const fullScreenTrack = this._resolveFullScreenLiveTrack();
     const joinedLiveRoom = live_display.joinedLiveRoomSummary({
@@ -991,8 +972,22 @@ export class HomeShellState extends ViewState<ResolvedHomeShellProps> {
         {responsiveContent}
       </_ShellBackScope>
     );
-    return shellFrame(
-      <ChatImagePreviewActionsScope actions={this._imagePreviewActions}>{shellContent}</ChatImagePreviewActionsScope>,
+    return (
+      <MediaCacheScope cache={this._mediaCacheController}>
+        <ChatImagePreviewActionsScope actions={this._imagePreviewActions}>
+          <div style={_scaffoldStyle}>
+            {_withAndroidBottomSafeArea({
+              enabled: useAndroidLayout,
+              preserveKeyboardViewport: liveMusicBoxVisible,
+              child: (
+                <div ref={shellRef} style={_shellBorderStyle}>
+                  {shellContent}
+                </div>
+              ),
+            })}
+          </div>
+        </ChatImagePreviewActionsScope>
+      </MediaCacheScope>
     );
   }
 
@@ -1026,6 +1021,8 @@ export class HomeShellState extends ViewState<ResolvedHomeShellProps> {
 }
 
 const _scaffoldStyle: CSSProperties = {
+  flex: '1 1 0',
+  alignSelf: 'stretch',
   display: 'flex',
   flexDirection: 'column',
   width: '100%',
@@ -1045,25 +1042,6 @@ const _shellBorderStyle: CSSProperties = {
   boxSizing: 'border-box',
   border: `1px solid ${_windowEdgeBorder}`,
 };
-
-let _fallbackMediaCacheController: MediaCacheController | null = null;
-
-/** The first (pre-initState) render has no services yet. */
-function _fallbackMediaCache(): MediaCacheController {
-  // A real controller is never needed here: the empty shell renders no media.
-  // Use the services' class lazily to avoid a second import path.
-  if (_fallbackMediaCacheController == null) {
-    _fallbackMediaCacheController = new (_MediaCacheControllerCtor())();
-  }
-  return _fallbackMediaCacheController;
-}
-
-function _MediaCacheControllerCtor(): new () => MediaCacheController {
-  return _MediaCacheControllerClass;
-}
-
-// Resolved at module load (value import kept separate from the type import above).
-import { MediaCacheController as _MediaCacheControllerClass } from '@gang-chat/core/app/media_cache_controller';
 
 function _addPostFrameCallback(callback: () => void): void {
   if (typeof requestAnimationFrame === 'function') {
@@ -1101,11 +1079,38 @@ function _ShellBackScope({
   return <>{children}</>;
 }
 
+/**
+ * `LayoutBuilder` stand-in for the shell box: a callback ref plus the box's
+ * client size (inside its border), re-observed whenever the node changes.
+ */
+function _useShellBoxSize(): [(node: HTMLDivElement | null) => void, ElementSize | null] {
+  const [node, setNode] = useState<HTMLDivElement | null>(null);
+  const [size, setSize] = useState<ElementSize | null>(null);
+  useLayoutEffect(() => {
+    if (node == null) return;
+    const update = () => {
+      const width = node.clientWidth;
+      const height = node.clientHeight;
+      setSize((previous) =>
+        previous != null && Math.abs(previous.width - width) < 0.5 && Math.abs(previous.height - height) < 0.5
+          ? previous
+          : { width, height },
+      );
+    };
+    update();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [node]);
+  return [setNode, size];
+}
+
 export function HomeShell(props: HomeShellProps) {
   const widget = useMemo(() => _resolveHomeShellProps(props), [props]);
   const state = useViewState(() => new HomeShellState(), widget);
-  const shellSize = useElementSize(state._shellRef);
-  return state.build(shellSize);
+  const [shellRef, shellSize] = _useShellBoxSize();
+  return state.build(shellSize, shellRef);
 }
 
 let _homeShellMixinsInstalled = false;

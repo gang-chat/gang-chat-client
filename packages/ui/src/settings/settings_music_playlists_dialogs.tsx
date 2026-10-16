@@ -478,9 +478,10 @@ export function _MusicPlaylistFilterDialog(props: _MusicPlaylistFilterDialogProp
   const gap = 8.0;
   const maxWidth = gridSize?.width ?? Infinity;
   const columns = maxWidth < 330 ? 2 : 3;
-  // `(maxWidth - gap * (columns - 1)) / columns`, resolved by CSS so the first
-  // (unmeasured) frame already lays out like Flutter.
-  const itemWidth = `calc((100% - ${gap * (columns - 1)}px) / ${columns})`;
+  // Each tile is `(maxWidth - gap * (columns - 1)) / columns` wide. PORT: an
+  // equal-column CSS grid resolves that width exactly (a wrapping row of
+  // computed widths can wrap early on sub-pixel rounding), and already lays
+  // out like Flutter in the first, unmeasured frame.
   return (
     <DialogFrame
       title="筛选"
@@ -522,11 +523,14 @@ export function _MusicPlaylistFilterDialog(props: _MusicPlaylistFilterDialogProp
         <SizedBox height={16} />
         <_MusicPlaylistFieldLabel text="歌曲数量" />
         <SizedBox height={8} />
-        <div ref={gridRef} style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap, minWidth: 0 }}>
+        <div
+          ref={gridRef}
+          style={{ display: 'grid', gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap, minWidth: 0 }}
+        >
           {_MusicPlaylistFilterDialogState._countFilters.map((filter) => {
             const selected = state._countFilter === filter.value;
             return (
-              <SizedBox key={filter.value} width={itemWidth}>
+              <div key={filter.value} style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                 <PressableSurface
                   onPressed={() =>
                     state.setState(() => {
@@ -551,7 +555,7 @@ export function _MusicPlaylistFilterDialog(props: _MusicPlaylistFilterDialogProp
                     </Text>
                   </Center>
                 </PressableSurface>
-              </SizedBox>
+              </div>
             );
           })}
         </div>
@@ -919,6 +923,8 @@ export function _MusicPlaylistNameDialog(props: _MusicPlaylistNameDialogProps) {
             <SizedBox height={10} />
           </>
         ) : null}
+        {/* PORT: Dart keyed this field 'personal-music-playlist-name-input'; the
+            kit's Input has no test-id prop, so the key is dropped. */}
         <Input
           controller={state._controller}
           focusNode={state._focusNode}
