@@ -78,6 +78,22 @@ const handlers: Record<string, Handler> = {
     return new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
   },
 
+  async readFileChunk(_window, filePath: string, offset: number, length: number) {
+    const handle = await fs.open(filePath, 'r');
+    try {
+      const buffer = Buffer.alloc(length);
+      const { bytesRead } = await handle.read(buffer, 0, length, offset);
+      return new Uint8Array(buffer.buffer, buffer.byteOffset, bytesRead);
+    } finally {
+      await handle.close();
+    }
+  },
+
+  async setLastModified(_window, filePath: string, modifiedMs: number) {
+    const time = new Date(modifiedMs);
+    await fs.utimes(filePath, time, time);
+  },
+
   async writeFile(_window, filePath: string, bytes: Uint8Array) {
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(filePath, bytes);

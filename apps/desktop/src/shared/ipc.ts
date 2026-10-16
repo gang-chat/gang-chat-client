@@ -75,6 +75,8 @@ export interface BootSnapshot {
     applicationSupport: string;
     applicationCache: string;
     downloads: string | null;
+    /** Windows %APPDATA% (roaming); null elsewhere. */
+    roamingAppData: string | null;
   };
   /** Scheme of the media cache protocol (`gang-media`). */
   mediaScheme: string;
@@ -124,6 +126,7 @@ export interface ScreenSourceInfo {
 export type WindowEventPayload =
   | { type: 'close-requested' }
   | { type: 'tray-exit-requested' }
+  | { type: 'tray-open-requested' }
   | { type: 'maximized-changed'; maximized: boolean }
   | { type: 'fullscreen-changed'; fullScreen: boolean }
   | { type: 'focus-changed'; focused: boolean }

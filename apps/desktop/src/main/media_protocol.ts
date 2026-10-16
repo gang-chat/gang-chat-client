@@ -33,7 +33,7 @@ function keyFor(url: string): string {
 const inflight = new Map<string, Promise<void>>();
 
 async function download(url: string, file: string, metaFile: string): Promise<void> {
-  const response = await net.fetch(url, { cache: 'no-store' });
+  const response = await net.fetch(url);
   if (!response.ok || !response.body) {
     throw new Error(`media download failed: ${response.status}`);
   }
@@ -44,7 +44,7 @@ async function download(url: string, file: string, metaFile: string): Promise<vo
   try {
     for await (const chunk of Readable.fromWeb(response.body as import('node:stream/web').ReadableStream<Uint8Array>)) {
       size += (chunk as Buffer).length;
-      if (!out.write(chunk)) await new Promise((r) => out.once('drain', r));
+      if (!out.write(chunk)) await new Promise<void>((r) => out.once('drain', () => r()));
     }
     await new Promise<void>((resolve, reject) => out.end((error?: Error | null) => (error ? reject(error) : resolve())));
     await fsp.rename(temp, file);

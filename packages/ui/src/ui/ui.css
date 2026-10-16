@@ -2,3 +2,24 @@
  * Global styles the UI kit needs that inline styles cannot express
  * (keyframes). Imported once by the app root.
  */
+
+/* CircularProgressIndicator (lib/progress_indicator.tsx). */
+@keyframes gang-progress-rotate {
+  100% {
+    transform: rotate(360deg);
+  }
+}
+@keyframes gang-progress-dash {
+  0% {
+    stroke-dasharray: calc(var(--gang-progress-circumference) * 0.01) var(--gang-progress-circumference);
+    stroke-dashoffset: 0;
+  }
+  50% {
+    stroke-dasharray: calc(var(--gang-progress-circumference) * 0.75) var(--gang-progress-circumference);
+    stroke-dashoffset: calc(var(--gang-progress-circumference) * -0.12);
+  }
+  100% {
+    stroke-dasharray: calc(var(--gang-progress-circumference) * 0.75) var(--gang-progress-circumference);
+    stroke-dashoffset: calc(var(--gang-progress-circumference) * -0.99);
+  }
+}

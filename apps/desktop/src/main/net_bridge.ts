@@ -120,7 +120,7 @@ export function registerNetBridge(): void {
     const entry = active.get(id);
     if (!entry) throw new Error('Request is no longer active');
     return new Promise<void>((resolve) => {
-      entry.request.write(Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength), () => resolve());
+      entry.request.write(Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength), undefined, () => resolve());
     });
   });
 

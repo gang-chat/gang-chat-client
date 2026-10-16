@@ -118,21 +118,28 @@ export function createMainWindow(options: { authenticated: boolean; preload: str
 }
 
 function ensureTray(): boolean {
-  if (process.platform !== 'win32' && process.platform !== 'linux') return false;
+  // Like the Flutter shell, only Windows minimizes to a tray icon.
+  if (process.platform !== 'win32') return false;
   if (tray) return true;
   trayIcon = appIcon().resize({ width: 16, height: 16 });
   tray = new Tray(trayIcon);
   tray.setToolTip('Gang Chat');
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: '打开 Gang Chat', click: () => restoreFromTray() },
+      { label: '打开 Gang Chat', click: () => openFromTray() },
       { type: 'separator' },
       { label: '退出', click: () => emit({ type: 'tray-exit-requested' }) },
     ]),
   );
-  tray.on('click', () => restoreFromTray());
-  tray.on('double-click', () => restoreFromTray());
+  tray.on('click', () => openFromTray());
+  tray.on('double-click', () => openFromTray());
   return true;
+}
+
+/** Restores natively (works even if the renderer is busy) and tells the app. */
+function openFromTray() {
+  restoreFromTray();
+  emit({ type: 'tray-open-requested' });
 }
 
 function restoreFromTray() {
@@ -248,13 +255,10 @@ const handlers: Record<string, WindowHandler> = {
     window.close();
   },
   minimizeToTray(window) {
-    if (ensureTray()) {
-      window.setSkipTaskbar(true);
-      window.hide();
-      return;
-    }
-    if (process.platform === 'darwin') window.hide();
-    else window.minimize();
+    // DesktopWindowController falls back to minimize() when this throws.
+    if (!ensureTray()) throw new Error('No tray icon is available on this platform');
+    window.setSkipTaskbar(true);
+    window.hide();
   },
   restoreFromTray() {
     restoreFromTray();

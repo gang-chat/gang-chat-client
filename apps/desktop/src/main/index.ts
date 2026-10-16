@@ -149,6 +149,7 @@ function buildBootSnapshot(config: Record<string, unknown> | null): BootSnapshot
       applicationSupport: app.getPath('userData'),
       applicationCache: path.join(app.getPath('userData'), 'cache'),
       downloads,
+      roamingAppData: process.platform === 'win32' ? app.getPath('appData') : null,
     },
     mediaScheme: kMediaScheme,
   };

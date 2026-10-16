@@ -81,6 +81,16 @@ export function createDesktopPlatform(bridge: DesktopBridge): Platform {
     writeFile: (path, bytes) => invokeFiles<void>('writeFile', path, bytes),
     appendFile: (path, bytes) => invokeFiles<void>('appendFile', path, bytes),
     readFile: (path) => invokeFiles<Uint8Array>('readFile', path),
+    async *openRead(path: string): AsyncIterable<Uint8Array> {
+      const chunkSize = 1024 * 1024;
+      for (let offset = 0; ; offset += chunkSize) {
+        const chunk = await invokeFiles<Uint8Array>('readFileChunk', path, offset, chunkSize);
+        if (chunk.length === 0) return;
+        yield chunk;
+        if (chunk.length < chunkSize) return;
+      }
+    },
+    setLastModified: (path, modifiedMs) => invokeFiles<void>('setLastModified', path, modifiedMs),
     deleteFile: (path) => invokeFiles<void>('deleteFile', path),
     rename: (from, to) => invokeFiles<void>('rename', from, to),
     exists: (path) => invokeFiles<boolean>('exists', path),
@@ -158,14 +168,26 @@ export function createDesktopPlatform(bridge: DesktopBridge): Platform {
         await invokeWindow('setResizable', false);
         if (layout.center) await invokeWindow('center');
       } else {
+        const width = layout.width ?? 1180;
+        const height = layout.height ?? 760;
         await invokeWindow('setWindowButtonVisibility', true);
         await invokeWindow('setResizable', true);
         await invokeWindow('setMaximizable', true);
         await invokeWindow('setMaximumSize', 100000, 100000);
-        await invokeWindow('setMinimumSize', 360, 600);
+        await invokeWindow('setMinimumSize', layout.minWidth ?? 360, layout.minHeight ?? 600);
         if (layout.restore) {
-          await invokeWindow('setSize', 1180, 760);
+          if (await invokeWindow<boolean>('isFullScreen')) await invokeWindow('setFullScreen', false);
+          if (await invokeWindow<boolean>('isMaximized')) await invokeWindow('unmaximize');
+          await invokeWindow('setSize', width, height);
           await invokeWindow('center');
+        } else {
+          // Initial logged-in layout: keep a size the user may have chosen,
+          // only growing a window still at the login-card size.
+          const size = await invokeWindow<{ width: number; height: number }>('getSize');
+          if (size.width < 360 || size.height < 600) {
+            await invokeWindow('setSize', width, height);
+            await invokeWindow('center');
+          }
         }
       }
     },
@@ -191,8 +213,8 @@ export function createDesktopPlatform(bridge: DesktopBridge): Platform {
     setMaximumSize: (width: number, height: number) => invokeWindow('setMaximumSize', width, height),
     setMaximizable: (maximizable: boolean) => invokeWindow('setMaximizable', maximizable),
     center: () => invokeWindow('center'),
-    setOpacity: (opacity: number) => invokeWindow('setOpacity', opacity),
-    setSkipTaskbar: (skip: boolean) => invokeWindow('setSkipTaskbar', skip),
+    setOpacity: (opacity: number) => invokeWindow<void>('setOpacity', opacity),
+    setSkipTaskbar: (skip: boolean) => invokeWindow<void>('setSkipTaskbar', skip),
     setHasShadow: (hasShadow: boolean) => invokeWindow('setHasShadow', hasShadow),
     setTitle: (title: string) => invokeWindow('setTitle', title),
     setWindowButtonVisibility: (visible: boolean) => invokeWindow('setWindowButtonVisibility', visible),
