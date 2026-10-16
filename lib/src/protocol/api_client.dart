@@ -793,13 +793,6 @@ abstract interface class SharedMusicPlaylistCloneApi {
   });
 }
 
-/// Optional extension: a short-lived ticket that signs the current user into
-/// the gang-games lobby of one room. Kept separate from [GangApi] so older
-/// fakes remain source-compatible.
-abstract interface class GamesTicketApi {
-  Future<String> createGamesTicket(String roomId);
-}
-
 class GangApiClient
     implements
         GangApi,
@@ -813,8 +806,7 @@ class GangApiClient
         RoomMusicPlaylistCloneApi,
         SharedMusicPlaylistCloneApi,
         MusicTrackPreviewApi,
-        MusicBoxActivePlaylistCloneApi,
-        GamesTicketApi {
+        MusicBoxActivePlaylistCloneApi {
   GangApiClient({
     required this.baseUrl,
     required this.accessTokenProvider,
@@ -2359,17 +2351,6 @@ class GangApiClient
         }),
       );
     }, retryTransientFailures: true).then(LiveJoinResult.fromJson);
-  }
-
-  @override
-  Future<String> createGamesTicket(String roomId) async {
-    final decoded = await _sendJson((token) {
-      return _httpClient.post(
-        _uri('/rooms/$roomId/games/ticket'),
-        headers: _headers(token),
-      );
-    });
-    return decoded['ticket']! as String;
   }
 
   @override

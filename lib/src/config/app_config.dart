@@ -15,7 +15,6 @@ class AppConfig {
     required this.apiBaseUrl,
     required this.assetBaseUrl,
     required this.releaseBucketUrl,
-    this.gamesBaseUrl = '',
   });
 
   /// Compile-time fallback config. Useful for tests and as a last-resort
@@ -23,8 +22,7 @@ class AppConfig {
   const AppConfig.defaults()
     : apiBaseUrl = _fallbackApiBaseUrl,
       assetBaseUrl = _fallbackAssetBaseUrl,
-      releaseBucketUrl = _fallbackReleaseBucketUrl,
-      gamesBaseUrl = '';
+      releaseBucketUrl = _fallbackReleaseBucketUrl;
 
   /// Base URL of the REST API, including the `/api/v1` prefix.
   final String apiBaseUrl;
@@ -37,10 +35,6 @@ class AppConfig {
   /// Should not contain a trailing slash.
   final String releaseBucketUrl;
 
-  /// gang-games-server (the mini-game lobby), e.g.
-  /// `https://ky-z.com/gang-chat/games-api`. Empty hides games.
-  final String gamesBaseUrl;
-
   static const _fallbackApiBaseUrl = 'http://127.0.0.1:21116/api/v1';
   static const _fallbackAssetBaseUrl = 'http://127.0.0.1:21116';
   static const _fallbackReleaseBucketUrl =
@@ -52,9 +46,6 @@ class AppConfig {
   );
   static const _defineReleaseBucketUrl = String.fromEnvironment(
     'GANG_RELEASE_BUCKET_URL',
-  );
-  static const _defineGamesBaseUrl = String.fromEnvironment(
-    'GANG_GAMES_BASE_URL',
   );
 
   static const _assetPath = 'assets/config/app_config.json';
@@ -113,7 +104,6 @@ class AppConfig {
         _fallbackReleaseBucketUrl,
         _defineReleaseBucketUrl,
       ),
-      gamesBaseUrl: pick('games_base_url', '', _defineGamesBaseUrl),
     );
   }
 }

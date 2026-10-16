@@ -183,54 +183,6 @@ void main() {
     },
   );
 
-  test('createGamesTicket posts to the room and returns the ticket', () async {
-    final api = GangApiClient(
-      baseUrl: 'http://example.test/api/v1',
-      accessTokenProvider: ({bool forceRefresh = false}) async => 'token',
-      httpClient: MockClient((request) async {
-        expect(request.method, 'POST');
-        expect(request.url.path, '/api/v1/rooms/room-1/games/ticket');
-        expect(request.headers['authorization'], 'Bearer token');
-        return http.Response(
-          jsonEncode({
-            'ticket': 'header.claims.signature',
-            'expires_at': '2026-10-16T08:01:00Z',
-          }),
-          200,
-        );
-      }),
-    );
-
-    expect(await api.createGamesTicket('room-1'), 'header.claims.signature');
-  });
-
-  test('createGamesTicket reports a server without games', () async {
-    final api = GangApiClient(
-      baseUrl: 'http://example.test/api/v1',
-      accessTokenProvider: ({bool forceRefresh = false}) async => 'token',
-      httpClient: MockClient((request) async {
-        return http.Response(
-          jsonEncode({
-            'error': {
-              'code': 'games_unavailable',
-              'message': 'games are not available on this server',
-            },
-          }),
-          503,
-        );
-      }),
-    );
-
-    await expectLater(
-      api.createGamesTicket('room-1'),
-      throwsA(
-        isA<ApiException>()
-            .having((e) => e.code, 'code', 'games_unavailable')
-            .having((e) => e.message, 'message', '小游戏还没开放'),
-      ),
-    );
-  });
-
   test('listMessageHistory sends all filters and parses the page', () async {
     final api = GangApiClient(
       baseUrl: 'http://example.test/api/v1',
