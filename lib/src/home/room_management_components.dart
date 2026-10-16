@@ -196,6 +196,7 @@ class _LabeledSegmented<T> extends StatelessWidget {
 
 class _ToggleRow extends StatelessWidget {
   const _ToggleRow({
+    super.key,
     required this.label,
     required this.value,
     required this.onChanged,

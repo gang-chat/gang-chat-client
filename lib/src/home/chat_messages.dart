@@ -2261,16 +2261,27 @@ class _MessageRow extends StatelessWidget {
             constraints: const BoxConstraints(maxWidth: _messageMaxWidth),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: Text(
-                sender,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: outgoing ? TextAlign.right : TextAlign.left,
-                style: UiTypography.label.copyWith(
-                  color: senderColor,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      sender,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: outgoing ? TextAlign.right : TextAlign.left,
+                      style: UiTypography.label.copyWith(
+                        color: senderColor,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  if (message.sender.isBot) ...[
+                    const SizedBox(width: 4),
+                    const _GangBotBadge(),
+                  ],
+                ],
               ),
             ),
           ),
@@ -2305,15 +2316,17 @@ class _MessageRow extends StatelessWidget {
       ),
     );
 
-    final avatar = Avatar(
-      label: room_display.userAvatarLabel(message.sender),
-      imageUrl: AppConfigScope.of(
-        context,
-      ).resolveAssetUrl(message.sender.avatarUrl),
-      defaultAvatarKey: message.sender.defaultAvatarKey,
-      size: 32,
-      showBorder: false,
-    );
+    final avatar = message.sender.isBot
+        ? const _GangBotAvatar(size: 32)
+        : Avatar(
+            label: room_display.userAvatarLabel(message.sender),
+            imageUrl: AppConfigScope.of(
+              context,
+            ).resolveAssetUrl(message.sender.avatarUrl),
+            defaultAvatarKey: message.sender.defaultAvatarKey,
+            size: 32,
+            showBorder: false,
+          );
 
     final avatarWithContextMenu = _MessageAvatarMentionMenu(
       user: message.sender,

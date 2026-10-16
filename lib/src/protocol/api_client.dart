@@ -220,6 +220,7 @@ abstract interface class GangApi {
     String? visibility,
     String? joinPolicy,
     bool? aiVoiceAnnouncementsEnabled,
+    bool? gangBotEnabled,
     String? avatarAssetId,
     String? defaultAvatarKey,
   });
@@ -1430,6 +1431,7 @@ class GangApiClient
     String? visibility,
     String? joinPolicy,
     bool? aiVoiceAnnouncementsEnabled,
+    bool? gangBotEnabled,
     String? avatarAssetId,
     String? defaultAvatarKey,
   }) async {
@@ -1441,6 +1443,7 @@ class GangApiClient
     if (aiVoiceAnnouncementsEnabled != null) {
       body['ai_voice_announcements_enabled'] = aiVoiceAnnouncementsEnabled;
     }
+    if (gangBotEnabled != null) body['gang_bot_enabled'] = gangBotEnabled;
     if (avatarAssetId != null) body['avatar_asset_id'] = avatarAssetId;
     if (defaultAvatarKey != null) body['default_avatar_key'] = defaultAvatarKey;
     final decoded = await _sendJson((token) {

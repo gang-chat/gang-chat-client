@@ -176,6 +176,7 @@ extension _HomeShellMessages on _HomeShellState {
       ownerUserId: _selectedRoom?.createdBy?.id,
       excludedUserId: _currentUser.id,
       limit: 50,
+      includeGangBot: _selectedRoom?.gangBotActive ?? false,
     );
   }
 

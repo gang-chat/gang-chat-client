@@ -691,6 +691,7 @@ class RoomsController {
     String? visibility,
     String? joinPolicy,
     bool? aiVoiceAnnouncementsEnabled,
+    bool? gangBotEnabled,
     String? avatarAssetId,
     String? defaultAvatarKey,
   }) {
@@ -701,6 +702,7 @@ class RoomsController {
       visibility: visibility,
       joinPolicy: joinPolicy,
       aiVoiceAnnouncementsEnabled: aiVoiceAnnouncementsEnabled,
+      gangBotEnabled: gangBotEnabled,
       avatarAssetId: avatarAssetId,
       defaultAvatarKey: defaultAvatarKey,
     );
@@ -1355,6 +1357,8 @@ class RoomsController {
       hasUnreadMentionCount: true,
       hasPendingJoinRequests: incoming.hasPendingJoinRequests,
       aiVoiceAnnouncementsEnabled: incoming.aiVoiceAnnouncementsEnabled,
+      gangBotAvailable: incoming.gangBotAvailable,
+      gangBotEnabled: incoming.gangBotEnabled,
       updatedAt: incoming.updatedAt,
     );
   }
@@ -1375,6 +1379,8 @@ class RoomsController {
       messageRecallPolicy: room.messageRecallPolicy,
       messageRecallWindowSeconds: room.messageRecallWindowSeconds,
       canDeleteRoom: room.canDeleteRoom,
+      gangBotAvailable: incoming.gangBotAvailable,
+      gangBotEnabled: incoming.gangBotEnabled,
       avatarUrl: incoming.avatarUrl,
       defaultAvatarKey: incoming.defaultAvatarKey,
       memberCount: incoming.memberCount,

@@ -29,6 +29,10 @@ class _AvatarHoverCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // gang-bot is not an account: there is no profile to show.
+    if (user.isBot) {
+      return Tooltip(message: kGangBotDescription, child: child);
+    }
     return UserHoverCard(
       user: user,
       currentUser: currentUser,
@@ -104,3 +108,60 @@ const _avatarHoverCardTestCurrentUser = CurrentUser(
   isSuperuser: false,
   createdAt: null,
 );
+
+const kGangBotDescription =
+    'gang-bot 是群里的 AI，不是真人账号。@gang-bot 就能和它聊，房间管理员可以在房间设置里关掉它。';
+
+/// gang-bot's avatar: a robot mark instead of initials.
+class _GangBotAvatar extends StatelessWidget {
+  const _GangBotAvatar({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: UiColors.selected,
+        shape: BoxShape.circle,
+        border: Border.all(color: UiColors.selectedBorder),
+      ),
+      child: SizedBox.square(
+        dimension: size,
+        child: Icon(
+          Icons.smart_toy_outlined,
+          color: UiColors.accent,
+          size: size * 0.56,
+        ),
+      ),
+    );
+  }
+}
+
+/// The "AI" tag next to gang-bot's name, so it never passes for a person.
+class _GangBotBadge extends StatelessWidget {
+  const _GangBotBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: UiColors.selected,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: UiColors.selectedBorder),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+        child: Text(
+          'AI',
+          style: UiTypography.label.copyWith(
+            color: UiColors.accent,
+            fontSize: 9,
+            fontWeight: FontWeight.w700,
+            height: 1.1,
+          ),
+        ),
+      ),
+    );
+  }
+}

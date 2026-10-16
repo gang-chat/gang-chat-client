@@ -85,6 +85,7 @@ class _RoomSettingsDialogState extends State<RoomSettingsDialog> {
   late String _visibility;
   late String _joinPolicy;
   late bool _aiVoiceAnnouncementsEnabled;
+  late bool _gangBotEnabled;
   late String _notificationPolicy;
   late bool _isPinned;
 
@@ -162,6 +163,7 @@ class _RoomSettingsDialogState extends State<RoomSettingsDialog> {
     _visibility = room_display.normalizeRoomVisibility(_room.visibility);
     _joinPolicy = room_display.normalizeRoomJoinPolicy(_room.joinPolicy);
     _aiVoiceAnnouncementsEnabled = _room.aiVoiceAnnouncementsEnabled;
+    _gangBotEnabled = _room.gangBotEnabled;
     _notificationPolicy = room_display.normalizeRoomNotificationPolicy(
       _room.notificationPolicy,
     );
@@ -300,6 +302,7 @@ class _RoomSettingsDialogState extends State<RoomSettingsDialog> {
               description: draft.description,
               visibility: draft.visibility,
               joinPolicy: draft.joinPolicy,
+              gangBotEnabled: _room.gangBotAvailable ? _gangBotEnabled : null,
               avatarAssetId: draft.avatarAssetId,
               defaultAvatarKey: draft.defaultAvatarKey,
             );
@@ -310,6 +313,7 @@ class _RoomSettingsDialogState extends State<RoomSettingsDialog> {
       }
       setState(() {
         _room = updated;
+        _gangBotEnabled = updated.gangBotEnabled;
         _notificationPolicy = room_display.normalizeRoomNotificationPolicy(
           updated.notificationPolicy,
         );
@@ -448,6 +452,7 @@ class _RoomSettingsDialogState extends State<RoomSettingsDialog> {
         _visibility = room_display.normalizeRoomVisibility(updated.visibility);
         _joinPolicy = room_display.normalizeRoomJoinPolicy(updated.joinPolicy);
         _aiVoiceAnnouncementsEnabled = updated.aiVoiceAnnouncementsEnabled;
+        _gangBotEnabled = updated.gangBotEnabled;
         _notificationPolicy = room_display.normalizeRoomNotificationPolicy(
           updated.notificationPolicy,
         );
@@ -795,6 +800,14 @@ class _RoomSettingsDialogState extends State<RoomSettingsDialog> {
               ],
               onChanged: (value) => setState(() => _joinPolicy = value),
             ),
+            if (!_creating && _room.gangBotAvailable)
+              _ToggleRow(
+                key: const ValueKey('room-settings-gang-bot-toggle'),
+                label: 'gang-bot（AI 群友）',
+                value: _gangBotEnabled,
+                enabled: _canManageRoom && !_saving,
+                onChanged: (value) => setState(() => _gangBotEnabled = value),
+              ),
             Button(
               width: double.infinity,
               tone: ButtonTone.primary,

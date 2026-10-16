@@ -107,6 +107,51 @@ void main() {
     );
   });
 
+  testWidgets('gang-bot messages carry an AI tag and no profile card', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      _host(
+        _chatPane(
+          controller: controller,
+          room: _roomDetail,
+          messages: [
+            _message(
+              type: 'text',
+              body: '好啊，算我一个',
+              sender: const UserSummary(
+                id: 'gang-bot',
+                username: 'gang-bot',
+                displayName: 'gang-bot',
+                avatarUrl: null,
+                defaultAvatarKey: 'violet-2',
+                isBot: true,
+              ),
+            ),
+          ],
+        ),
+        height: 400,
+      ),
+    );
+
+    expect(find.text('gang-bot'), findsOneWidget);
+    expect(find.text('AI'), findsOneWidget);
+    expect(find.byIcon(Icons.smart_toy_outlined), findsOneWidget);
+    // The initials avatar is replaced by the robot mark.
+    expect(find.text('GA'), findsNothing);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Tooltip &&
+            (widget.message ?? '').startsWith('gang-bot 是群里的 AI'),
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('current user message avatar stays borderless while in live', (
     tester,
   ) async {

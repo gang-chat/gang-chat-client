@@ -23,7 +23,7 @@ class MessageMentionRange {
   final int end;
 }
 
-enum MessageMentionKind { user, everyone, admins }
+enum MessageMentionKind { user, everyone, admins, bot }
 
 class MessageMentionOption {
   const MessageMentionOption({
@@ -100,9 +100,13 @@ List<MessageMentionOption> messageMentionOptions({
   required String? ownerUserId,
   String? excludedUserId,
   int limit = defaultMessageMentionOptionLimit,
+  bool includeGangBot = false,
 }) {
   final normalizedQuery = query.trim().toLowerCase();
-  final specialOptions = _specialMentionOptions(normalizedQuery);
+  final specialOptions = _specialMentionOptions(
+    normalizedQuery,
+    includeGangBot: includeGangBot,
+  );
   if (specialOptions.length >= limit) {
     return specialOptions.take(limit).toList();
   }
@@ -200,6 +204,9 @@ void _addMentionDescriptorForLabel({
         out.add({'type': 'admins', 'label': label});
       }
       break;
+    case MessageMentionKind.bot:
+      if (seen.add('kind:bot')) out.add({'type': 'bot', 'label': label});
+      break;
     case MessageMentionKind.user:
       final member = resolveMessageMentionMember(
         label: label,
@@ -255,6 +262,8 @@ bool messageMentionLabelTargetsUser({
       return true;
     case MessageMentionKind.admins:
       return _userIsAdminLike(user, ownerUserId: ownerUserId);
+    case MessageMentionKind.bot:
+      return false;
     case MessageMentionKind.user:
       final normalized = _normalizeMentionLabel(label);
       return _mentionLabelsForUser(
@@ -270,6 +279,9 @@ MessageMentionKind messageMentionKindForLabel(String label) {
   }
   if (normalized == _normalizeMentionLabel(kMentionAdminsLabel)) {
     return MessageMentionKind.admins;
+  }
+  if (normalized == _normalizeMentionLabel(kMentionGangBotLabel)) {
+    return MessageMentionKind.bot;
   }
   return MessageMentionKind.user;
 }
@@ -328,13 +340,32 @@ bool isMessageMentionRangeForUser({
 const kMentionEveryoneLabel = '所有人';
 const kMentionAdminsLabel = '管理员';
 
-List<MessageMentionOption> _specialMentionOptions(String normalizedQuery) {
+/// gang-bot, the room AI. Mentioning it sends `{type: "bot"}`.
+const kMentionGangBotLabel = 'gang-bot';
+
+List<MessageMentionOption> _specialMentionOptions(
+  String normalizedQuery, {
+  bool includeGangBot = false,
+}) {
   final options = <MessageMentionOption>[];
-  void addIfMatches({required String label, required MessageMentionKind kind}) {
+  void addIfMatches({
+    required String label,
+    required MessageMentionKind kind,
+    String roleLabel = '',
+  }) {
     if (!_specialMentionMatches(label, normalizedQuery)) return;
-    options.add(MessageMentionOption(label: label, roleLabel: '', kind: kind));
+    options.add(
+      MessageMentionOption(label: label, roleLabel: roleLabel, kind: kind),
+    );
   }
 
+  if (includeGangBot) {
+    addIfMatches(
+      label: kMentionGangBotLabel,
+      kind: MessageMentionKind.bot,
+      roleLabel: 'AI',
+    );
+  }
   addIfMatches(label: kMentionEveryoneLabel, kind: MessageMentionKind.everyone);
   addIfMatches(label: kMentionAdminsLabel, kind: MessageMentionKind.admins);
   return options;
@@ -351,6 +382,14 @@ bool _specialMentionMatches(String label, String normalizedQuery) {
   if (label == kMentionAdminsLabel) {
     return 'admin'.contains(normalizedQuery) ||
         'admins'.contains(normalizedQuery);
+  }
+  if (label == kMentionGangBotLabel) {
+    return const [
+      'bot',
+      'ai',
+      'gangbot',
+      '机器人',
+    ].any((alias) => alias.contains(normalizedQuery));
   }
   return false;
 }

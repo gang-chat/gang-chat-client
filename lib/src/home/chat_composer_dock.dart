@@ -678,6 +678,7 @@ class _ComposerMentionTileLeading extends StatelessWidget {
       message_mentions.MessageMentionKind.admins =>
         Icons.admin_panel_settings_outlined,
       message_mentions.MessageMentionKind.user => Icons.alternate_email,
+      message_mentions.MessageMentionKind.bot => Icons.smart_toy_outlined,
     };
     return DecoratedBox(
       decoration: BoxDecoration(

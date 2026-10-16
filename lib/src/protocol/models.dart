@@ -107,6 +107,7 @@ class UserSummary {
     this.commonRooms = const [],
     this.isDeleted = false,
     this.isSuspended = false,
+    this.isBot = false,
   });
 
   final String id;
@@ -128,6 +129,10 @@ class UserSummary {
   final List<UserCommonRoom> commonRooms;
   final bool isDeleted;
   final bool isSuspended;
+
+  /// gang-bot, the room AI. It is not a user account: there is no profile to
+  /// open, and its messages carry an AI badge.
+  final bool isBot;
 
   factory UserSummary.fromJson(Map<String, Object?> json) {
     final username = json['username']! as String;
@@ -177,6 +182,7 @@ class UserSummary {
       isSuspended:
           json['is_suspended'] as bool? ??
           _stringFromJson(json, const ['account_status']) == 'suspended',
+      isBot: json['is_bot'] as bool? ?? false,
     );
   }
 
@@ -198,6 +204,7 @@ class UserSummary {
     List<UserCommonRoom>? commonRooms,
     bool? isDeleted,
     bool? isSuspended,
+    bool? isBot,
   }) {
     return UserSummary(
       id: id,
@@ -219,6 +226,7 @@ class UserSummary {
       commonRooms: commonRooms ?? this.commonRooms,
       isDeleted: isDeleted ?? this.isDeleted,
       isSuspended: isSuspended ?? this.isSuspended,
+      isBot: isBot ?? this.isBot,
     );
   }
 
@@ -255,6 +263,7 @@ class UserSummary {
       commonRooms: commonRooms.isNotEmpty ? commonRooms : fallback.commonRooms,
       isDeleted: false,
       isSuspended: isSuspended || fallback.isSuspended,
+      isBot: isBot || fallback.isBot,
     );
   }
 }
@@ -859,6 +868,8 @@ class RoomCard {
     this.hasUnreadMentionCount = false,
     this.hasPendingJoinRequests = false,
     this.aiVoiceAnnouncementsEnabled = false,
+    this.gangBotAvailable = false,
+    this.gangBotEnabled = true,
   });
 
   final String id;
@@ -882,7 +893,13 @@ class RoomCard {
   final bool hasUnreadMentionCount;
   final bool hasPendingJoinRequests;
   final bool aiVoiceAnnouncementsEnabled;
+
+  /// Whether this server runs gang-bot, and whether this room has it on.
+  final bool gangBotAvailable;
+  final bool gangBotEnabled;
   final DateTime updatedAt;
+
+  bool get gangBotActive => gangBotAvailable && gangBotEnabled;
 
   factory RoomCard.fromJson(Map<String, Object?> json) {
     final hasUnreadCount = json.containsKey('unread_count');
@@ -936,6 +953,8 @@ class RoomCard {
             'ai_voice_announce_enabled',
           ]) ??
           false,
+      gangBotAvailable: json['gang_bot_available'] as bool? ?? false,
+      gangBotEnabled: json['gang_bot_enabled'] as bool? ?? true,
       updatedAt: DateTime.parse(json['updated_at']! as String),
     );
   }
@@ -982,6 +1001,8 @@ class RoomCard {
       hasPendingJoinRequests:
           hasPendingJoinRequests ?? this.hasPendingJoinRequests,
       aiVoiceAnnouncementsEnabled: aiVoiceAnnouncementsEnabled,
+      gangBotAvailable: gangBotAvailable,
+      gangBotEnabled: gangBotEnabled,
       updatedAt: updatedAt,
     );
   }
@@ -1720,6 +1741,8 @@ class RoomDetail {
     this.messageRecallWindowSeconds,
     this.canDeleteRoom,
     this.onlineMemberCount = 0,
+    this.gangBotAvailable = false,
+    this.gangBotEnabled = true,
   });
 
   final String id;
@@ -1742,6 +1765,12 @@ class RoomDetail {
   final int? messageRecallWindowSeconds;
 
   final bool? canDeleteRoom;
+
+  /// Whether this server runs gang-bot, and whether this room has it on.
+  final bool gangBotAvailable;
+  final bool gangBotEnabled;
+
+  bool get gangBotActive => gangBotAvailable && gangBotEnabled;
   final String? avatarUrl;
   final String defaultAvatarKey;
   final int memberCount;
@@ -1799,6 +1828,8 @@ class RoomDetail {
         'can_delete_room',
         'can_delete',
       ]),
+      gangBotAvailable: json['gang_bot_available'] as bool? ?? false,
+      gangBotEnabled: json['gang_bot_enabled'] as bool? ?? true,
       avatarUrl: json['avatar_url'] as String?,
       defaultAvatarKey: json['default_avatar_key'] as String? ?? 'blue-3',
       memberCount: json['member_count']! as int,
@@ -1856,6 +1887,8 @@ class RoomDetail {
       messageRecallPolicy: messageRecallPolicy,
       messageRecallWindowSeconds: messageRecallWindowSeconds,
       canDeleteRoom: canDeleteRoom,
+      gangBotAvailable: gangBotAvailable,
+      gangBotEnabled: gangBotEnabled,
       avatarUrl: avatarUrl,
       defaultAvatarKey: defaultAvatarKey,
       memberCount: memberCount,
@@ -1889,6 +1922,8 @@ class RoomDetail {
       liveParticipantCount: live.participantCount,
       liveAvatarPreview: live.participants.map((p) => p.user).take(5).toList(),
       aiVoiceAnnouncementsEnabled: aiVoiceAnnouncementsEnabled,
+      gangBotAvailable: gangBotAvailable,
+      gangBotEnabled: gangBotEnabled,
       lastMessage: null,
       unreadCount: 0,
       updatedAt: updatedAt,
