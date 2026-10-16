@@ -1380,30 +1380,34 @@ export class LiveSession extends ChangeNotifier {
       // stream and it is published with the video in the main room; the aux
       // publisher is not used there.
       const publishAudioInMainRoom = HostPlatform.isWeb;
-      const capture = await this._captureScreenShare({
-        sourceId,
-        quality,
-        requestAudio: captureScreenAudio || publishAudioInMainRoom,
-      });
-      const videoTrack = new LocalVideoTrack(capture.video, undefined, false);
-      videoTrack.source = Track.Source.ScreenShare;
-      try {
-        // Preserve the room's configured codec choice. The screen-share
-        // encoding budget and single-layer publish belong to this setting.
-        await local.publishTrack(videoTrack, this._screenSharePublishOptions(quality));
-        if (publishAudioInMainRoom && capture.audio != null) {
-          const audioTrack = new LocalAudioTrack(capture.audio, undefined, false);
-          audioTrack.source = Track.Source.ScreenShareAudio;
-          capture.audio = null;
-          await local.publishTrack(audioTrack, { source: Track.Source.ScreenShareAudio });
+      // The Flutter SDK only unmuted an existing share publication; keep the
+      // running capture instead of opening a second one.
+      if (local.getTrackPublication(Track.Source.ScreenShare)?.track == null) {
+        const capture = await this._captureScreenShare({
+          sourceId,
+          quality,
+          requestAudio: captureScreenAudio || publishAudioInMainRoom,
+        });
+        const videoTrack = new LocalVideoTrack(capture.video, undefined, false);
+        videoTrack.source = Track.Source.ScreenShare;
+        try {
+          // Preserve the room's configured codec choice. The screen-share
+          // encoding budget and single-layer publish belong to this setting.
+          await local.publishTrack(videoTrack, this._screenSharePublishOptions(quality));
+          if (publishAudioInMainRoom && capture.audio != null) {
+            const audioTrack = new LocalAudioTrack(capture.audio, undefined, false);
+            audioTrack.source = Track.Source.ScreenShareAudio;
+            capture.audio = null;
+            await local.publishTrack(audioTrack, { source: Track.Source.ScreenShareAudio });
+          }
+        } catch (error) {
+          videoTrack.stop();
+          capture.audio?.stop();
+          throw error;
         }
-      } catch (error) {
-        videoTrack.stop();
-        capture.audio?.stop();
-        throw error;
+        this._releaseScreenShareCapture();
+        this._screenShareCapture = capture;
       }
-      this._releaseScreenShareCapture();
-      this._screenShareCapture = capture;
       this._screenSharing = true;
       // Do not delay the share UI while the first outbound frame becomes
       // available. The initial publish already has the selected FPS/bitrate;
@@ -2210,8 +2214,8 @@ export class LiveSession extends ChangeNotifier {
       }),
     );
     on(RoomEvent.LocalTrackSubscribed, (publication) => push({ type: 'localTrackSubscribed', trackSid: publication.trackSid }));
-    on(RoomEvent.TrackSubscribed, (track, _publication, participant) => {
-      this._attachRemoteAudio(track);
+    on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+      this._attachRemoteAudio(track, publication.source, participant.identity);
       lifecycle('trackSubscribed', participant);
     });
     on(RoomEvent.TrackUnsubscribed, (track, _publication, participant) => {
@@ -2233,13 +2237,30 @@ export class LiveSession extends ChangeNotifier {
     };
   }
 
-  private _attachRemoteAudio(track: RemoteTrack): void {
+  private _attachRemoteAudio(track: RemoteTrack, source: Track.Source, participantIdentity: string): void {
     if (!(track instanceof RemoteAudioTrack)) return;
+    // Start at the right level: the batched volume pass runs a microtask
+    // later, and an own screen-audio aux track must never be heard at all.
+    _setRemoteAudioTrackVolume(track, this._targetRemoteAudioVolume(participantIdentity, source));
     try {
       this._remoteAudio.attach(track);
     } catch (error) {
       console.debug(`live: remote audio attach failed: ${String(error)}`);
     }
+  }
+
+  /** The volume the `_apply*Volume` passes give a remote audio publication. */
+  private _targetRemoteAudioVolume(participantIdentity: string, source: Track.Source): number {
+    if (source === Track.Source.ScreenShareAudio) {
+      const isOwnAux = _isOwnScreenAudioAux(participantIdentity, this._room?.localParticipant.identity);
+      const isWatched =
+        this._watchedScreenShareIdentity != null &&
+        _screenShareAudioOwnerIdentity(participantIdentity) === this._watchedScreenShareIdentity;
+      return isOwnAux || !isWatched ? 0.0 : this._screenShareVolume;
+    }
+    if (participantIdentity === musicBoxBotIdentity) return this._musicBoxVolume;
+    const baseVolume = this._outputMuted ? 0.0 : this._outputVolume;
+    return normalizedParticipantVoiceVolume(baseVolume * this.participantVoiceVolume(participantIdentity));
   }
 
   private _detachRemoteAudio(track: RemoteTrack): void {
@@ -3119,11 +3140,24 @@ export class LiveSession extends ChangeNotifier {
   }
 }
 
+/**
+ * PORT: livekit-client rebuilds a remote track's Web Audio gain node whenever
+ * it re-wires the room's AudioContext (e.g. when a microphone is acquired)
+ * and only re-applies the stored volume when it is truthy, so a plain 0
+ * would snap back to full volume. Silence is therefore applied as an
+ * inaudible (-100 dB) gain.
+ */
+const _silentRemoteAudioVolume = 1e-5;
+
 function _setRemoteAudioVolume(publication: RemoteTrackPublication | TrackPublication, volume: number): void {
   const track = publication.track;
   if (!(track instanceof RemoteAudioTrack)) return;
+  _setRemoteAudioTrackVolume(track, volume);
+}
+
+function _setRemoteAudioTrackVolume(track: RemoteAudioTrack, volume: number): void {
   try {
-    track.setVolume(volume);
+    track.setVolume(volume > 0 ? volume : _silentRemoteAudioVolume);
   } catch {
     // Best-effort.
   }

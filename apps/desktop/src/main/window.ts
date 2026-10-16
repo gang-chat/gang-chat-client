@@ -81,6 +81,9 @@ export function createMainWindow(options: { authenticated: boolean; preload: str
       nodeIntegration: false,
       spellcheck: false,
       backgroundThrottling: false,
+      // Remote voices, the music box and notification tones must play
+      // without a click first, like the native Flutter app.
+      autoplayPolicy: 'no-user-gesture-required',
     },
   });
   mainWindow = window;

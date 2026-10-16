@@ -1,4 +1,4 @@
-import { desktopCapturer, ipcMain, session, shell, systemPreferences } from 'electron';
+import { desktopCapturer, ipcMain, screen, session, shell, systemPreferences } from 'electron';
 import os from 'node:os';
 
 import { IpcChannels, type ScreenSourceInfo } from '../shared/ipc';
@@ -45,21 +45,21 @@ export function systemAudioSupported(): boolean {
 export function installDisplayMediaHandler(): void {
   session.defaultSession.setDisplayMediaRequestHandler(
     async (request, callback) => {
-      const selection = pending;
+      const selection = pending && pending.expiresAt >= Date.now() ? pending : null;
       pending = null;
-      if (!selection || selection.expiresAt < Date.now()) {
-        // No source was chosen in our picker: deny rather than guess.
-        callback({});
-        return;
-      }
       try {
         const sources = await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 0, height: 0 } });
-        const source = sources.find((s) => s.id === selection.sourceId);
+        // Without a picker choice (the Flutter client shared the primary
+        // screen in that case) fall back to the primary display.
+        const source = selection
+          ? sources.find((s) => s.id === selection.sourceId)
+          : (sources.find((s) => s.id.startsWith('screen:') && s.display_id === String(screen.getPrimaryDisplay().id)) ??
+            sources.find((s) => s.id.startsWith('screen:')));
         if (!source) {
           callback({});
           return;
         }
-        const wantsAudio = selection.audio && request.audioRequested && systemAudioSupported();
+        const wantsAudio = (selection?.audio ?? request.audioRequested) && request.audioRequested && systemAudioSupported();
         callback(wantsAudio ? { video: source, audio: 'loopback' } : { video: source });
       } catch {
         callback({});
