@@ -60,7 +60,7 @@ npm run dev -w @gang-chat/desktop
 
 All rooms have roughly 60 messages (fewer for the rooms Demo has not joined) spread over the
 last three days. Between them they cover text, links, generated PNG images
-plus two `picsum.photos` images (those need internet), files (PDF, Markdown,
+plus two more generated photos (`MOCK_EXTERNAL_IMAGES=1` loads them from `picsum.photos` instead), files (PDF, Markdown,
 TXT, CSV, ZIP, JSON), voice clips (generated WAV with `duration_ms`),
 stickers, quotes, `@user` / `@所有人` mentions, a recalled message, system
 events (joined, role changed, live joined), shared songs, a shared playlist,
