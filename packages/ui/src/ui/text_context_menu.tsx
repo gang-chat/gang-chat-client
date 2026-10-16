@@ -234,9 +234,10 @@ export interface TextFieldEditingShortcutsProps {
  *
  * Flutter collapsed the selection and dropped focus on a right click before
  * the menu read them, so it restored both. A DOM field keeps its selection
- * and focus through `contextmenu`, so only the protection's other effect is
- * kept: while it is active (after a secondary pointer-down), the next primary
- * pointer-down anywhere reports
+ * and focus through `contextmenu`, so what remains of the protection is:
+ * [secondaryClickSelection] is applied when the click finds no selection, and
+ * while the protection is active (after a secondary pointer-down) the next
+ * primary pointer-down elsewhere reports
  * [onGlobalPrimaryPointerDownDuringSecondaryClickProtection].
  */
 export function TextFieldEditingShortcuts(props: TextFieldEditingShortcutsProps) {
@@ -246,6 +247,7 @@ export function TextFieldEditingShortcuts(props: TextFieldEditingShortcutsProps)
   const pasteRef = useRef(paste);
   pasteRef.current = paste;
   const protection = useRef<(() => void) | null>(null);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
 
   const clearSecondaryClickProtection = () => {
     protection.current?.();
@@ -310,6 +312,9 @@ export function TextFieldEditingShortcuts(props: TextFieldEditingShortcutsProps)
     clearSecondaryClickProtection();
     const onGlobalPointerDown = (global: PointerEvent) => {
       if ((global.buttons & 1) === 0) return;
+      // A primary press on the field itself ends the protection through the
+      // field's own pointer-down (which Flutter handled before global routes).
+      if (global.target instanceof Node && wrapperRef.current?.contains(global.target)) return;
       propsRef.current.onGlobalPrimaryPointerDownDuringSecondaryClickProtection?.({
         position: { x: global.clientX, y: global.clientY },
         buttons: global.buttons,
@@ -321,7 +326,7 @@ export function TextFieldEditingShortcuts(props: TextFieldEditingShortcutsProps)
   };
 
   return (
-    <div style={_contentsStyle} onContextMenu={onContextMenu} onKeyDown={onKeyDown} onPointerDown={onPointerDown}>
+    <div ref={wrapperRef} style={_contentsStyle} onContextMenu={onContextMenu} onKeyDown={onKeyDown} onPointerDown={onPointerDown}>
       {props.children}
     </div>
   );

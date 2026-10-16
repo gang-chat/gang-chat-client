@@ -42,8 +42,10 @@ export class LivePresenceAnnouncement {
     }
   }
 
-  /// Separate segments let the platform TTS adapter insert real pauses instead
-  /// of relying on punctuation, whose timing varies between installed voices.
+  /**
+   * Separate segments let the platform TTS adapter insert real pauses instead
+   * of relying on punctuation, whose timing varies between installed voices.
+   */
   get segments(): string[] {
     return [this.roleLabel, this.roomDisplayName, this.actionLabel];
   }

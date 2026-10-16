@@ -560,8 +560,8 @@ export class MessagesController {
 
     const transfer = pending.transfer;
     const bytes = await readBytes();
-    // PORT: kept verbatim from the Dart source (a mis-encoded '文件为空').
-    if (bytes.length === 0) throw new Error('鏂囦欢涓虹┖');
+    // PORT: the Dart source has this message mis-encoded (UTF-8 read as GBK).
+    if (bytes.length === 0) throw new Error('文件为空');
     if (transfer.cancelled) throw new UploadCancelledException();
 
     const asset = await this.uploadFileAsset({

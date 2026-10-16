@@ -19,26 +19,30 @@ export enum RoomMessageHistoryCategory {
  */
 export const RoomMessageHistoryCategoryValue = {
   apiValue(category: RoomMessageHistoryCategory): string {
-    switch (category) {
-      case RoomMessageHistoryCategory.all:
-        return 'all';
-      case RoomMessageHistoryCategory.links:
-        return 'links';
-      case RoomMessageHistoryCategory.voice:
-        return 'voice';
-      case RoomMessageHistoryCategory.stickers:
-        return 'stickers';
-      case RoomMessageHistoryCategory.images:
-        return 'images';
-      case RoomMessageHistoryCategory.files:
-        return 'files';
-      case RoomMessageHistoryCategory.music:
-        return 'music';
-      case RoomMessageHistoryCategory.system:
-        return 'system';
-    }
+    return roomMessageHistoryCategoryApiValue(category);
   },
 };
+
+export function roomMessageHistoryCategoryApiValue(category: RoomMessageHistoryCategory): string {
+  switch (category) {
+    case RoomMessageHistoryCategory.all:
+      return 'all';
+    case RoomMessageHistoryCategory.links:
+      return 'links';
+    case RoomMessageHistoryCategory.voice:
+      return 'voice';
+    case RoomMessageHistoryCategory.stickers:
+      return 'stickers';
+    case RoomMessageHistoryCategory.images:
+      return 'images';
+    case RoomMessageHistoryCategory.files:
+      return 'files';
+    case RoomMessageHistoryCategory.music:
+      return 'music';
+    case RoomMessageHistoryCategory.system:
+      return 'system';
+  }
+}
 
 export function roomMessageHistoryCopyText(message: Message): string {
   const content = message_display.messageCopyText(message).trim();

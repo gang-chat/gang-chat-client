@@ -77,3 +77,17 @@ Flutter。约定见 `docs/js-port-conventions.md`。本文记录各模块的移�
 - `StateError` 改为 `Error`，错误文案前缀是 "Error:" 而不是 "Bad state:"。
 - `CloseBehaviorStorage.storageValue` 扩展 getter 改为函数 `closeBehaviorStorageValue(behavior)`。
 
+### 应用层：消息、房间展示、搜索与实时事件（`packages/core/src/app`）
+
+- `composerAttachmentGlyph` 返回 `Icons.*` 的键名（如 `'image_outlined'`），因为 core 不依赖
+  UI 的图标表；界面层用 `Icons[composerAttachmentGlyph(...)]` 渲染。
+- `RoomMessageHistoryCategory.apiValue` 扩展 getter 改为
+  `RoomMessageHistoryCategoryValue.apiValue(category)` / `roomMessageHistoryCategoryApiValue(category)`。
+- `fnv1a64` / `fnv1a64Signed` 返回 `bigint`，十六进制输出与 Dart 版一致（缓存键不变）。
+- 本地时间：Dart 的 `toLocal()` 直接用 `Date` 的本地 getter；`DateTime(y, m, d)` 是本地午夜；
+  "昨天 / 前天"等天数差按 `Duration.inDays`（毫秒差截断）计算，跨夏令时与 Dart 一致。
+- `RoomNotificationDateRange` 的 `==` 改为 `equals()`；起止日期颠倒时抛 `RangeError`
+  （Dart 是 `ArgumentError`）。
+- 音乐组件剪贴板信封的 base64url 编解码手写实现，不依赖 `btoa` / `Buffer`（React Native 可用）。
+- `MessagesController` 的语音时长参数是毫秒；`fileTransfers` 是 `Map<string, FileTransferState>`。
+

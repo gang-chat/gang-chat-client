@@ -127,12 +127,13 @@ describe('zip decoder', () => {
       random[i] = seed >>> 24;
     }
 
+    // Compare with Buffer.equals: a deep `toEqual` over 70 KB is needlessly slow.
+    const roundTrips = (input: Uint8Array, options: Parameters<typeof deflateRawSync>[1] = {}) =>
+      Buffer.from(inflateRaw(Uint8Array.from(deflateRawSync(input, options)))).equals(Buffer.from(input));
     for (const input of [text, random, _pngBytes, new Uint8Array(0)]) {
-      expect(Buffer.from(inflateRaw(Uint8Array.from(deflateRawSync(input))))).toEqual(Buffer.from(input));
-      expect(Buffer.from(inflateRaw(Uint8Array.from(deflateRawSync(input, { level: 0 }))))).toEqual(Buffer.from(input));
-      expect(
-        Buffer.from(inflateRaw(Uint8Array.from(deflateRawSync(input, { strategy: constants.Z_FIXED })))),
-      ).toEqual(Buffer.from(input));
+      expect(roundTrips(input)).toBe(true);
+      expect(roundTrips(input, { level: 0 })).toBe(true);
+      expect(roundTrips(input, { strategy: constants.Z_FIXED })).toBe(true);
     }
   });
 
