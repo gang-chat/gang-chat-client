@@ -1059,6 +1059,9 @@ export function _FileImagePreview({ url, title, width, height, mediaCache = null
         borderRadius: UiRadii.sm,
         overflow: 'hidden',
         backgroundColor: UiColors.surfaceLow,
+        // The DecoratedBox border paints behind the image, like an inset
+        // shadow under in-flow content.
+        boxShadow: `inset 0 0 0 1px ${UiColors.border}`,
       }}
     >
       <CachedAssetImage
@@ -1075,22 +1078,6 @@ export function _FileImagePreview({ url, title, width, height, mediaCache = null
             </div>
           </div>
         )}
-      />
-      {/*
-        The DecoratedBox border sits behind the image in Flutter; an inset
-        shadow on the clip box would be covered the same way, so draw it as a
-        background layer under the image instead.
-      */}
-      <div
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          inset: 0,
-          zIndex: -1,
-          borderRadius: UiRadii.sm,
-          boxShadow: `inset 0 0 0 1px ${UiColors.border}`,
-          pointerEvents: 'none',
-        }}
       />
     </div>
   );
