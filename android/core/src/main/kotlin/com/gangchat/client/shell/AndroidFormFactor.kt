@@ -10,3 +10,7 @@ const val androidTabletShortestSide: Double = 600.0
 
 fun isAndroidTabletLogicalSize(logicalSize: Size): Boolean =
     logicalSize.shortestSide >= androidTabletShortestSide
+
+/** [isAndroidTabletLogicalSize] with the logical (dp) size spelled out. */
+fun isAndroidTabletLogicalSize(width: Double, height: Double): Boolean =
+    isAndroidTabletLogicalSize(Size(width, height))

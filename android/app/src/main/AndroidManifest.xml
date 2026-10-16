@@ -30,6 +30,31 @@
         android:name=".GangChatApplication"
         android:label="Gang Chat"
         android:icon="@mipmap/ic_launcher">
+        <!-- Same authority and paths as the Flutter build: release APKs in
+             cache/release-updates/ and copied clipboard images. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/release_update_paths" />
+        </provider>
+        <service
+            android:name=".platform.GangChatBackgroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync|remoteMessaging|microphone"
+            android:stopWithTask="false" />
+        <service
+            android:name=".platform.GangChatFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+        <!-- The launcher component keeps the Flutter build's name, so home
+             screen shortcuts and notification intents survive the upgrade. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -46,4 +71,31 @@
             </intent-filter>
         </activity>
     </application>
+    <!-- Package visibility for the intents the platform services resolve or
+         launch: the system APK installer, links, mail drafts, text-to-speech
+         engines and the text selection toolbar's "process text" actions. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.INSTALL_PACKAGE" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <data android:scheme="content" />
+            <data android:mimeType="application/vnd.android.package-archive" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="mailto" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT" />
+            <data android:mimeType="text/plain" />
+        </intent>
+    </queries>
 </manifest>
