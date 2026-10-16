@@ -47,8 +47,8 @@ object FileSelector {
         setMimeTypes(intent, extensions, mimeTypes)
         val (resultCode, data) = startForResult(intent, openFileRequestCode)
         if (resultCode != Activity.RESULT_OK || data == null) return null
-        val uri = data.data ?: throw Exception("Failed to retrieve data from opening file.")
-        return toPickedFile(uri) ?: throw Exception("Failed to read file: $uri")
+        val uri = data.data ?: throw pigeonError("Failed to retrieve data from opening file.")
+        return toPickedFile(uri) ?: throw pigeonError("Failed to read file: $uri")
     }
 
     /** Opens the picker for several documents; empty when cancelled. */
@@ -64,16 +64,29 @@ object FileSelector {
         // first reply wins), otherwise with every clip item.
         val uri = data.data
         if (uri != null) {
-            return listOf(toPickedFile(uri) ?: throw Exception("Failed to read file: $uri"))
+            return listOf(toPickedFile(uri) ?: throw pigeonError("Failed to read file: $uri"))
         }
         val clipData = data.clipData ?: return emptyList()
         val files = ArrayList<PickedFile>(clipData.itemCount)
         for (i in 0 until clipData.itemCount) {
             val itemUri = clipData.getItemAt(i).uri
-            files.add(toPickedFile(itemUri) ?: throw Exception("Failed to read file: $uri"))
+            files.add(toPickedFile(itemUri) ?: throw pigeonError("Failed to read file: $uri"))
         }
         return files
     }
+
+    /**
+     * How the plugin's errors reached Dart: Pigeon wrapped a native exception
+     * into a `PlatformException` coded with the exception's class name.
+     */
+    private fun pigeonError(error: Throwable): PlatformException =
+        PlatformException(
+            code = error.javaClass.simpleName,
+            message = error.toString(),
+            details = "Cause: ${error.cause}, Stacktrace: ${error.stackTraceToString()}",
+        )
+
+    private fun pigeonError(message: String): PlatformException = pigeonError(Exception(message))
 
     /** Routes a result from the activity; `true` when it belonged to the picker. */
     fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
@@ -83,7 +96,7 @@ object FileSelector {
     }
 
     private suspend fun startForResult(intent: Intent, requestCode: Int): Pair<Int, Intent?> {
-        val activity = GangChatPlatform.activity ?: throw Exception("No activity is available.")
+        val activity = GangChatPlatform.activity ?: throw pigeonError("No activity is available.")
         val waiter = CompletableDeferred<Pair<Int, Intent?>>()
         pending.remove(requestCode)?.complete(Activity.RESULT_CANCELED to null)
         pending[requestCode] = waiter
@@ -92,7 +105,7 @@ object FileSelector {
             activity.startActivityForResult(intent, requestCode)
         } catch (error: Exception) {
             pending.remove(requestCode)
-            throw error
+            throw pigeonError(error)
         }
         return waiter.await()
     }

@@ -8,6 +8,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.os.Looper
+import android.speech.tts.TextToSpeech
 import android.net.Uri as AndroidUri
 import androidx.activity.ComponentActivity
 import androidx.test.core.app.ApplicationProvider
@@ -23,6 +24,7 @@ import com.gangchat.client.testing.pumpEventQueue
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.time.Instant
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.async
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -40,6 +42,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowTextToSpeech
 
 /**
  * Port of test/unit/shell/android_system_service_test.dart. The Dart test
@@ -344,6 +347,27 @@ class AndroidSystemServiceTest {
 
             assertEquals(listOf("room-2"), selected)
             subscription.cancel()
+        }
+
+    @Test
+    fun `speech speaks the cleaned segments until it is stopped`() =
+        gang.runTest {
+            val speaking = async { android.speak(listOf(" 你好 ", "", "世界"), volume = 2.0, pause = 280.milliseconds) }
+            pumpEventQueue()
+            val tts = ShadowTextToSpeech.getLastTextToSpeechInstance()
+            shadowOf(tts).onInitListener.onInit(TextToSpeech.SUCCESS)
+            idleMainLooper()
+            pumpEventQueue()
+
+            assertEquals(listOf("你好", "世界"), shadowOf(tts).spokenTextList)
+            assertEquals(1f, ShadowTextToSpeech.getLastParams()!!.getFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME))
+            assertFalse(speaking.isCompleted)
+
+            android.disposeSpeech()
+            pumpEventQueue()
+
+            assertTrue(speaking.isCompleted)
+            assertTrue(shadowOf(tts).isShutdown)
         }
 
     @Test

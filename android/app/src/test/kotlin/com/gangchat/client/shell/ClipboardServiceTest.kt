@@ -4,8 +4,10 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.gangchat.client.platform.resetFileProviderPathCache
 import com.gangchat.client.testing.GangTestRule
 import java.io.File
+import org.junit.Before
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -28,6 +30,11 @@ import org.robolectric.annotation.Config
 class ClipboardServiceTest {
     @get:Rule
     val gang = GangTestRule()
+
+    @Before
+    fun setUp() {
+        resetFileProviderPathCache()
+    }
 
     @Test
     fun `SelectedFile fromBytes keeps clipboard image bytes uploadable`() =
