@@ -15,6 +15,7 @@ import type {
 
 import type { HomeShellState } from './home_shell';
 import { _ContentMode } from './home_shell';
+import { _DartException } from './home_shell_messages';
 
 /** Port of `extension _HomeShellNotifications on _HomeShellState`. */
 export const HomeShellNotifications = {
@@ -356,7 +357,7 @@ export const HomeShellNotifications = {
   async _copyNotification(this: HomeShellState, item: room_notifications.RoomNotificationItem): Promise<void> {
     const text = room_notifications.roomNotificationCopyText(item);
     if (text.length === 0) {
-      throw new Error('这条通知没有可复制的内容');
+      throw new _DartException('这条通知没有可复制的内容');
     }
     await this._clipboardService.writeText(text);
   },

@@ -18,6 +18,7 @@ import type {
   LiveState,
   Message,
   MessageQuote,
+  PublicRoom,
   RoomCard,
   RoomDetail,
   Sticker,
@@ -32,7 +33,8 @@ import { UiColors, argb } from '../ui/tokens';
 import { _ComposerDock } from './chat_composer_dock';
 import { _RoomHeader } from './chat_header';
 import type { ChatImagePreviewActions } from './chat_image_preview';
-import { ChatMessageActions, _MessageStage } from './chat_messages';
+import { ChatMessageActions, _MessageStage, type ChatFileDownloadActions, type ChatVoicePlaybackActions } from './chat_messages';
+import type { RoomProfileResolver, UserProfileActionBuilder } from './room_profile_card';
 
 export * from './chat_image_preview';
 export * from './chat_header';
@@ -57,7 +59,11 @@ export const _composerBottomInset = _chatFloatingEdgeInset;
 export const _outgoingBubble = argb(0xff1f352b);
 export const _incomingBubble = UiColors.surface;
 
-/** The props `_MessageStage` (chat_messages) declares; the pane passes them through. */
+/**
+ * The props `_MessageStage` (chat_messages) declares. Collections the pane
+ * only passes through take its declared types, so `Map` vs `ReadonlyMap`
+ * (or `readonly` arrays) cannot drift between the two modules.
+ */
 type _MessageStageProps = ComponentProps<typeof _MessageStage>;
 
 export interface ChatPaneProps {
@@ -69,14 +75,14 @@ export interface ChatPaneProps {
   messages: _MessageStageProps['messages'];
   newMessageCount: number;
   focusMessageId?: string | null;
-  onFocusMessageHandled?: _MessageStageProps['onFocusMessageHandled'];
+  onFocusMessageHandled?: ((messageId: string) => void) | null;
   fileTransfers: _MessageStageProps['fileTransfers'];
   fileDownloads: _MessageStageProps['fileDownloads'];
-  downloadActions: _MessageStageProps['downloadActions'];
-  voicePlaybackActions: _MessageStageProps['voicePlaybackActions'];
+  downloadActions: ChatFileDownloadActions;
+  voicePlaybackActions: ChatVoicePlaybackActions;
   imagePreviewActions: ChatImagePreviewActions;
   /** Defaults to `ChatMessageActions.disabled()`. */
-  messageActions?: _MessageStageProps['messageActions'];
+  messageActions?: ChatMessageActions;
   loading: boolean;
   error: string | null;
   sending: boolean;
@@ -129,10 +135,10 @@ export interface ChatPaneProps {
    * rooms). The hover card calls this lazily; when null it shows just the
    * lightweight summary carried by the message.
    */
-  onResolveSenderProfile?: _MessageStageProps['onResolveSenderProfile'];
-  onResolveRoomProfile?: _MessageStageProps['onResolveRoomProfile'];
-  onEnterProfileRoom?: _MessageStageProps['onEnterProfileRoom'];
-  senderProfileActionBuilder?: _MessageStageProps['senderProfileActionBuilder'];
+  onResolveSenderProfile?: ((sender: UserSummary) => Promise<UserSummary>) | null;
+  onResolveRoomProfile?: RoomProfileResolver | null;
+  onEnterProfileRoom?: ((room: PublicRoom) => void) | null;
+  senderProfileActionBuilder?: UserProfileActionBuilder | null;
   onMentionUser?: ((user: UserSummary) => void) | null;
 
   /**
@@ -209,7 +215,7 @@ export function ChatPane(props: ChatPaneProps) {
           messages={props.messages}
           newMessageCount={props.newMessageCount}
           focusMessageId={props.focusMessageId ?? null}
-          onFocusMessageHandled={props.onFocusMessageHandled}
+          onFocusMessageHandled={props.onFocusMessageHandled ?? undefined}
           mentionMembers={mentionMembers}
           mentionMembersReady={mentionMembersReady}
           fileTransfers={props.fileTransfers}
@@ -222,10 +228,10 @@ export function ChatPane(props: ChatPaneProps) {
           onRetry={props.onRetry}
           onViewedNewMessages={props.onViewedNewMessages}
           bottomInset={_messageListBottomInset}
-          onResolveSenderProfile={props.onResolveSenderProfile}
-          onResolveRoomProfile={props.onResolveRoomProfile}
-          onEnterProfileRoom={props.onEnterProfileRoom}
-          senderProfileActionBuilder={props.senderProfileActionBuilder}
+          onResolveSenderProfile={props.onResolveSenderProfile ?? undefined}
+          onResolveRoomProfile={props.onResolveRoomProfile ?? undefined}
+          onEnterProfileRoom={props.onEnterProfileRoom ?? undefined}
+          senderProfileActionBuilder={props.senderProfileActionBuilder ?? undefined}
           onMentionUser={props.onMentionUser ?? undefined}
         />
       </Expanded>

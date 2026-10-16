@@ -27,7 +27,7 @@ import { Icon, Icons } from '../ui/icon';
 import { Input } from '../ui/input';
 import { showDialog, useRoute } from '../ui/overlay';
 import { Segment, SegmentedControl } from '../ui/segmented_control';
-import { UiColors, UiCurves, UiRadii, UiSpacing, UiTypography, withAlpha } from '../ui/tokens';
+import { UiColors, UiCurves, UiRadii, UiSpacing, UiTypography } from '../ui/tokens';
 import { HoverCardAnchor, HoverCardSelectableText } from './hover_card_anchor';
 
 export class MusicTrackCardData {
@@ -451,11 +451,11 @@ class _MusicTrackPlaylistTargetDialogState extends ViewState<_MusicTrackPlaylist
         </div>
       );
     } else {
-      // RawScrollbar(thickness: 7, radius: 999, thumb: textMuted 82%) over a
       // ListView with 10px of right padding.
+      // PORT: Flutter drew a RawScrollbar (7px, pill, textMuted 82%); the list
+      // uses the app's global thin scrollbar (ui.css) instead.
       body = (
         <div
-          className="gang-music-track-playlist-target-list"
           style={{
             flex: '1 1 0',
             minHeight: 0,
@@ -465,7 +465,6 @@ class _MusicTrackPlaylistTargetDialogState extends ViewState<_MusicTrackPlaylist
             display: 'flex',
             flexDirection: 'column',
             gap: UiSpacing.sm,
-            scrollbarColor: `${withAlpha(UiColors.textMuted, 0.82)} transparent`,
           }}
         >
           {visibleTargets.map((target) => (

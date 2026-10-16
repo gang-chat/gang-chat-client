@@ -2,8 +2,7 @@ import { createRef, useEffect, useLayoutEffect, useMemo, useState, type CSSPrope
 
 import type { AvailableAppUpdate } from '@gang-chat/core/app/app_update';
 import type { AudioDeviceStore } from '@gang-chat/core/app/audio_device_store';
-import type { AndroidPushRegistrationController } from '@gang-chat/core/app/android_push_registration_controller';
-import { AndroidPushRegistrationController as AndroidPushRegistrationControllerImpl } from '@gang-chat/core/app/android_push_registration_controller';
+import { AndroidPushRegistrationController } from '@gang-chat/core/app/android_push_registration_controller';
 import { AuthenticatedAppServices } from '@gang-chat/core/app/authenticated_app_services';
 import type { AuthenticatedAppContext } from '@gang-chat/core/app/authenticated_app_context';
 import type { CloseBehaviorStore } from '@gang-chat/core/app/close_behavior';
@@ -775,7 +774,7 @@ export class HomeShellState extends ViewState<ResolvedHomeShellProps> {
   _installAndroidPushRegistration(): void {
     const widget = this.widget;
     if (!widget.androidSystemService.isSupported) return;
-    const controller = new AndroidPushRegistrationControllerImpl({
+    const controller = new AndroidPushRegistrationController({
       api: this._services.api,
       androidSystemService: widget.androidSystemService,
     });

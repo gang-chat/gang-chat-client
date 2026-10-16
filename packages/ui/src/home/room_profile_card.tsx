@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 
 import * as room_display from '@gang-chat/core/app/room_display';
 import { PublicRoom, type CurrentUser, type UserCommonRoom, type UserSummary } from '@gang-chat/core/protocol/models';
@@ -358,6 +358,13 @@ interface _UserProfileCardPopupProps {
 function _UserProfileCardPopup(props: _UserProfileCardPopupProps) {
   const ref = useRef<HTMLDivElement | null>(null);
   const [placed, setPlaced] = useState<WindowPoint | null>(null);
+  // The layout delegate re-runs when the window resizes.
+  const [, setWindowRevision] = useState(0);
+  useEffect(() => {
+    const onResize = () => setWindowRevision((value) => value + 1);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
   const safeInsets = resolveEdgeInsets(hoverCardOverlaySafeInsets());
   const windowWidth = window.innerWidth;
   const windowHeight = window.innerHeight;

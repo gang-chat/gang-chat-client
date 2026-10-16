@@ -63,7 +63,7 @@ import type {
 } from '@gang-chat/core/protocol/models';
 
 import { EdgeInsets } from '../lib/edge_insets';
-import { Column, Expanded, Flexible, Row, SizedBox, Stack, Positioned, Text } from '../lib/layout';
+import { Column, Expanded, Positioned, Row, SizedBox, Stack, Text } from '../lib/layout';
 import { SystemMouseCursors } from '../lib/mouse_cursors';
 import { CircularProgressIndicator } from '../lib/progress_indicator';
 import { TextEditingController } from '../lib/text_editing';
@@ -1822,21 +1822,18 @@ function _NRow({ mainAxisSize, children }: { mainAxisSize?: 'min' | 'max'; child
  */
 function _NFlex({ flex = 1, expanded = false, children }: { flex?: number; expanded?: boolean; children?: ReactNode }) {
   const measuring = useContext(_NotificationMeasureContext);
-  if (measuring) {
-    return (
-      <div data-nflex={flex} style={{ flex: '0 0 auto', minWidth: 0 }}>
-        {children}
-      </div>
-    );
-  }
-  return expanded ? (
-    <Expanded data-nflex={flex} flex={flex}>
+  // One element type in both passes, so finishing the measurement does not
+  // remount the row's hover cards. The styles are layout.tsx's Expanded /
+  // Flexible.
+  const style: CSSProperties = measuring
+    ? { flex: '0 0 auto', minWidth: 0 }
+    : expanded
+      ? { flex: `${flex} 1 0`, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }
+      : { flex: `0 ${flex} auto`, minWidth: 0, minHeight: 0 };
+  return (
+    <div data-nflex={flex} style={style}>
       {children}
-    </Expanded>
-  ) : (
-    <Flexible data-nflex={flex} flex={flex}>
-      {children}
-    </Flexible>
+    </div>
   );
 }
 
@@ -1999,7 +1996,8 @@ function _CompactNotificationRow({
       <SizedBox
         data-testid={timeKey}
         width={CompactActivityLayout.compactTimestampColumnWidth}
-        style={{ display: 'flex', flexDirection: 'column' }}
+        // The FittedBox fills the tight 68px column and centres its child.
+        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}
       >
         <CompactActivityTimestamp timestamp={time} style={{ ...UiTypography.label, color: UiColors.textMuted, lineHeight: 1.28 }} />
       </SizedBox>
