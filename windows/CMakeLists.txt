@@ -57,6 +57,15 @@ add_subdirectory("runner")
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# flutter_inappwebview_windows builds C++/WinRT as C++17, which includes
+# <experimental/coroutine>. MSVC 14.51 (Visual Studio 18) turns that header's
+# deprecation into a hard error unless it is silenced.
+if(TARGET flutter_inappwebview_windows_plugin)
+  target_compile_definitions(flutter_inappwebview_windows_plugin PRIVATE
+    _SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
+  )
+endif()
+
 
 # === Installation ===
 # Support files are copied into place next to the executable, so that it can
