@@ -23,23 +23,28 @@ const USAGE = `Usage: node tool/js/mock_server/server.mjs [options]
   --quiet                  Only print the startup banner and errors
   -h, --help               Show this help`;
 
+const CLI_OPTIONS = {
+  port: { type: 'string' },
+  host: { type: 'string' },
+  'public-url': { type: 'string' },
+  'livekit-url': { type: 'string' },
+  'token-ttl': { type: 'string' },
+  'chatter-interval': { type: 'string' },
+  heartbeat: { type: 'string' },
+  latency: { type: 'string' },
+  'latest-version': { type: 'string' },
+  quiet: { type: 'boolean' },
+  help: { type: 'boolean', short: 'h' },
+};
+
 function parseCli(argv) {
-  const { values } = parseArgs({
-    args: argv,
-    options: {
-      port: { type: 'string' },
-      host: { type: 'string' },
-      'public-url': { type: 'string' },
-      'livekit-url': { type: 'string' },
-      'token-ttl': { type: 'string' },
-      'chatter-interval': { type: 'string' },
-      heartbeat: { type: 'string' },
-      latency: { type: 'string' },
-      'latest-version': { type: 'string' },
-      quiet: { type: 'boolean' },
-      help: { type: 'boolean', short: 'h' },
-    },
-  });
+  let values;
+  try {
+    ({ values } = parseArgs({ args: argv, options: CLI_OPTIONS }));
+  } catch (error) {
+    console.error(`${error.message}\n\n${USAGE}`);
+    process.exit(2);
+  }
   if (values.help) {
     console.log(USAGE);
     process.exit(0);

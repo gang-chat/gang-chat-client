@@ -85,12 +85,6 @@ export function maskEmail(email) {
   return `${local.slice(0, 1)}***@${domain}`;
 }
 
-export function trimmedOrNull(value) {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  return trimmed.length === 0 ? null : trimmed;
-}
-
 /** Reorders `items` (objects with `id`) so `ids` come first in the given order. */
 export function moveIdsToFront(items, ids) {
   const wanted = ids.filter((id) => items.some((item) => item.id === id));

@@ -7,7 +7,7 @@ export const REQUEST_ID_HEADER = 'x-request-id';
 export const MAX_BODY_BYTES = 64 * 1024 * 1024;
 
 /**
- * Thrown by handlers; rendered as `{ "error": { code, message, request_id } }`,
+ * Thrown by handlers; rendered as `{ "error": { code, message, request_id }, ...extra }`,
  * the shape `ApiException.fromResponse` / `AuthException.fromResponse` parse.
  * Messages are English on purpose: the client maps known phrases and codes to
  * its own Chinese copy (lib/src/protocol/error_messages.dart).
@@ -193,7 +193,7 @@ export function sendJson(res, status, body, headers = {}) {
 }
 
 export function sendError(res, error, requestId) {
-  const body = { error: { code: error.code, message: error.message, request_id: requestId, ...error.extra } };
+  const body = { error: { code: error.code, message: error.message, request_id: requestId }, ...error.extra };
   sendJson(res, error.status, body);
 }
 

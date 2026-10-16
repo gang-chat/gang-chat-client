@@ -40,3 +40,52 @@
   color: var(--gang-placeholder-color, #66666d);
   opacity: 1;
 }
+
+/*
+ * Indeterminate LinearProgressIndicator (home/room_members_components.tsx):
+ * Flutter's two-line timing over 1800ms. Each line runs from its tail (left)
+ * to its head (right); one property per keyframes so each segment keeps its
+ * own Material curve.
+ */
+@keyframes gang-linear-progress-line1-head {
+  0% {
+    right: 100%;
+    animation-timing-function: cubic-bezier(0.2, 0, 0.8, 1);
+  }
+  41.6667%,
+  100% {
+    right: 0%;
+  }
+}
+@keyframes gang-linear-progress-line1-tail {
+  0%,
+  18.5% {
+    left: 0%;
+    animation-timing-function: cubic-bezier(0.4, 0, 1, 1);
+  }
+  60.1667%,
+  100% {
+    left: 100%;
+  }
+}
+@keyframes gang-linear-progress-line2-head {
+  0%,
+  55.5556% {
+    right: 100%;
+    animation-timing-function: cubic-bezier(0, 0, 0.65, 1);
+  }
+  87.0556%,
+  100% {
+    right: 0%;
+  }
+}
+@keyframes gang-linear-progress-line2-tail {
+  0%,
+  70.3889% {
+    left: 0%;
+    animation-timing-function: cubic-bezier(0.1, 0, 0.45, 1);
+  }
+  100% {
+    left: 100%;
+  }
+}

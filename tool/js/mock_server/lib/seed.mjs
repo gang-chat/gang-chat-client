@@ -154,7 +154,7 @@ export function seedStore(store) {
   for (const spec of USERS) {
     const { avatarColor, ...user } = spec;
     if (avatarColor) user.avatarAssetId = media.avatar(avatarColor).id;
-    store.addUser(user);
+    store.addUser({ ...user, seeded: true });
   }
 
   seedStickerPacks(store, media, now);

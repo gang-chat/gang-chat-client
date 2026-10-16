@@ -1,13 +1,13 @@
 // Background activity so the UI has something live to show: another seeded
 // user posts into the first room every N seconds, and playing music boxes
 // advance (structural `music_box_changed` on track change, `music_box_progress`
-// every couple of seconds).
+// every second).
 import { emitMusicBoxChanged, memberIds, postMessage } from './events.mjs';
 import { photoPng } from './media.mjs';
 import { progressJson, tick } from './music_box.mjs';
 import { CHATTER_LINES, DEMO_USER_ID, FIRST_ROOM_ID } from './seed.mjs';
 
-const MUSIC_TICK_MS = 2000;
+const MUSIC_TICK_MS = 1000;
 
 export function startSimulation(app) {
   const timers = [];
@@ -25,16 +25,19 @@ export function startSimulation(app) {
 let chatterCount = 0;
 
 /**
- * Posts one message "from someone else" into FIRST_ROOM_ID: a member who is
- * not currently connected, never Demo or the bot. Mostly text; every 5th is an
- * image and every 7th mentions Demo.
+ * Posts one message "from someone else" into FIRST_ROOM_ID: a seeded member
+ * who is not currently connected (never Demo, the bot, or accounts created at
+ * runtime). Mostly text; every 5th is an image and every 7th mentions Demo.
  */
 export function postChatter(app, roomId = FIRST_ROOM_ID) {
   const { store, hub } = app;
   const room = store.rooms.get(roomId);
   if (!room) return null;
   const connected = hub.connectedUserIds();
-  const humans = memberIds(room).filter((id) => id !== DEMO_USER_ID && !store.users.get(id).isBot);
+  const humans = memberIds(room).filter((id) => {
+    const user = store.users.get(id);
+    return id !== DEMO_USER_ID && user.seeded && !user.isBot;
+  });
   const idle = humans.filter((id) => !connected.has(id));
   const pool = idle.length > 0 ? idle : humans;
   if (pool.length === 0) return null;

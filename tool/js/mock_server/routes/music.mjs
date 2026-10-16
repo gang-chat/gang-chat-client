@@ -2,7 +2,7 @@
 // (`/me/music-box/playlists`) and room (`/rooms/:roomId/music-box/playlists`)
 // playlists share one route table built by `playlistRoutes`.
 import { emitMusicBoxChanged } from '../lib/events.mjs';
-import { badRequest, binary, conflict, created, notFound, ok } from '../lib/http.mjs';
+import { ApiError, badRequest, binary, conflict, created, notFound, ok } from '../lib/http.mjs';
 import { requiredString, stringList } from '../lib/input.mjs';
 import { encodeWav } from '../lib/media.mjs';
 import { activate, control, enqueue, findCatalogTrack, musicBoxJson, removeItem, searchCatalog } from '../lib/music_box.mjs';
@@ -53,7 +53,15 @@ function searchMusicBox(c) {
 /** Mutates the room's music box, broadcasts `music_box_changed`, returns the new snapshot. */
 function mutateMusicBox(c, mutate) {
   const room = memberRoom(c);
-  mutate(room.musicBox, room);
+  try {
+    mutate(room.musicBox, room);
+  } catch (error) {
+    // A revision conflict carries the authoritative snapshot for the client to apply.
+    if (error instanceof ApiError && error.code === 'music_box_revision_conflict') {
+      error.extra = { state: musicBoxJson(c.store, room) };
+    }
+    throw error;
+  }
   emitMusicBoxChanged(c.app, room);
   return musicBoxJson(c.store, room);
 }

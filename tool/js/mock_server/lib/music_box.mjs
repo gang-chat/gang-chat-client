@@ -120,6 +120,24 @@ function stop(box) {
   box.positionMs = 0;
 }
 
+/** Switches to `item` from the start; a paused box stays paused (docs/music-box-api.md). */
+function switchTo(box, item, now) {
+  const wasPaused = box.state === 'paused';
+  play(box, item, now);
+  if (wasPaused) box.state = 'paused';
+}
+
+function assertRevision(box, expectedRevision) {
+  if (expectedRevision != null && expectedRevision !== box.revision) {
+    throw conflict('music box state changed; refresh and try again', 'music_box_revision_conflict');
+  }
+}
+
+/** The temporary queue only plays in order or repeats one; saved playlists allow every mode. */
+export function allowedModes(box) {
+  return box.activeSource.type === 'temporary' ? ['sequential', 'repeat_one'] : PLAYBACK_MODES;
+}
+
 /** Index of the item after the current one, or -1. `natural` = the track ended on its own. */
 function nextIndex(box, { natural }) {
   const queue = activeQueue(box);
@@ -138,10 +156,14 @@ function nextIndex(box, { natural }) {
 function advance(box, now, { natural }) {
   const index = nextIndex(box, { natural });
   if (index < 0) stop(box);
-  else play(box, activeQueue(box)[index], now);
+  else switchTo(box, activeQueue(box)[index], now);
 }
 
-/** Applies `POST /music-box/control`. Throws ApiError for invalid commands. */
+/**
+ * Applies `POST /music-box/control` (actions per docs/music-box-api.md).
+ * Transport actions ignore `expected_revision`; `set_mode` and
+ * `clear_temporary_playlist` reject a stale one. Throws ApiError for invalid commands.
+ */
 export function control(box, { action, itemId, mode, expectedRevision }, now = Date.now()) {
   const queue = activeQueue(box);
   switch (action) {
@@ -171,25 +193,33 @@ export function control(box, { action, itemId, mode, expectedRevision }, now = D
       break;
     case 'previous': {
       const index = currentIndex(box);
-      if (index > 0) play(box, queue[index - 1], now);
-      else if (index === 0 && box.mode === 'repeat_all' && queue.length > 1) play(box, queue[queue.length - 1], now);
-      else if (index === 0) play(box, queue[0], now);
+      if (index < 0) return;
+      // Past 3 seconds "previous" restarts the current song.
+      if (currentPosition(box, now) > 3000) switchTo(box, queue[index], now);
+      else if (index > 0) switchTo(box, queue[index - 1], now);
+      else switchTo(box, box.mode === 'repeat_all' ? queue[queue.length - 1] : queue[0], now);
       break;
     }
     case 'play_now': {
       const item = queue.find((candidate) => candidate.id === itemId);
       if (!item) throw notFound('music box item not found');
+      if (item.status !== 'ready') throw new ApiError(409, 'music_box_item_not_ready', 'music box item is not ready');
+      if (box.activeSource.type === 'temporary' && box.currentItemId && item.id !== box.currentItemId) {
+        // Queue order becomes: current song -> priority song -> the rest.
+        const rest = box.temporaryQueue.filter((candidate) => candidate.id !== item.id);
+        rest.splice(rest.findIndex((candidate) => candidate.id === box.currentItemId) + 1, 0, item);
+        box.temporaryQueue = rest;
+      }
       play(box, item, now);
       break;
     }
     case 'set_mode':
-      if (!PLAYBACK_MODES.includes(mode)) throw badRequest(`unknown mode: ${mode}`);
-      if (expectedRevision != null && expectedRevision !== box.revision) {
-        throw conflict('music box revision changed', 'music_box_revision_conflict');
-      }
+      if (!allowedModes(box).includes(mode)) throw badRequest(`mode ${mode} is not available for this source`);
+      assertRevision(box, expectedRevision);
       box.mode = mode;
       break;
     case 'clear_temporary_playlist':
+      assertRevision(box, expectedRevision);
       if (box.activeSource.type === 'temporary') stop(box);
       box.temporaryQueue = [];
       break;
@@ -228,6 +258,7 @@ export function activate(box, { sourceType, playlist = null, owner = null, start
   if (sourceType === 'temporary') {
     box.activeSource = { type: 'temporary' };
     box.playlistQueue = [];
+    if (!allowedModes(box).includes(box.mode)) box.mode = 'sequential';
   } else {
     if (!playlist) throw notFound('playlist not found');
     box.activeSource = {
@@ -280,6 +311,7 @@ function requesterJson(store, userId) {
     user_id: user.id,
     username: user.username,
     display_name: user.displayName,
+    avatar_label: user.displayName,
     avatar_url: store.userAvatarUrl(user),
     default_avatar_key: user.defaultAvatarKey,
   };
@@ -305,9 +337,14 @@ function itemJson(store, box, item) {
   };
 }
 
-/** `MusicBoxState.fromJson` — the snapshot every music-box write returns. */
-export function musicBoxJson(store, room, now = Date.now()) {
+/**
+ * `MusicBoxState.fromJson` — the snapshot every music-box write returns.
+ * Room fan-out (`broadcast`) carries all-false capabilities, as the real server
+ * does, because they are actor-specific; clients refetch their own snapshot.
+ */
+export function musicBoxJson(store, room, { broadcast = false, now = Date.now() } = {}) {
   const box = room.musicBox;
+  const can = !broadcast;
   const queue = activeQueue(box);
   const index = currentIndex(box);
   const source = box.activeSource;
@@ -323,7 +360,7 @@ export function musicBoxJson(store, room, now = Date.now()) {
       mode: box.mode,
       can_previous: index >= 0 && queue.length > 0,
       can_next: queue.length > 0 && (index < queue.length - 1 || box.mode !== 'sequential'),
-      capabilities: { can_control: true, can_change_mode: true, can_reorder: true, allowed_modes: PLAYBACK_MODES },
+      capabilities: { can_control: can, can_change_mode: can, can_reorder: can, allowed_modes: allowedModes(box) },
     },
     queue: queue.map((item) => itemJson(store, box, item)),
     usage: {
@@ -336,6 +373,7 @@ export function musicBoxJson(store, room, now = Date.now()) {
         : {
             type: source.type,
             id: source.id,
+            playlist_id: source.id,
             name: source.name,
             owner_user_id: source.ownerUserId,
             snapshot_id: source.snapshotId,
@@ -345,7 +383,7 @@ export function musicBoxJson(store, room, now = Date.now()) {
     temporary_queue: box.temporaryQueue.map((item) => itemJson(store, box, item)),
     temporary_playlist: {
       queued_count: box.temporaryQueue.length,
-      capabilities: { can_enqueue: true, can_switch: true, can_reorder: true, can_clear: true, can_play_now: true },
+      capabilities: { can_enqueue: can, can_switch: can, can_reorder: can, can_clear: can, can_play_now: can },
     },
   };
 }

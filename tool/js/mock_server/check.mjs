@@ -354,7 +354,8 @@ async function runChecks(origin) {
         (e) => e.type === 'room_updated' && e.payload.last_message?.id === json.message.id,
       );
       validate(event.payload, ROOM_CARD, 'room_updated');
-      assert(event.payload.room_id === ctx.roomId && event.payload.update_reason === 'message_created', 'bad room_updated payload');
+      // The sender's own sessions get `message_sent` so the client does not ding for its own message.
+      assert(event.payload.room_id === ctx.roomId && event.payload.update_reason === 'message_sent', 'bad room_updated payload');
       const retry = await api('POST', `/rooms/${ctx.roomId}/messages`, { token: ctx.token, body: { client_message_id: clientMessageId, body: 'hello from check.mjs' } });
       assert(retry.status === 200 && retry.json.message.id === json.message.id, 'retry with same client_message_id was not idempotent');
       return `message ${json.message.id}`;

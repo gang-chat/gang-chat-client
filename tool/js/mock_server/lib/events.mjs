@@ -11,16 +11,18 @@
 //   room_role_changed           -> { room_id, role }
 //   room_*_updated              -> {} (the client refetches)
 // There is no message-level event: a new message arrives as `room_updated`
-// with `update_reason: "message_created"` and the client reloads messages.
+// with `update_reason: "message_created"` (`"message_sent"` for the sender's
+// own sessions) and the client reloads messages.
 import { musicBoxJson } from './music_box.mjs';
 import { nextId } from './util.mjs';
 
 export const memberIds = (room) => [...room.members.keys()];
 
+/** `reason` may be a function of the recipient's user id. */
 export function emitRoomUpdated(app, room, reason, userIds = memberIds(room)) {
   app.hub.sendToUsers(userIds, 'room_updated', room.id, (userId) => ({
     ...app.store.roomCard(room, userId),
-    update_reason: reason,
+    update_reason: typeof reason === 'function' ? reason(userId) : reason,
   }));
 }
 
@@ -44,17 +46,21 @@ export function emitLiveSnapshot(app, room, type, extra = {}) {
 }
 
 export function emitMusicBoxChanged(app, room) {
-  app.hub.sendToUsers(memberIds(room), 'music_box_changed', room.id, musicBoxJson(app.store, room));
+  app.hub.sendToUsers(memberIds(room), 'music_box_changed', room.id, musicBoxJson(app.store, room, { broadcast: true }));
 }
 
 export function emitToUser(app, userId, type, roomId = null, data = {}) {
   app.hub.sendToUser(userId, type, roomId, roomId ? { room_id: roomId, ...data } : data);
 }
 
-/** Adds a message, broadcasts the room snapshot, notifies mentions and lets gang-bot answer. */
+/**
+ * Adds a message, broadcasts the room snapshot, notifies mentions and lets
+ * gang-bot answer. The client plays its new-message sound for every
+ * `message_created` snapshot, so the sender's own sessions get `message_sent`.
+ */
 export function postMessage(app, room, spec) {
   const message = app.store.addMessage(room, spec);
-  emitRoomUpdated(app, room, 'message_created');
+  emitRoomUpdated(app, room, (userId) => (userId === message.senderId ? 'message_sent' : 'message_created'));
   notifyMentionedUsers(app, room, message);
   maybeReplyAsBot(app, room, message);
   return message;

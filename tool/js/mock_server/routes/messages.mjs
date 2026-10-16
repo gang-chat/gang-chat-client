@@ -4,6 +4,7 @@
 import { emitRoomUpdated, postMessage } from '../lib/events.mjs';
 import { badRequest, conflict, created, forbidden, json, notFound } from '../lib/http.mjs';
 import { oneOf, stringList } from '../lib/input.mjs';
+import { requirePlaylist, sharedPlaylistJson } from '../lib/playlists.mjs';
 import { route } from '../lib/router.mjs';
 import { clampInt, foldedIncludes, iso, nextId } from '../lib/util.mjs';
 
@@ -122,6 +123,62 @@ function attachmentSpec(c, json) {
   };
 }
 
+/** Finds a non-removed message in any room the caller belongs to (forwarding). */
+function findAccessibleMessage(c, messageId) {
+  for (const room of c.store.rooms.values()) {
+    if (!room.members.has(c.user.id)) continue;
+    const message = room.messages.find((candidate) => candidate.id === messageId);
+    if (message && !c.store.isRemoved(message)) return message;
+  }
+  throw notFound('message not found');
+}
+
+/** Resolves `{ playlist_scope, source_room_id }` to a playlist owner key the caller may read. */
+function shareOwnerKey(c, spec) {
+  if (spec.playlistScope !== 'room') return `user:${c.user.id}`;
+  const room = c.store.requireRoom(spec.sourceRoomId ?? '');
+  c.store.requireMember(room, c.user);
+  return `room:${room.id}`;
+}
+
+/**
+ * Playlist and song shares carry only references (docs/music-box-api.md): the
+ * server swaps in an immutable snapshot and normalizes the body. Forwards
+ * (`source_message_id`) copy the original message's snapshot.
+ */
+function resolveMusicShare(c, type, attachments) {
+  const ref = attachments.find((attachment) => attachment.type === type);
+  if (!ref) throw badRequest(`${type} attachment is required`, 'validation_failed');
+  const label = type === 'playlist' ? '歌单' : '歌曲';
+  if (ref.sourceMessageId) {
+    const original = findAccessibleMessage(c, ref.sourceMessageId).attachments.find(
+      (attachment) => attachment.type === type && (attachment.playlist || attachment.track),
+    );
+    if (!original) throw notFound('message not found');
+    return { body: `[${label}] ${original.playlist?.name ?? original.track?.title}`, attachments: [{ ...original }] };
+  }
+  if (!ref.playlistId) return { attachments }; // already a snapshot (legacy shape): keep it
+  const ownerKey = shareOwnerKey(c, ref);
+  const playlist = requirePlaylist(c.store, ownerKey, ref.playlistId);
+  const scope = { playlistId: playlist.id, playlistScope: ref.playlistScope ?? 'personal', sourceRoomId: ref.sourceRoomId };
+  if (type === 'playlist') {
+    const snapshot = sharedPlaylistJson(c.store, playlist, c.user.id);
+    return { body: `[歌单] ${playlist.name}`, attachments: [{ type, ...scope, playlist: snapshot }] };
+  }
+  const item = playlist.items.find((candidate) => candidate.id === ref.itemId);
+  if (!item) throw notFound('playlist item not found');
+  const track = {
+    id: item.id,
+    playlist_id: playlist.id,
+    track_id: item.trackId,
+    source: item.source,
+    title: item.title,
+    artists: item.artists,
+    duration_ms: item.durationMs,
+  };
+  return { body: `[歌曲] ${item.title}`, attachments: [{ type, ...scope, itemId: item.id, track }] };
+}
+
 /** POST /rooms/:id/messages — retries with the same `client_message_id` return the original. */
 function sendMessage(c) {
   const { room } = memberRoom(c);
@@ -133,8 +190,13 @@ function sendMessage(c) {
   if (existing) return { message: c.store.messageJson(room, existing) };
 
   const type = oneOf(c.body.type ?? 'text', MESSAGE_TYPES, 'type');
-  const body = typeof c.body.body === 'string' ? c.body.body : '';
-  const attachments = (Array.isArray(c.body.attachments) ? c.body.attachments : []).map((item) => attachmentSpec(c, item));
+  let body = typeof c.body.body === 'string' ? c.body.body : '';
+  let attachments = (Array.isArray(c.body.attachments) ? c.body.attachments : []).map((item) => attachmentSpec(c, item));
+  if (type === 'playlist' || type === 'music_track') {
+    const share = resolveMusicShare(c, type, attachments);
+    body = share.body ?? body;
+    attachments = share.attachments;
+  }
   if (!body.trim() && attachments.length === 0) throw badRequest('message body is required', 'validation_failed');
   if (body.length > 10_000) throw badRequest('message body is too long', 'validation_failed');
 
