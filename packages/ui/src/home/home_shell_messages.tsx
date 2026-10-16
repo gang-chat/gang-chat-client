@@ -125,12 +125,11 @@ function _compareStrings(a: string, b: string): number {
 /**
  * Port of `extension _HomeShellMessages on _HomeShellState`.
  *
- * PORT notes for the whole table:
- *  - The Dart getters (`_selectedComposerQuotes`, `_selectedComposerComponent`,
- *    `_sidebarRoomDrafts`, `_chatMessageActions`, `_stagedAttachmentViews`)
- *    are methods: the table is merged with `Object.assign`, which would
- *    evaluate a getter against the table instead of copying it.
- *  - The message actions dropped their `BuildContext` argument (like the
+ * Notes for the whole table:
+ *  - The Dart extension getters stay getters: HomeShell copies the table's
+ *    property descriptors onto its prototype. A getter cannot declare a
+ *    `this` parameter, so each one casts `this` to [HomeShellState].
+ *  - PORT: the message actions dropped their `BuildContext` argument (like the
  *    kit's `showFloatingNotice`); `context.mounted` checks of the bubble
  *    become checks of the shell's [mounted].
  */
@@ -201,14 +200,16 @@ export const HomeShellMessages = {
     this._clearComposerMentionState();
   },
 
-  _selectedComposerQuotes(this: HomeShellState): MessageQuote[] {
-    const roomId = this._selectedServerId;
-    return roomId == null ? [] : [...(this._messageQuoteDrafts.get(roomId) ?? [])];
+  get _selectedComposerQuotes(): MessageQuote[] {
+    const self = this as unknown as HomeShellState;
+    const roomId = self._selectedServerId;
+    return roomId == null ? [] : (self._messageQuoteDrafts.get(roomId) ?? []);
   },
 
-  _selectedComposerComponent(this: HomeShellState): Message | null {
-    const roomId = this._selectedServerId;
-    return roomId == null ? null : (this._messageComponentDrafts.get(roomId) ?? null);
+  get _selectedComposerComponent(): Message | null {
+    const self = this as unknown as HomeShellState;
+    const roomId = self._selectedServerId;
+    return roomId == null ? null : (self._messageComponentDrafts.get(roomId) ?? null);
   },
 
   _removeSelectedComposerComponent(this: HomeShellState): void {
@@ -660,16 +661,17 @@ export const HomeShellMessages = {
     return false;
   },
 
-  _sidebarRoomDrafts(this: HomeShellState): Map<string, string> {
+  get _sidebarRoomDrafts(): Map<string, string> {
+    const self = this as unknown as HomeShellState;
     const roomIds = new Set<string>([
-      ...this._messageDrafts.keys(),
-      ...this._stagedAttachmentDrafts.keys(),
-      ...this._messageQuoteDrafts.keys(),
-      ...this._messageComponentDrafts.keys(),
+      ...self._messageDrafts.keys(),
+      ...self._stagedAttachmentDrafts.keys(),
+      ...self._messageQuoteDrafts.keys(),
+      ...self._messageComponentDrafts.keys(),
     ]);
     const previews = new Map<string, string>();
     for (const roomId of roomIds) {
-      const preview = this._roomDraftPreviewFor(roomId);
+      const preview = self._roomDraftPreviewFor(roomId);
       if (preview != null) previews.set(roomId, preview);
     }
     return previews;
@@ -692,26 +694,27 @@ export const HomeShellMessages = {
     });
   },
 
-  _chatMessageActions(this: HomeShellState): ChatMessageActions {
+  get _chatMessageActions(): ChatMessageActions {
+    const self = this as unknown as HomeShellState;
     return new ChatMessageActions({
-      onCopy: (message: Message) => this._copyChatMessage(message),
-      onQuote: (message: Message) => this._quoteChatMessage(message),
-      onOpenQuote: (quote: MessageQuote) => this._openQuotedMessage(quote),
-      onDeleteForMe: (message: Message) => this._deleteMessageForMe(message),
-      onRecall: (message: Message) => this._recallChatMessage(message),
-      canRecall: (message: Message) => this._canRecallChatMessage(message),
-      canQuote: (message: Message) => this._canQuoteChatMessage(message),
-      onReeditRecalledText: (message: Message) => this._reeditRecalledTextMessage(message),
-      canReeditRecalledText: (message: Message) => this._canReeditRecalledTextMessage(message),
-      canInspectRecalledText: (message: Message) => this._canInspectRecalledTextMessage(message),
+      onCopy: (message: Message) => self._copyChatMessage(message),
+      onQuote: (message: Message) => self._quoteChatMessage(message),
+      onOpenQuote: (quote: MessageQuote) => self._openQuotedMessage(quote),
+      onDeleteForMe: (message: Message) => self._deleteMessageForMe(message),
+      onRecall: (message: Message) => self._recallChatMessage(message),
+      canRecall: (message: Message) => self._canRecallChatMessage(message),
+      canQuote: (message: Message) => self._canQuoteChatMessage(message),
+      onReeditRecalledText: (message: Message) => self._reeditRecalledTextMessage(message),
+      canReeditRecalledText: (message: Message) => self._canReeditRecalledTextMessage(message),
+      canInspectRecalledText: (message: Message) => self._canInspectRecalledTextMessage(message),
       onViewSharedPlaylist: (message: Message, playlist: SharedMusicPlaylist) =>
-        this._viewSharedPlaylistMessage(message, playlist),
+        self._viewSharedPlaylistMessage(message, playlist),
       onEditOwnedSharedPlaylist: (message: Message, playlist: SharedMusicPlaylist) =>
-        this._editOwnedSharedPlaylistMessage(message, playlist),
-      sharedTrackPreviewController: this._sharedMessageTrackPreviewController,
-      loadSharedTrackPlaylists: (roomId: string) => this._loadSharedTrackPlaylists(roomId),
+        self._editOwnedSharedPlaylistMessage(message, playlist),
+      sharedTrackPreviewController: self._sharedMessageTrackPreviewController,
+      loadSharedTrackPlaylists: (roomId: string) => self._loadSharedTrackPlaylists(roomId),
       onAddSharedTrackToPlaylist: (track: SharedMusicTrack, target: MusicTrackPlaylistTarget) =>
-        this._addSharedTrackToPlaylist(track, target),
+        self._addSharedTrackToPlaylist(track, target),
     });
   },
 
@@ -1244,7 +1247,7 @@ export const HomeShellMessages = {
 
   async _sendText(this: HomeShellState, value: string): Promise<void> {
     const body = value.trimEnd();
-    const component = this._selectedComposerComponent();
+    const component = this._selectedComposerComponent;
     if (component != null) {
       const roomId = this._selectedServerId;
       const plan = composerMessageSendPlan({ body, component });
@@ -1737,8 +1740,9 @@ export const HomeShellMessages = {
   // is the backend's responsibility (asset TTL / unreferenced sweep).
 
   /** View models for the chips shown above the composer input. */
-  _stagedAttachmentViews(this: HomeShellState): composer_attachment.ComposerAttachmentView[] {
-    return this._stagedAttachments.map(
+  get _stagedAttachmentViews(): composer_attachment.ComposerAttachmentView[] {
+    const self = this as unknown as HomeShellState;
+    return self._stagedAttachments.map(
       (entry) =>
         new composer_attachment.ComposerAttachmentView({
           id: entry.id,

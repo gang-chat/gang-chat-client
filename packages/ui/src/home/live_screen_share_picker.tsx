@@ -318,21 +318,9 @@ class _ScreenSourceThumbnailState extends ViewState<_ScreenSourceThumbnailProps>
   }
 }
 
-/**
- * Port of `live_display.visibleLiveScreenSourceThumbnail` for data-URL
- * thumbnails (the core helper is typed for byte arrays).
- */
-function _visibleLiveScreenSourceThumbnail(opts: { thumbnail: string | null; imageError: unknown }): string | null {
-  const { thumbnail, imageError } = opts;
-  if (thumbnail == null || thumbnail.length === 0 || imageError != null) {
-    return null;
-  }
-  return thumbnail;
-}
-
 function _ScreenSourceThumbnail(props: _ScreenSourceThumbnailProps) {
   const state = useViewState(() => new _ScreenSourceThumbnailState(props.source), props);
-  const thumbnail = _visibleLiveScreenSourceThumbnail({
+  const thumbnail = live_display.visibleLiveScreenSourceThumbnail({
     thumbnail: state._thumbnail,
     imageError: state._imageError,
   });

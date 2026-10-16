@@ -426,7 +426,7 @@ export function liveScreenSourceSelectedChanged<T>(
   return state.copyWith({ selectedId });
 }
 
-export function visibleLiveScreenSourceThumbnail<T extends ArrayLike<number>>(opts: {
+export function visibleLiveScreenSourceThumbnail<T extends { readonly length: number }>(opts: {
   thumbnail: T | null | undefined;
   imageError: unknown;
 }): T | null {

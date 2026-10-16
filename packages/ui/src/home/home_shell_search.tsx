@@ -25,14 +25,14 @@ import { HoverCardTapRegionScope } from './hover_card_anchor';
 /**
  * Port of `extension _HomeShellSearch on _HomeShellState`.
  *
- * PORT: the Dart getters (`_hasSearchQuery`, `_filteringSidebarBySearch`,
- * `_sidebarServers`, `_loadingSidebarSearch`, `_visibleSearchCategories`) are
- * methods here: the table is merged onto the prototype with `Object.assign`,
- * which would evaluate a getter once against the table instead of copying it.
+ * The Dart extension getters stay getters: HomeShell copies the table's
+ * property descriptors onto its prototype. A getter cannot declare a `this`
+ * parameter, so each one casts `this` to [HomeShellState].
  */
 export const HomeShellSearch = {
-  _hasSearchQuery(this: HomeShellState): boolean {
-    return search_display.hasGlobalSearchQuery(this._searchQuery);
+  get _hasSearchQuery(): boolean {
+    const self = this as unknown as HomeShellState;
+    return search_display.hasGlobalSearchQuery(self._searchQuery);
   },
 
   _buildCompactSearchField(this: HomeShellState): ReactNode {
@@ -68,7 +68,7 @@ export const HomeShellSearch = {
             timestampNow={this._serverNow}
             currentUser={this.widget.app.currentUser}
             activeCategory={this._activeSearchCategory}
-            visibleCategories={this._visibleSearchCategories()}
+            visibleCategories={this._visibleSearchCategories}
             busyPublicRoomId={this._busySearchPublicRoomId}
             pendingPublicRoomIds={this._searchPendingPublicRoomIds}
             onCategorySelected={(category) => this._selectSearchCategory(category)}
@@ -88,27 +88,31 @@ export const HomeShellSearch = {
     );
   },
 
-  _filteringSidebarBySearch(this: HomeShellState): boolean {
-    return this._hasSearchQuery() && this._activeSearchCategory === search_display.GlobalSearchCategory.myRooms;
+  get _filteringSidebarBySearch(): boolean {
+    const self = this as unknown as HomeShellState;
+    return self._hasSearchQuery && self._activeSearchCategory === search_display.GlobalSearchCategory.myRooms;
   },
 
-  _sidebarServers(this: HomeShellState): RoomCard[] {
+  get _sidebarServers(): RoomCard[] {
+    const self = this as unknown as HomeShellState;
     return search_display.sidebarRoomsForSearch({
-      rooms: this._servers,
-      query: this._searchQuery,
-      activeCategory: this._activeSearchCategory,
-      results: this._searchResults,
+      rooms: self._servers,
+      query: self._searchQuery,
+      activeCategory: self._activeSearchCategory,
+      results: self._searchResults,
     });
   },
 
-  _loadingSidebarSearch(this: HomeShellState): boolean {
-    return this._filteringSidebarBySearch() && this._searching && this._searchResults == null;
+  get _loadingSidebarSearch(): boolean {
+    const self = this as unknown as HomeShellState;
+    return self._filteringSidebarBySearch && self._searching && self._searchResults == null;
   },
 
-  _visibleSearchCategories(this: HomeShellState): readonly search_display.GlobalSearchCategory[] {
-    const activeCategory = this._activeSearchCategory;
+  get _visibleSearchCategories(): readonly search_display.GlobalSearchCategory[] {
+    const self = this as unknown as HomeShellState;
+    const activeCategory = self._activeSearchCategory;
     return activeCategory == null
-      ? this._currentUser.isSuperuser
+      ? self._currentUser.isSuperuser
         ? search_display.superuserGlobalSearchCategories
         : search_display.globalSearchCategories
       : [activeCategory];
@@ -151,7 +155,7 @@ export const HomeShellSearch = {
     try {
       const results = await this._globalSearchController.search({
         query,
-        categories: this._visibleSearchCategories(),
+        categories: this._visibleSearchCategories,
       });
       if (!this.mounted || requestSerial !== this._searchRequestSerial) return;
       if (this._titleSearchController.text.trim() !== query) return;
@@ -177,7 +181,7 @@ export const HomeShellSearch = {
     if (this._searchLoadingMore || this._searching || current == null) return;
     if (!search_display.hasGlobalSearchQuery(query)) return;
 
-    const categories = this._visibleSearchCategories().filter(
+    const categories = this._visibleSearchCategories.filter(
       (category) => search_display.globalSearchCursorForCategory(current.nextCursors, category) != null,
     );
     if (categories.length === 0) return;
