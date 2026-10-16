@@ -10,26 +10,28 @@ import com.gangchat.client.plugins.SharedPreferences
  * in the OS keychain via flutter_secure_storage. The API base URL is not
  * sensitive and lives in SharedPreferences so reading it never triggers a
  * macOS keychain authorization prompt.
+ *
+ * Open like the Dart class, which tests subclass with in-memory fakes.
  */
-class TokenStore {
+open class TokenStore {
     private val _storage: FlutterSecureStorage get() = FlutterSecureStorage()
 
-    suspend fun readRefreshToken(): String? = _storage.read(_refreshTokenKey)
+    open suspend fun readRefreshToken(): String? = _storage.read(_refreshTokenKey)
 
-    suspend fun writeRefreshToken(refreshToken: String) {
+    open suspend fun writeRefreshToken(refreshToken: String) {
         _storage.write(_refreshTokenKey, refreshToken)
     }
 
-    suspend fun clearRefreshToken() {
+    open suspend fun clearRefreshToken() {
         _storage.delete(_refreshTokenKey)
     }
 
-    suspend fun readApiBaseUrl(): String? {
+    open suspend fun readApiBaseUrl(): String? {
         val prefs = SharedPreferences.getInstance()
         return prefs.getString(_apiBaseUrlKey)
     }
 
-    suspend fun writeApiBaseUrl(baseUrl: String) {
+    open suspend fun writeApiBaseUrl(baseUrl: String) {
         val prefs = SharedPreferences.getInstance()
         prefs.setString(_apiBaseUrlKey, baseUrl)
     }
