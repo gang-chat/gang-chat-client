@@ -72,5 +72,14 @@ Android 客户端正在从 Flutter 一比一移植为原生 Kotlin + Jetpack Com
 - `AuthSessionController` 共享的刷新 Future 改为 `Deferred`；定时刷新的错误静默丢弃，与 Dart 的
   `catchError((_) => '')` 一致。
 - 为了让测试能像 Dart 一样继承替身，`AuthClient`、`TokenStore` 改为 `open`。
+- **刻意修正**：`MessagesController.sendVoiceMessage` 遇到空文件时，Dart 源码里的报错是乱码
+  `鏂囦欢涓虹┖`（"文件为空"的 UTF-8 字节被按 GBK 读出），用户会直接看到；原生版改为 `文件为空`。
+- `patchRoomDetailApplied`、`patchLiveSnapshot`、`LiveController._removeUserFromRoomLivePreview`
+  与 `roomCardWithLive` 一样不复制 gang-bot 字段（同一处疑似 Dart 遗漏，均有 `PORT` 注释）。
+- `MediaCacheController` 去掉了只在 Web 上用的内存缓存（64 MB 淘汰）；原生端一直走磁盘缓存，
+  Dart 也没有磁盘淘汰，行为不变。
+- 下载按块读取响应流（暂停时停止读取，对应 Dart 暂停的 `await for`）；文件读写、重命名、删除在
+  `Dispatchers.IO`；协程取消按取消传播，不转成 `DownloadCancelledException`。
+- `RoomReadSyncController`：不挂起就完成的同步会立即从进行中表里移除（Dart 晚一个 microtask）。
 - `RoomNotificationDateRange` 起止颠倒时抛 `IllegalArgumentException`，消息文字与 Dart 的
   `ArgumentError.value` 略有不同。

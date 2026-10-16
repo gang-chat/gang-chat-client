@@ -532,9 +532,9 @@ open class MessagesController(val api: GangApi? = null) {
 
         val transfer = pending.transfer
         val bytes = readBytes()
-        // PORT: the Dart source has this message as mojibake (the GBK reading
-        // of the UTF-8 bytes of "文件为空"); kept verbatim, like Dart.
-        if (bytes.isEmpty()) throw IllegalStateException("鏂囦欢涓虹┖")
+        // The Dart source had this message as mojibake (the GBK reading of the
+        // UTF-8 bytes of "文件为空"), which users saw verbatim; fixed here.
+        if (bytes.isEmpty()) throw IllegalStateException("文件为空")
         if (transfer.cancelled) throw UploadCancelledException()
 
         val asset =
