@@ -14,19 +14,8 @@ import type {
 import { UiContextMenuItem, UiContextMenuSection, showUiContextMenu, type WindowPoint } from '../ui/context_menu';
 import { FloatingNoticeTone, showFloatingNotice } from '../ui/feedback';
 import { roleBadgeForegroundColorForLabel } from '../ui/role_badge';
-import { UiColors, argb } from '../ui/tokens';
+import { UiColors } from '../ui/tokens';
 import type { MusicTrackPlaylistTarget } from './music_track_profile_card';
-
-// PORT: the `chat_pane.dart` constants the message widgets read. The part
-// files shared them as library privates; here they are mirrored with the same
-// values instead of imported from './chat_pane', because chat_pane.tsx
-// imports the message modules and importing back would form an evaluation
-// cycle (chat_messages could be evaluated before chat_pane's constants exist).
-export const _chatHorizontalPadding = 18.0;
-export const _chatFloatingEdgeInset = 14.0;
-export const _messageMaxWidth = 560.0;
-export const _outgoingBubble = argb(0xff1f352b);
-export const _incomingBubble = UiColors.surface;
 
 /**
  * Shared pieces of `chat_messages.dart` (the message action bundles, the

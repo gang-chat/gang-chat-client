@@ -5,7 +5,6 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type DragEvent as ReactDragEvent,
   type ReactNode,
   type RefObject,
 } from 'react';
@@ -21,8 +20,6 @@ import * as room_display from '@gang-chat/core/app/room_display';
 import * as sticker_display from '@gang-chat/core/app/sticker_display';
 import * as voice_display from '@gang-chat/core/app/voice_message_display';
 import type { Message, MessageQuote, Sticker } from '@gang-chat/core/protocol/models';
-import { FileDropEvent, FileDropService } from '@gang-chat/core/shell/file_drop_service';
-import { SelectedFile } from '@gang-chat/core/shell/file_selection_service';
 
 import { EdgeInsets } from '../lib/edge_insets';
 import { Center, Column, Expanded, Flexible, Row, SizedBox, Text } from '../lib/layout';
@@ -264,48 +261,16 @@ export function _ComposerDock(props: _ComposerDockProps) {
 
 /**
  * Holds the composer box behind `dropKey` (Dart passed it as the
- * ChatComposer's key) and turns files dropped onto it into a
- * [FileDropService] drop at the pointer position.
- *
- * PORT: Flutter received drops from the native runner and the home shell
- * staged those landing inside the composer. Here the composer listens to the
- * DOM drop itself and publishes it through `FileDropService.dispatch`, which
- * reaches the same home-shell handler. A drop another listener already
- * handled (`defaultPrevented`) is left alone, and this one calls
- * `preventDefault()`, so a window-level drop target must skip
- * `defaultPrevented` drops to avoid staging a file twice.
+ * ChatComposer's key). File drops are not handled here: the window-wide
+ * `FileDropTarget` (shell/file_drop_target) publishes every drop through
+ * `FileDropService`, and the home shell stages those whose point lies inside
+ * this box, as in Dart.
  */
 function _ComposerDropTarget({ dropKey, children }: { dropKey: RefObject<HTMLDivElement | null> | null; children: ReactNode }) {
-  const carriesFiles = (event: ReactDragEvent<HTMLDivElement>) => Array.from(event.dataTransfer?.types ?? []).includes('Files');
   return (
     <div
       ref={(node) => {
         if (dropKey != null) dropKey.current = node;
-      }}
-      onDragOver={(event) => {
-        if (!carriesFiles(event)) return;
-        event.preventDefault();
-        event.dataTransfer.dropEffect = 'copy';
-      }}
-      onDrop={(event) => {
-        if (event.defaultPrevented || !carriesFiles(event)) return;
-        const dropped = Array.from(event.dataTransfer.files);
-        if (dropped.length === 0) return;
-        event.preventDefault();
-        FileDropService.dispatch(
-          new FileDropEvent({
-            files: dropped.map((file) =>
-              SelectedFile.deferred({
-                name: file.name,
-                mimeType: file.type,
-                length: file.size,
-                readAsBytes: async () => new Uint8Array(await file.arrayBuffer()),
-              }),
-            ),
-            x: event.clientX,
-            y: event.clientY,
-          }),
-        );
       }}
       style={{ width: '100%' }}
     >
@@ -837,7 +802,6 @@ function _StickerTile({ sticker, onPressed }: { sticker: Sticker; onPressed: () 
               mimeType={sticker.asset.mimeType}
               expectedBytes={sticker.asset.sizeBytes}
               fit={BoxFit.contain}
-              style={{ width: '100%', height: '100%' }}
               errorBuilder={() => <Icon icon={Icons.broken_image_outlined} color={UiColors.textMuted} size={20} />}
             />
           )}

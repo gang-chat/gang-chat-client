@@ -59,12 +59,11 @@ export function registerNetBridge(): void {
       if (forbiddenHeaders.has(key.toLowerCase())) continue;
       request.setHeader(key, value);
     }
-    if (spec.hasBody) {
-      if (spec.contentLength != null) {
-        request.setHeader('Content-Length', String(spec.contentLength));
-      } else {
-        request.chunkedEncoding = true;
-      }
+    // Electron rejects a manual Content-Length (net::ERR_INVALID_ARGUMENT).
+    // Bodies of known length are buffered and sized by Chromium; only bodies
+    // of unknown length are sent with chunked transfer encoding.
+    if (spec.hasBody && spec.contentLength == null) {
+      request.chunkedEncoding = true;
     }
     const entry: ActiveRequest = { request, sender: event.sender, response: null, finished: false };
     active.set(id, entry);

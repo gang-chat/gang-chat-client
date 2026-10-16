@@ -1,12 +1,4 @@
-import {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type ReactNode,
-  type RefObject,
-} from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 
 import { HostPlatform } from '@gang-chat/core/config/host_platform';
 import * as live_display from '@gang-chat/core/app/live_display';
@@ -49,6 +41,7 @@ import { WindowChromeInsets } from '../ui/window_chrome';
 import { AppWindowControls, AppWindowDragRegion, appWindowControlGap, appWindowControlsWidth } from '../shell/window_controls';
 import { HomeAdaptiveLayout } from './adaptive_layout';
 import { narrowBreakpoint, sidebarWidth } from './navigation';
+import { tapRegionGroupContains, useTapRegionGroupMember } from './hover_card_anchor';
 import { RoomHoverCard, UserHoverCard, type RoomProfileResolver, type UserProfileResolver } from './room_profile_card';
 
 export const _homeTitleBarHeight = 44;
@@ -182,40 +175,12 @@ export function _homeTitleBarSearchLayout(
 // ---------------------------------------------------------------------------
 // Tap regions.
 //
-// PORT: Flutter's `TapRegion(groupId:)`. Every region registered under the
-// same group counts as "inside"; `onTapOutside` fires for a pointer down
-// outside all of them. Hover cards opened from the search results and the
-// search field's text context menu shared the group in Flutter
-// (`HoverCardTapRegionScope`, `buildTextFieldContextMenu(tapRegionGroupId:)`);
-// they live in the overlay layer here, so a pointer down inside any overlay
-// layer (a `position: fixed` ancestor) or the text context menu also counts as
-// inside the group.
-
-const _tapRegionGroups = new Map<unknown, Set<RefObject<HTMLElement | null>>>();
-
-function _isInsideOverlayLayer(target: Node): boolean {
-  if (typeof window === 'undefined' || typeof document === 'undefined') return false;
-  let element: Element | null = target instanceof Element ? target : target.parentElement;
-  while (element != null && element !== document.body && element !== document.documentElement) {
-    if (window.getComputedStyle(element).position === 'fixed') return true;
-    element = element.parentElement;
-  }
-  return false;
-}
-
-function _pointerInsideTapRegionGroup(groupId: unknown, event: PointerEvent): boolean {
-  const target = event.target as Node | null;
-  if (target == null) return true;
-  const regions = _tapRegionGroups.get(groupId);
-  if (regions != null) {
-    for (const region of regions) {
-      const node = region.current;
-      if (node != null && node.contains(target)) return true;
-    }
-  }
-  if (isTextContextMenuPanelHit({ x: event.clientX, y: event.clientY })) return true;
-  return _isInsideOverlayLayer(target);
-}
+// PORT: Flutter's `TapRegion(groupId:)`. The group registry lives in
+// `hover_card_anchor.tsx` (hover cards opened from the search results join the
+// same group through `HoverCardTapRegionScope`, as in Dart). The search
+// field's text context menu was in the group via
+// `buildTextFieldContextMenu(tapRegionGroupId:)`; the kit's menu has no group,
+// so a pointer down on it also counts as inside.
 
 export interface _SearchTapRegionProps {
   groupId: unknown;
@@ -231,26 +196,13 @@ export function _SearchTapRegion({ groupId, onTapOutside, children, style, 'data
   const callback = useRef(onTapOutside);
   callback.current = onTapOutside;
   const listening = onTapOutside != null;
-
-  useLayoutEffect(() => {
-    let regions = _tapRegionGroups.get(groupId);
-    if (regions == null) {
-      regions = new Set();
-      _tapRegionGroups.set(groupId, regions);
-    }
-    regions.add(ref);
-    return () => {
-      const current = _tapRegionGroups.get(groupId);
-      if (current == null) return;
-      current.delete(ref);
-      if (current.size === 0) _tapRegionGroups.delete(groupId);
-    };
-  }, [groupId]);
+  useTapRegionGroupMember(groupId, ref);
 
   useEffect(() => {
     if (!listening || typeof document === 'undefined') return;
     const listener = (event: PointerEvent) => {
-      if (_pointerInsideTapRegionGroup(groupId, event)) return;
+      if (tapRegionGroupContains(groupId, event)) return;
+      if (isTextContextMenuPanelHit({ x: event.clientX, y: event.clientY })) return;
       callback.current?.(event);
     };
     document.addEventListener('pointerdown', listener, true);

@@ -17,13 +17,9 @@ import { ReadOnlySelectableText } from '../ui/read_only_text_box';
 import { RoleBadge } from '../ui/role_badge';
 import { UiTooltip } from '../ui/tooltip';
 import { UiColors, UiCurves, UiTypography, withAlpha } from '../ui/tokens';
-import {
-  _messageMaxWidth,
-  _senderName,
-  _showChatMessageContextMenu,
-  chatRoomUsernameColor,
-  type ChatMessageActions,
-} from './chat_messages_actions';
+import { _senderName, _showChatMessageContextMenu, chatRoomUsernameColor, type ChatMessageActions } from './chat_messages_actions';
+// Circular (chat_pane imports the message modules): read only at render time.
+import { _messageMaxWidth } from './chat_pane';
 import { _AvatarHoverCard } from './chat_profile_card';
 import { HoverCardAnchor, HoverCardTapRegionScope, hoverInfoCardWidth } from './hover_card_anchor';
 import type { RoomProfileResolver, UserProfileActionBuilder } from './room_profile_card';

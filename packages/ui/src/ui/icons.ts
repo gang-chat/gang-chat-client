@@ -161,6 +161,7 @@ export const Icons = {
   pause_rounded: icon(0xe034, 'Material Icons Round'),
   person: icon(0xe7fd, 'Material Icons'),
   person_add_alt_1: icon(0xef65, 'Material Icons'),
+  person_add_alt_1_outlined: icon(0xef65, 'Material Icons Outlined'),
   person_outline: icon(0xe7ff, 'Material Icons'),
   person_remove_outlined: icon(0xef66, 'Material Icons Outlined'),
   person_search_outlined: icon(0xf106, 'Material Icons Outlined'),
