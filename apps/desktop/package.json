@@ -5,6 +5,8 @@
   "private": true,
   "description": "Gang Chat desktop client for Windows and macOS.",
   "author": "Gang Chat",
+  "homepage": "https://ky-z.com/gang-chat/home/",
+  "repository": "github:gang-chat/gang-chat-client",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",

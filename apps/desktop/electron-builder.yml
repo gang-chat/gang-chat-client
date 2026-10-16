@@ -1,0 +1,76 @@
+# Packaging for the Electron desktop client. Artifact names match the Flutter
+# release so the homepage, the release bucket and the in-app updater keep
+# working unchanged:
+#   GangChat_v<version>.exe, GangChat-<version>-windows.zip, GangChat_v<version>.dmg
+appId: com.gangchat.client
+productName: Gang Chat
+executableName: GangChat
+copyright: Copyright © 2026 com.gangchat. All rights reserved.
+directories:
+  output: dist
+  buildResources: build
+files:
+  - out/**/*
+  - package.json
+extraResources:
+  - from: ../../assets/config/app_config.json
+    to: app_config.json
+  - from: build/icon.ico
+    to: icon.ico
+  - from: build/icon_256.png
+    to: icon.png
+asar: true
+electronLanguages:
+  - zh-CN
+  - zh-TW
+  - en-US
+
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: zip
+      arch: [x64]
+  # Signing is configured in CI through CSC_LINK / CSC_KEY_PASSWORD (the same
+  # PFX the Flutter release used); unsigned builds are allowed.
+  signAndEditExecutable: true
+  # The portable zip; the installer overrides this in `nsis.artifactName`.
+  artifactName: GangChat-${version}-windows.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: true
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Gang Chat
+  uninstallDisplayName: Gang Chat
+  installerLanguages: [zh_CN, zh_TW, en_US]
+  language: '2052'
+  include: build/installer.nsh
+  artifactName: GangChat_v${version}.${ext}
+
+mac:
+  icon: build/icon.png
+  category: public.app-category.social-networking
+  minimumSystemVersion: '12.0'
+  target:
+    - target: dmg
+      arch: [universal]
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    NSMicrophoneUsageDescription: Gang Chat uses your microphone in live rooms.
+    NSCameraUsageDescription: Gang Chat uses your camera in live rooms.
+    NSCameraUseContinuityCameraDeviceType: true
+    NSAudioCaptureUsageDescription: Gang Chat shares system audio with your screen share in live rooms.
+
+dmg:
+  artifactName: GangChat_v${version}.${ext}
+
+linux:
+  target: [dir]
+  category: Network
