@@ -1,5 +1,4 @@
 import {
-  useEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -10,6 +9,7 @@ import {
 
 import { Center, Column, Expanded, Positioned, Row, SizedBox, Stack, Text } from '../lib/layout';
 import { SystemMouseCursors } from '../lib/mouse_cursors';
+import { CircularProgressIndicator } from '../lib/progress_indicator';
 import { ViewState, useViewState } from '../lib/view_state';
 import { ButtonIcon, ButtonTone } from './button';
 import { ResponsiveDialogAction, ResponsiveDialogActionBar, showFloatingErrorNotice } from './feedback';
@@ -260,7 +260,7 @@ export function AvatarCropDialog(props: AvatarCropDialogProps) {
       ) : image == null ? (
         <SizedBox height={180}>
           <Center style={{ height: '100%' }}>
-            <_CircularProgressIndicator color={UiColors.accent} />
+            <CircularProgressIndicator color={UiColors.accent} />
           </Center>
         </SizedBox>
       ) : (
@@ -534,53 +534,5 @@ function _CropZoomSlider({ value, onChanged }: { value: number; onChanged: ((val
         }}
       />
     </div>
-  );
-}
-
-/**
- * Indeterminate Material `CircularProgressIndicator` (36px, 4px stroke),
- * animated with the Web Animations API.
- */
-function _CircularProgressIndicator({ color, size = 36, strokeWidth = 4 }: { color: string; size?: number; strokeWidth?: number }) {
-  const svgRef = useRef<SVGSVGElement | null>(null);
-  const circleRef = useRef<SVGCircleElement | null>(null);
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  useEffect(() => {
-    const svg = svgRef.current;
-    const circle = circleRef.current;
-    if (svg == null || circle == null || typeof svg.animate !== 'function') return;
-    const rotation = svg.animate([{ transform: 'rotate(0deg)' }, { transform: 'rotate(360deg)' }], {
-      duration: 1400,
-      iterations: Infinity,
-      easing: 'linear',
-    });
-    const sweep = circle.animate(
-      [
-        { strokeDasharray: `${circumference * 0.01} ${circumference}`, strokeDashoffset: '0' },
-        { strokeDasharray: `${circumference * 0.75} ${circumference}`, strokeDashoffset: `${-circumference * 0.1}` },
-        { strokeDasharray: `${circumference * 0.75} ${circumference}`, strokeDashoffset: `${-circumference * 0.99}` },
-      ],
-      { duration: 1400, iterations: Infinity, easing: 'ease-in-out' },
-    );
-    return () => {
-      rotation.cancel();
-      sweep.cancel();
-    };
-  }, [circumference]);
-  return (
-    <svg ref={svgRef} width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="progressbar" style={{ display: 'block' }}>
-      <circle
-        ref={circleRef}
-        cx={size / 2}
-        cy={size / 2}
-        r={radius}
-        fill="none"
-        stroke={color}
-        strokeWidth={strokeWidth}
-        strokeLinecap="butt"
-        strokeDasharray={`${circumference * 0.75} ${circumference}`}
-      />
-    </svg>
   );
 }

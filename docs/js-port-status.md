@@ -48,7 +48,12 @@ Flutter。约定见 `docs/js-port-conventions.md`。本文记录各模块的移�
 - 窗口：`startDragging` 改为 CSS 拖拽区；Flutter 的首帧等待是空操作；标题栏、阴影、
   可最大化等设置合并进 `setLayout`。只有 Windows 有托盘（与 Flutter 一致），其它平台
   `minimizeToTray()` 退回最小化。
-- 应用内更新：Windows 下载安装程序后启动；macOS 没有 Sparkle（`Platform.updater` 为空），
-  走"下载并打开 DMG"的流程。
+- 应用内更新改用 `electron-updater`（基于 Electron 自带的 `autoUpdater`），读取存储桶
+  `releases/` 下的 `latest.yml` / `latest-mac.yml`：Windows 按 blockmap 差分下载 NSIS 安装包，
+  退出后安装；macOS 走 Squirrel.Mac（需要 Developer ID 签名，构建时设置
+  `GANG_MAC_UPDATES_SIGNED=1`）。更新提示、进度和取消界面沿用 Flutter 版。开发版或未签名的
+  macOS 版自动退回 Flutter 版的流程（Windows 自行下载安装包；macOS 在浏览器中下载 DMG）。
+  Sparkle 不再使用。发布流程需要把 `latest*.yml`、`*.blockmap` 和 macOS 的
+  `GangChat-<version>-mac.zip` 一起上传到 `releases/`。
 - 偏好迁移：保留 Flutter 版的迁移逻辑；音量类键一律按 double 写入（JSON 里 1.0 和 1 无法区分）。
 - Android 专用服务（推送、屏幕旋转、系统 UI）在桌面端是空实现，Android 仍用 Flutter 版。

@@ -17,6 +17,9 @@
     "dist:mac": "electron-vite build && electron-builder --mac --publish never",
     "dist:dir": "electron-vite build && electron-builder --dir --publish never"
   },
+  "dependencies": {
+    "electron-updater": "6.8.10"
+  },
   "devDependencies": {
     "@gang-chat/core": "1.0.0",
     "@gang-chat/ui": "1.0.0",

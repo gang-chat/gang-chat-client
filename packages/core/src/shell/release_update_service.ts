@@ -1,6 +1,7 @@
 import {
   AppUpdatePlatform,
   AvailableAppUpdate,
+  ReleaseAsset,
   isNewerAppVersion,
   latestReleaseAssetForPlatform,
   parseReleaseAssetsFromS3List,
@@ -8,11 +9,12 @@ import {
 } from '../app/app_update';
 import { HostPlatform } from '../config/host_platform';
 import { Completer, withTimeout } from '../lib/async';
-import { JsonFormatException } from '../lib/json';
+import { asDate, JsonFormatException } from '../lib/json';
+import { ShutdownHooks } from '../lifecycle/shutdown_hooks';
 import { HttpClientHelpers, responseBodyText } from '../platform/http';
 import type { HttpClient } from '../platform/http';
-import { platform } from '../platform/platform';
-import type { FileSystemBridge } from '../platform/platform';
+import { hasPlatform, platform } from '../platform/platform';
+import type { FileSystemBridge, UpdaterBridge } from '../platform/platform';
 
 export type ReleaseDownloadProgress = (progress: { receivedBytes: number; totalBytes: number | null }) => void;
 
@@ -127,6 +129,16 @@ export class ReleaseDownloadCancellationToken {
     if (this._cancelled) abort.abort();
   }
 
+  /** @internal Binds a download run by the native updater (no partial file of ours). */
+  _bindNative(abort: AbortController): void {
+    this._abort = abort;
+    this._partialFile = null;
+    this._files = null;
+    this._active = true;
+    this._completion = new Completer<void>();
+    if (this._cancelled) abort.abort();
+  }
+
   /** @internal */
   _throwIfCancelled(): void {
     if (this._cancelled) throw new ReleaseDownloadCancelledException();
@@ -142,6 +154,12 @@ export class ReleaseDownloadCancellationToken {
     }
   }
 }
+
+/**
+ * Marker "path" returned by [ReleaseUpdateService.downloadUpdate] when the
+ * native updater holds the downloaded update itself.
+ */
+const _nativeUpdateFilePrefix = 'native-update:';
 
 /** Downloaded bytes are flushed to disk in blocks of this size. */
 const _writeBufferBytes = 1 << 20;
@@ -165,8 +183,11 @@ export class ReleaseUpdateService {
       temporaryDirectoryProvider?: ReleaseTemporaryDirectoryProvider;
       androidInstallerLauncher?: ReleaseAndroidInstallerLauncher;
       files?: FileSystemBridge;
+      /** Native self-updater; `undefined` resolves `platform().updater`, `null` disables it. */
+      updater?: UpdaterBridge | null;
     } = {},
   ) {
+    this._updaterOverride = opts.updater;
     this._httpClient = opts.httpClient ?? null;
     this._processRunner = opts.processRunner ?? null;
     this._temporaryDirectoryProvider = opts.temporaryDirectoryProvider ?? null;
@@ -179,6 +200,31 @@ export class ReleaseUpdateService {
   private readonly _temporaryDirectoryProvider: ReleaseTemporaryDirectoryProvider | null;
   private readonly _androidInstallerLauncher: ReleaseAndroidInstallerLauncher | null;
   private readonly _filesOverride: FileSystemBridge | null;
+  private readonly _updaterOverride: UpdaterBridge | null | undefined;
+  /** Version the native updater found in its last check (downloads go through it). */
+  private _nativeUpdateVersion: string | null = null;
+
+  /**
+   * The native updater (electron-updater on desktop) when this build can
+   * self-update. It replaces the Flutter client's own installer download for
+   * Windows and its browser DMG download for macOS; the bucket-listing flow
+   * below remains the fallback (development builds, unsigned macOS builds).
+   */
+  private async _nativeUpdater(appPlatform: AppUpdatePlatform): Promise<UpdaterBridge | null> {
+    if (appPlatform === AppUpdatePlatform.android) return null;
+    const updater = this._updaterOverride !== undefined ? this._updaterOverride : hasPlatform() ? (platform().updater ?? null) : null;
+    if (updater == null) return null;
+    try {
+      return (await updater.isAvailable()) ? updater : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Whether downloads and installs of [update] go through the native updater. */
+  isNativeUpdate(update: AvailableAppUpdate): boolean {
+    return this._nativeUpdateVersion != null && this._nativeUpdateVersion === update.latestVersion;
+  }
 
   private get _client(): HttpClient {
     return this._httpClient ?? platform().http;
@@ -194,6 +240,29 @@ export class ReleaseUpdateService {
     platform: AppUpdatePlatform;
   }): Promise<AvailableAppUpdate | null> {
     const { bucketUrl, currentVersion } = opts;
+    const nativeUpdater = await this._nativeUpdater(opts.platform);
+    if (nativeUpdater != null) {
+      const info = await nativeUpdater.checkForUpdate();
+      if (info == null || !isNewerAppVersion({ currentVersion, latestVersion: info.version })) {
+        this._nativeUpdateVersion = null;
+        return null;
+      }
+      this._nativeUpdateVersion = info.version;
+      const key = `releases/GangChat_v${info.version}.${_installerExtension(opts.platform)}`;
+      return new AvailableAppUpdate({
+        currentVersion,
+        latestVersion: info.version,
+        asset: new ReleaseAsset({
+          key,
+          version: info.version,
+          platform: opts.platform,
+          releasedAt: asDate(info.releaseDate),
+        }),
+        downloadUrl: releaseAssetUrl(bucketUrl, key),
+        releaseNotes: info.releaseNotes,
+      });
+    }
+    this._nativeUpdateVersion = null;
     const listUri = this._listUri(bucketUrl);
     const response = await new HttpClientHelpers(this._client).get(listUri);
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -220,6 +289,9 @@ export class ReleaseUpdateService {
     opts: { onProgress?: ReleaseDownloadProgress; cancellationToken?: ReleaseDownloadCancellationToken } = {},
   ): Promise<string> {
     const { onProgress, cancellationToken } = opts;
+    if (this.isNativeUpdate(update)) {
+      return this._downloadNativeUpdate(update, opts);
+    }
     const files = this._files;
     const abort = new AbortController();
     let file: string | null = null;
@@ -264,7 +336,46 @@ export class ReleaseUpdateService {
     }
   }
 
+  private async _downloadNativeUpdate(
+    update: AvailableAppUpdate,
+    opts: { onProgress?: ReleaseDownloadProgress; cancellationToken?: ReleaseDownloadCancellationToken },
+  ): Promise<string> {
+    const { onProgress, cancellationToken } = opts;
+    const updater = await this._nativeUpdater(update.asset.platform);
+    if (updater == null) throw new ReleaseInstallerException('应用内更新不可用');
+    const abort = new AbortController();
+    try {
+      cancellationToken?._bindNative(abort);
+      cancellationToken?._throwIfCancelled();
+      onProgress?.({ receivedBytes: 0, totalBytes: null });
+      await updater.downloadUpdate({ onProgress, signal: abort.signal });
+      cancellationToken?._throwIfCancelled();
+      return `${_nativeUpdateFilePrefix}${update.latestVersion}`;
+    } catch (error) {
+      if (error instanceof ReleaseDownloadCancelledException || cancellationToken?.isCancelled === true) {
+        throw new ReleaseDownloadCancelledException();
+      }
+      throw error;
+    } finally {
+      cancellationToken?._complete();
+    }
+  }
+
   async startInstaller(file: string, opts: { platform?: AppUpdatePlatform | null } = {}): Promise<void> {
+    if (file.startsWith(_nativeUpdateFilePrefix)) {
+      const resolved = opts.platform ?? appUpdatePlatformForOperatingSystem(HostPlatform.operatingSystem);
+      const updater = resolved == null ? null : await this._nativeUpdater(resolved);
+      if (updater == null) throw new ReleaseInstallerException('应用内更新不可用');
+      // Leave the voice channel and flush local state before the updater quits
+      // the app, with the same budget the window controller gives shutdown.
+      try {
+        await withTimeout(ShutdownHooks.runAll(), 1200);
+      } catch {
+        // Installing must not be blocked by cleanup errors.
+      }
+      await updater.quitAndInstall();
+      return;
+    }
     const resolvedPlatform = opts.platform ?? appUpdatePlatformForOperatingSystem(HostPlatform.operatingSystem);
     switch (resolvedPlatform) {
       case AppUpdatePlatform.windows:

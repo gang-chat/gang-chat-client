@@ -241,19 +241,33 @@ export interface SpeechBridge {
   cancel(): Promise<void>;
 }
 
+/** What the native updater found in the release feed. */
+export interface NativeUpdateInfo {
+  version: string;
+  /** ISO 8601 release time from the feed, when present. */
+  releaseDate: string | null;
+  releaseNotes: string | null;
+}
+
 /**
- * Native in-app updater (macOS Sparkle in the Flutter app: it downloads,
- * verifies and installs outside the App Sandbox). Hosts without one leave
- * `Platform.updater` null and the release-bucket download flow is used.
+ * Native in-app updater. The Electron app implements it with electron-updater
+ * (Electron's autoUpdater: NSIS differential updates on Windows, Squirrel.Mac
+ * on signed macOS builds) reading the release bucket's `releases/` feed.
+ * Hosts or builds that cannot self-update (development builds, unsigned macOS)
+ * report unavailable, and `ReleaseUpdateService` falls back to the
+ * bucket-listing download flow of the Flutter client.
  */
 export interface UpdaterBridge {
-  /** False for builds without an update-signing key. */
   isAvailable(): Promise<boolean>;
-  /**
-   * Checks [feedUrl] (Sparkle appcast). A background check shows UI only when
-   * an update exists; a user-initiated one always reports back.
-   */
-  checkForUpdates(options: { feedUrl: string; background: boolean }): Promise<void>;
+  /** Checks the feed; null when the running version is current. */
+  checkForUpdate(): Promise<NativeUpdateInfo | null>;
+  /** Downloads the update found by the last [checkForUpdate]. Aborting rejects. */
+  downloadUpdate(options: {
+    onProgress?: (progress: { receivedBytes: number; totalBytes: number | null }) => void;
+    signal?: AbortSignal;
+  }): Promise<void>;
+  /** Quits the app and installs the downloaded update (relaunching it afterwards). */
+  quitAndInstall(): Promise<void>;
 }
 
 export interface AppInfo {
@@ -282,7 +296,7 @@ export interface Platform {
   readonly screenCapture: ScreenCaptureBridge | null;
   readonly process: ProcessBridge | null;
   readonly speech: SpeechBridge | null;
-  /** macOS native updater (`SparkleUpdater`); absent/null elsewhere. */
+  /** Native self-updater (electron-updater on desktop); absent/null elsewhere. */
   readonly updater?: UpdaterBridge | null;
   /** Opens a URL (http/https/mailto) with the system handler. */
   openExternal(url: string): Promise<boolean>;

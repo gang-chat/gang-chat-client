@@ -10,6 +10,7 @@ import { registerNetBridge } from './net_bridge';
 import { installDisplayMediaHandler, registerScreenCapture } from './screen_capture';
 import { loadStorage, preferencesSnapshot, readSecure, registerStorage } from './storage';
 import { clearNotifications, registerSystem } from './system';
+import { registerUpdater } from './updater';
 import {
   createMainWindow,
   getMainWindow,
@@ -123,6 +124,13 @@ async function configureProxy(config: Record<string, unknown> | null): Promise<v
   });
 }
 
+function releaseBucketUrl(config: Record<string, unknown> | null): string {
+  const override = __GANG_CONFIG_OVERRIDES__.releaseBucketUrl;
+  if (override) return override;
+  const value = config?.['release_bucket_url'];
+  return typeof value === 'string' && value.length > 0 ? value : 'https://os.ky-z.com:9000/gang-chat';
+}
+
 let bootSnapshot: BootSnapshot | null = null;
 
 function buildBootSnapshot(config: Record<string, unknown> | null): BootSnapshot {
@@ -167,6 +175,7 @@ app.whenReady().then(async () => {
   registerScreenCapture();
   registerSystem();
   registerWindowIpc();
+  registerUpdater(releaseBucketUrl(config));
   handleMediaProtocol();
   installDisplayMediaHandler();
 

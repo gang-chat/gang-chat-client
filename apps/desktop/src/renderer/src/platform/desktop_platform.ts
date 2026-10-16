@@ -11,8 +11,10 @@ import type {
   ScreenCaptureBridge,
   ScreenCaptureSource,
   SecureStorage,
+  NativeUpdateInfo,
   SpeechBridge,
   SystemNotificationOptions,
+  UpdaterBridge,
   WindowBridge,
   WindowEvent,
 } from '@gang-chat/core/platform/platform';
@@ -255,6 +257,31 @@ export function createDesktopPlatform(bridge: DesktopBridge): Platform {
 
   const speech: SpeechBridge = createBrowserSpeech();
 
+  const invokeUpdater = <T>(op: string) => bridge.invoke(IpcChannels.updaterInvoke, op) as Promise<T>;
+  const updater: UpdaterBridge = {
+    isAvailable: () => invokeUpdater<boolean>('isAvailable'),
+    checkForUpdate: () => invokeUpdater<NativeUpdateInfo | null>('checkForUpdate'),
+    async downloadUpdate({ onProgress, signal }) {
+      if (signal?.aborted) throw abortError();
+      const unsubscribe = bridge.on(IpcChannels.updaterProgress, (progress) => {
+        onProgress?.(progress as { receivedBytes: number; totalBytes: number | null });
+      });
+      const onAbort = () => void invokeUpdater('cancelDownload');
+      signal?.addEventListener('abort', onAbort, { once: true });
+      try {
+        await invokeUpdater<void>('downloadUpdate');
+        if (signal?.aborted) throw abortError();
+      } catch (error) {
+        if (signal?.aborted) throw abortError();
+        throw error;
+      } finally {
+        unsubscribe();
+        signal?.removeEventListener('abort', onAbort);
+      }
+    },
+    quitAndInstall: () => invokeUpdater<void>('quitAndInstall'),
+  };
+
   return {
     os,
     isDesktop: true,
@@ -271,12 +298,19 @@ export function createDesktopPlatform(bridge: DesktopBridge): Platform {
     screenCapture,
     process,
     speech,
+    updater,
     openExternal: (url) => bridge.invoke(IpcChannels.openExternal, url) as Promise<boolean>,
     cachedMediaUrl(url) {
       if (!/^https?:\/\//i.test(url)) return url;
       return `${boot.mediaScheme}://cache/?u=${encodeURIComponent(url)}`;
     },
   };
+}
+
+function abortError(): Error {
+  const error = new Error('The update download was cancelled');
+  error.name = 'AbortError';
+  return error;
 }
 
 /** SharedPreferences equivalent: synchronous reads from the boot snapshot, write-through to main. */

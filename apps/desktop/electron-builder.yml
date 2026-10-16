@@ -20,6 +20,12 @@ extraResources:
   - from: build/icon_256.png
     to: icon.png
 asar: true
+# electron-updater feed: the workflow uploads latest.yml / latest-mac.yml and
+# the blockmaps next to the installers in the bucket's releases/ folder. The
+# app sets the same URL at runtime from app_config.json.
+publish:
+  provider: generic
+  url: https://os.ky-z.com:9000/gang-chat/releases
 electronLanguages:
   - zh-CN
   - zh-TW
@@ -56,8 +62,13 @@ mac:
   icon: build/icon.png
   category: public.app-category.social-networking
   minimumSystemVersion: '12.0'
+  # The update zip; the DMG overrides this in `dmg.artifactName`.
+  artifactName: GangChat-${version}-mac.${ext}
   target:
     - target: dmg
+      arch: [universal]
+    # Squirrel.Mac (electron-updater) installs updates from the zip.
+    - target: zip
       arch: [universal]
   hardenedRuntime: true
   entitlements: build/entitlements.mac.plist
@@ -70,6 +81,7 @@ mac:
 
 dmg:
   artifactName: GangChat_v${version}.${ext}
+  writeUpdateInfo: false
 
 linux:
   target: [dir]

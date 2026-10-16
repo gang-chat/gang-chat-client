@@ -1,7 +1,8 @@
-import { createContext, useContext, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
+import { createContext, useContext, useRef, type CSSProperties, type ReactNode } from 'react';
 
 import { EdgeInsets, paddingStyle, type EdgeInsetsValue } from '../lib/edge_insets';
 import { Column, Expanded, Row, SizedBox, Spacer, Text } from '../lib/layout';
+import { useElementSize } from '../lib/use_element_size';
 import { BadgeDot } from './badge_dot';
 import { ButtonIcon } from './button';
 import { Icon, Icons, type IconData } from './icon';
@@ -349,21 +350,6 @@ const _twoPaneMinWidth = 720;
 const _contentTopGap = 16;
 const _horizontalPadding = 28;
 
-/** `LayoutBuilder`'s max width: the element's width, tracked with a ResizeObserver. */
-function _useLayoutWidth(ref: RefObject<HTMLElement | null>): number {
-  const [width, setWidth] = useState(() => (typeof window === 'undefined' ? 0 : window.innerWidth));
-  useLayoutEffect(() => {
-    const node = ref.current;
-    if (node == null) return;
-    setWidth(node.clientWidth);
-    if (typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(() => setWidth(node.clientWidth));
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [ref]);
-  return width;
-}
-
 /**
  * 统一的设置类页面外壳。
  *
@@ -373,7 +359,8 @@ function _useLayoutWidth(ref: RefObject<HTMLElement | null>): number {
  */
 export function SettingsScaffold(props: SettingsScaffoldProps) {
   const ref = useRef<HTMLDivElement | null>(null);
-  const maxWidth = _useLayoutWidth(ref);
+  // LayoutBuilder: the window width stands in until the first measurement.
+  const maxWidth = useElementSize(ref)?.width ?? window.innerWidth;
   const navigation = props.navigation ?? null;
   let content: ReactNode;
   if (navigation instanceof SettingsTileNavigation) {

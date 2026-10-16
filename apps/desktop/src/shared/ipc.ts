@@ -44,6 +44,10 @@ export const IpcChannels = {
   // Screen capture.
   screenInvoke: 'screen:invoke',
 
+  // In-app updates (electron-updater).
+  updaterInvoke: 'updater:invoke',
+  updaterProgress: 'updater:progress',
+
   // Processes & shell.
   processInvoke: 'process:invoke',
   openExternal: 'shell:open-external',

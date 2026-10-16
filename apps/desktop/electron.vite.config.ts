@@ -23,7 +23,12 @@ export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
     resolve: { alias: sharedAliases },
-    define: { __GANG_CONFIG_OVERRIDES__: JSON.stringify(configOverrides) },
+    define: {
+      __GANG_CONFIG_OVERRIDES__: JSON.stringify(configOverrides),
+      // Set by the release workflow when the macOS build is Developer ID
+      // signed; Squirrel.Mac refuses to install updates for unsigned apps.
+      __GANG_MAC_UPDATES_SIGNED__: JSON.stringify(process.env.GANG_MAC_UPDATES_SIGNED === '1'),
+    },
     build: { outDir: 'out/main' },
   },
   preload: {

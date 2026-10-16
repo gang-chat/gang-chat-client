@@ -135,8 +135,14 @@ export function fileEmptyMessage(): string {
 
 /** Port of `Uri.tryParse`: the URL itself, or null when it cannot be parsed. */
 export function fileDownloadUri(url: string): string | null {
+  // A `:` before the first `/`, `?` or `#` ends the scheme, which must be
+  // non-empty and well-formed (Dart rejects `://bad`).
+  const schemeEnd = url.search(/[:/?#]/);
+  const hasScheme = schemeEnd >= 0 && url[schemeEnd] === ':';
+  if (hasScheme && !/^[A-Za-z][A-Za-z0-9+.-]*$/.test(url.substring(0, schemeEnd))) return null;
   try {
-    new URL(url, 'http://localhost/');
+    if (hasScheme) new URL(url);
+    else new URL(url, 'http://localhost/');
     return url;
   } catch {
     return null;

@@ -9,6 +9,8 @@ import {
   ReleaseUpdateService,
   appUpdatePlatformForOperatingSystem,
 } from '../../src/shell/release_update_service';
+import { ShutdownHooks } from '../../src/lifecycle/shutdown_hooks';
+import type { NativeUpdateInfo, UpdaterBridge } from '../../src/platform/platform';
 import { MockClient, mockBytesResponse, mockResponse } from '../support/fake_http_client';
 import { installFakePlatform } from '../support/fake_platform';
 import type { FakePlatform } from '../support/fake_platform';
@@ -277,4 +279,143 @@ test('startInstaller rejects non-APK files on Android and unsupported platforms'
   await expect(new ReleaseUpdateService().startInstaller('/tmp/x')).rejects.toThrow(
     'Installing updates is not supported on this platform.',
   );
+});
+
+// ---------------------------------------------------------------------------
+// Native updater (electron-updater) path.
+
+
+class FakeUpdater implements UpdaterBridge {
+  available = true;
+  info: NativeUpdateInfo | null = { version: '0.6.0', releaseDate: '2026-10-01T08:00:00.000Z', releaseNotes: '修复' };
+  installs = 0;
+  events: string[] = [];
+  downloadGate: Promise<void> = Promise.resolve();
+
+  async isAvailable() {
+    return this.available;
+  }
+  async checkForUpdate() {
+    return this.info;
+  }
+  async downloadUpdate(options: {
+    onProgress?: (p: { receivedBytes: number; totalBytes: number | null }) => void;
+    signal?: AbortSignal;
+  }) {
+    options.onProgress?.({ receivedBytes: 50, totalBytes: 100 });
+    await this.downloadGate;
+    if (options.signal?.aborted) {
+      const error = new Error('aborted');
+      error.name = 'AbortError';
+      throw error;
+    }
+    options.onProgress?.({ receivedBytes: 100, totalBytes: 100 });
+  }
+  async quitAndInstall() {
+    this.events.push('install');
+    this.installs += 1;
+  }
+}
+
+test('checkForUpdate uses the native updater feed when it is available', async () => {
+  const updater = new FakeUpdater();
+  const client = new MockClient(async () => {
+    throw new Error('the bucket listing must not be read');
+  });
+  const service = new ReleaseUpdateService({ httpClient: client, updater });
+
+  const found = await service.checkForUpdate({
+    bucketUrl: 'https://os.example.test/gang-chat',
+    currentVersion: '0.5.0',
+    platform: AppUpdatePlatform.windows,
+  });
+
+  expect(found?.latestVersion).toBe('0.6.0');
+  expect(found?.asset.key).toBe('releases/GangChat_v0.6.0.exe');
+  expect(found?.asset.releasedAt?.toISOString()).toBe('2026-10-01T08:00:00.000Z');
+  expect(found?.releaseNotes).toBe('修复');
+  expect(service.isNativeUpdate(found!)).toBe(true);
+});
+
+test('checkForUpdate reports no update when the native feed is not newer', async () => {
+  const updater = new FakeUpdater();
+  updater.info = { version: '0.5.0', releaseDate: null, releaseNotes: null };
+  const service = new ReleaseUpdateService({ updater });
+
+  expect(
+    await service.checkForUpdate({ bucketUrl: 'https://os.example.test/gang-chat', currentVersion: '0.5.0', platform: AppUpdatePlatform.macos }),
+  ).toBeNull();
+});
+
+test('an unavailable native updater falls back to the bucket listing', async () => {
+  const updater = new FakeUpdater();
+  updater.available = false;
+  let listed = false;
+  const client = new MockClient(async () => {
+    listed = true;
+    return mockResponse('<ListBucketResult><Contents><Key>releases/GangChat_v0.5.2.exe</Key></Contents></ListBucketResult>', 200);
+  });
+  const service = new ReleaseUpdateService({ httpClient: client, updater });
+
+  const found = await service.checkForUpdate({
+    bucketUrl: 'https://os.example.test/gang-chat',
+    currentVersion: '0.5.0',
+    platform: AppUpdatePlatform.windows,
+  });
+
+  expect(listed).toBe(true);
+  expect(found?.latestVersion).toBe('0.5.2');
+  expect(service.isNativeUpdate(found!)).toBe(false);
+});
+
+test('native download reports progress and installing quits through the updater after shutdown hooks', async () => {
+  const updater = new FakeUpdater();
+  const service = new ReleaseUpdateService({ updater });
+  const found = (await service.checkForUpdate({
+    bucketUrl: 'https://os.example.test/gang-chat',
+    currentVersion: '0.5.0',
+    platform: AppUpdatePlatform.windows,
+  }))!;
+  const progress: Array<[number, number | null]> = [];
+
+  const file = await service.downloadUpdate(found, {
+    onProgress: ({ receivedBytes, totalBytes }) => progress.push([receivedBytes, totalBytes]),
+  });
+  const token = ShutdownHooks.register(async () => {
+    updater.events.push('hooks');
+  });
+  try {
+    await service.startInstaller(file, { platform: AppUpdatePlatform.windows });
+  } finally {
+    ShutdownHooks.unregister(token);
+  }
+
+  expect(progress).toEqual([
+    [0, null],
+    [50, 100],
+    [100, 100],
+  ]);
+  expect(updater.events).toEqual(['hooks', 'install']);
+});
+
+test('cancelling a native download raises ReleaseDownloadCancelledException', async () => {
+  const updater = new FakeUpdater();
+  let release!: () => void;
+  updater.downloadGate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const service = new ReleaseUpdateService({ updater });
+  const found = (await service.checkForUpdate({
+    bucketUrl: 'https://os.example.test/gang-chat',
+    currentVersion: '0.5.0',
+    platform: AppUpdatePlatform.macos,
+  }))!;
+  const token = new ReleaseDownloadCancellationToken();
+
+  const download = service.downloadUpdate(found, { cancellationToken: token });
+  token.cancel();
+  release();
+
+  await expect(download).rejects.toBeInstanceOf(ReleaseDownloadCancelledException);
+  expect(updater.installs).toBe(0);
 });

@@ -23,3 +23,14 @@
     stroke-dashoffset: calc(var(--gang-progress-circumference) * -0.99);
   }
 }
+
+/*
+ * Button labels are single-line with an ellipsis (Dart
+ * `DefaultTextStyle.merge(maxLines: 1, overflow: ellipsis)`), also when the
+ * label is a `<Text>` element that sets its own wrapping inline.
+ */
+.gang-button-label > * {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
