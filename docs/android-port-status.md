@@ -9,7 +9,7 @@ Android 客户端正在从 Flutter 一比一移植为原生 Kotlin + Jetpack Com
 | --- | --- | --- |
 | Dart 运行时对等物（async、Stream、JSON、DateTime、Uri、http、插件门面） | `:core` foundation / plugins | 完成 |
 | Flutter 框架层对等物（ViewState、BuildContext、Navigator、Overlay、Dialog、文本、MediaQuery） | `:app` widgets | 完成 |
-| 协议、鉴权、配置 | `:core` protocol / auth / config | 进行中 |
+| 协议、鉴权、配置 | `:core` protocol / auth / config | 完成（118 个移植用例通过） |
 | 业务控制器 | `:core` app | 进行中（无依赖的底层文件已完成） |
 | 平台服务（通知、前台服务、FCM、更新安装、存储） | `:app` platform | 进行中 |
 | LiveKit 语音、摄像头、屏幕共享 | `:app` live | 未开始 |
@@ -17,6 +17,19 @@ Android 客户端正在从 Flutter 一比一移植为原生 Kotlin + Jetpack Com
 | 主界面、设置、登录 | `:app` home / settings / shell | 未开始 |
 
 ## 与 Flutter 版的差异
+
+### 协议与鉴权（`:core` protocol / auth / live / shell）
+
+- Dart 的 `HandshakeException`（TLS 握手失败）对应 `SSLException`，或消息以 `HandshakeException:` 开头、
+  cause 为 `SSLException` 的 `ClientException`。
+- 环境代理（`HttpClient.findProxyFromEnvironment`）按 `http_proxy` / `https_proxy` / `no_proxy` 移植；
+  代理认证改由 OkHttp 的 proxy authenticator 在 407 时（CONNECT 隧道则预先）发送；代理配置无效时直连
+  （dart:io 会抛错）。
+- JSON 里读进 `Int` 字段的整数按 32 位截断（Dart `int` 是 64 位）；字节数、文件大小、上传进度、
+  Unix 秒时间戳用 `Long`。
+- SSE 事件流里的非法 UTF-8 字节被替换而不是报错（Dart 的解码器是严格的）。
+- 表情包缓存的文件读写放在 `Dispatchers.IO`。
+- `TokenStore` 去掉了只对 macOS 有意义的钥匙串选项。
 
 ### 业务逻辑（`:core` app / shell）
 
