@@ -224,7 +224,19 @@ function createMediaFactory(store, rng) {
     },
     externalPhoto() {
       photoSeed += 1;
-      return store.addAsset({ mimeType: 'image/jpeg', filename: `picsum-${photoSeed}.jpg`, width: 640, height: 427, sizeBytes: 48_213, externalUrl: `https://picsum.photos/seed/gang${photoSeed}/640/427` });
+      const seed = photoSeed;
+      // Generated locally so the mock works offline (sandboxes, CI); set
+      // MOCK_EXTERNAL_IMAGES=1 to exercise a remote image host instead.
+      if (process.env.MOCK_EXTERNAL_IMAGES === '1') {
+        return store.addAsset({ mimeType: 'image/jpeg', filename: `picsum-${seed}.jpg`, width: 640, height: 427, sizeBytes: 48_213, externalUrl: `https://picsum.photos/seed/gang${seed}/640/427` });
+      }
+      return store.addAsset({
+        mimeType: 'image/png',
+        filename: `photo-${seed}.png`,
+        width: 640,
+        height: 427,
+        generate: () => photoPng({ width: 640, height: 427, from: '#1F3B57', to: '#C46A2E', seed }),
+      });
     },
     avatar(color) {
       return store.addAsset({ mimeType: 'image/png', filename: 'avatar.png', width: 128, height: 128, generate: () => avatarPng({ color }) });

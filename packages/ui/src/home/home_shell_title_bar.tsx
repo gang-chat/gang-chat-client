@@ -348,16 +348,20 @@ export function _HomeTitleBar(props: _HomeTitleBarProps) {
     content = (
       <Stack style={{ width: '100%', height: '100%' }}>
         <Row crossAxisAlignment="stretch" style={{ width: '100%', height: '100%' }}>
-          <div style={{ width: brandWidth, flexShrink: 0, display: 'grid' }}>
-            <AppWindowDragRegion windowController={windowController} onDoubleTap={toggleMaximize}>
-              <div style={_fillStyle} />
-            </AppWindowDragRegion>
-          </div>
-          <div style={{ flex: '1 1 0', minWidth: 0, display: 'grid' }}>
-            <AppWindowDragRegion windowController={windowController} onDoubleTap={toggleMaximize}>
-              <div style={_fillStyle} />
-            </AppWindowDragRegion>
-          </div>
+          <AppWindowDragRegion
+            windowController={windowController}
+            onDoubleTap={toggleMaximize}
+            style={{ width: brandWidth, flexShrink: 0 }}
+          >
+            <div style={_fillStyle} />
+          </AppWindowDragRegion>
+          <AppWindowDragRegion
+            windowController={windowController}
+            onDoubleTap={toggleMaximize}
+            style={{ flex: '1 1 0', minWidth: 0 }}
+          >
+            <div style={_fillStyle} />
+          </AppWindowDragRegion>
           {showWindowControls ? (
             <div className="gang-no-drag" style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
               <AppWindowControls maximized={maximized} onMinimize={minimize} onToggleMaximize={toggleMaximize} onClose={close} />
