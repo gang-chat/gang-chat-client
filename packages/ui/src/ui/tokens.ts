@@ -250,6 +250,7 @@ export const UiCurves = {
   easeIn: 'cubic-bezier(0.42, 0, 1, 1)',
   easeInOut: 'cubic-bezier(0.42, 0, 0.58, 1)',
   easeOutCubic: 'cubic-bezier(0.215, 0.61, 0.355, 1)',
+  easeInCubic: 'cubic-bezier(0.55, 0.055, 0.675, 0.19)',
   easeInOutCubic: 'cubic-bezier(0.645, 0.045, 0.355, 1)',
   easeOutBack: 'cubic-bezier(0.175, 0.885, 0.32, 1.275)',
   fastOutSlowIn: 'cubic-bezier(0.4, 0, 0.2, 1)',

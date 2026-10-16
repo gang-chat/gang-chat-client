@@ -32,6 +32,8 @@ export class Store {
     this.verificationTokens = new Map();
     this.resetTokens = new Map();
     this.pushDevices = new Map();
+    /** `Idempotency-Key` replays: `${userId}:${key}` -> created entity id. */
+    this.idempotencyKeys = new Map();
   }
 
   // -------------------------------------------------------------------------

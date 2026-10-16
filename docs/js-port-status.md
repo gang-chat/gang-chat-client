@@ -91,3 +91,17 @@ Flutter。约定见 `docs/js-port-conventions.md`。本文记录各模块的移�
 - 音乐组件剪贴板信封的 base64url 编解码手写实现，不依赖 `btoa` / `Buffer`（React Native 可用）。
 - `MessagesController` 的语音时长参数是毫秒；`fileTransfers` 是 `Map<string, FileTransferState>`。
 
+### 应用层：房间列表、语音频道、音乐盒、表情包（`packages/core/src/app`）
+
+- 表情包 zip 解包：`package:archive` 改为 `lib/zip.ts` 的纯 TypeScript 实现（stored / deflate、
+  ZIP64），不依赖 `DecompressionStream` 或 Node `zlib`，React Native 可直接用；加密或其它压缩方式的
+  条目读作 `null` 并跳过（与 Dart 的 `content == null` 分支一致）。
+- 歌单的可选服务端扩展（Dart 的 `api is RoomMusicPlaylistCloneApi` 等）改为检查对应方法是否存在，
+  因为 TS 接口没有运行时类型。
+- `PersonalMusicPlaylistsController.room(...)` 的 `api` 标识在 Dart 里是按值比较的 record；
+  TS 版返回按 `(roomApi, personalApi, roomId, canManage)` 驻留的冻结元组，相同参数保持 `===`。
+- 音乐盒命令 id 用 `Date.now() * 1000`（JS 没有微秒时钟），唯一性仍靠自增序号。
+- `copyWith` 的"不变"哨兵（`StickerPanelLoadState`、`StickerPreviewState`、
+  `LiveScreenSourcePickerState`）：不传或传 `undefined` 保持原值，传 `null` 清空。
+- `ArgumentError.value(delta, ...)` 改为 `Error`，文案沿用 Dart 的 `Invalid argument (delta): ...`。
+
