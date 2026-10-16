@@ -57,6 +57,12 @@ android {
         versionCode = appVersionCode
         versionName = appVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Flutter's --dart-define overrides (see AppConfig): set these
+        // environment variables at build time to point a build elsewhere.
+        for (name in listOf("GANG_API_BASE_URL", "GANG_ASSET_BASE_URL", "GANG_RELEASE_BUCKET_URL")) {
+            buildConfigField("String", name, "\"${System.getenv(name).orEmpty()}\"")
+        }
     }
 
     compileOptions {

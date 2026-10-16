@@ -41,7 +41,7 @@ android/
 ```
 app/android_push_registration_controller  app/app (barrel，不移植)  app/authenticated_app_services
 app/composer_attachment_display  app/live_session_controller  app/managed_user_audio_settings
-app/voice_recorder_controller  config/app_config
+app/voice_recorder_controller
 live/android_audio_initialization  live/audio_device_rebinder  live/audio_device_restorer
 live/audio_device_service  live/audio_input_rebinder  live/audio_test_service
 live/live_presence_audio_coordinator  live/live_presence_sound_service  live/live_session
@@ -56,6 +56,9 @@ synthesized_wav 以外的文件
 `shell/sparkle_updater`、`shell/browser/*`、`shell/file_drop_service`（桌面拖放）、
 `live/mac_audio_devices`、`home/live_screen_share_picker`（桌面屏幕源选择器）、
 `ui/window_chrome`、`ui/title_bar`、`lib/ui_showcase.dart`、`app/app.dart` 与 `ui/ui.dart`（barrel）。
+
+已经移植好的：`config/app_config.dart` → `:core` `config/AppConfig.kt`（资源经 `rootBundle` 门面读取），
+`config/host_platform.dart` → `config/HostPlatform.kt`（`isAndroid` 恒为 true，`kIsWeb` 恒为 false）。
 
 文件内只在 Web / Windows / macOS / Linux 上走的分支同样删掉，只保留 Android 走得到的代码
 （`HostPlatform.isAndroid` 恒为 true，`kIsWeb` 恒为 false）。Android 平板走宽屏布局，
@@ -188,6 +191,8 @@ synthesized_wav 以外的文件
 | `path_provider` | `PathProvider.getApplicationSupportDirectory()` 等（`suspend`，返回 `File`） |
 | `shared_preferences` | `SharedPreferences.getInstance()`，同名 get/set（set 是 `suspend`）；`getInt` 返回 `Int?`，64 位值用 `getLong`/`setLong` |
 | `flutter_secure_storage` | `FlutterSecureStorage().read/write/delete(key)` |
+| `rootBundle`（assets） | `rootBundle.loadString("assets/...")`（测试用 `rootBundle.setMockAssets`） |
+| `--dart-define` / `String.fromEnvironment` | `AppConfig.environment`（`:app` 启动时从 `BuildConfig` 填入） |
 
 `:app` 在启动时安装真实实现。**真实实现必须读写 Flutter 插件原有的存储格式**
 （SharedPreferences 文件 `FlutterSharedPreferences`、键前缀 `flutter.`、列表/浮点的编码前缀；
