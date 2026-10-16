@@ -1,50 +1,47 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  useWindowDimensions,
-  type LayoutChangeEvent,
-  type ViewStyle,
-} from 'react-native';
+  createContext,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ClipboardEvent as ReactClipboardEvent,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from 'react';
 
-import { ValueNotifier } from '@gang-chat/core/lib/change_notifier';
 import { HostPlatform } from '@gang-chat/core/config/host_platform';
+import { ValueNotifier } from '@gang-chat/core/lib/change_notifier';
+import { hasPlatform, platform } from '@gang-chat/core/platform/platform';
 
 import {
+  TextEditingValue,
+  TextSelection,
   type FocusNode,
   type TextEditingController,
-  type TextEditingValue,
-  type TextSelection,
   type UndoHistoryController,
 } from '../lib/text_editing';
 import { useMountedRef } from '../lib/use_mounted';
-import { measureInWindow, type WindowRect } from './overlay';
-import { UiColors, UiMotion, UiRadii, UiShadows, UiTypography, boxShadow, withAlpha } from './tokens';
-import { useTextFieldDomHooks } from './text_context_menu_dom';
+import { insertOverlay, type OverlayEntryHandle } from './overlay';
+import { UiColors, UiCurves, UiRadii, UiShadows, UiTypography, boxShadow, withAlpha } from './tokens';
 
 /**
  * Port of `lib/src/ui/text_context_menu.dart`: the app's own text selection
  * menu (剪切 / 复制 / 粘贴 / 全选 / 撤销 / 重做) for editable and read-only text.
  *
  * Flutter hands `contextMenuBuilder` to `TextField`, which calls it with its
- * `EditableTextState` on a secondary click. React Native's `TextInput` has no
- * such hook, so in this port [TextFieldEditingShortcuts] — the wrapper every
- * text field already sits in — owns the hookup:
- *
- *  - Web (Electron): `text_context_menu_dom.web.ts` listens for `contextmenu`
- *    on the wrapped DOM subtree, builds an [EditableTextState] from the
- *    focused `<input>` / `<textarea>` (or from the DOM selection for
- *    selectable `<Text>`), and shows the menu returned by the wrapper's
- *    [TextFieldEditingShortcutsProps.contextMenuBuilder] (default:
- *    [buildTextFieldContextMenu] with the field's read-only / password state)
- *    in an overlay entry.
- *  - Native: the platform's own selection menu is used (see
- *    `text_context_menu_dom.ts`).
- *
- * Callers pass the same options Dart passed to `buildTextFieldContextMenu`:
+ * `EditableTextState` on a secondary click. A DOM `<input>` / `<textarea>`
+ * has no such hook, so in this port [TextFieldEditingShortcuts] — the wrapper
+ * every text field already sits in — owns it: it handles `contextmenu` on its
+ * subtree, builds an [EditableTextState] from the field under the pointer
+ * (or from the DOM selection when the subtree is selectable text rather than
+ * a field), and shows the menu returned by its `contextMenuBuilder` prop
+ * (default: [buildTextFieldContextMenu] with the field's read-only / password
+ * state) in an overlay entry:
  *
  * ```tsx
  * <TextFieldEditingShortcuts
@@ -53,7 +50,7 @@ import { useTextFieldDomHooks } from './text_context_menu_dom';
  *   undoController={undoController}
  *   contextMenuBuilder={(state) => buildTextFieldContextMenu(state, { undoController, canPasteNonText })}
  * >
- *   <TextInput … />
+ *   <textarea … />
  * </TextFieldEditingShortcuts>
  * ```
  */
@@ -68,7 +65,7 @@ const _contextMenuHorizontalPadding = 10;
 // `ContextMenuButtonItem`, `ClipboardStatus`, …). The controllers and
 // `TextSelection` / `TextEditingValue` come from `lib/text_editing`.
 
-/** A point in window coordinates (Flutter `Offset`, global). */
+/** A point in window coordinates (Flutter global `Offset`). */
 export interface TextMenuOffset {
   x: number;
   y: number;
@@ -108,7 +105,7 @@ export interface TextSelectionToolbarAnchors {
 
 /**
  * The editable-text state a context menu is built from (Flutter
- * `EditableTextState`). The web hookup implements it over the DOM field.
+ * `EditableTextState`), implemented over the DOM field or selection.
  */
 export interface EditableTextState {
   readonly textEditingValue: TextEditingValue;
@@ -143,69 +140,73 @@ export interface TextPointerDownEvent {
 
 /**
  * Port of an `Action<PasteTextIntent>` override: [invoke] receives the
- * field's default text paste (`callingAction`) so it can fall back to it.
+ * field's default text paste (Flutter's `callingAction`) so it can fall back
+ * to it.
  */
 export interface PasteTextIntentAction {
   invoke(defaultPaste: () => void): void;
 }
 
-interface PasteTextIntentScopeValue {
+interface _PasteTextIntentScopeValue {
   action: PasteTextIntentAction;
   /**
    * PORT: lets a field whose owner did not pass `canPasteNonText` to
    * [buildTextFieldContextMenu] still keep 粘贴 visible for non-text
-   * clipboards (see [TextFieldEditingShortcuts]' default builder).
+   * clipboards (used by [TextFieldEditingShortcuts]' default builder).
    */
   canPasteNonText: (() => Promise<boolean>) | null;
 }
 
-const PasteTextIntentScope = createContext<PasteTextIntentScopeValue | null>(null);
+const _PasteTextIntentScope = createContext<_PasteTextIntentScopeValue | null>(null);
 
 export interface PasteTextIntentActionsProps {
   /** The `PasteTextIntent` override; null keeps the default paste. */
   action: PasteTextIntentAction | null;
   /** Optional non-text clipboard probe for the default context menu. */
   canPasteNonText?: (() => Promise<boolean>) | null;
-  children: ReactNode;
+  children?: ReactNode;
 }
 
 /**
  * Port of `Actions(actions: {PasteTextIntent: action}, child: …)`.
  *
- * Both the keyboard paste (Cmd/Ctrl+V, a DOM `paste` event on the web) and
- * the context-menu 粘贴 of any field below run through [action].
+ * Both the keyboard paste (Cmd/Ctrl+V — the DOM `paste` event) and the
+ * context-menu 粘贴 of any field below run through [action]. The wrapper is
+ * `display: contents`, so it does not take part in layout.
  */
 export function PasteTextIntentActions({ action, canPasteNonText = null, children }: PasteTextIntentActionsProps) {
   const value = useMemo(() => (action == null ? null : { action, canPasteNonText }), [action, canPasteNonText]);
-  const ref = useRef<View | null>(null);
-  useTextFieldDomHooks(ref, {
-    pasteAction: value?.action ?? null,
-    // The paste override is the only hook this wrapper installs; the field's
-    // own TextFieldEditingShortcuts provides the context menu.
-    contextMenu: null,
-  });
+  const onPaste = (event: ReactClipboardEvent<HTMLDivElement>) => {
+    if (action == null || event.defaultPrevented) return;
+    const field = _editableTarget(event.target, event.currentTarget);
+    if (field == null || field.readOnly || field.disabled) return;
+    // The override decides asynchronously whether it consumed the paste, so
+    // take the browser's text now and insert it ourselves if it did not.
+    event.preventDefault();
+    const text = event.clipboardData.getData('text/plain');
+    const selection = _fieldSelection(field);
+    action.invoke(() => _insertText(field, text, selection));
+  };
   return (
-    <PasteTextIntentScope.Provider value={value}>
-      <View ref={ref} style={styles.contents}>
+    <_PasteTextIntentScope.Provider value={value}>
+      <div style={_contentsStyle} onPaste={onPaste}>
         {children}
-      </View>
-    </PasteTextIntentScope.Provider>
+      </div>
+    </_PasteTextIntentScope.Provider>
   );
 }
 
 // ---------------------------------------------------------------------------
 
-let _contextMenuPanelBounds: WindowRect | null = null;
+let _contextMenuPanel: HTMLElement | null = null;
 
 /** Whether [globalPosition] (window coordinates) hits the open text menu. */
 export function isTextContextMenuPanelHit(globalPosition: TextMenuOffset): boolean {
-  const rect = _contextMenuPanelBounds;
-  if (rect == null) return false;
+  const panel = _contextMenuPanel;
+  if (panel == null || !panel.isConnected) return false;
+  const rect = panel.getBoundingClientRect();
   return (
-    globalPosition.x >= rect.x &&
-    globalPosition.y >= rect.y &&
-    globalPosition.x < rect.x + rect.width &&
-    globalPosition.y < rect.y + rect.height
+    globalPosition.x >= rect.left && globalPosition.y >= rect.top && globalPosition.x < rect.right && globalPosition.y < rect.bottom
   );
 }
 
@@ -220,69 +221,114 @@ export interface TextFieldEditingShortcutsProps {
    * PORT: Flutter's `TextField.contextMenuBuilder`, hosted here because this
    * wrapper owns the context-menu hookup. Defaults to
    * [buildTextFieldContextMenu] with the field's own read-only / password
-   * state and [undoController].
+   * state and [undoController]. Return null for no menu.
    */
   contextMenuBuilder?: ((editableTextState: EditableTextState) => ReactNode) | null;
-  children: ReactNode;
+  children?: ReactNode;
 }
 
 /**
  * Port of `TextFieldEditingShortcuts`: Ctrl+Y redo, the secondary-click
- * selection protection and (in this port) the context-menu hookup for the
- * text field(s) it wraps. It does not take part in layout (the wrapper is
- * `display: contents`).
+ * selection protection and (in this port) the context menu for the text
+ * field(s) it wraps. The wrapper is `display: contents`.
  *
  * Flutter collapsed the selection and dropped focus on a right click before
  * the menu read them, so it restored both. A DOM field keeps its selection
- * and focus through `contextmenu`, so the web hookup only keeps the
- * protection's other effect: while a menu opened by a secondary click is up,
- * the next primary pointer-down anywhere reports
+ * and focus through `contextmenu`, so only the protection's other effect is
+ * kept: while it is active (after a secondary pointer-down), the next primary
+ * pointer-down anywhere reports
  * [onGlobalPrimaryPointerDownDuringSecondaryClickProtection].
  */
 export function TextFieldEditingShortcuts(props: TextFieldEditingShortcutsProps) {
-  const {
-    controller = null,
-    focusNode = null,
-    secondaryClickSelection = null,
-    onGlobalPrimaryPointerDownDuringSecondaryClickProtection = null,
-    undoController,
-    contextMenuBuilder = null,
-    children,
-  } = props;
-  const paste = useContext(PasteTextIntentScope);
-  const ref = useRef<View | null>(null);
-  const builder = (state: EditableTextState): ReactNode =>
-    contextMenuBuilder != null
-      ? contextMenuBuilder(state)
-      : buildTextFieldContextMenu(state, {
-          undoController,
-          readOnly: state.readOnly,
-          allowCut: !state.obscureText,
-          allowCopy: !state.obscureText,
-          canPasteNonText: paste?.canPasteNonText ?? null,
-        });
-  useTextFieldDomHooks(ref, {
-    pasteAction: null,
-    contextMenu: {
-      build: builder,
-      pasteIntentAction: paste?.action ?? null,
+  const paste = useContext(_PasteTextIntentScope);
+  const propsRef = useRef(props);
+  propsRef.current = props;
+  const pasteRef = useRef(paste);
+  pasteRef.current = paste;
+  const protection = useRef<(() => void) | null>(null);
+
+  const clearSecondaryClickProtection = () => {
+    protection.current?.();
+    protection.current = null;
+  };
+  useEffect(() => clearSecondaryClickProtection, []);
+
+  // The controller's text changed: Flutter drops the protection.
+  const controller = props.controller ?? null;
+  useEffect(() => {
+    if (controller == null) return;
+    let lastText = controller.text;
+    const listener = () => {
+      if (controller.text === lastText) return;
+      lastText = controller.text;
+      clearSecondaryClickProtection();
+    };
+    controller.addListener(listener);
+    return () => controller.removeListener(listener);
+  }, [controller]);
+
+  const build = (state: EditableTextState): ReactNode => {
+    const { contextMenuBuilder = null, undoController } = propsRef.current;
+    if (contextMenuBuilder != null) return contextMenuBuilder(state);
+    return buildTextFieldContextMenu(state, {
       undoController,
-      controller,
-      focusNode,
-      secondaryClickSelection,
-      onGlobalPrimaryPointerDown: onGlobalPrimaryPointerDownDuringSecondaryClickProtection,
-    },
-  });
+      readOnly: state.readOnly,
+      allowCut: !state.obscureText,
+      allowCopy: !state.obscureText,
+      canPasteNonText: pasteRef.current?.canPasteNonText ?? null,
+    });
+  };
+
+  const onContextMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (event.defaultPrevented) return;
+    event.preventDefault();
+    const anchor = { x: event.clientX, y: event.clientY };
+    const field = _editableTarget(event.target, event.currentTarget);
+    const state =
+      field != null
+        ? _fieldState(field, anchor, () => pasteRef.current?.action ?? null)
+        : _domSelectionState(event.currentTarget, anchor);
+    _showMenu(build, state);
+  };
+
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.defaultPrevented) return;
+    // SingleActivator(LogicalKeyboardKey.keyY, control: true) → redo.
+    if (event.key.toLowerCase() !== 'y' || !event.ctrlKey || event.shiftKey || event.altKey || event.metaKey) return;
+    const undoController = propsRef.current.undoController;
+    if (undoController == null) return;
+    event.preventDefault();
+    undoController.redo();
+  };
+
+  const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if ((event.buttons & 2) === 0) {
+      clearSecondaryClickProtection();
+      return;
+    }
+    clearSecondaryClickProtection();
+    const onGlobalPointerDown = (global: PointerEvent) => {
+      if ((global.buttons & 1) === 0) return;
+      propsRef.current.onGlobalPrimaryPointerDownDuringSecondaryClickProtection?.({
+        position: { x: global.clientX, y: global.clientY },
+        buttons: global.buttons,
+      });
+      clearSecondaryClickProtection();
+    };
+    document.addEventListener('pointerdown', onGlobalPointerDown, true);
+    protection.current = () => document.removeEventListener('pointerdown', onGlobalPointerDown, true);
+  };
+
   return (
-    <View ref={ref} style={styles.contents}>
-      {children}
-    </View>
+    <div style={_contentsStyle} onContextMenu={onContextMenu} onKeyDown={onKeyDown} onPointerDown={onPointerDown}>
+      {props.children}
+    </div>
   );
 }
 
 export interface BuildTextFieldContextMenuOptions {
   undoController?: UndoHistoryController | null;
-  /** Unused in this port (taps outside always close the menu); kept for call-site parity. */
+  /** Kept for call-site parity; taps outside always close the menu. */
   tapRegionGroupId?: unknown;
   onOpenChanged?: ((open: boolean) => void) | null;
   onActionPressed?: (() => void) | null;
@@ -380,7 +426,7 @@ function _TextFieldContextMenu(props: _TextFieldContextMenuProps) {
       });
   };
 
-  // Listen to the clipboard status and undo history (initState/dispose).
+  // Rebuild when the clipboard status or the undo history changes.
   useEffect(() => {
     const handleMenuStateChanged = () => {
       if (mounted.current) setVersion((v) => v + 1);
@@ -404,17 +450,17 @@ function _TextFieldContextMenu(props: _TextFieldContextMenuProps) {
   // onOpenChanged(true) after the first frame, onOpenChanged(false) after dispose.
   useEffect(() => {
     let openNotified = false;
-    const timer = setTimeout(() => {
+    const frame = requestAnimationFrame(() => {
       if (!mounted.current) return;
       openNotified = true;
       propsRef.current.onOpenChanged?.(true);
-    }, 0);
+    });
     return () => {
-      clearTimeout(timer);
+      cancelAnimationFrame(frame);
       generation.current += 1;
       if (openNotified) {
         const onOpenChanged = propsRef.current.onOpenChanged;
-        if (onOpenChanged != null) setTimeout(() => onOpenChanged(false), 0);
+        if (onOpenChanged != null) requestAnimationFrame(() => onOpenChanged(false));
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -444,8 +490,8 @@ function _itemOfType(state: EditableTextState, type: ContextMenuButtonType): Con
 function _selectAllFallback(state: EditableTextState): (() => void) | null {
   const value = state.textEditingValue;
   if (value.text.length === 0 || !value.selection.isValid) return null;
-  const start = value.selection.start < value.selection.end ? value.selection.start : value.selection.end;
-  const end = value.selection.start < value.selection.end ? value.selection.end : value.selection.start;
+  const start = value.selection.start;
+  const end = value.selection.end;
   if (start === 0 && end === value.text.length) return null;
   return () => state.selectAll(SelectionChangedCause.toolbar);
 }
@@ -560,72 +606,69 @@ function _readOnlySectionsFor(props: _TextFieldContextMenuProps): _ContextMenuSe
 /**
  * Port of `_ContextMenuToolbar`: lays the panel out like Flutter's
  * `DesktopTextSelectionToolbarLayoutDelegate` — its top-left at the anchor,
- * shifted back inside the padded screen when it would overhang. Android uses
+ * shifted back inside the padded window when it would overhang. Android uses
  * the above/below placement of `TextSelectionToolbarLayoutDelegate`.
  */
 function _ContextMenuToolbar({ anchors, children }: { anchors: TextSelectionToolbarAnchors; children: ReactNode }) {
-  const window = useWindowDimensions();
-  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
-  const panelRef = useRef<View | null>(null);
-  const paddingAbove = _contextMenuScreenPadding;
-  const areaWidth = window.width - _contextMenuScreenPadding * 2;
-  const areaHeight = window.height - paddingAbove - _contextMenuScreenPadding;
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
 
+  // Measure before paint, then place (CustomSingleChildLayout).
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    if (panel == null) return;
+    _contextMenuPanel = panel;
+    const width = panel.offsetWidth;
+    const height = panel.offsetHeight;
+    const paddingAbove = _contextMenuScreenPadding;
+    const areaWidth = window.innerWidth - _contextMenuScreenPadding * 2;
+    const areaHeight = window.innerHeight - paddingAbove - _contextMenuScreenPadding;
+    let left: number;
+    let top: number;
+    if (HostPlatform.isAndroid) {
+      // TextSelectionToolbarLayoutDelegate: above the selection when it fits,
+      // otherwise below it.
+      const anchorAbove = { x: anchors.primaryAnchor.x - _contextMenuScreenPadding, y: anchors.primaryAnchor.y - 8 - paddingAbove };
+      const below = anchors.secondaryAnchor ?? anchors.primaryAnchor;
+      const anchorBelow = { x: below.x - _contextMenuScreenPadding, y: below.y + 18 - paddingAbove };
+      const fitsAbove = anchorAbove.y >= height;
+      const anchor = fitsAbove ? anchorAbove : anchorBelow;
+      left = Math.min(anchor.x - width / 2, areaWidth - width);
+      top = fitsAbove ? anchor.y - height : anchor.y;
+    } else {
+      const anchor = { x: anchors.primaryAnchor.x - _contextMenuScreenPadding, y: anchors.primaryAnchor.y - paddingAbove };
+      const overhangX = anchor.x + width - areaWidth;
+      const overhangY = anchor.y + height - areaHeight;
+      left = overhangX > 0 ? anchor.x - overhangX : anchor.x;
+      top = overhangY > 0 ? anchor.y - overhangY : anchor.y;
+    }
+    const next = { left: _contextMenuScreenPadding + Math.max(0, left), top: paddingAbove + Math.max(0, top) };
+    setPosition((current) => (current != null && current.left === next.left && current.top === next.top ? current : next));
+  });
   useEffect(
     () => () => {
-      _contextMenuPanelBounds = null;
+      if (_contextMenuPanel === panelRef.current) _contextMenuPanel = null;
     },
     [],
   );
 
-  let left = 0;
-  let top = 0;
-  if (size != null) {
-    if (HostPlatform.isAndroid) {
-      // TextSelectionToolbarLayoutDelegate: above the selection when it fits,
-      // otherwise below it (kToolbarContentDistanceBelow = 20 - 2).
-      const anchorAbove = { x: anchors.primaryAnchor.x - _contextMenuScreenPadding, y: anchors.primaryAnchor.y - 8 - paddingAbove };
-      const below = anchors.secondaryAnchor ?? anchors.primaryAnchor;
-      const anchorBelow = { x: below.x - _contextMenuScreenPadding, y: below.y + 18 - paddingAbove };
-      const fitsAbove = anchorAbove.y >= size.height;
-      const anchor = fitsAbove ? anchorAbove : anchorBelow;
-      left = Math.max(0, Math.min(anchor.x - size.width / 2, areaWidth - size.width));
-      top = fitsAbove ? anchor.y - size.height : anchor.y;
-    } else {
-      const anchor = { x: anchors.primaryAnchor.x - _contextMenuScreenPadding, y: anchors.primaryAnchor.y - paddingAbove };
-      const overhangX = anchor.x + size.width - areaWidth;
-      const overhangY = anchor.y + size.height - areaHeight;
-      left = overhangX > 0 ? anchor.x - overhangX : anchor.x;
-      top = overhangY > 0 ? anchor.y - overhangY : anchor.y;
-    }
-    left = Math.max(0, left);
-    top = Math.max(0, top);
-  }
-
-  const onLayout = (event: LayoutChangeEvent) => {
-    const { width, height } = event.nativeEvent.layout;
-    if (size == null || size.width !== width || size.height !== height) setSize({ width, height });
-    void measureInWindow(panelRef).then((rect) => {
-      _contextMenuPanelBounds = rect;
-    });
-  };
-
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      <View
-        style={{
-          position: 'absolute',
-          left: _contextMenuScreenPadding + left,
-          top: paddingAbove + top,
-          // Hidden until measured so the first frame never flashes at 0,0.
-          opacity: size == null ? 0 : 1,
-        }}
-      >
-        <View ref={panelRef} onLayout={onLayout} nativeID="text-context-menu-panel" testID="text-context-menu-panel">
-          {children}
-        </View>
-      </View>
-    </View>
+    <div
+      ref={panelRef}
+      data-testid="text-context-menu-panel"
+      // Pressing the menu must not move focus out of the field it edits.
+      onMouseDown={(event) => event.preventDefault()}
+      onContextMenu={(event) => event.preventDefault()}
+      style={{
+        position: 'fixed',
+        left: position?.left ?? 0,
+        top: position?.top ?? 0,
+        visibility: position == null ? 'hidden' : 'visible',
+        zIndex: 1,
+      }}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -635,13 +678,12 @@ function _ContextMenuPanel({ sections }: { sections: _ContextMenuSection[] }) {
     if (sectionIndex > 0) children.push(<_ContextMenuDivider key={`divider-${sectionIndex}`} />);
     section.forEach((item, itemIndex) => children.push(<_ContextMenuItem key={`${sectionIndex}-${itemIndex}`} data={item} />));
   });
-  return <View style={styles.panel}>{children}</View>;
+  return (
+    <div role="menu" style={_panelStyle}>
+      {children}
+    </div>
+  );
 }
-
-const _webItemTransition: ViewStyle | null =
-  Platform.OS === 'web'
-    ? ({ transitionProperty: 'background-color', transitionDuration: '70ms', transitionTimingFunction: UiMotion.curve } as ViewStyle)
-    : null;
 
 function _ContextMenuItem({ data }: { data: _ContextMenuItemData }) {
   const [hovered, setHovered] = useState(false);
@@ -649,35 +691,42 @@ function _ContextMenuItem({ data }: { data: _ContextMenuItemData }) {
   const foreground = enabled ? UiColors.text : UiColors.textMuted;
   const shortcutColor = enabled ? UiColors.textSecondary : withAlpha(UiColors.textMuted, 0.68);
   return (
-    <Pressable
-      accessibilityRole="menuitem"
-      disabled={!enabled}
-      onPress={data.onPressed ?? undefined}
-      onHoverIn={() => setHovered(true)}
-      onHoverOut={() => setHovered(false)}
-      style={[
-        styles.item,
-        _webItemTransition,
-        { backgroundColor: enabled && hovered ? UiColors.surfaceHover : UiColors.transparent },
-        Platform.OS === 'web' ? ({ cursor: enabled ? 'pointer' : 'default' } as ViewStyle) : null,
-      ]}
+    <div
+      role="menuitem"
+      aria-disabled={!enabled}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onClick={data.onPressed ?? undefined}
+      style={{
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'center',
+        boxSizing: 'border-box',
+        minHeight: _contextMenuMinItemHeight,
+        padding: `6px ${_contextMenuHorizontalPadding}px`,
+        borderRadius: UiRadii.sm,
+        backgroundColor: enabled && hovered ? UiColors.surfaceHover : UiColors.transparent,
+        transition: `background-color 70ms ${UiCurves.easeOutCubic}`,
+        cursor: enabled ? 'pointer' : 'default',
+        userSelect: 'none',
+      }}
     >
-      <Text numberOfLines={1} style={[styles.itemLabel, { color: foreground }]}>
+      <span style={{ ...UiTypography.body, ..._ellipsis, flex: '1 1 0', minWidth: 0, color: foreground, fontSize: 13, lineHeight: 1.2 }}>
         {data.label}
-      </Text>
-      <View style={{ width: 16 }} />
-      <Text numberOfLines={1} style={[styles.itemShortcut, { color: shortcutColor }]}>
+      </span>
+      <span style={{ width: 16, flexShrink: 0 }} />
+      <span style={{ ...UiTypography.label, whiteSpace: 'nowrap', color: shortcutColor, fontSize: 12, lineHeight: 1.2 }}>
         {data.shortcut}
-      </Text>
-    </Pressable>
+      </span>
+    </div>
   );
 }
 
 function _ContextMenuDivider() {
   return (
-    <View testID="text-context-menu-divider" style={styles.dividerPadding}>
-      <View style={styles.divider} />
-    </View>
+    <div data-testid="text-context-menu-divider" style={{ padding: '4px 6px' }}>
+      <div style={{ height: 1, backgroundColor: UiColors.borderStrong }} />
+    </div>
   );
 }
 
@@ -699,40 +748,273 @@ function _shortcutLabel(shortcut: _ShortcutKind): string {
   }
 }
 
-const styles = StyleSheet.create({
-  contents: { display: 'contents' },
-  panel: {
-    width: _contextMenuWidth,
-    backgroundColor: UiColors.surfaceRaised,
-    borderRadius: UiRadii.lg - 2,
-    borderWidth: 1,
-    borderColor: UiColors.borderStrong,
-    ...boxShadow(UiShadows.popover),
-    overflow: 'hidden',
-    // Flutter draws the border over the 5px padding (DecoratedBox), so the
-    // content inset from the outer edge stays 5.
-    padding: 4,
-  },
-  item: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: _contextMenuMinItemHeight,
-    paddingHorizontal: _contextMenuHorizontalPadding,
-    paddingVertical: 6,
-    borderRadius: UiRadii.sm,
-  },
-  itemLabel: {
-    ...UiTypography.body,
-    flex: 1,
-    minWidth: 0,
-    fontSize: 13,
-    lineHeight: 13 * 1.2,
-  },
-  itemShortcut: {
-    ...UiTypography.label,
-    fontSize: 12,
-    lineHeight: 12 * 1.2,
-  },
-  dividerPadding: { paddingHorizontal: 6, paddingVertical: 4 },
-  divider: { alignSelf: 'stretch', height: 1, backgroundColor: UiColors.borderStrong },
-});
+const _contentsStyle: CSSProperties = { display: 'contents' };
+
+const _ellipsis: CSSProperties = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
+
+const _panelStyle: CSSProperties = {
+  width: _contextMenuWidth,
+  boxSizing: 'border-box',
+  backgroundColor: UiColors.surfaceRaised,
+  borderRadius: UiRadii.lg - 2,
+  border: `1px solid ${UiColors.borderStrong}`,
+  boxShadow: boxShadow(UiShadows.popover),
+  overflow: 'hidden',
+  // Flutter draws the DecoratedBox border over the 5px padding, so the
+  // content inset from the outer edge stays 5.
+  padding: 4,
+  display: 'flex',
+  flexDirection: 'column',
+};
+
+// ---------------------------------------------------------------------------
+// DOM plumbing: the field / selection under the pointer, clipboard, insertion.
+
+type _EditableField = HTMLInputElement | HTMLTextAreaElement;
+
+function _editableTarget(target: EventTarget | null, root: Element): _EditableField | null {
+  if (!(target instanceof Element)) return null;
+  const field = target.closest('input, textarea');
+  if (field == null || !root.contains(field)) return null;
+  if (field instanceof HTMLTextAreaElement || field instanceof HTMLInputElement) return field;
+  return null;
+}
+
+interface _FieldSelection {
+  start: number;
+  end: number;
+  backward: boolean;
+}
+
+function _fieldSelection(field: _EditableField): _FieldSelection | null {
+  try {
+    const start = field.selectionStart;
+    const end = field.selectionEnd;
+    if (start == null || end == null) return null;
+    return { start, end, backward: field.selectionDirection === 'backward' };
+  } catch {
+    // Some input types (e.g. email) do not expose a selection.
+    return null;
+  }
+}
+
+async function _readClipboardText(): Promise<string> {
+  try {
+    if (hasPlatform()) return (await platform().clipboard.readText()) ?? '';
+    return (await navigator.clipboard?.readText()) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+async function _writeClipboardText(text: string): Promise<void> {
+  try {
+    if (hasPlatform()) {
+      await platform().clipboard.writeText(text);
+      return;
+    }
+    await navigator.clipboard?.writeText(text);
+  } catch {
+    // Copy failures are silent, like Flutter's Clipboard.setData.
+  }
+}
+
+/**
+ * Inserts [text] over [selection] the way typing would, so the browser's
+ * undo stack and the field's `onChange` (and thus its controller) follow.
+ */
+function _insertText(field: _EditableField, text: string, selection: _FieldSelection | null): void {
+  field.focus();
+  if (selection != null) {
+    try {
+      field.setSelectionRange(selection.start, selection.end, selection.backward ? 'backward' : 'forward');
+    } catch {
+      // Selection not supported for this input type.
+    }
+  }
+  if (text.length === 0) return;
+  let inserted = false;
+  try {
+    inserted = document.execCommand('insertText', false, text);
+  } catch {
+    inserted = false;
+  }
+  if (inserted) return;
+  const current = _fieldSelection(field) ?? { start: field.value.length, end: field.value.length, backward: false };
+  field.setRangeText(text, current.start, current.end, 'end');
+  field.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function _deleteSelection(field: _EditableField, selection: _FieldSelection): void {
+  field.focus();
+  try {
+    field.setSelectionRange(selection.start, selection.end);
+  } catch {
+    return;
+  }
+  let deleted = false;
+  try {
+    deleted = document.execCommand('delete');
+  } catch {
+    deleted = false;
+  }
+  if (deleted) return;
+  field.setRangeText('', selection.start, selection.end, 'end');
+  field.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function _fieldState(
+  field: _EditableField,
+  anchor: TextMenuOffset,
+  pasteIntentAction: () => PasteTextIntentAction | null,
+): EditableTextState {
+  const text = field.value;
+  const domSelection = _fieldSelection(field);
+  const selection =
+    domSelection == null
+      ? TextSelection.collapsed({ offset: -1 })
+      : new TextSelection({
+          baseOffset: domSelection.backward ? domSelection.end : domSelection.start,
+          extentOffset: domSelection.backward ? domSelection.start : domSelection.end,
+        });
+  const readOnly = field.readOnly || field.disabled;
+  const obscureText = field instanceof HTMLInputElement && field.type === 'password';
+  const hasSelection = selection.isValid && !selection.isCollapsed;
+  const clipboardStatus = new ValueNotifier<ClipboardStatus>(ClipboardStatus.unknown);
+  if (!readOnly) {
+    void _readClipboardText().then((clip) => {
+      clipboardStatus.value = clip.length > 0 ? ClipboardStatus.pasteable : ClipboardStatus.notPasteable;
+    });
+  }
+
+  const selectedText = () => (domSelection == null ? '' : text.substring(domSelection.start, domSelection.end));
+  const copy = () => void _writeClipboardText(selectedText());
+  const cut = () => {
+    if (domSelection == null) return;
+    void _writeClipboardText(selectedText());
+    _deleteSelection(field, domSelection);
+  };
+  const paste = () => {
+    void _readClipboardText().then((clip) => _insertText(field, clip, domSelection));
+  };
+  const selectAll = () => {
+    field.focus();
+    field.select();
+  };
+  const allSelected = domSelection != null && domSelection.start === 0 && domSelection.end === text.length;
+
+  const items: ContextMenuButtonItem[] = [];
+  if (hasSelection && !readOnly && !obscureText) items.push({ type: ContextMenuButtonType.cut, onPressed: cut });
+  if (hasSelection && !obscureText) items.push({ type: ContextMenuButtonType.copy, onPressed: copy });
+  if (!readOnly) items.push({ type: ContextMenuButtonType.paste, onPressed: paste });
+  if (text.length > 0 && !allSelected) items.push({ type: ContextMenuButtonType.selectAll, onPressed: selectAll });
+
+  return {
+    textEditingValue: new TextEditingValue({ text, selection }),
+    clipboardStatus,
+    contextMenuAnchors: { primaryAnchor: anchor, secondaryAnchor: null },
+    contextMenuButtonItems: items,
+    readOnly,
+    obscureText,
+    selectAll: () => selectAll(),
+    copySelection: () => copy(),
+    hideToolbar: _hideMenu,
+    invokePasteTextIntent: () => {
+      const action = pasteIntentAction();
+      if (action == null) {
+        paste();
+        return;
+      }
+      action.invoke(paste);
+    },
+  };
+}
+
+/** Read-only state over the DOM selection inside [root] (selectable text). */
+function _domSelectionState(root: Element, anchor: TextMenuOffset): EditableTextState {
+  const text = root.textContent ?? '';
+  let selection = TextSelection.collapsed({ offset: -1 });
+  let selectedText = '';
+  const domSelection = window.getSelection();
+  if (domSelection != null && domSelection.rangeCount > 0) {
+    const range = domSelection.getRangeAt(0);
+    if (root.contains(range.commonAncestorContainer)) {
+      const before = document.createRange();
+      before.selectNodeContents(root);
+      before.setEnd(range.startContainer, range.startOffset);
+      const start = before.toString().length;
+      selectedText = range.toString();
+      selection = new TextSelection({ baseOffset: start, extentOffset: start + selectedText.length });
+    }
+  }
+  const copy = () => void _writeClipboardText(selectedText);
+  const selectAll = () => {
+    const range = document.createRange();
+    range.selectNodeContents(root);
+    const current = window.getSelection();
+    current?.removeAllRanges();
+    current?.addRange(range);
+  };
+  const items: ContextMenuButtonItem[] = [];
+  if (selectedText.length > 0) items.push({ type: ContextMenuButtonType.copy, onPressed: copy });
+  return {
+    textEditingValue: new TextEditingValue({ text, selection }),
+    clipboardStatus: new ValueNotifier<ClipboardStatus>(ClipboardStatus.notPasteable),
+    contextMenuAnchors: { primaryAnchor: anchor, secondaryAnchor: null },
+    contextMenuButtonItems: items,
+    readOnly: true,
+    obscureText: false,
+    selectAll: () => selectAll(),
+    copySelection: () => copy(),
+    hideToolbar: _hideMenu,
+    invokePasteTextIntent: () => {},
+  };
+}
+
+// ---------------------------------------------------------------------------
+// The single open menu (Flutter shows at most one selection toolbar).
+
+let _open: { entry: OverlayEntryHandle; detach: () => void } | null = null;
+
+function _hideMenu(): void {
+  const open = _open;
+  _open = null;
+  if (open == null) return;
+  open.detach();
+  open.entry.remove();
+}
+
+function _showMenu(build: (state: EditableTextState) => ReactNode, state: EditableTextState): void {
+  _hideMenu();
+  const entry = insertOverlay(() => build(state));
+  const inPanel = (event: MouseEvent) =>
+    (_contextMenuPanel != null && event.target instanceof Node && _contextMenuPanel.contains(event.target)) ||
+    isTextContextMenuPanelHit({ x: event.clientX, y: event.clientY });
+
+  // Taps outside close the menu without swallowing the tap (TapRegion's
+  // onTapOutside).
+  const onPointerDown = (event: PointerEvent) => {
+    if (inPanel(event)) return;
+    _hideMenu();
+  };
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    event.stopPropagation();
+    _hideMenu();
+  };
+  const onWindowChange = () => _hideMenu();
+  document.addEventListener('pointerdown', onPointerDown, true);
+  document.addEventListener('keydown', onKeyDown, true);
+  window.addEventListener('blur', onWindowChange);
+  window.addEventListener('resize', onWindowChange);
+  _open = {
+    entry,
+    detach: () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('keydown', onKeyDown, true);
+      window.removeEventListener('blur', onWindowChange);
+      window.removeEventListener('resize', onWindowChange);
+    },
+  };
+}

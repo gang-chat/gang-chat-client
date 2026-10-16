@@ -1,11 +1,10 @@
-import { Platform, type TextStyle, type ViewStyle } from 'react-native';
+import type { CSSProperties } from 'react';
 
 /**
  * Signal design tokens (port of `lib/src/ui/tokens.dart`).
  *
  * Feature code takes colours, radii, type, shadows and motion only from here.
- * Colours are `#RRGGBB` / `#RRGGBBAA` strings, which React Native and
- * react-native-web both accept.
+ * Colours are `#RRGGBB` / `#RRGGBBAA` strings usable directly in CSS.
  */
 
 export const kClientFontFamily = 'Microsoft YaHei';
@@ -20,12 +19,8 @@ export const kMonoFontFamily = 'JetBrains Mono';
 /** Dot-matrix face for the wordmark and big numerals. */
 export const kDotFontFamily = 'Doto';
 
-/**
- * Builds a `fontFamily` value. The web accepts a CSS fallback stack; native
- * React Native accepts one registered family, so it gets the primary face.
- */
+/** Builds a CSS `font-family` stack: [primary], then the client CJK faces. */
 export function fontStack(primary: string, fallback: readonly string[] = [kClientFontFamily, ...kClientFontFamilyFallback]): string {
-  if (Platform.OS !== 'web') return primary;
   const quote = (name: string) => (/^[a-zA-Z-]+$/.test(name) ? name : `"${name}"`);
   return [primary, ...fallback, 'system-ui', 'sans-serif'].map(quote).join(', ');
 }
@@ -127,9 +122,9 @@ interface Rgba {
   a: number;
 }
 
-/** Converts a Flutter ARGB int (`0xAARRGGBB`) to `#RRGGBBAA`. */
+/** Converts a Flutter ARGB int (`0xAARRGGBB`) to `#RRGGBB` / `#RRGGBBAA`. */
 export function argb(value: number): string {
-  const a = (value >>> 24) & 0xff;
+  const a = Math.floor(value / 0x1000000) & 0xff;
   const r = (value >>> 16) & 0xff;
   const g = (value >>> 8) & 0xff;
   const b = value & 0xff;
@@ -240,18 +235,28 @@ export const UiRadii = {
   pill: 999,
 } as const;
 
-/** Durations in milliseconds; [curve] is a CSS easing / Easing-compatible bezier. */
+/** Durations in milliseconds; [curve] is `Curves.easeOutCubic` as a CSS easing. */
 export const UiMotion = {
   fast: 120,
   standard: 180,
   slow: 260,
-  curve: 'cubic-bezier(0.215, 0.61, 0.355, 1)', // Curves.easeOutCubic
-  curveBezier: [0.215, 0.61, 0.355, 1] as const,
+  curve: 'cubic-bezier(0.215, 0.61, 0.355, 1)',
+} as const;
+
+/** Flutter curves used by the kit, as CSS easings. */
+export const UiCurves = {
+  linear: 'linear',
+  easeOut: 'cubic-bezier(0, 0, 0.58, 1)',
+  easeIn: 'cubic-bezier(0.42, 0, 1, 1)',
+  easeInOut: 'cubic-bezier(0.42, 0, 0.58, 1)',
+  easeOutCubic: 'cubic-bezier(0.215, 0.61, 0.355, 1)',
+  easeInOutCubic: 'cubic-bezier(0.645, 0.045, 0.355, 1)',
+  easeOutBack: 'cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+  fastOutSlowIn: 'cubic-bezier(0.4, 0, 0.2, 1)',
 } as const;
 
 // ---------------------------------------------------------------------------
-// Shadows. Flutter `BoxShadow`s become CSS-style `boxShadow` strings, which
-// react-native-web and React Native (0.76+, new architecture) both accept.
+// Shadows. Flutter `BoxShadow` lists become CSS `box-shadow` strings.
 
 export interface BoxShadowSpec {
   color: string;
@@ -261,12 +266,11 @@ export interface BoxShadowSpec {
   offsetY?: number;
 }
 
-export function boxShadow(shadows: readonly BoxShadowSpec[]): ViewStyle {
-  if (shadows.length === 0) return {};
-  const value = shadows
+export function boxShadow(shadows: readonly BoxShadowSpec[]): string {
+  if (shadows.length === 0) return 'none';
+  return shadows
     .map((s) => `${s.offsetX ?? 0}px ${s.offsetY ?? 0}px ${s.blurRadius}px ${s.spreadRadius ?? 0}px ${s.color}`)
     .join(', ');
-  return { boxShadow: value } as ViewStyle;
 }
 
 export const UiShadows = {
@@ -282,36 +286,28 @@ export const UiShadows = {
 };
 
 // ---------------------------------------------------------------------------
-// Typography. Flutter `height` is a multiplier; React Native wants an absolute
-// `lineHeight`, so each style carries `fontSize * height`.
+// Typography. Flutter's `TextStyle.height` multiplier maps to a unitless CSS
+// `line-height`; letter spacing is in px.
+
+export type UiTextStyle = CSSProperties;
 
 function textStyle(spec: {
   color: string;
   fontFamily?: string;
   fontSize: number;
-  fontWeight?: TextStyle['fontWeight'];
+  fontWeight?: number;
   letterSpacing?: number;
   height?: number;
-}): TextStyle {
-  const style: TextStyle = {
+}): UiTextStyle {
+  const style: UiTextStyle = {
     color: spec.color,
     fontFamily: spec.fontFamily ?? kClientFontStack,
     fontSize: spec.fontSize,
   };
   if (spec.fontWeight != null) style.fontWeight = spec.fontWeight;
   if (spec.letterSpacing != null) style.letterSpacing = spec.letterSpacing;
-  if (spec.height != null) style.lineHeight = Math.round(spec.fontSize * spec.height * 100) / 100;
+  if (spec.height != null) style.lineHeight = spec.height;
   return style;
-}
-
-/** Re-sizes a style while keeping its Flutter `height` multiplier. */
-export function withFontSize(style: TextStyle, fontSize: number): TextStyle {
-  const multiplier = style.lineHeight != null && style.fontSize ? style.lineHeight / style.fontSize : null;
-  return {
-    ...style,
-    fontSize,
-    ...(multiplier != null ? { lineHeight: Math.round(fontSize * multiplier * 100) / 100 } : {}),
-  };
 }
 
 export const UiTypography = {
@@ -320,7 +316,7 @@ export const UiTypography = {
     color: UiColors.text,
     fontFamily: fontStack(kDisplayFontFamily),
     fontSize: 30,
-    fontWeight: '700',
+    fontWeight: 700,
     letterSpacing: -0.6,
     height: 1.15,
   }),
@@ -328,7 +324,7 @@ export const UiTypography = {
     color: UiColors.text,
     fontFamily: fontStack(kDisplayFontFamily),
     fontSize: 21,
-    fontWeight: '700',
+    fontWeight: 700,
     letterSpacing: -0.3,
     height: 1.25,
   }),
@@ -336,7 +332,7 @@ export const UiTypography = {
     color: UiColors.text,
     fontFamily: fontStack(kDisplayFontFamily),
     fontSize: 17,
-    fontWeight: '700',
+    fontWeight: 700,
     letterSpacing: -0.2,
     height: 1.3,
   }),
@@ -344,29 +340,27 @@ export const UiTypography = {
     color: UiColors.text,
     fontFamily: fontStack(kDisplayFontFamily),
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: 700,
     letterSpacing: -0.1,
     height: 1.35,
   }),
   body: textStyle({ color: UiColors.text, fontSize: 14, height: 1.4 }),
-  label: textStyle({ color: UiColors.textSecondary, fontSize: 12, fontWeight: '500', height: 1.35 }),
-  caption: textStyle({ color: UiColors.textMuted, fontSize: 11.5, fontWeight: '500', height: 1.35 }),
+  label: textStyle({ color: UiColors.textSecondary, fontSize: 12, fontWeight: 500, height: 1.35 }),
+  caption: textStyle({ color: UiColors.textMuted, fontSize: 11.5, fontWeight: 500, height: 1.35 }),
   /** Monospace uppercase label ("tag" look) for section headers, counters and timestamps. */
-  overline: {
-    ...textStyle({
-      color: UiColors.textMuted,
-      fontFamily: fontStack(kMonoFontFamily),
-      fontSize: 10.5,
-      fontWeight: '700',
-      letterSpacing: 1.2,
-      height: 1.3,
-    }),
-  },
+  overline: textStyle({
+    color: UiColors.textMuted,
+    fontFamily: fontStack(kMonoFontFamily),
+    fontSize: 10.5,
+    fontWeight: 700,
+    letterSpacing: 1.2,
+    height: 1.3,
+  }),
   mono: textStyle({
     color: UiColors.textMuted,
     fontFamily: fontStack(kMonoFontFamily),
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: 500,
     letterSpacing: 0.2,
     height: 1.3,
   }),
@@ -375,13 +369,13 @@ export const UiTypography = {
     color: UiColors.text,
     fontFamily: fontStack(kDotFontFamily, [kMonoFontFamily, kClientFontFamily]),
     fontSize: 28,
-    fontWeight: '800',
+    fontWeight: 800,
     height: 1.0,
   }),
-} satisfies Record<string, TextStyle>;
+} satisfies Record<string, UiTextStyle>;
 
 /** Base text style of the app (Flutter theme default: 14px client font). */
-export const UiDefaultTextStyle: TextStyle = {
+export const UiDefaultTextStyle: UiTextStyle = {
   color: UiColors.text,
   fontFamily: kClientFontStack,
   fontSize: 14,
@@ -394,13 +388,6 @@ export const UiSelection = {
   handleColor: UiColors.accent,
 };
 
-/** Scrollbar look (Flutter `scrollbarTheme`), used by the web stylesheet. */
-export const UiScrollbar = {
-  thickness: 6,
-  thumb: UiColors.borderStrong,
-  thumbHover: UiColors.textMuted,
-};
-
 /** Tooltip look (Flutter `tooltipTheme`). */
 export const UiTooltipTheme = {
   background: UiColors.surfaceHover,
@@ -409,5 +396,5 @@ export const UiTooltipTheme = {
   paddingHorizontal: 9,
   paddingVertical: 5,
   waitDuration: 380,
-  textStyle: textStyle({ color: UiColors.text, fontSize: 12, fontWeight: '500' }),
+  textStyle: textStyle({ color: UiColors.text, fontSize: 12, fontWeight: 500 }),
 };

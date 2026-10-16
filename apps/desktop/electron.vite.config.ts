@@ -34,25 +34,14 @@ export default defineConfig({
     root: 'src/renderer',
     plugins: [react()],
     resolve: {
-      alias: [
-        // The shared UI is written against React Native; Electron renders it
-        // through react-native-web.
-        { find: /^react-native$/, replacement: 'react-native-web' },
-        ...sharedAliases,
-      ],
-      // Platform files: `foo.web.tsx` wins over the native `foo.tsx`.
+      alias: sharedAliases,
+      // Platform files in @gang-chat/core: the browser implementation
+      // `foo.web.ts` wins over the React Native one `foo.ts`.
       extensions: ['.web.tsx', '.web.ts', '.web.jsx', '.web.js', '.tsx', '.ts', '.jsx', '.mjs', '.js', '.json'],
     },
     define: {
       __DEV__: JSON.stringify(!isProduction),
       __GANG_CONFIG_OVERRIDES__: JSON.stringify(configOverrides),
-      'process.env.EXPO_OS': JSON.stringify('web'),
-    },
-    optimizeDeps: {
-      esbuildOptions: {
-        resolveExtensions: ['.web.tsx', '.web.ts', '.web.js', '.tsx', '.ts', '.js'],
-        loader: { '.js': 'jsx' },
-      },
     },
     server: {
       fs: { allow: [repoRoot] },

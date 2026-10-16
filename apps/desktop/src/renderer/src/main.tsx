@@ -1,6 +1,7 @@
 import './global.css';
 
-import { AppRegistry } from 'react-native';
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
 import { setPlatform } from '@gang-chat/core/platform/platform';
 
 import { desktopBridge } from './platform/desktop_bridge';
@@ -12,5 +13,8 @@ import { DesktopRoot } from './desktop_root';
 const bridge = desktopBridge();
 setPlatform(createDesktopPlatform(bridge));
 
-AppRegistry.registerComponent('GangChat', () => DesktopRoot);
-AppRegistry.runApplication('GangChat', { rootTag: document.getElementById('root') });
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <DesktopRoot />
+  </StrictMode>,
+);

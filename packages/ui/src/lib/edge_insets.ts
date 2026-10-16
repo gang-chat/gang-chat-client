@@ -1,4 +1,4 @@
-import type { ViewStyle } from 'react-native';
+import type { CSSProperties } from 'react';
 
 /**
  * Port of Flutter's `EdgeInsets` / `EdgeInsetsGeometry` for component props
@@ -68,12 +68,12 @@ export function verticalInsets(value: EdgeInsetsValue | null | undefined): numbe
   return r.top + r.bottom;
 }
 
-export function paddingStyle(value: EdgeInsetsValue | null | undefined): ViewStyle {
+export function paddingStyle(value: EdgeInsetsValue | null | undefined): CSSProperties {
   const r = resolveEdgeInsets(value);
   return { paddingLeft: r.left, paddingTop: r.top, paddingRight: r.right, paddingBottom: r.bottom };
 }
 
-export function marginStyle(value: EdgeInsetsValue | null | undefined): ViewStyle {
+export function marginStyle(value: EdgeInsetsValue | null | undefined): CSSProperties {
   const r = resolveEdgeInsets(value);
   return { marginLeft: r.left, marginTop: r.top, marginRight: r.right, marginBottom: r.bottom };
 }

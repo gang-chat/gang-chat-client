@@ -1,19 +1,32 @@
-import type { RefObject } from 'react';
-import type { View } from 'react-native';
+import { useEffect, useRef, type RefObject } from 'react';
 
 /**
- * Port of Flutter's `TapRegion.onTapOutside`.
- *
- * PORT: React Native has no global pointer stream that lets a view observe
- * taps elsewhere without consuming them. On native this hook does nothing and
- * [kTapOutsideNeedsBarrier] tells popups to put a transparent dismiss barrier
- * behind themselves instead (so the outside tap closes the popup but is not
- * delivered to the control underneath).
+ * Port of Flutter's `TapRegion.onTapOutside`: a pointer down anywhere outside
+ * every element in [regions] (one tap-region group) calls [onTapOutside]. The
+ * pointer event still reaches whatever it landed on, like Flutter.
  */
 export function useTapOutside(
-  _regions: ReadonlyArray<RefObject<View | null>>,
-  _onTapOutside: (event: { x: number; y: number }) => void,
-  _enabled = true,
-): void {}
+  regions: ReadonlyArray<RefObject<HTMLElement | null>>,
+  onTapOutside: (event: PointerEvent) => void,
+  enabled = true,
+): void {
+  const callback = useRef(onTapOutside);
+  callback.current = onTapOutside;
+  const regionsRef = useRef(regions);
+  regionsRef.current = regions;
 
-export const kTapOutsideNeedsBarrier = true;
+  useEffect(() => {
+    if (!enabled || typeof document === 'undefined') return;
+    const listener = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (target == null) return;
+      for (const region of regionsRef.current) {
+        const node = region.current;
+        if (node != null && node.contains(target)) return;
+      }
+      callback.current(event);
+    };
+    document.addEventListener('pointerdown', listener, true);
+    return () => document.removeEventListener('pointerdown', listener, true);
+  }, [enabled]);
+}

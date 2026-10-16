@@ -29,7 +29,6 @@
     "livekit-client": "2.22.3",
     "material-icons": "1.13.14",
     "react": "19.2.0",
-    "react-dom": "19.2.0",
-    "react-native-web": "0.21.3"
+    "react-dom": "19.2.0"
   }
 }

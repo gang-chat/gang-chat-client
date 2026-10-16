@@ -1,5 +1,5 @@
 /*
- * Document-level styles for the react-native-web renderer: the fonts the
+ * Document-level styles for the React renderer: the fonts the
  * Flutter app bundled, the Material icon fonts, the dark canvas and the
  * scrollbar look from `uiTheme().scrollbarTheme`.
  */
@@ -113,13 +113,3 @@ textarea {
   -webkit-app-region: no-drag;
 }
 
-/*
- * react-native-web drops unknown style props, so components mark drag regions
- * with `dataSet={{ gangDrag: 'true' }}` / `dataSet={{ gangNoDrag: 'true' }}`.
- */
-[data-gang-drag='true'] {
-  -webkit-app-region: drag;
-}
-[data-gang-no-drag='true'] {
-  -webkit-app-region: no-drag;
-}

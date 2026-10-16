@@ -43,7 +43,7 @@ class HtmlAudioPlayer implements AudioPlayer {
     const audio = this._ensureAudio();
     audio.pause();
     const url = await this._urlFor(source);
-    if (generation !== this._generation || this._current === PlayerState.disposed) {
+    if (generation !== this._generation || this._isDisposed()) {
       if (url.revoke) URL.revokeObjectURL(url.src);
       return;
     }
@@ -154,6 +154,11 @@ class HtmlAudioPlayer implements AudioPlayer {
   private _replaceObjectUrl(next: string | null): void {
     if (this._objectUrl != null && this._objectUrl !== next) URL.revokeObjectURL(this._objectUrl);
     this._objectUrl = next;
+  }
+
+  /** A method, not an inline check, so TS does not narrow `_current` across awaits. */
+  private _isDisposed(): boolean {
+    return this._current === PlayerState.disposed;
   }
 
   private _setState(state: PlayerState): void {

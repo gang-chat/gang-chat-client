@@ -5,9 +5,10 @@ import {
   useEffect,
   useRef,
   useSyncExternalStore,
+  type CSSProperties,
   type ReactNode,
+  type RefObject,
 } from 'react';
-import { BackHandler, Platform, Pressable, StyleSheet, View, type View as RNView } from 'react-native';
 
 /**
  * Port of Flutter's `Overlay` + `Navigator` popup routes.
@@ -15,14 +16,19 @@ import { BackHandler, Platform, Pressable, StyleSheet, View, type View as RNView
  * The app root renders one [OverlayHost]. Everything Flutter pushed as a
  * route or overlay entry — dialogs (`showDialog`), context menus
  * (`showMenu`), anchored panels, hover cards, toasts — is inserted here and
- * drawn above the page in insertion order.
+ * drawn above the page in insertion order, in a fixed full-window layer.
  *
- *  - [insertOverlay] adds a non-modal layer (`OverlayEntry`).
+ *  - [insertOverlay] adds a non-modal layer (`OverlayEntry`). The layer is a
+ *    fixed full-window box with `pointer-events: none`, so clicks pass through
+ *    to the page; the entry's content positions itself (absolute) and MUST
+ *    set `pointerEvents: 'auto'` on its own root box to receive input.
+ *    Route content (pushRoute) follows the same rule; showDialog wraps its
+ *    content for you.
  *  - [pushRoute] / [showDialog] add a modal layer with a barrier and resolve
  *    with the value passed to `close(result)` (`Navigator.pop(result)`).
  *  - Inside a route, [useRoute] gives `close` / `isCurrent` (the
  *    `Navigator.of(context)` / `ModalRoute.of(context)` equivalents).
- *  - Escape (web) / the Android back button pops the top dismissible route.
+ *  - Escape pops the top dismissible route.
  */
 
 export interface OverlayEntryHandle {
@@ -35,13 +41,13 @@ export interface OverlayEntryHandle {
 }
 
 export interface RouteOptions {
-  /** Tapping the barrier pops the route with `undefined`. Default true. */
+  /** Clicking the barrier pops the route with `undefined`. Default true. */
   barrierDismissible?: boolean;
   /** Barrier colour; Flutter's dialog default is black 54%. */
   barrierColor?: string;
-  /** Whether Escape / Android back pops the route. Default = barrierDismissible. */
+  /** Whether Escape pops the route. Default = barrierDismissible. */
   dismissOnBack?: boolean;
-  /** Called before a barrier/back dismissal; return false to veto (`PopScope.canPop`). */
+  /** Called before a barrier/Escape dismissal; return false to veto (`PopScope.canPop`). */
   onWillPop?: () => boolean | Promise<boolean>;
 }
 
@@ -72,18 +78,13 @@ function emit() {
 
 function subscribe(listener: () => void) {
   listeners.add(listener);
-  return () => listeners.delete(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
 function getSnapshot() {
   return entries;
-}
-
-export function insertOverlay(builder: () => ReactNode): OverlayEntryHandle {
-  const entry: Entry = { id: nextId++, version: 0, builder, modal: false, options: {} };
-  entries.push(entry);
-  emit();
-  return handleFor(entry);
 }
 
 function handleFor(entry: Entry): OverlayEntryHandle {
@@ -106,6 +107,13 @@ function handleFor(entry: Entry): OverlayEntryHandle {
   };
 }
 
+export function insertOverlay(builder: () => ReactNode): OverlayEntryHandle {
+  const entry: Entry = { id: nextId++, version: 0, builder, modal: false, options: {} };
+  entries.push(entry);
+  emit();
+  return handleFor(entry);
+}
+
 export function pushRoute<T>(builder: () => ReactNode, options: RouteOptions = {}): RouteHandle<T> {
   let resolve!: (value: T | undefined) => void;
   const result = new Promise<T | undefined>((r) => {
@@ -123,9 +131,16 @@ export function pushRoute<T>(builder: () => ReactNode, options: RouteOptions = {
   entry.close = close as (result?: unknown) => void;
   entries.push(entry);
   emit();
-  return { ...base, id: base.id, result, close, remove: () => close(undefined), get mounted() {
-    return base.mounted;
-  } };
+  return {
+    id: base.id,
+    result,
+    close,
+    remove: () => close(undefined),
+    markNeedsBuild: () => base.markNeedsBuild(),
+    get mounted() {
+      return base.mounted;
+    },
+  };
 }
 
 /**
@@ -139,9 +154,9 @@ export function showDialog<T = void>(
   let closeRef: (result?: T) => void = () => {};
   const route = pushRoute<T>(
     () => (
-      <View style={styles.dialogCenter} pointerEvents="box-none">
-        {builder((result) => closeRef(result))}
-      </View>
+      <div style={dialogCenterStyle} data-overlay-dialog="true">
+        <div style={dialogContentStyle}>{builder((result) => closeRef(result))}</div>
+      </div>
     ),
     { barrierColor: kDialogBarrierColor, ...options },
   );
@@ -170,10 +185,7 @@ export function hasOpenModalRoute(): boolean {
 
 /** Closes every overlay and route (logout / window teardown). */
 export function clearOverlays(): void {
-  const snapshot = [...entries];
-  for (const entry of snapshot) {
-    if (entry.close) entry.close(undefined);
-  }
+  for (const entry of [...entries]) entry.close?.(undefined);
   entries = [];
   emit();
 }
@@ -190,11 +202,12 @@ const RouteContext = createContext<RouteContextValue | null>(null);
  * Inside a route: `Navigator.of(context).pop(result)` → `useRoute().close(result)`.
  * Outside any route, `close` is a no-op and `isCurrent` is true.
  */
-export function useRoute<T = unknown>(): { close: (result?: T) => void; isCurrent: () => boolean } {
+export function useRoute<T = unknown>(): { close: (result?: T) => void; isCurrent: () => boolean; inRoute: boolean } {
   const value = useContext(RouteContext);
   return {
     close: (value?.close ?? (() => {})) as (result?: T) => void,
     isCurrent: value?.isCurrent ?? (() => true),
+    inRoute: value != null,
   };
 }
 
@@ -202,32 +215,24 @@ export function OverlayHost({ children }: { children: ReactNode }) {
   const current = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
   useEffect(() => {
-    if (Platform.OS === 'web') {
-      const onKeyDown = (event: KeyboardEvent) => {
-        if (event.key !== 'Escape' || event.defaultPrevented) return;
-        if (!hasOpenModalRoute()) return;
-        event.preventDefault();
-        event.stopPropagation();
-        void maybePopTopRoute();
-      };
-      document.addEventListener('keydown', onKeyDown, true);
-      return () => document.removeEventListener('keydown', onKeyDown, true);
-    }
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (!hasOpenModalRoute()) return false;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      if (!hasOpenModalRoute()) return;
+      event.preventDefault();
+      event.stopPropagation();
       void maybePopTopRoute();
-      return true;
-    });
-    return () => sub.remove();
+    };
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
   }, []);
 
   return (
-    <View style={styles.root}>
+    <div style={rootStyle}>
       {children}
       {current.map((entry) => (
         <OverlayLayer key={entry.id} entry={entry} version={entry.version} />
       ))}
-    </View>
+    </div>
   );
 }
 
@@ -246,33 +251,30 @@ function OverlayLayer({ entry }: { entry: Entry; version: number }) {
 
   const content = <RouteContext.Provider value={contextValue}>{entry.builder()}</RouteContext.Provider>;
   if (!entry.modal) {
-    return (
-      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-        {content}
-      </View>
-    );
+    return <div style={passThroughLayerStyle}>{content}</div>;
   }
   const barrierDismissible = entry.options.barrierDismissible ?? true;
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="关闭"
-        style={[StyleSheet.absoluteFill, { backgroundColor: entry.options.barrierColor ?? 'transparent' }, webCursorDefault]}
-        onPress={async () => {
+    <div style={modalLayerStyle}>
+      <div
+        aria-hidden="true"
+        style={{ position: 'absolute', inset: 0, background: entry.options.barrierColor ?? 'transparent' }}
+        onMouseDown={async (event) => {
+          if (event.button !== 0) return;
           if (!barrierDismissible) return;
           if (entry.options.onWillPop && !(await entry.options.onWillPop())) return;
           entry.close?.(undefined);
         }}
+        onContextMenu={(event) => {
+          // A right-click outside an open menu closes it, like Flutter.
+          event.preventDefault();
+          if (barrierDismissible) entry.close?.(undefined);
+        }}
       />
-      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-        {content}
-      </View>
-    </View>
+      <div style={passThroughLayerStyle}>{content}</div>
+    </div>
   );
 }
-
-const webCursorDefault = Platform.OS === 'web' ? ({ cursor: 'default' } as object) : null;
 
 export interface WindowRect {
   x: number;
@@ -281,25 +283,63 @@ export interface WindowRect {
   height: number;
 }
 
-/** Measures a host component in window coordinates (`RenderBox.localToGlobal`). */
-export function measureInWindow(ref: { current: RNView | null } | RNView | null): Promise<WindowRect | null> {
-  const node = ref && 'current' in (ref as object) ? (ref as { current: RNView | null }).current : (ref as RNView | null);
-  if (node == null) return Promise.resolve(null);
-  return new Promise((resolve) => {
-    try {
-      node.measureInWindow((x, y, width, height) => resolve({ x, y, width, height }));
-    } catch {
-      resolve(null);
-    }
-  });
+/** Measures an element in window coordinates (`RenderBox.localToGlobal` + size). */
+export function measureInWindow(ref: RefObject<HTMLElement | null> | HTMLElement | null): Promise<WindowRect | null> {
+  const node = ref == null ? null : ref instanceof HTMLElement ? ref : ref.current;
+  if (node == null || !node.isConnected) return Promise.resolve(null);
+  const rect = node.getBoundingClientRect();
+  return Promise.resolve({ x: rect.left, y: rect.top, width: rect.width, height: rect.height });
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1 },
-  dialogCenter: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-});
+/** Synchronous variant of [measureInWindow]. */
+export function rectInWindow(ref: RefObject<HTMLElement | null> | HTMLElement | null): WindowRect | null {
+  const node = ref == null ? null : ref instanceof HTMLElement ? ref : ref.current;
+  if (node == null || !node.isConnected) return null;
+  const rect = node.getBoundingClientRect();
+  return { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
+}
+
+const rootStyle: CSSProperties = {
+  position: 'relative',
+  display: 'flex',
+  flexDirection: 'column',
+  flex: 1,
+  minWidth: 0,
+  minHeight: 0,
+  width: '100%',
+  height: '100%',
+};
+
+// Non-modal layers let pointer events through everywhere except their own content.
+const passThroughLayerStyle: CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  pointerEvents: 'none',
+  zIndex: 1000,
+};
+
+const modalLayerStyle: CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  zIndex: 1000,
+};
+
+const dialogContentStyle: CSSProperties = {
+  pointerEvents: 'auto',
+  display: 'flex',
+  flexDirection: 'column',
+  maxWidth: '100%',
+  maxHeight: '100%',
+  minHeight: 0,
+};
+
+const dialogCenterStyle: CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: 24,
+  boxSizing: 'border-box',
+  pointerEvents: 'none',
+};

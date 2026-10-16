@@ -1,7 +1,8 @@
 # Flutter → TypeScript 移植约定
 
-桌面端从 Flutter 一比一移植到 Electron。共享代码按 React Native 的方式写，
-以后移动端用 React Native 时可以直接复用逻辑层和界面层。Android 目前仍用 Flutter。
+桌面端从 Flutter 一比一移植到 Electron，界面用 React（DOM）。逻辑层
+`@gang-chat/core` 保持平台无关，以后移动端用 React Native 时直接复用；移动端界面
+另用 React Native 原生组件编写，不与桌面共用组件。Android 目前仍用 Flutter。
 
 本文是移植时的硬性约定：每个 Dart 文件都按同一套规则翻译，不同人（或不同
 agent）分别移植的模块才能不用协商就互相引用。
@@ -14,8 +15,8 @@ packages/core/src/      @gang-chat/core：纯 TypeScript，不依赖 React、DOM
   platform/             Platform 接口（宿主应用实现）与 HttpClient
   config/ protocol/ auth/ app/ live/ lifecycle/
   shell/                lib/src/shell 里的非界面服务（剪贴板、文件、窗口、更新……）
-packages/ui/src/        @gang-chat/ui：React + React Native 组件
-  lib/                  useListenable、ViewState
+packages/ui/src/        @gang-chat/ui：桌面端 React DOM 组件（也可用于浏览器版）
+  lib/                  useListenable、ViewState、Flutter 风格的布局组件（layout.tsx）
   ui/ home/ settings/
   shell/                lib/src/shell 里的界面（登录页、更新提示、密码找回流程……）
 apps/desktop/           Electron：main / preload / renderer 入口和桌面平台实现
@@ -49,9 +50,9 @@ apps/desktop/           Electron：main / preload / renderer 入口和桌面平�
   ```
   方法表的对象名 = Dart extension 名去掉前导下划线；方法名保持 Dart 原名（包括下划线）。
   part 文件里的私有 Widget 类导出为组件（保留下划线名，例如 `export function _JoinDialog`）。
-- 平台差异：同名文件加后缀 `foo.web.tsx`（Electron / 浏览器）和 `foo.tsx`
-  （React Native 原生实现或占位）。导入时写 `./foo`，打包器按平台选择。两者导出
-  完全相同的签名。
+- 平台差异只存在于 `@gang-chat/core`：同名文件加后缀 `foo.web.ts`（Electron / 浏览器）
+  和 `foo.ts`（React Native 原生实现或占位）。导入时写 `./foo`，打包器按平台选择。两者导出
+  完全相同的签名。`@gang-chat/ui` 只跑在 DOM 上，不需要平台文件。
 
 ## 3. 命名与签名
 
@@ -136,14 +137,15 @@ apps/desktop/           Electron：main / preload / renderer 入口和桌面平�
 
 ## 6. 界面层（`@gang-chat/ui`）
 
-只用 React Native 基础组件：`View`、`Text`、`Pressable`、`ScrollView`、`FlatList`、
-`TextInput`、`Image`、`ActivityIndicator`、`Animated`。Electron 通过
-react-native-web 渲染它们。**不要**写 `<div>`、CSS 文件或 className
-（`*.web.tsx` 平台文件除外）。
+React 19 + DOM。样式写成内联 `style`（`React.CSSProperties`），数值从 tokens 取；悬停、按下、
+聚焦等交互状态像 Flutter 组件一样记在组件 state 里（`onMouseEnter/Leave`、`onMouseDown/Up`、
+`onFocus/Blur`），这样视觉与 Dart 逐项对应。不引入 CSS 框架；只有全局的东西（字体、滚动条、
+选区、`@keyframes`）放 CSS（`packages/ui/src/ui/ui.css`，由应用根导入）。动画用 CSS
+`transition` 或 Web Animations API（`element.animate()`）。
 
 ### Widget → 组件
 
-| Flutter | React Native |
+| Flutter | React DOM |
 | --- | --- |
 | `StatelessWidget` | `export function Foo(props: FooProps)` |
 | `StatefulWidget` + `State` | 简单状态用 hooks；字段/生命周期多的 State 类用 `ViewState`（`ui/src/lib/view_state.ts`），保持 Dart 结构：`initState`、`didUpdateProps`、`dispose`、`setState`、`mounted` |
@@ -151,50 +153,45 @@ react-native-web 渲染它们。**不要**写 `<div>`、CSS 文件或 className
 | `VoidCallback?` / `ValueChanged<T>?` | `onX?: () => void` / `onX?: (value: T) => void` |
 | `ListenableBuilder` / `AnimatedBuilder` | `useListenable(controller)` |
 | `ValueListenableBuilder` | `useListenableSelector(notifier, n => n.value)` |
-| `Column` / `Row` | `View`（默认纵向）/ `View style={{flexDirection:'row'}}` |
-| `Expanded` / `Flexible` | `flex: 1` / `flexShrink: 1`；`minWidth: 0` 防止文本撑破 |
-| `SizedBox(width/height)` | `View style={{ width, height }}` |
-| `Padding` / `Container` / `DecoratedBox` | `View` + `padding` / `backgroundColor` / `borderRadius` / `borderWidth` |
-| `Stack` + `Positioned` | 父 `position:'relative'`，子 `position:'absolute'` |
-| `Text` + `TextStyle` | `Text`，样式从 `UiTypography.*` 展开后覆盖；`maxLines`/`overflow: ellipsis` → `numberOfLines` |
-| `Icon(Icons.x, size, color)` | `<Icon icon={Icons.x} size color />`（`ui/icon.tsx`，名字与 Flutter 相同） |
-| `GestureDetector` / `InkWell` / `MouseRegion` | `Pressable`（`onPress`、`onLongPress`、`onHoverIn/Out`）；可按压视觉统一用移植后的 `PressableSurface` |
+| `Column` / `Row` | `lib/layout.tsx` 的 `Column` / `Row`（`mainAxisAlignment`、`crossAxisAlignment` 默认 `center` 与 Flutter 一致、`mainAxisSize`、`gap`） |
+| `Expanded` / `Flexible` / `Spacer` | 同名组件（已带 `minWidth/minHeight: 0`，长文本能省略号截断） |
+| `SizedBox` / `Center` / `Stack` / `Positioned` | 同名组件 |
+| `Padding` / `Container` / `DecoratedBox` | `div` + `padding` / `background` / `borderRadius` / `border`；注意 `boxSizing: 'border-box'` |
+| `Text` + `TextStyle` | `lib/layout.tsx` 的 `Text`（`maxLines`、`overflow`、`selectable`、`textAlign`），样式从 `UiTypography.*` 展开后覆盖；行内片段（`TextSpan`）用 `<span>` |
+| `Icon(Icons.x, size, color)` | `<Icon icon={Icons.x} size color />`（`ui/icon.tsx`，名字与 Flutter 相同；`IconTheme` 可继承颜色/尺寸） |
+| `GestureDetector` / `InkWell` / `MouseRegion` | DOM 事件（`onClick`、`onMouseEnter/Leave`、`onContextMenu`、`onDoubleClick`、`onWheel`…）；可按压视觉统一用移植后的 `PressableSurface` |
+| 长按（触屏） | 桌面端只需右键；需要时用 pointer 事件 + 计时器实现 |
 | `ClipRRect` | `borderRadius` + `overflow: 'hidden'` |
-| `Opacity` / `AnimatedOpacity` | `opacity` / `Animated` |
-| `ListView.builder` | `FlatList`（长列表）或 `ScrollView` + `map` |
-| `TextField` | `TextInput`（移植后的 `Input` / `UiTextInput` 包装） |
-| `Image.network` / `Image.memory` | `Image source={{ uri }}`；远端图片的 URL 先经 `platform().cachedMediaUrl(url)` |
-| `LayoutBuilder` / `MediaQuery.sizeOf` | `onLayout` 测量 / `useWindowDimensions()` |
+| `Opacity` / `AnimatedOpacity` / `AnimatedContainer` | `opacity` + CSS `transition`（时长/曲线取 `UiMotion` / `UiCurves`） |
+| `ListView` / `SingleChildScrollView` | `div` + `overflowY: 'auto'`；超长列表再考虑虚拟化 |
+| `TextField` | 移植后的 `Input` / `UiTextInput`（内部是 `<input>` / `<textarea>`） |
+| `Image.network` / `Image.memory` | `<img>`；远端 URL 先经 `platform().cachedMediaUrl(url)`；内存字节用 `URL.createObjectURL(new Blob([bytes]))` 并在卸载时 revoke |
+| `LayoutBuilder` / `MediaQuery.sizeOf` | `ResizeObserver` 测量容器 / `window.innerWidth` + `resize` 事件（封装成 hook） |
 | `Tooltip` | 移植后的 `UiTooltip` |
 | `showDialog` / `Navigator.pop(result)` | `showDialog(close => <Dialog … />)`（`ui/overlay.tsx`），返回 `Promise<T \| undefined>`；路由内 `useRoute().close(result)` |
-| `OverlayEntry` / `Overlay.of(context).insert` | `insertOverlay(() => node)` → `handle.remove()` |
-| `RenderBox.localToGlobal` / 锚点 | `measureInWindow(ref)`（`ui/overlay.tsx`） |
+| `OverlayEntry` / `Overlay.of(context).insert` | `insertOverlay(() => node)` → `handle.remove()`；浮层内容的根节点要设 `pointerEvents: 'auto'` |
+| `RenderBox.localToGlobal` / 锚点 | `measureInWindow(ref)` / `rectInWindow(ref)`（`ui/overlay.tsx`，即 `getBoundingClientRect`） |
 | `InheritedWidget`（`AppConfigScope` 等） | React context + `useXxx()` hook |
-| `Theme.of(context).platform == TargetPlatform.android` | `HostPlatform.isAndroid` |
+| `FocusNode` / 键盘快捷键 | `ref.current.focus()`；`onKeyDown`，全局快捷键在 `document` 上监听并在卸载时移除 |
+| `Theme.of(context).platform == TargetPlatform.android` | `HostPlatform.isAndroid`（桌面端恒为 false，保留分支便于对照） |
 
 ### 样式
 
 - 颜色、圆角、间距、字体、阴影、动效只从 `ui/tokens.ts` 取（`UiColors`、`UiRadii`、
-  `UiSpacing`、`UiTypography`、`UiShadows` + `boxShadow()`、`UiMotion`）。
+  `UiSpacing`、`UiTypography`、`UiShadows` + `boxShadow()`、`UiMotion`、`UiCurves`）。
   `Color(0xAARRGGBB)` 写死的颜色用 `argb(0xAARRGGBB)`；`withValues(alpha:)` → `withAlpha()`；
   `Color.lerp` → `lerpColor()`。
-- Flutter 的 `TextStyle.height` 是倍数，RN 要绝对 `lineHeight`：tokens 已换算好；
-  自定义时写 `lineHeight: fontSize * height`。
-- 尺寸数值（宽高、间距、断点）保持 Dart 原值，像素级一致是目标。
+- `TextStyle.height` 倍数 = CSS 无单位 `lineHeight`；tokens 已按此换算。
+- 尺寸数值（宽高、间距、断点）保持 Dart 原值，像素级一致是目标。所有带 padding/border
+  的盒子用 `boxSizing: 'border-box'`，与 Flutter 的尺寸语义一致。
+- 文本默认不可选（与 Flutter 一致）；Flutter 里可选的地方（`SelectableText`、`SelectionArea`）
+  用 `Text selectable`。
 
 ### 窗口拖拽区
 
 Flutter 的 `AppWindowDragRegion` / `windowManager.startDragging()` 在 Electron 里是 CSS
-`-webkit-app-region`。react-native-web 会丢掉未知样式属性，所以用 `dataSet` 标记：
-拖拽区 `<View dataSet={{ gangDrag: 'true' }}>`，其中可点击的控件 `dataSet={{ gangNoDrag: 'true' }}`
-（`apps/desktop/src/renderer/src/global.css` 里有对应规则；原生端忽略）。
-
-### 只有 Web 才有的交互
-
-右键菜单、文件拖放、滚轮、键盘快捷键、粘贴事件、`<video>` 渲染等 DOM 能力：
-放进 `*.web.tsx`（可直接用 DOM：react-native-web 的 ref 就是 DOM 节点），同时提供
-同签名的 `*.tsx` 原生版本（能做就做，做不到就是占位）。业务组件只依赖这个统一签名。
-已有的 `ui/platform_gestures.dart` 这类跨平台手势封装就是放这种分支的地方。
+`-webkit-app-region`：拖拽区加 `className="gang-drag-region"`，其中可点击的控件加
+`className="gang-no-drag"`（规则在 `apps/desktop/src/renderer/src/global.css`）。
 
 ## 7. 文案与注释
 
