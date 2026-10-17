@@ -13,8 +13,8 @@ The desktop builds are the Electron client (`apps/desktop`, packaged with
 electron-builder). The APK is the native Kotlin client (`android/`, built with
 Gradle). The release version is written into `apps/desktop/package.json` and
 `android/version.properties` before packaging, so the installers, the APK, the
-About page and the build numbers all follow the tag. The Flutter client has
-been removed, and with it the web client: no web build is deployed any more.
+About page and the build numbers all follow the tag. The web client is the
+same React UI in the browser (`apps/web`). The Flutter client has been removed.
 
 Desktop signing is optional while certificates are being provisioned. When all
 secrets for a desktop platform are absent, the workflow publishes an unsigned
@@ -22,6 +22,13 @@ artifact and adds warnings to the job summary and GitHub Release notes. When
 all required secrets are present, signing and verification are mandatory.
 Partially configured or invalid signing settings fail the affected job so a
 misconfigured release cannot be mistaken for a signed one.
+
+After the GitHub Release is published, the `deploy-web` job builds the web
+client (`tool/build_web.sh`) and deploys it to
+`https://ky-z.com/gang-chat/app/`. It follows the same rule: with none of
+`WEB_DEPLOY_SSH`, `WEB_DEPLOY_SSH_KEY` and `WEB_DEPLOY_KNOWN_HOSTS` set it is
+skipped with a warning, and with only some of them set it fails. Setup is
+described in `docs/web-spike.md` (部署).
 
 ## Windows signing
 

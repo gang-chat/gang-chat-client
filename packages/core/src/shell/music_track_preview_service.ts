@@ -93,8 +93,8 @@ export class BrowserMusicTrackPreviewPlatform implements MusicTrackPreviewPlatfo
  * PORT: the Flutter Android build used a tiny native MediaPlayer bridge
  * (`gang_chat/music_preview`) so WebRTC audio routing was untouched, and macOS
  * set an AVAudioSession `mixWithOthers` context. Neither applies to the
- * HTMLAudioElement player (Android stays on Flutter), so only the desktop path
- * is ported. Files go through `platform().files`.
+ * HTMLAudioElement player (Android is the native client under android/), so
+ * only the desktop path is ported. Files go through `platform().files`.
  */
 export class LocalMusicTrackPreviewPlatform implements MusicTrackPreviewPlatform {
   private static readonly _maxCacheBytes = 256 << 20;

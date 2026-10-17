@@ -109,9 +109,10 @@ export class SaveFileLocation {
 
 /**
  * PORT: the Android branches (SAF `createDocument` staging files, MediaStore
- * downloads) went through `AndroidSystemService`; Android stays on Flutter, so
- * [getSaveLocation] always returns a plain path, [commitLocation] /
- * [discardLocation] are no-ops and [saveBytesToDownloads] returns null.
+ * downloads) went through `AndroidSystemService`; Android is the native client
+ * under android/, so [getSaveLocation] always returns a plain path,
+ * [commitLocation] / [discardLocation] are no-ops and [saveBytesToDownloads]
+ * returns null.
  */
 export class FileSelectionService {
   async openFile(opts: { acceptedTypeGroups?: FileTypeGroup[] } = {}): Promise<SelectedFile | null> {

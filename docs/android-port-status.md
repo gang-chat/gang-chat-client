@@ -26,7 +26,8 @@ Flutter 工程随后从仓库移除。移植约定见 `docs/android-port-convent
 
 - 删除了 `lib/`、`test/`、`integration_test/`、`ios/`、`linux/`、`macos/`、`windows/`、`web/`、
   `third_party/`、`installer/`、`deploy/`、`pubspec.*` 和 Dart 脚本。Windows / macOS 由 Electron 版
-  （`apps/desktop`）发布，**Web 版不再构建和部署**（`release.yml` 的 `deploy-web` 已删除）。
+  （`apps/desktop`）发布，Web 版改用同一套 React 界面（`apps/web`，见 `docs/web-spike.md`），
+  发布流程的 `deploy-web` 部署的是它。
 - `tool/check_utf8.dart` 改为 `tool/check_utf8.py`（同样的检查，另加一个乱码特征 `鏂囦欢`）。
 - CI：`.github/workflows/android.yml` 跑 UTF-8 检查、`:core:test :app:testDebugUnitTest` 并打 debug APK；
   `release.yml` 的 `build-android` 改用 Gradle：按 tag 写 `android/version.properties`，

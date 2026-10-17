@@ -146,8 +146,7 @@ export function isLivePresenceSoundParticipantIdentity(identity: string): boolea
 /**
  * Port of flutter_webrtc's `AndroidAudioConfiguration` (enum values by name).
  *
- * PORT: only meaningful on Android, which stays on Flutter for now; a React
- * Native app would hand these to `@livekit/react-native`'s `AudioSession`.
+ * PORT: only meaningful on Android, which is the native client under android/.
  */
 export interface AndroidLiveAudioConfiguration {
   manageAudioFocus: boolean;

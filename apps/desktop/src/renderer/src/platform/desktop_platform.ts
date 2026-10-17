@@ -21,6 +21,9 @@ import type {
   WindowEvent,
 } from '@gang-chat/core/platform/platform';
 
+import { appWindowMinSize } from '@gang-chat/core/shell/desktop_window_controller';
+import { createBrowserSpeech } from '@gang-chat/ui/platform/browser_speech';
+
 import { IpcChannels, type FileEntry, type PickedFile, type PreferenceValue, type ScreenSourceInfo } from '../../../shared/ipc';
 import type { DesktopBridge } from './desktop_bridge';
 import { IpcHttpClient } from './ipc_http_client';
@@ -178,7 +181,9 @@ export function createDesktopPlatform(bridge: DesktopBridge): Platform {
         await invokeWindow('setResizable', true);
         await invokeWindow('setMaximizable', true);
         await invokeWindow('setMaximumSize', 100000, 100000);
-        await invokeWindow('setMinimumSize', layout.minWidth ?? 360, layout.minHeight ?? 600);
+        const minWidth = layout.minWidth ?? appWindowMinSize.width;
+        const minHeight = layout.minHeight ?? appWindowMinSize.height;
+        await invokeWindow('setMinimumSize', minWidth, minHeight);
         if (layout.restore) {
           if (await invokeWindow<boolean>('isFullScreen')) await invokeWindow('setFullScreen', false);
           if (await invokeWindow<boolean>('isMaximized')) await invokeWindow('unmaximize');
@@ -188,7 +193,7 @@ export function createDesktopPlatform(bridge: DesktopBridge): Platform {
           // Initial logged-in layout: keep a size the user may have chosen,
           // only growing a window still at the login-card size.
           const size = await invokeWindow<{ width: number; height: number }>('getSize');
-          if (size.width < 360 || size.height < 600) {
+          if (size.width < minWidth || size.height < minHeight) {
             await invokeWindow('setSize', width, height);
             await invokeWindow('center');
           }
@@ -388,33 +393,4 @@ class DesktopPreferences implements PreferencesStore {
     this.values.delete(key);
     await this.bridge.invoke(IpcChannels.prefsRemove, key);
   }
-}
-
-/**
- * System voice through Chromium's speechSynthesis, which uses SAPI on Windows
- * and AVSpeechSynthesizer on macOS. PORT: the Flutter client shelled out to
- * PowerShell/SAPI and `say`; the voices are the same system voices.
- */
-function createBrowserSpeech(): SpeechBridge {
-  return {
-    speak(text, options) {
-      return new Promise<void>((resolve) => {
-        if (typeof speechSynthesis === 'undefined') {
-          resolve();
-          return;
-        }
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.volume = Math.max(0, Math.min(1, options.volume));
-        utterance.lang = options.language ?? 'zh-CN';
-        const voice = speechSynthesis.getVoices().find((v) => v.lang.toLowerCase().startsWith('zh'));
-        if (voice) utterance.voice = voice;
-        utterance.onend = () => resolve();
-        utterance.onerror = () => resolve();
-        speechSynthesis.speak(utterance);
-      });
-    },
-    async cancel() {
-      if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel();
-    },
-  };
 }

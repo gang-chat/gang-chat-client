@@ -4,9 +4,10 @@ export type AndroidDisplayRotationReader = () => Promise<number>;
  * Reads Android's current display rotation as quarter turns from its natural
  * orientation. Callers are responsible for restricting use to Android.
  *
- * PORT: Android stays on Flutter; the `gang_chat/display_orientation`
- * channel has no TypeScript host, so [currentQuarterTurns] always reports the
- * natural orientation unless a [reader] is injected.
+ * PORT: Android is the native client under android/; the
+ * `gang_chat/display_orientation` channel has no TypeScript host, so
+ * [currentQuarterTurns] always reports the natural orientation unless a
+ * [reader] is injected.
  */
 export class AndroidDisplayRotationService {
   constructor(opts: { reader?: AndroidDisplayRotationReader } = {}) {

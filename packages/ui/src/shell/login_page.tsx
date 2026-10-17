@@ -100,7 +100,7 @@ const _authTitleBarStyle: CSSProperties = {
   letterSpacing: 0,
 };
 // PORT: `_androidAuthSystemUiOverlayStyle` (status/navigation bar colours)
-// only applied to Android, which stays on Flutter.
+// only applied to Android, which is the native client under android/.
 
 // PORT: `Icons.person_add_alt_1_outlined` is missing from the generated
 // `ui/icons.ts` (the generator's regex skips `Icons` split across lines in

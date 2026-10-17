@@ -4,18 +4,21 @@ import {
   type AudioRecorder,
   type RecordConfig,
 } from '@gang-chat/core/app/voice_recorder_controller';
+import { HostPlatform } from '@gang-chat/core/config/host_platform';
 import { StreamController, type EventStream } from '@gang-chat/core/lib/event_stream';
 import { platform } from '@gang-chat/core/platform/platform';
 
 /**
- * Voice-message recorder for the desktop renderer (the `record` plugin of the
- * Flutter client).
+ * Voice-message recorder for the DOM hosts (the `record` plugin of the
+ * Flutter client): the Electron renderer and the web build.
  *
  * AAC-LC goes through `MediaRecorder` into an MP4 (m4a) container, which
  * Chromium encodes with the OS encoder on Windows and macOS. Where no AAC
  * encoder exists the recorder captures 16-bit PCM through Web Audio and
- * writes a WAV, the same fallback the Flutter web build used. Finished clips
- * are written to the requested temp path through the main process.
+ * writes a WAV, the same fallback the Flutter web build used. Desktop writes
+ * finished clips to the requested temp path through the main process; the
+ * web keeps them in memory and returns a `blob:` URL, like the `record`
+ * plugin's web implementation (`VoiceRecorderController.readClip` fetches it).
  */
 const aacMimeType = 'audio/mp4;codecs=mp4a.40.2';
 
@@ -62,8 +65,17 @@ export class MediaRecorderAudioRecorder implements AudioRecorder {
       },
     });
     const wav = config.encoder === AudioEncoder.wav || !(await this.isEncoderSupported(AudioEncoder.aacLc));
-    const context = new AudioContext(wav && config.sampleRate ? { sampleRate: config.sampleRate } : undefined);
-    const source = context.createMediaStreamSource(stream);
+    let context = new AudioContext(wav && config.sampleRate ? { sampleRate: config.sampleRate } : undefined);
+    let source: MediaStreamAudioSourceNode;
+    try {
+      source = context.createMediaStreamSource(stream);
+    } catch {
+      // Firefox cannot resample a microphone into a context with another
+      // rate; record at the device rate instead (the WAV header carries it).
+      void context.close().catch(() => {});
+      context = new AudioContext();
+      source = context.createMediaStreamSource(stream);
+    }
     const analyser = context.createAnalyser();
     analyser.fftSize = 2048;
     source.connect(analyser);
@@ -121,6 +133,10 @@ export class MediaRecorderAudioRecorder implements AudioRecorder {
     try {
       const bytes = await active.finish();
       if (bytes.length === 0) return null;
+      if (HostPlatform.isWeb) {
+        const type = active.path.endsWith('.wav') ? 'audio/wav' : 'audio/mp4';
+        return URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type }));
+      }
       await platform().files.writeFile(active.path, bytes);
       return active.path;
     } finally {

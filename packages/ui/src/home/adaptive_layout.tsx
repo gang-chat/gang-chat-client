@@ -1,6 +1,6 @@
 import { createContext, useContext, useSyncExternalStore, type ReactNode } from 'react';
 
-import { narrowBreakpoint } from './navigation';
+import { usesNarrowHomeLayout } from './navigation';
 
 const HomeAdaptiveLayoutContext = createContext<boolean | null>(null);
 
@@ -27,7 +27,7 @@ function _useWindowWidth(): number {
 function usesCompactLayout(): boolean {
   const mode = useContext(HomeAdaptiveLayoutContext);
   const windowWidth = _useWindowWidth();
-  return mode ?? windowWidth < narrowBreakpoint;
+  return mode ?? usesNarrowHomeLayout(windowWidth);
 }
 
 export interface HomeAdaptiveLayoutProps {

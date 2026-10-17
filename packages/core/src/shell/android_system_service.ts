@@ -7,7 +7,7 @@ import { JsonFormatException } from '../lib/json';
 /**
  * Android-only operating-system capabilities used by the shell adapters.
  *
- * PORT: typed no-op stub. Android stays on Flutter, so the
+ * PORT: typed no-op stub. Android is the native client under android/, so the
  * `gang_chat/android_system` channel has no TypeScript host: [isSupported] is
  * always false and every method returns the same harmless default the Dart
  * code returned on non-Android platforms. Streams never emit. Kept so callers

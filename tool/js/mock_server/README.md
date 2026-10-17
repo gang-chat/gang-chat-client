@@ -57,6 +57,7 @@ GANG_ASSET_BASE_URL=http://127.0.0.1:21116 \
 | `--host <addr>` | `127.0.0.1` | Bind address |
 | `--public-url <url>` | `http://<host>:<port>` | Origin written into asset URLs (set it when the client reaches the mock through another host name) |
 | `--livekit-url <url>` | `ws://127.0.0.1:7880` | LiveKit URL returned by `POST /rooms/:id/live/join` |
+| `--livekit-api-key <key>` / `--livekit-api-secret <s>` | unset (`MOCK_LIVEKIT_API_KEY` / `MOCK_LIVEKIT_API_SECRET` env) | Sign the LiveKit tokens so a real server accepts them (see Voice) |
 | `--token-ttl <s>` | `900` | Access-token lifetime; lower it (e.g. `90`; the client refreshes 60s before expiry) to exercise refresh |
 | `--chatter-interval <s>` | `20` | Simulated incoming message cadence; `0` disables |
 | `--heartbeat <s>` | `15` | SSE `: ping` interval |
@@ -132,8 +133,15 @@ client's media connection fails. That is on purpose: it exercises the voice
 panel's error path. The roster, mute/camera/screen toggles
 (`PATCH /live/me`), member volumes, screen-view, moderation and
 `connection_state: "left"` all go through the mock and broadcast live
-snapshots. Pass `--livekit-url` to point at a real LiveKit dev server instead.
-The mock's tokens are not signed, so a real LiveKit server will still reject them.
+snapshots.
+
+For real audio and video, run a LiveKit dev server and let the mock sign its
+tokens with the dev key:
+
+```bash
+livekit-server --dev            # listens on ws://127.0.0.1:7880, key devkey / secret
+node tool/js/mock_server/server.mjs --livekit-api-key devkey --livekit-api-secret secret
+```
 
 ## What is stubbed
 

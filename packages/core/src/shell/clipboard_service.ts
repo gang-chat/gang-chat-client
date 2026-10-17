@@ -24,9 +24,10 @@ let _webPasteHandler: WebPasteHandler | null = null;
  * Windows/macOS for files and images).
  *
  * PORT: the Android branches (`AndroidSystemService.readClipboardImage` /
- * `writeClipboardImage`) are gone; Android stays on Flutter. On the web the
- * Dart code read/wrote browser clipboard images itself and re-encoded
- * non-PNG images on a canvas; here the host's `ClipboardBridge` does both.
+ * `writeClipboardImage`) are gone; Android is the native client under
+ * android/. On the web the Dart code read/wrote browser clipboard images
+ * itself and re-encoded non-PNG images on a canvas; here the host's
+ * `ClipboardBridge` does both.
  */
 export class ClipboardService {
   private get _supportsFiles(): boolean {

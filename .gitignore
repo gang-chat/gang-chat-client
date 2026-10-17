@@ -24,4 +24,6 @@ node_modules/
 /apps/desktop/out/
 /apps/desktop/dist/
 /apps/desktop/build/sparkle/
+# Web build output (tool/build_web.sh)
+/build/
 *.tsbuildinfo

@@ -6,12 +6,12 @@
 
 ## 两套代码
 
-| | 桌面端（Windows / macOS） | Android |
+| | 桌面端（Windows / macOS）与 Web | Android |
 | --- | --- | --- |
-| 技术栈 | TypeScript + React DOM，Electron 宿主 | Kotlin + Jetpack Compose |
+| 技术栈 | TypeScript + React DOM，Electron 宿主；Web 版是同一套界面跑在浏览器里 | Kotlin + Jetpack Compose |
 | 逻辑层 | `packages/core`（`@gang-chat/core`），不依赖界面 | `android/core`（Gradle 模块 `:core`），纯 Kotlin/JVM，不依赖 Android SDK |
 | 界面层 | `packages/ui`（`@gang-chat/ui`） | `android/app`（Gradle 模块 `:app`） |
-| 平台实现 | `apps/desktop`（Electron 主进程、preload、渲染进程入口） | `android/app` 的 `platform/` |
+| 平台实现 | `apps/desktop`（Electron 主进程、preload、渲染进程入口）；`apps/web`（浏览器 API） | `android/app` 的 `platform/` |
 | 移植约定 / 状态 | [js-port-conventions](js-port-conventions.md) / [js-port-status](js-port-status.md) | [android-port-conventions](android-port-conventions.md) / [android-port-status](android-port-status.md) |
 
 两套代码不共用源码，只共用仓库根目录的 `assets/`（服务器配置、品牌图、字体）和同一个服务端协议。**每个新功能和每处行为修复都要在两端分别实现**，见 [新功能开发流程](#新功能开发流程)。
@@ -86,6 +86,7 @@ rg -n "from '(react|electron|@gang-chat/ui)" packages/core/src
 - 非界面服务：`packages/core/src/shell/`，例如 `clipboard_service`、`file_selection_service`、`release_update_service`、`sparkle_updater`、`desktop_window_controller`、`local_*_store`。它们只通过 `platform()` 调用原生能力。
 - 界面：`packages/ui/src/shell/`，例如 `gang_app`（应用根与认证门）、`login_page`、`app_update_gate`、`email_verification_flow`、`password_reset_flow`、`window_controls`。
 - 原生实现：`apps/desktop/src/main/`（主进程）、`src/preload/index.ts`（只放行 `src/shared/ipc.ts` 中登记的 IPC 通道）、`src/renderer/src/platform/desktop_platform.ts`（`Platform` 实现）。
+- Web 版：`apps/web/src/platform/web_platform.ts` 用浏览器 API 实现同一个 `Platform`；`os` 为 `web`，共享代码里的 `kIsWeb` 分支生效。新增 `Platform` 能力时两个宿主都要实现（浏览器做不到的写成明确的不支持）。
 
 Android：
 
@@ -199,7 +200,7 @@ protocol / auth / config
 模块之间：
 
 ```text
-桌面端：apps/desktop → @gang-chat/ui → @gang-chat/core
+桌面端：apps/desktop、apps/web → @gang-chat/ui → @gang-chat/core
 Android：:app → :core
 ```
 

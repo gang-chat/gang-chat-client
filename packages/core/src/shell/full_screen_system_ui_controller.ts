@@ -25,9 +25,8 @@ export type SystemUiModeSetter = (mode: SystemUiMode, opts?: { overlays?: System
  * navigation bars follow the same visibility state as Gang Chat's media
  * controls and are always restored when the full-screen scope is disposed.
  *
- * PORT: Android stays on Flutter, so the default setter (Flutter's
- * `SystemChrome.setEnabledSystemUIMode`) is a no-op; a React Native Android
- * app injects one.
+ * PORT: Android is the native client under android/, so the default setter
+ * (Flutter's `SystemChrome.setEnabledSystemUIMode`) is a no-op.
  */
 export class FullScreenSystemUiController {
   constructor(opts: { platform?: HostOs; setEnabledSystemUIMode?: SystemUiModeSetter } = {}) {

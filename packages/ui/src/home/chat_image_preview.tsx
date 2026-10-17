@@ -1264,7 +1264,8 @@ function _FrozenPortraitBackdrop({ snapshot, quarterTurns }: { snapshot: ImagePr
       ? { width: snapshot.logicalSize.height, height: snapshot.logicalSize.width }
       : snapshot.logicalSize;
   // PORT: the Dart AnimatedSwitcher cross-fade between rotations is dropped
-  // (this branch only runs on Android, which stays on Flutter).
+  // (this branch only runs on Android, which is the native client under
+  // android/).
   return (
     <div style={{ position: 'absolute', inset: 0, background: UiColors.black, overflow: 'hidden' }}>
       <div

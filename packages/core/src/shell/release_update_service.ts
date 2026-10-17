@@ -173,7 +173,8 @@ const _writeBufferBytes = 1 << 20;
  * cancellation aborts the request through an `AbortSignal` instead of closing
  * the client. Process launches go through `platform().process`. The default
  * Android installer launcher (the `gang_chat/app_update` channel) is gone
- * because Android stays on Flutter; inject one to use the Android path.
+ * because Android is the native client under android/; inject one to use the
+ * Android path.
  */
 export class ReleaseUpdateService {
   constructor(

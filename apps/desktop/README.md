@@ -8,6 +8,7 @@ Windows / macOS 桌面客户端，从已移除的 Flutter 版一比一移植而�
 | `packages/core` | 协议、鉴权、业务控制器、LiveKit 会话（`livekit-client`）、平台服务；不依赖界面 |
 | `packages/ui` | React（DOM）界面，按 Flutter Widget 一比一移植 |
 | `apps/desktop` | Electron 主进程、preload、渲染进程入口和 `Platform` 接口的桌面实现 |
+| `apps/web` | Web 版：同一套界面跑在浏览器里，`Platform` 接口的浏览器实现，见 `docs/web-spike.md` |
 | `tool/js/mock_server` | 本地模拟服务端，用于没有真实服务器时联调 |
 
 移植约定见 `docs/js-port-conventions.md`，与 Flutter 版的差异见 `docs/js-port-status.md`，

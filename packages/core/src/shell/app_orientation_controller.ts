@@ -21,10 +21,9 @@ export type LogicalViewSizeReader = () => Size;
  * unless full-screen media is active, while Android tablets use the platform's
  * unrestricted orientation behavior.
  *
- * PORT: Android stays on Flutter, so no host wires `SystemChrome
- * .setPreferredOrientations`: the default setter does nothing and the default
- * view size is zero. A React Native Android app injects both (e.g.
- * expo-screen-orientation + `Dimensions`). The policy itself is unchanged.
+ * PORT: Android is the native client under android/, so no host wires
+ * `SystemChrome.setPreferredOrientations`: the default setter does nothing and
+ * the default view size is zero. The policy itself is unchanged.
  */
 export class AppOrientationController {
   constructor(

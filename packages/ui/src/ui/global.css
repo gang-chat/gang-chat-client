@@ -1,6 +1,6 @@
 /*
- * Document-level styles for the React renderer: the fonts the
- * Flutter app bundled, the Material icon fonts, the dark canvas and the
+ * Document-level styles for the React hosts (the Electron renderer and the
+ * web build): the fonts the Flutter app bundled, the Material icon fonts, the dark canvas and the
  * scrollbar look from `uiTheme().scrollbarTheme`.
  */
 @import 'material-icons/iconfont/material-icons.css';

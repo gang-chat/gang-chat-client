@@ -2,14 +2,15 @@
 
 ![Gang Chat](assets/branding/gang_chat.svg)
 
-Gang Chat 是一个房间聊天客户端，面向 Windows、macOS 和 Android。它把文字聊天、语音频道、摄像头、屏幕共享、房间管理、通知、表情包、文件传输和房间音乐盒放在同一个自适应界面中，并通过独立的 Gang Chat 服务端完成账号、消息和业务状态同步，通过 LiveKit/WebRTC 承载实时音视频。
+Gang Chat 是一个房间聊天客户端，面向 Windows、macOS、Android 和 Web（浏览器）。它把文字聊天、语音频道、摄像头、屏幕共享、房间管理、通知、表情包、文件传输和房间音乐盒放在同一个自适应界面中，并通过独立的 Gang Chat 服务端完成账号、消息和业务状态同步，通过 LiveKit/WebRTC 承载实时音视频。
 
 客户端由两套代码组成，都从此前的 Flutter 客户端一比一移植而来，界面、文案和行为以 Flutter 版为准，有意的差异记录在各自的移植状态文档中：
 
 - **Windows / macOS**：Electron + React 桌面客户端，代码在 `apps/desktop`、`packages/core`、`packages/ui`，说明见 [`apps/desktop/README.md`](apps/desktop/README.md)。
+- **Web**：同一套 React 界面和逻辑层跑在浏览器里，页面壳在 `apps/web`，部署在 [https://ky-z.com/gang-chat/app/](https://ky-z.com/gang-chat/app/)，说明见 [`docs/web-spike.md`](docs/web-spike.md)。
 - **Android**：原生 Kotlin + Jetpack Compose 客户端，代码在 `android/`（Gradle 工程）。
 
-两套代码不共用源码，只共用仓库根目录的 `assets/`（服务器配置、品牌图、字体）和同一个服务端。Flutter 工程已从仓库移除，Flutter Web 客户端随之下线，不再构建和部署。需要对照原 Dart 实现时，以提交 `fcf2fdd` 为准，例如 `git show fcf2fdd:lib/src/app/rooms_controller.dart`。
+桌面端和 Web 版共用 `packages/core`、`packages/ui`；Android 与它们不共用源码，只共用仓库根目录的 `assets/`（服务器配置、品牌图、字体）和同一个服务端。Flutter 工程已从仓库移除。需要对照原 Dart 实现时，以提交 `fcf2fdd` 为准，例如 `git show fcf2fdd:lib/src/app/rooms_controller.dart`。
 
 > 本 README 以当前 `master` 分支的实际实现为准。
 
@@ -68,7 +69,7 @@ GangChat-<version>-windows.zip
 
 Android 手机在普通界面默认使用竖屏，只有全屏图片、全屏摄像头或全屏屏幕共享等媒体场景允许横屏。Android 平板使用大屏判定并允许系统正常旋转，同时继续隐藏桌面端窗口控制按钮。
 
-Linux、iOS 和 Web 不是目标平台：仓库只构建和发布 Windows、macOS 与 Android。Flutter Web 客户端已随 Flutter 工程一起移除，发布流程也不再部署 Web 版。
+Linux 和 iOS 不是目标平台：仓库只构建和发布 Windows、macOS、Android 安装包，并部署 Web 版。Web 版与桌面端共用界面，但没有窗口控制、托盘和应用内更新（网页总是最新部署的版本），屏幕共享、通知等能力以浏览器支持为准，逐项状态见 [Web 版说明](docs/web-spike.md)。
 
 ## 功能总览
 
@@ -541,10 +542,11 @@ Linux、iOS 和 Web 不是目标平台：仓库只构建和发布 Windows、macO
 
 ```mermaid
 flowchart LR
-    subgraph DESKTOP["Windows / macOS：Electron + React"]
+    subgraph DESKTOP["Windows / macOS / Web：React"]
         DUI["React 界面<br/>packages/ui"]
         DCORE["逻辑层<br/>packages/core"]
         DHOST["Electron 主进程 / preload<br/>apps/desktop"]
+        WHOST["浏览器页面壳<br/>apps/web"]
     end
     subgraph MOBILE["Android：Kotlin + Jetpack Compose"]
         AUI["Compose 界面<br/>android/app ui / home / settings / shell"]
@@ -559,9 +561,13 @@ flowchart LR
 
     DUI --> DCORE
     DCORE -->|Platform 接口| DHOST
+    DCORE -->|Platform 接口| WHOST
     DHOST --> API
     DHOST --> SSE
     DHOST --> OBJ
+    WHOST --> API
+    WHOST --> SSE
+    WHOST --> OBJ
     DCORE --> LIVE
     AUI --> AHOST
     AUI --> ACORE
@@ -577,13 +583,13 @@ flowchart LR
 
 两套代码都按 Flutter 版的目录一比一移植，分层相同。下表中 Kotlin 路径省略了 `src/main/kotlin/com/gangchat/client/` 前缀，例如 `android/core` 的 `app/` 指 `android/core/src/main/kotlin/com/gangchat/client/app/`。
 
-| 层 | 桌面端（TypeScript） | Android（Kotlin） |
+| 层 | 桌面端与 Web（TypeScript） | Android（Kotlin） |
 | --- | --- | --- |
 | 运行时对等层 | `packages/core/src/lib`、`packages/core/src/platform`（`Platform` 接口、`HttpClient`）、`packages/ui/src/lib` | `android/core` 的 `foundation/`、`plugins/`；`android/app` 的 `widgets/` |
 | 配置、协议、鉴权 | `packages/core/src/config`、`protocol`、`auth` | `android/core` 的 `config/`、`protocol/`、`auth/` |
 | 业务逻辑 | `packages/core/src/app` | `android/core` 的 `app/`；依赖 LiveKit、录音或 Compose 的少数文件在 `android/app` 的 `app/` |
 | 实时与语音 | `packages/core/src/live`、视频渲染 `packages/ui/src/live` | `android/core` 的 `live/`（SSE 等纯逻辑）；`android/app` 的 `live/` 和 `platform/webrtc/` |
-| 平台服务 | `packages/core/src/shell`；原生实现在 `apps/desktop/src` | `android/core` 的 `shell/`（本地偏好等）、`android/app` 的 `shell/`；原生实现在 `android/app` 的 `platform/` |
+| 平台服务 | `packages/core/src/shell`；宿主实现在 `apps/desktop/src`（Electron）和 `apps/web/src/platform`（浏览器） | `android/core` 的 `shell/`（本地偏好等）、`android/app` 的 `shell/`；原生实现在 `android/app` 的 `platform/` |
 | 界面 | `packages/ui/src/ui`、`home`、`settings`、`shell` | `android/app` 的 `ui/`、`home/`、`settings/`、`shell/` |
 
 文件名和标识符都保持 Dart 原名（TypeScript 文件用 snake_case，Kotlin 文件用 PascalCase），两端可以逐文件对照。具体规则见 [TypeScript 移植约定](docs/js-port-conventions.md) 和 [Android 移植约定](docs/android-port-conventions.md)，各层职责和依赖方向见 [模块化开发指南](docs/modular-development-guide.md)。
@@ -592,7 +598,7 @@ flowchart LR
 
 账号、房间、消息、通知、文件元数据、表情包、歌单和音乐盒控制通过带 Bearer Token 的 REST API 完成。界面组件不直接拼请求体，而是通过 protocol 层的 API client（`packages/core/src/protocol/api_client.ts`、`android/core` 的 `protocol/ApiClient.kt`）和 app 层的 controller 进入。
 
-桌面端的 HTTP 请求（含上传、下载和 SSE）由 Electron 主进程用 Chromium 网络栈发出（`apps/desktop/src/main/net_bridge.ts`），没有浏览器跨域限制；Android 使用 OkHttp（`android/core` 的 `foundation/http/`）。
+桌面端的 HTTP 请求（含上传、下载和 SSE）由 Electron 主进程用 Chromium 网络栈发出（`apps/desktop/src/main/net_bridge.ts`），没有浏览器跨域限制；Web 版用浏览器 `fetch`（`apps/web/src/platform/fetch_http_client.ts`），页面与 API 同源部署，不需要跨域配置；Android 使用 OkHttp（`android/core` 的 `foundation/http/`）。
 
 ### SSE 实时事件
 
@@ -627,6 +633,10 @@ flowchart LR
 - 主进程 `src/main/`：窗口、托盘和关闭行为（`window.ts`），偏好和安全存储（`storage.ts`），网络桥（`net_bridge.ts`），媒体缓存协议（`media_protocol.ts`），文件对话框与读写（`files.ts`），剪贴板（`clipboard.ts`），系统通知、外链和子进程（`system.ts`），屏幕采集与媒体权限（`screen_capture.ts`、`media_access.ts`），Windows 更新（`updater.ts`）和 macOS 更新（`sparkle.ts`）。
 - preload `src/preload/index.ts`：渲染进程与主进程之间唯一的桥，只放行 `src/shared/ipc.ts` 中登记的通道。
 - 渲染进程 `src/renderer/src/`：`desktop_root.tsx` 启动应用，`platform/desktop_platform.ts` 在 preload 之上实现 `Platform`。
+
+### Web 宿主
+
+`apps/web` 是 Vite 页面，`src/platform/` 用浏览器 API 实现 `Platform`：`fetch`（流式响应、SSE）、`localStorage`、文件选择和浏览器下载、异步剪贴板、Web Notifications 和 `speechSynthesis`。`os` 为 `web`，共享代码里从 Dart 移植来的 `kIsWeb` 分支照旧生效：没有窗口、托盘和标题栏按钮，没有应用内更新。存储格式与 Flutter Web 版相同，同一域名下从 Flutter 版切换过来不用重新登录；`public/flutter_service_worker.js` 负责注销 Flutter 版注册过的 Service Worker。功能状态和部署步骤见 [Web 版说明](docs/web-spike.md)。
 
 ### Android 原生能力
 
@@ -674,6 +684,11 @@ gang-chat-client/
 │  ├─ scripts/                 打包、Sparkle 准备、ad-hoc 签名
 │  ├─ build/                   图标、NSIS 脚本、macOS entitlements
 │  └─ electron-builder.yml
+├─ apps/web/                   Web 版（Vite 页面，与桌面端同一套界面）
+│  ├─ src/platform/            Platform 的浏览器实现
+│  ├─ public/                  图标、manifest、清理旧 Service Worker 的脚本
+│  └─ vite.config.ts           生产构建输出到仓库根目录的 build/web
+├─ deploy/web/                 Web 版的 nginx 配置
 ├─ packages/
 │  ├─ core/                    @gang-chat/core：协议、鉴权、业务逻辑、LiveKit 会话、平台服务（不依赖界面）
 │  │  ├─ src/                  lib/ platform/ config/ protocol/ auth/ app/ lifecycle/ live/ shell/
@@ -688,6 +703,8 @@ gang-chat-client/
 ├─ docs/                       移植约定与状态、模块化指南、音乐盒、发布和设计文档
 ├─ tool/
 │  ├─ check_utf8.py           UTF-8、BOM 和乱码检查
+│  ├─ build_web.sh            构建 Web 版到 build/web
+│  ├─ deploy_web.sh           经 SSH 部署 Web 版
 │  ├─ js/mock_server/         本地模拟服务端
 │  ├─ js/generate_icons.mjs   生成 packages/ui/src/ui/icons.ts
 │  └─ verify_sparkle_signature.swift  发布时校验 Sparkle 签名
@@ -713,7 +730,7 @@ gang-chat-client/
 - Windows：Windows 10/11 64 位。生成 NSIS 安装程序和便携 ZIP 由 electron-builder 完成，不需要另装 NSIS。
 - macOS：打包需要在 macOS 上进行，并安装 Xcode 命令行工具：`apps/desktop/scripts/prepare_sparkle.mjs` 会下载固定版本、校验过的 Sparkle，并编译 `apps/desktop/native/sparkle/sparkle.mm`。应用最低支持 macOS 12（`apps/desktop/electron-builder.yml` 的 `minimumSystemVersion`）。
 
-在仓库根目录安装所有 workspace 依赖（CI 使用 `npm ci`，严格按 `package-lock.json` 安装）：
+Web 版使用同一套 npm workspaces，不需要额外依赖。在仓库根目录安装所有 workspace 依赖（CI 使用 `npm ci`，严格按 `package-lock.json` 安装）：
 
 ```bash
 npm install
@@ -816,7 +833,15 @@ macOS 第一次使用摄像头、麦克风或屏幕共享时，在“系统设�
 node tool/js/mock_server/server.mjs --port 21116
 ```
 
-账号 `demo` / `demo1234`，验证码固定为 `123456`。模拟服务端没有 LiveKit，语音频道会按预期连不上媒体服务器。
+账号 `demo` / `demo1234`，验证码固定为 `123456`。模拟服务端本身没有 LiveKit；需要连通语音时另开 `livekit-server --dev`，并给模拟服务端加上 `--livekit-api-key devkey --livekit-api-secret secret`（见 [模拟服务端](tool/js/mock_server/README.md)）。
+
+### Web
+
+```bash
+npm run dev:web                # http://localhost:4176/gang-chat/app/，热更新
+```
+
+连本地服务端时同样用 `GANG_API_BASE_URL` / `GANG_ASSET_BASE_URL` 环境变量。麦克风、摄像头和屏幕共享要求页面在 HTTPS 或 `localhost` 下运行。
 
 ### Android
 
@@ -867,6 +892,16 @@ npm run dist:mac -w @gang-chat/desktop
 
 输出 universal 的 `apps/desktop/dist/GangChat_v<version>.dmg`，应用本体在 `apps/desktop/dist/mac-universal/GangChat.app`。`CFBundleVersion` 由 `apps/desktop/scripts/package.mjs` 按 `major * 1,000,000 + minor * 1,000 + patch` 设置，与 Android 的 versionCode 相同。没有 Developer ID 时，`apps/desktop/scripts/after_pack.cjs` 做 ad-hoc 签名，因为 Sparkle 不接受代码签名无效的更新；Developer ID 签名和公证在发布工作流中配置。
 
+### Web
+
+```bash
+tool/build_web.sh                                       # 输出 build/web，base href 为 /gang-chat/app/
+npm run preview -w @gang-chat/web                       # 本地预览生产构建
+GANG_WEB_DEPLOY_SSH=deploy@ky-z.com tool/deploy_web.sh  # 构建并经 SSH 部署
+```
+
+`GANG_WEB_BASE_HREF` 可以改部署路径，`GANG_CHAT_VERSION` / `GANG_CHAT_RELEASED_AT` 设置设置页“关于”里显示的版本和发布时间。`tool/deploy_web.sh` 每次上传到新的 `releases/<时间戳>/` 目录再原子切换 `current`，保留最近几次用于回滚；nginx 配置见 `deploy/web/nginx-gang-chat-app.conf`。
+
 ### Android Debug APK
 
 ```bash
@@ -915,9 +950,9 @@ npm test
 cd android && ./gradlew :core:test :app:testDebugUnitTest
 ```
 
-### 桌面端
+### 桌面端与 Web
 
-- `npm run typecheck`：对 `packages/core`、`packages/ui` 和 `apps/desktop` 执行 `tsc --noEmit`（strict）。
+- `npm run typecheck`：对 `packages/core`、`packages/ui`、`apps/desktop` 和 `apps/web` 执行 `tsc --noEmit`（strict）。
 - `npm test`：vitest，运行 `packages/*/test/**/*.test.ts(x)` 和 `apps/*/test/**/*.test.ts`（见 `vitest.config.ts`）。
 - 模拟服务端自检：`node tool/js/mock_server/check.mjs`。
 
@@ -992,8 +1027,9 @@ Robolectric、截图测试和模拟服务端覆盖不到以下路径，涉及时
    - macOS 和 Windows：`npm ci` 后把版本写进 `apps/desktop/package.json`，用 electron-builder 打包；macOS 还会核对 `CFBundleVersion`、校验代码签名，并用 Sparkle 私钥签名 DMG、生成 `appcast.xml`。
    - Android：执行 `python3 tool/check_utf8.py`，把版本和发行时间写进 `android/version.properties`，执行 `./gradlew :app:assembleRelease`，再用 `apksigner` 校验签名、用 `aapt2 dump badging` 核对 versionCode 和 versionName。
 3. 汇总签名状态，发布 GitHub Release 和全部安装资产：`GangChat_v<version>.exe`、`.exe.blockmap`、`latest.yml`、`GangChat-<version>-windows.zip`、`GangChat_v<version>.dmg`、`appcast.xml` 和 `GangChat_v<version>.apk`。
+4. GitHub Release 发布成功后，`deploy-web` 用 `tool/build_web.sh` 构建 Web 版，并经 SSH 部署到 `https://ky-z.com/gang-chat/app/`。
 
-发布后再把这些文件同步到对象存储的 `releases/` 目录；`appcast.xml` 指向 DMG，必须最后上传。相关路径有推送或 Pull Request 时，`.github/workflows/desktop-electron.yml` 和 `.github/workflows/android.yml` 分别检查桌面端和 Android，并把未签名的桌面测试包和 debug APK 上传为工作流产物。
+发布后再把这些文件同步到对象存储的 `releases/` 目录；`appcast.xml` 指向 DMG，必须最后上传。相关路径有推送或 Pull Request 时，`.github/workflows/desktop-electron.yml` 和 `.github/workflows/android.yml` 分别检查桌面端（含 Web 构建）和 Android，并把未签名的桌面测试包和 debug APK 上传为工作流产物。
 
 ### 签名策略
 
@@ -1002,6 +1038,7 @@ Robolectric、截图测试和模拟服务端覆盖不到以下路径，涉及时
 - macOS 更新：`SPARKLE_ED_PRIVATE_KEY` 必须配置，并与 `apps/desktop/electron-builder.yml` 中的 `SUPublicEDKey` 对应；发布前用 `tool/verify_sparkle_signature.swift` 校验签名，缺失或不匹配时失败。
 - Android：正式发布必须提供固定的 release keystore（`ANDROID_KEYSTORE_BASE64` 等四个 Secret），缺失或无效时失败，防止发布无法覆盖升级的临时签名 APK。
 - Android FCM：`FIREBASE_GOOGLE_SERVICES_JSON_BASE64` 可选；缺失时 APK 仍可使用，但进程退出后的 FCM 推送不可用。
+- Web 部署：`WEB_DEPLOY_SSH`、`WEB_DEPLOY_SSH_KEY`、`WEB_DEPLOY_KNOWN_HOSTS` 三个 Secret 都未配置时跳过部署并给出警告，只配置一部分时失败；配置方法见 [Web 版说明](docs/web-spike.md) 的“部署”。
 
 完整 Secret 名称、签名命令和验证方法见 [Release workflow](docs/release-workflow.md)。
 
@@ -1014,12 +1051,13 @@ Robolectric、截图测试和模拟服务端覆盖不到以下路径，涉及时
 ### 敏感本地数据
 
 - 桌面端：Refresh Token 等敏感凭据用 Electron `safeStorage`（macOS 钥匙串 / Windows DPAPI）加密后，保存在用户数据目录的 `secure-storage.json`（`apps/desktop/src/main/storage.ts`）。Flutter 桌面版把凭据存在系统钥匙串/凭据管理器中，因此切换到 Electron 版后需要重新登录一次。
+- Web：刷新令牌按 `flutter_secure_storage_web` 的格式加密后存在 `localStorage`（`apps/web/src/platform/web_storage.ts`），从 Flutter Web 版切换过来保留登录状态。
 - Android：按 Flutter 版 `flutter_secure_storage` 的格式保存（Android Keystore 包装的密钥 + AES-GCM 数据，`FlutterSecureStorageStore`），从 Flutter 版 APK 覆盖安装后保留登录状态。Keystore 密钥不可用时（例如备份恢复到新设备）会清空安全存储，需要重新登录一次。
 - 不要在日志、测试 fixture、截图、Issue 或提交中暴露真实 Token、密码、证书和生产数据库内容。
 
 ### 非敏感本地偏好
 
-以下内容保存在非敏感偏好中：桌面端是用户数据目录中的 `preferences.json`（键名与 Flutter 版相同），Android 是 Flutter 版 `shared_preferences` 使用的 `FlutterSharedPreferences` 文件（`flutter.` 键前缀和值编码按原插件复现，`FlutterSharedPreferencesStore`）。
+以下内容保存在非敏感偏好中：桌面端是用户数据目录中的 `preferences.json`（键名与 Flutter 版相同），Web 版是 `localStorage` 中 `flutter.<键>` 形式的 JSON（与 Flutter Web 版相同），Android 是 Flutter 版 `shared_preferences` 使用的 `FlutterSharedPreferences` 文件（`flutter.` 键前缀和值编码按原插件复现，`FlutterSharedPreferencesStore`）。
 
 - API/界面相关的本地选择。
 - 输入/输出设备签名。
@@ -1075,6 +1113,7 @@ OPPO 等无 Google 服务的国内机型无法仅靠 FCM 在进程结束后接�
 
 - Android：不需要。applicationId、签名和 versionCode 规则不变，安全存储和偏好按 Flutter 插件的格式读写，覆盖安装后保留登录状态和设置；只有 Keystore 密钥不可用时才需要重新登录。
 - Windows / macOS：需要重新登录一次，因为 Electron 版改用 `safeStorage` 保存凭据。
+- Web：不需要。新版部署在同一地址，`localStorage` 中的数据按 Flutter Web 版的格式读写。
 
 ### Windows/macOS 提示安装包不受信任
 
@@ -1184,6 +1223,7 @@ npm test
 ## 进一步阅读
 
 - [桌面端（Electron）说明](apps/desktop/README.md)
+- [Web 版说明](docs/web-spike.md)
 - [Flutter → TypeScript 移植约定](docs/js-port-conventions.md)
 - [TypeScript / Electron 移植状态](docs/js-port-status.md)
 - [Flutter → Android 原生移植约定](docs/android-port-conventions.md)

@@ -19,7 +19,7 @@ packages/core/src/      @gang-chat/core：纯 TypeScript，不依赖 React、DOM
   platform/             Platform 接口（宿主应用实现）与 HttpClient
   config/ protocol/ auth/ app/ live/ lifecycle/
   shell/                lib/src/shell 里的非界面服务（剪贴板、文件、窗口、更新……）
-packages/ui/src/        @gang-chat/ui：桌面端 React DOM 组件
+packages/ui/src/        @gang-chat/ui：桌面端与 Web 版共用的 React DOM 组件
   lib/                  useListenable、ViewState、Flutter 风格的布局组件（layout.tsx）
   ui/ home/ settings/
   shell/                lib/src/shell 里的界面（登录页、更新提示、密码找回流程……）

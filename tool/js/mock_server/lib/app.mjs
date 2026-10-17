@@ -42,6 +42,9 @@ export const DEFAULT_OPTIONS = {
   /** Origin written into asset URLs; defaults to http://<host>:<port>. */
   publicUrl: null,
   livekitUrl: 'ws://127.0.0.1:7880',
+  /** With both set, live tokens are signed for a real LiveKit server. */
+  livekitApiKey: null,
+  livekitApiSecret: null,
   tokenTtlMs: 15 * 60 * 1000,
   chatterIntervalMs: 20_000,
   heartbeatMs: 15_000,
