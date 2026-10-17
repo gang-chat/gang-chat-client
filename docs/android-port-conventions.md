@@ -29,7 +29,6 @@ android/
       platform/               原 MethodChannel 背后的原生实现（通知、前台服务、FCM、更新安装……）
       config/ app/ live/ shell/ ui/ home/ settings/          ← 需要 Android/LiveKit/Compose 的文件
     src/test/kotlin/...       Robolectric 测试、Compose UI 测试、Roborazzi 截图测试
-  legacy-flutter-host/        旧 Flutter 宿主的 Kotlin 代码，仅供移植参考，移植完成后删除
 ```
 
 仓库根目录的 `assets/`（配置、品牌图、字体）整个打进 APK 的 assets，与桌面端共用。

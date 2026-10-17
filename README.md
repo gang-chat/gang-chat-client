@@ -2,13 +2,16 @@
 
 ![Gang Chat](assets/branding/gang_chat.svg)
 
-Gang Chat 是一个使用 Flutter 构建的跨平台房间聊天客户端，面向 Windows、macOS 和 Android。它把文字聊天、语音频道、摄像头、屏幕共享、房间管理、通知、表情包、文件传输和房间音乐盒放在同一个自适应界面中，并通过独立的 Gang Chat 服务端完成账号、消息和业务状态同步，通过 LiveKit/WebRTC 承载实时音视频。
+Gang Chat 是一个房间聊天客户端，面向 Windows、macOS 和 Android。它把文字聊天、语音频道、摄像头、屏幕共享、房间管理、通知、表情包、文件传输和房间音乐盒放在同一个自适应界面中，并通过独立的 Gang Chat 服务端完成账号、消息和业务状态同步，通过 LiveKit/WebRTC 承载实时音视频。
 
-> 本 README 以当前 `master` 分支的实际实现为准。仓库中虽然保留了 Linux、iOS 和 Web 的 Flutter 平台目录，但当前自动发布和主要回归范围是 Windows、macOS 与 Android。
+客户端由两套代码组成，都从此前的 Flutter 客户端一比一移植而来，界面、文案和行为以 Flutter 版为准，有意的差异记录在各自的移植状态文档中：
 
-> **Electron 桌面端（移植中）**：Windows / macOS 客户端正在一比一移植到 Electron + React，
-> 代码在 `apps/desktop`、`packages/core`、`packages/ui`，说明见 [`apps/desktop/README.md`](apps/desktop/README.md)。
-> Android 暂时保持 Flutter。
+- **Windows / macOS**：Electron + React 桌面客户端，代码在 `apps/desktop`、`packages/core`、`packages/ui`，说明见 [`apps/desktop/README.md`](apps/desktop/README.md)。
+- **Android**：原生 Kotlin + Jetpack Compose 客户端，代码在 `android/`（Gradle 工程）。
+
+两套代码不共用源码，只共用仓库根目录的 `assets/`（服务器配置、品牌图、字体）和同一个服务端。Flutter 工程已从仓库移除，Flutter Web 客户端随之下线，不再构建和部署。需要对照原 Dart 实现时，以提交 `fcf2fdd` 为准，例如 `git show fcf2fdd:lib/src/app/rooms_controller.dart`。
+
+> 本 README 以当前 `master` 分支的实际实现为准。
 
 ## 目录
 
@@ -50,6 +53,7 @@ GangChat-<version>-windows.zip
 
 | 能力 | Windows | macOS | Android |
 | --- | --- | --- | --- |
+| 客户端实现 | Electron + React | Electron + React | Kotlin + Jetpack Compose |
 | 正式发布产物 | `.exe`、便携 `.zip` | `.dmg` | `.apk` |
 | 自适应宽屏/窄屏布局 | 支持 | 支持 | 支持 |
 | 原生窗口控制区 | 自定义最小化/最大化/关闭 | 系统原生交通灯 | 不显示桌面窗口按钮 |
@@ -57,14 +61,14 @@ GangChat-<version>-windows.zip
 | 文字、文件、图片、语音、表情 | 支持 | 支持 | 支持 |
 | 语音频道和摄像头 | 支持 | 支持 | 支持 |
 | 屏幕共享 | 屏幕/窗口选择 | 屏幕/窗口选择 | MediaProjection 系统授权 |
-| 屏幕共享声音 | 独立屏幕音轨 | 独立屏幕音轨 | Android 播放捕获，尽力而为 |
+| 屏幕共享声音 | 独立屏幕音轨 | 独立屏幕音轨（macOS 14.2 及以上） | Android 播放捕获，尽力而为 |
 | 图片/摄像头/屏幕共享全屏 | 支持 | 支持 | 支持横竖屏切换 |
-| 应用内更新 | 下载并启动安装程序 | 下载并打开 DMG | 后台下载并打开系统安装器 |
+| 应用内更新 | electron-updater 下载安装程序并安装 | Sparkle 下载、校验、安装并重启 | 后台下载并打开系统安装器 |
 | 进程退出后的离线推送 | 不适用 | 不适用 | 需要发布包配置 FCM 和设备具备 Google Play 服务 |
 
 Android 手机在普通界面默认使用竖屏，只有全屏图片、全屏摄像头或全屏屏幕共享等媒体场景允许横屏。Android 平板使用大屏判定并允许系统正常旋转，同时继续隐藏桌面端窗口控制按钮。
 
-Linux、iOS 和 Web 目前不是正式发布目标；不要仅因为仓库存在对应 Flutter 目录就认为这些平台已经完成产品级适配。
+Linux、iOS 和 Web 不是目标平台：仓库只构建和发布 Windows、macOS 与 Android。Flutter Web 客户端已随 Flutter 工程一起移除，发布流程也不再部署 Web 版。
 
 ## 功能总览
 
@@ -276,7 +280,7 @@ Linux、iOS 和 Web 目前不是正式发布目标；不要仅因为仓库存在
 - 当全局系统通知已开启，且房间消息策略为“全部”时，后台房间消息可显示消息内容。
 - 系统通知支持按房间聚合、点击进入对应房间和应用图标数字角标。
 - 更新 APK 可以在后台继续下载，完成后显示安装通知；没有通知权限时，重新打开 Gang Chat 会继续引导安装。
-- 发布包配置 FCM 后，即使 Flutter 进程已结束，只要用户没有退出账号，服务端仍可向该设备推送离线通知。
+- 发布包配置 FCM 后，即使应用进程已结束，只要用户没有退出账号，服务端仍可向该设备推送离线通知。
 - FCM 依赖 Google Play 服务。没有 Google 服务的设备仍可使用应用和后台实时连接，但进程结束后的推送需要额外接入对应厂商推送渠道。
 
 ### 7. 用户名片、房间名片与嵌套交互
@@ -350,8 +354,8 @@ Linux、iOS 和 Web 目前不是正式发布目标；不要仅因为仓库存在
 #### 屏幕共享声音
 
 - 屏幕声音作为独立的 `screenShareAudio` 轨道发布，不与麦克风轨道共用状态。
-- Windows 使用系统/进程回环采集并尽量排除 Gang Chat 自身声音，降低回声风险。
-- macOS 通过原生屏幕捕获能力接入共享声音。
+- Windows 使用系统回环采集，并请求排除 Gang Chat 自身声音，降低回声风险。
+- macOS 通过 Chromium 的 ScreenCaptureKit 回环采集共享声音，需要 macOS 14.2 及以上；更早的系统共享时没有声音。
 - Android 使用 MediaProjection 的播放捕获能力；系统版本、内容保护策略和应用是否允许被捕获会影响结果。
 - 屏幕视频优先：声音辅助连接失败时不会阻止画面继续共享。
 - 本地用户不会订阅自己的屏幕共享声音，远端屏幕声音使用独立音量控制。
@@ -524,9 +528,9 @@ Linux、iOS 和 Web 目前不是正式发布目标；不要仅因为仓库存在
 
 ### 13. 自动更新
 
-- 客户端从配置的 S3 兼容对象存储列出 `releases/` 资源，并按语义版本选择当前平台的最新安装包。
-- Windows 下载 `.exe` 后以系统权限启动安装程序，并退出当前应用。
-- macOS 下载 `.dmg` 后使用系统 `open` 打开镜像，并退出当前应用。
+- 客户端从配置的 S3 兼容对象存储的 `releases/` 目录发现新版本；Android（以及 Windows 的回退路径）列出该目录中的安装包，按语义版本选择当前平台的最新版本。
+- Windows 使用 electron-updater 读取 `releases/latest.yml`，按 blockmap 差分下载安装程序，退出当前应用后安装；对象存储中没有 `latest.yml` 时，退回列出 `releases/` 中的安装包并整包下载。
+- macOS 使用 Sparkle 读取 `releases/appcast.xml`，由 Sparkle 自己的窗口完成下载、EdDSA 签名校验、安装和重启；开发版没有 Sparkle，退回在浏览器中下载 DMG。
 - Android 校验 APK 长度、ZIP/APK 结构和文件扩展名，再通过 `FileProvider` 打开系统安装界面。
 - Android 允许后台下载；下载进度显示在前台服务通知中。
 - Android 安装完成前应保持账号和任务状态，不需要一直停留在前台，但不应主动退出 Gang Chat。
@@ -537,31 +541,62 @@ Linux、iOS 和 Web 目前不是正式发布目标；不要仅因为仓库存在
 
 ```mermaid
 flowchart LR
-    UI["Flutter UI<br/>home / settings / ui"]
-    APP["应用逻辑<br/>lib/src/app"]
+    subgraph DESKTOP["Windows / macOS：Electron + React"]
+        DUI["React 界面<br/>packages/ui"]
+        DCORE["逻辑层<br/>packages/core"]
+        DHOST["Electron 主进程 / preload<br/>apps/desktop"]
+    end
+    subgraph MOBILE["Android：Kotlin + Jetpack Compose"]
+        AUI["Compose 界面<br/>android/app ui / home / settings / shell"]
+        AHOST["平台服务 / LiveKit<br/>android/app platform / live / shell"]
+        ACORE["逻辑层<br/>android/core"]
+    end
     API["REST API<br/>账号 / 房间 / 消息 / 歌单"]
     SSE["SSE /me/stream<br/>实时业务事件"]
     LIVE["LiveKit + WebRTC<br/>语音 / 摄像头 / 屏幕共享"]
-    OBJ["S3 兼容对象存储<br/>资源 / 安装包"]
+    OBJ["S3 兼容对象存储<br/>资源 / 安装包 / 更新源"]
     PUSH["Android FCM<br/>进程退出后的推送"]
-    LOCAL["本地存储<br/>安全凭据 / 偏好 / 缓存"]
 
-    UI --> APP
-    APP --> API
-    APP --> SSE
-    APP --> LIVE
-    APP --> OBJ
-    APP --> PUSH
-    APP --> LOCAL
+    DUI --> DCORE
+    DCORE -->|Platform 接口| DHOST
+    DHOST --> API
+    DHOST --> SSE
+    DHOST --> OBJ
+    DCORE --> LIVE
+    AUI --> AHOST
+    AUI --> ACORE
+    AHOST --> ACORE
+    ACORE --> API
+    ACORE --> SSE
+    ACORE --> OBJ
+    AHOST --> LIVE
+    AHOST --> PUSH
 ```
+
+### 两套客户端的分层
+
+两套代码都按 Flutter 版的目录一比一移植，分层相同。下表中 Kotlin 路径省略了 `src/main/kotlin/com/gangchat/client/` 前缀，例如 `android/core` 的 `app/` 指 `android/core/src/main/kotlin/com/gangchat/client/app/`。
+
+| 层 | 桌面端（TypeScript） | Android（Kotlin） |
+| --- | --- | --- |
+| 运行时对等层 | `packages/core/src/lib`、`packages/core/src/platform`（`Platform` 接口、`HttpClient`）、`packages/ui/src/lib` | `android/core` 的 `foundation/`、`plugins/`；`android/app` 的 `widgets/` |
+| 配置、协议、鉴权 | `packages/core/src/config`、`protocol`、`auth` | `android/core` 的 `config/`、`protocol/`、`auth/` |
+| 业务逻辑 | `packages/core/src/app` | `android/core` 的 `app/`；依赖 LiveKit、录音或 Compose 的少数文件在 `android/app` 的 `app/` |
+| 实时与语音 | `packages/core/src/live`、视频渲染 `packages/ui/src/live` | `android/core` 的 `live/`（SSE 等纯逻辑）；`android/app` 的 `live/` 和 `platform/webrtc/` |
+| 平台服务 | `packages/core/src/shell`；原生实现在 `apps/desktop/src` | `android/core` 的 `shell/`（本地偏好等）、`android/app` 的 `shell/`；原生实现在 `android/app` 的 `platform/` |
+| 界面 | `packages/ui/src/ui`、`home`、`settings`、`shell` | `android/app` 的 `ui/`、`home/`、`settings/`、`shell/` |
+
+文件名和标识符都保持 Dart 原名（TypeScript 文件用 snake_case，Kotlin 文件用 PascalCase），两端可以逐文件对照。具体规则见 [TypeScript 移植约定](docs/js-port-conventions.md) 和 [Android 移植约定](docs/android-port-conventions.md)，各层职责和依赖方向见 [模块化开发指南](docs/modular-development-guide.md)。
 
 ### REST API
 
-账号、房间、消息、通知、文件元数据、表情包、歌单和音乐盒控制通过带 Bearer Token 的 REST API 完成。客户端不在 Widget 中直接拼请求体，而是通过 `lib/src/protocol` 和 `lib/src/app` 的 controller 进入。
+账号、房间、消息、通知、文件元数据、表情包、歌单和音乐盒控制通过带 Bearer Token 的 REST API 完成。界面组件不直接拼请求体，而是通过 protocol 层的 API client（`packages/core/src/protocol/api_client.ts`、`android/core` 的 `protocol/ApiClient.kt`）和 app 层的 controller 进入。
+
+桌面端的 HTTP 请求（含上传、下载和 SSE）由 Electron 主进程用 Chromium 网络栈发出（`apps/desktop/src/main/net_bridge.ts`），没有浏览器跨域限制；Android 使用 OkHttp（`android/core` 的 `foundation/http/`）。
 
 ### SSE 实时事件
 
-客户端维护 `GET /api/v1/me/stream` 长连接：
+客户端维护 `GET /api/v1/me/stream` 长连接（`LiveStreamClient`，两端都在 `live/` 目录）：
 
 - 解析服务端事件并更新房间、消息、通知、已读、角色和实时状态。
 - 35 秒无任何字节时由 watchdog 判定连接失活。
@@ -572,60 +607,94 @@ flowchart LR
 
 - LiveKit 负责语音、摄像头和屏幕视频轨道。
 - 服务端签发房间 Token，并把管理权限同步到 LiveKit。
-- 屏幕共享声音使用第二个隔离的 PeerConnectionFactory/辅助参与者发布，避免和麦克风 AudioDeviceModule 相互干扰。
-- `third_party/flutter_webrtc` 和 `third_party/livekit_client` 包含 Gang Chat 所需的平台修复；不能随意替换成上游包而不做完整音视频回归。
+- 桌面端使用官方 JS SDK `livekit-client`，在渲染进程中运行（`packages/core/src/live/live_session.ts`）；屏幕源选择和摄像头/麦克风系统权限由主进程处理（`apps/desktop/src/main/screen_capture.ts`、`media_access.ts`）。
+- Android 使用 LiveKit Android SDK（`io.livekit:livekit-android`，版本见 `android/gradle/libs.versions.toml`），取代 Flutter 版分叉的 `flutter_webrtc` / `livekit_client`。分叉里 Android 端的修复（进程级 AudioSwitch 音频路由、麦克风增益、MediaProjection 屏幕采集、播放捕获）移植到 `android/app` 的 `platform/webrtc/`。
+- 屏幕共享声音在两端都由隐藏的 `<用户 ID>--screen-audio` 辅助参与者在第二个 LiveKit 房间里单独发布，避免和麦克风的音频模块相互干扰；声音发布失败时画面继续共享。
+- 升级 `livekit-client` 或 LiveKit Android SDK 前必须做完整的音视频、重连和屏幕共享回归。Android 的断线续连检测依赖反射 SDK 内部回调（见 [Android 移植状态](docs/android-port-status.md)），`protobuf-javalite` 固定为 SDK 自带的版本（见 `android/gradle/libs.versions.toml` 中的注释），需要一起核对。
 
 ### 对象存储与资源缓存
 
 - 头像、房间图标、附件和表情通过服务端资源地址加载。
-- 客户端统一解析历史绝对 URL、相对资源路径和当前资源域名。
-- 下载文件、图片、音乐试听和实时提示音使用各自的缓存/临时目录。
-- 更新检查直接读取公开对象存储中的发布文件列表。
+- 客户端统一解析历史绝对 URL、相对资源路径和当前资源域名（`AppConfig.resolveAssetUrl`）。
+- 桌面端的远端图片经 `gang-media://` 协议走主进程磁盘缓存（512 MB LRU，`apps/desktop/src/main/media_protocol.ts`）；Android 由 `MediaCacheController` 缓存到应用缓存目录。
+- 下载文件、音乐试听和实时提示音使用各自的缓存/临时目录。
+- 更新检查直接读取公开对象存储 `releases/` 下的发布文件，见 [自动更新](#13-自动更新)。
 
-### Android 原生桥接
+### 桌面宿主（Electron）
 
-Android Kotlin 层负责：
+`apps/desktop` 实现 `@gang-chat/core` 的 `Platform` 接口并组装界面：
 
-- 前台后台服务和任务划除通知。
-- 系统通知权限、数字角标和房间通知。
-- FCM Token 获取和通知点击路由。
-- APK 后台下载、校验、FileProvider 和系统安装器。
-- 屏幕旋转、全屏系统 UI、媒体音量路由和系统能力调用。
+- 主进程 `src/main/`：窗口、托盘和关闭行为（`window.ts`），偏好和安全存储（`storage.ts`），网络桥（`net_bridge.ts`），媒体缓存协议（`media_protocol.ts`），文件对话框与读写（`files.ts`），剪贴板（`clipboard.ts`），系统通知、外链和子进程（`system.ts`），屏幕采集与媒体权限（`screen_capture.ts`、`media_access.ts`），Windows 更新（`updater.ts`）和 macOS 更新（`sparkle.ts`）。
+- preload `src/preload/index.ts`：渲染进程与主进程之间唯一的桥，只放行 `src/shared/ipc.ts` 中登记的通道。
+- 渲染进程 `src/renderer/src/`：`desktop_root.tsx` 启动应用，`platform/desktop_platform.ts` 在 preload 之上实现 `Platform`。
+
+### Android 原生能力
+
+`android/app` 的 `platform/` 是 Flutter 版 MethodChannel 背后原生代码的直接移植，由 `shell/` 中的服务包装后供界面使用：
+
+- 前台服务保持后台在线，以及任务划除处理（`GangChatBackgroundService`、`shell/AndroidSystemService`）。
+- 通知渠道、房间通知和数字角标（`GangChatNotifications`）；渠道 id、通知 id 和 intent extra 与 Flutter 版一致。
+- FCM Token 获取、离线消息和通知点击路由（`GangChatFirebaseMessagingService`、`GangChatPushRegistration`）。
+- APK 后台下载、校验、FileProvider 和系统安装器（`shell/ReleaseUpdateService`、`AndroidUpdateInstaller`）。
+- 屏幕旋转、全屏系统 UI 和其他系统能力调用（`SystemChrome`、`AndroidDisplay`、`AndroidSystemBridge`）。
+- 兼容 Flutter 版存储格式的安全存储和偏好（`FlutterSecureStorageStore`、`FlutterSharedPreferencesStore`）。
+
+进程启动时 `GangChatApplication` 为 `android/core` 的门面安装真实实现；`MainActivity` 每次创建时运行 `GangChatStartup`，再显示 `GangApp`。
 
 ## 项目结构
 
 ```text
 gang-chat-client/
-├─ android/                    Android Activity、服务、通知、更新和原生桥
-├─ assets/
-│  ├─ branding/               应用品牌资源
-│  └─ config/app_config.json  默认 API、资源和发布地址
-├─ docs/                       架构、音乐盒、发布和平台移植文档
-├─ installer/windows/          NSIS Windows 安装程序
-├─ integration_test/           依赖真实平台/设备的探针测试
-├─ lib/
-│  ├─ main.dart                Flutter 入口
-│  └─ src/
-│     ├─ app/                  纯业务规则、状态、controller、display helper
-│     ├─ auth/                 登录、注册、刷新 Token 和凭据接口
-│     ├─ config/               构建时/资源配置
-│     ├─ home/                 主界面、聊天、房间、Live、音乐盒 UI
-│     ├─ live/                 LiveKit/WebRTC 和音频设备适配层
-│     ├─ protocol/             REST API、模型、错误映射和 JSON
-│     ├─ settings/             设置、表情包和歌单管理 UI
-│     ├─ shell/                应用壳、窗口、剪贴板、更新、平台服务
-│     └─ ui/                   可复用 UI 组件
-├─ macos/                      macOS Runner、签名权限和原生窗口
-├─ test/
-│  ├─ unit/                    app/protocol/live/shell 单元测试
-│  └─ widget/                  ui/home/settings/shell Widget 测试
-├─ third_party/
-│  ├─ audioplayers_windows/   Windows 本地音频播放修复
-│  ├─ flutter_webrtc/         Gang Chat WebRTC 平台扩展
-│  └─ livekit_client/         Gang Chat LiveKit 客户端扩展
-├─ tool/                       UTF-8、发布元数据等脚本
-├─ windows/                    Windows Runner 和原生窗口代码
-└─ pubspec.yaml
+├─ .github/workflows/
+│  ├─ android.yml              Android：UTF-8 检查、单元测试、debug APK
+│  ├─ desktop-electron.yml     桌面端：类型检查、单元测试、模拟服务端自检、未签名测试包
+│  └─ release.yml              正式发布：Windows、macOS、Android
+├─ android/                    Android 原生客户端（Gradle 工程）
+│  ├─ core/                    纯 Kotlin（JVM）模块：运行时对等层、协议、鉴权、业务逻辑、本地偏好
+│  │  └─ src/
+│  │     ├─ main/kotlin/com/gangchat/client/
+│  │     │                     foundation/ plugins/ config/ protocol/ auth/ app/ lifecycle/ live/ shell/
+│  │     ├─ test/              JUnit 测试
+│  │     └─ testFixtures/      GangTestRule、MockClient（两个模块共用）
+│  ├─ app/                     Android 应用模块：平台服务、LiveKit、Compose 界面
+│  │  └─ src/
+│  │     ├─ main/kotlin/com/gangchat/client/
+│  │     │                     widgets/ platform/ app/ live/ shell/ ui/ home/ settings/
+│  │     ├─ main/res/          图标、启动主题、FileProvider 路径
+│  │     └─ test/              Robolectric、Compose UI 和 Roborazzi 截图测试
+│  ├─ gradle/libs.versions.toml 依赖版本目录
+│  ├─ version.properties       versionName 与发行时间
+│  └─ settings.gradle.kts、build.gradle.kts、gradlew
+├─ apps/desktop/               Electron 桌面客户端
+│  ├─ src/main/                主进程：窗口、存储、网络、更新、屏幕采集
+│  ├─ src/preload/             渲染进程与主进程之间的 IPC 桥
+│  ├─ src/renderer/            渲染进程入口与 Platform 实现
+│  ├─ src/shared/              IPC 通道定义
+│  ├─ native/sparkle/          macOS Sparkle 的 Node-API 模块
+│  ├─ scripts/                 打包、Sparkle 准备、ad-hoc 签名
+│  ├─ build/                   图标、NSIS 脚本、macOS entitlements
+│  └─ electron-builder.yml
+├─ packages/
+│  ├─ core/                    @gang-chat/core：协议、鉴权、业务逻辑、LiveKit 会话、平台服务（不依赖界面）
+│  │  ├─ src/                  lib/ platform/ config/ protocol/ auth/ app/ lifecycle/ live/ shell/
+│  │  └─ test/                 vitest 单元测试
+│  └─ ui/                      @gang-chat/ui：React DOM 界面
+│     ├─ src/                  lib/ ui/ home/ settings/ shell/ live/
+│     └─ test/
+├─ assets/                     两端共用的资源（Android 直接作为 APK assets）
+│  ├─ branding/               品牌图
+│  ├─ config/app_config.json  默认 API、资源和发布地址
+│  └─ fonts/                  字体
+├─ docs/                       移植约定与状态、模块化指南、音乐盒、发布和设计文档
+├─ tool/
+│  ├─ check_utf8.py           UTF-8、BOM 和乱码检查
+│  ├─ js/mock_server/         本地模拟服务端
+│  ├─ js/generate_icons.mjs   生成 packages/ui/src/ui/icons.ts
+│  └─ verify_sparkle_signature.swift  发布时校验 Sparkle 签名
+├─ package.json                npm workspaces 与根脚本
+├─ package-lock.json
+├─ tsconfig.base.json
+└─ vitest.config.ts
 ```
 
 更严格的层级职责和依赖方向见 [模块化开发指南](docs/modular-development-guide.md)。
@@ -634,57 +703,29 @@ gang-chat-client/
 
 ### 通用要求
 
-- Flutter `3.44.0` stable。
-- Dart `3.12.0`（随 Flutter 3.44.0 提供）。
 - Git。
-- 可访问 Gang Chat 服务端、LiveKit 和资源存储的网络环境。
+- Python 3，用于 `tool/check_utf8.py`。
+- 可访问 Gang Chat 服务端、LiveKit 和资源存储的网络环境；没有服务端时可以使用 [模拟服务端](tool/js/mock_server/README.md)（需要 Node.js 22）。
 
-获取依赖：
+### 桌面端（Windows / macOS）
 
-```powershell
-flutter pub get
-```
+- Node.js 22（CI 使用 22）和 npm。
+- Windows：Windows 10/11 64 位。生成 NSIS 安装程序和便携 ZIP 由 electron-builder 完成，不需要另装 NSIS。
+- macOS：打包需要在 macOS 上进行，并安装 Xcode 命令行工具：`apps/desktop/scripts/prepare_sparkle.mjs` 会下载固定版本、校验过的 Sparkle，并编译 `apps/desktop/native/sparkle/sparkle.mm`。应用最低支持 macOS 12（`apps/desktop/electron-builder.yml` 的 `minimumSystemVersion`）。
 
-依赖版本在 `pubspec.yaml` 中精确固定。仓库通过 `dependency_overrides` 使用三个本地修复包：
-
-- `third_party/audioplayers_windows`
-- `third_party/flutter_webrtc`
-- `third_party/livekit_client`
-
-不要在没有验证三端音视频、试听、重连和屏幕共享的情况下移除这些 override。
-
-### Windows
-
-- Windows 10/11 64 位。
-- Visual Studio 2022，安装“使用 C++ 的桌面开发”。
-- Windows 10/11 SDK、CMake 和 Ninja（Flutter 工具链会检测）。
-- 发布安装程序还需要 NSIS；GitHub Actions 使用 Chocolatey 安装。
-
-检查环境：
-
-```powershell
-flutter doctor -v
-flutter devices
-```
-
-### macOS
-
-- macOS 12 或更高版本（Xcode 26 起不再支持更低的部署目标）。
-- Xcode 和命令行工具。
-- CocoaPods。
-- 摄像头、麦克风和屏幕录制权限。
+在仓库根目录安装所有 workspace 依赖（CI 使用 `npm ci`，严格按 `package-lock.json` 安装）：
 
 ```bash
-sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
-flutter doctor -v
-flutter devices
+npm install
 ```
 
 ### Android
 
-- Android Studio 或独立 Android SDK。
-- JDK 17（发布工作流使用 Temurin 17）。
-- Android SDK Platform、Build Tools、Platform Tools。
+- JDK 21（CI 使用 Temurin 21；Kotlin/Java 代码以 17 为目标版本编译）。
+- Android SDK：SDK Platform `android-37.0`（`compileSdk = 37`）、Build Tools 和 Platform Tools。应用 `minSdk` 为 24，`targetSdk` 为 36。
+- 设置环境变量 `ANDROID_HOME` 指向 SDK，或在 `android/local.properties` 中写 `sdk.dir=<SDK 路径>`（该文件不提交）。
+- Gradle 由 wrapper 下载（`android/gradle/wrapper/gradle-wrapper.properties`），不需要单独安装；也可以用 Android Studio 直接打开 `android/` 目录。
+- 依赖版本集中在 `android/gradle/libs.versions.toml`（AGP、Kotlin、Compose BOM、LiveKit、Firebase、Robolectric、Roborazzi 等）。
 - 真机调试需要开启开发者选项和 USB 调试；无需安装 OPPO 互联等厂商互联软件。
 
 Windows 上连接真机：
@@ -697,14 +738,13 @@ Windows 上连接真机：
 
 ```powershell
 adb devices
-flutter devices
 ```
 
 如果列表显示 `unauthorized`，解锁手机并重新确认 USB 调试授权；如果完全没有设备，安装手机厂商 USB 驱动或更新 Android Platform Tools。
 
 ## 配置客户端
 
-默认配置位于 `assets/config/app_config.json`：
+默认配置位于 `assets/config/app_config.json`，两端共用：
 
 ```json
 {
@@ -716,9 +756,9 @@ flutter devices
 
 配置优先级从高到低为：
 
-1. `--dart-define`。
-2. `assets/config/app_config.json`。
-3. `lib/src/config/app_config.dart` 中的开发回退值。
+1. 构建时环境变量（取代 Flutter 的 `--dart-define`）：桌面端在 `npm run dev` 或构建时由 `apps/desktop/electron.vite.config.ts` 读取；Android 在 Gradle 构建时写进 `BuildConfig`（`android/app/build.gradle.kts`）。
+2. `assets/config/app_config.json`：桌面安装包把它复制为资源目录中的 `app_config.json`，Android 把整个 `assets/` 打进 APK。
+3. 代码中的开发回退值（`packages/core/src/config/app_config.ts`、`android/core/src/main/kotlin/com/gangchat/client/config/AppConfig.kt`），指向 `http://127.0.0.1:21116`。
 
 支持的构建变量：
 
@@ -728,110 +768,128 @@ flutter devices
 | `GANG_ASSET_BASE_URL` | 头像、附件、表情等资源根地址 |
 | `GANG_RELEASE_BUCKET_URL` | 自动更新使用的对象存储 Bucket 地址 |
 
-本地服务端示例：
+变量在构建时写入，修改后需要重新运行或重新构建。
 
-```powershell
-flutter run -d windows `
-  --dart-define=GANG_API_BASE_URL=http://127.0.0.1:21116/api/v1 `
-  --dart-define=GANG_ASSET_BASE_URL=http://127.0.0.1:21116 `
-  --dart-define=GANG_RELEASE_BUCKET_URL=https://os.ky-z.com:9000/gang-chat
+桌面端连接本地服务端：
+
+```bash
+GANG_API_BASE_URL=http://127.0.0.1:21116/api/v1 \
+GANG_ASSET_BASE_URL=http://127.0.0.1:21116 \
+npm run dev
 ```
 
-Android 真机不能使用电脑的 `127.0.0.1`。请使用手机可访问的局域网/HTTPS 地址，并确保 Android 网络安全策略允许该开发地址。
+Windows PowerShell：
+
+```powershell
+$env:GANG_API_BASE_URL = "http://127.0.0.1:21116/api/v1"
+$env:GANG_ASSET_BASE_URL = "http://127.0.0.1:21116"
+npm run dev
+```
+
+Android（在 `android/` 目录下）：
+
+```bash
+GANG_API_BASE_URL=http://192.168.1.10:21116/api/v1 \
+GANG_ASSET_BASE_URL=http://192.168.1.10:21116 \
+./gradlew :app:installDebug
+```
+
+Android 真机不能使用电脑的 `127.0.0.1`。请使用手机可访问的局域网或 HTTPS 地址；用 USB 连接时也可以先执行 `adb reverse tcp:21116 tcp:21116`，把手机的 21116 端口转发到电脑，再继续使用 `127.0.0.1`。清单开启了 `usesCleartextTraffic`，`http://` 开发地址可以直接使用。模拟服务端默认只监听 `127.0.0.1`，局域网访问时需要加 `--host 0.0.0.0 --public-url http://<电脑 IP>:21116`；用 `adb reverse` 时不需要。
 
 ## 运行与调试
 
-### Windows
+### 桌面端（Windows / macOS）
 
-```powershell
-flutter run -d windows
+在仓库根目录：
+
+```bash
+npm run dev
 ```
 
-常用热重载按键：
+启动 Electron，渲染进程（React 界面）支持热更新；修改主进程或 preload 代码后需要重新运行。开发版不启用 electron-updater 和 Sparkle：检查更新时 Windows 退回列出对象存储中的安装包并整包下载，macOS 退回在浏览器中下载 DMG。
 
-- `r`：Hot Reload。
-- `R`：Hot Restart。
-- `q`：结束调试。
+macOS 第一次使用摄像头、麦克风或屏幕共享时，在“系统设置 → 隐私与安全性”授予对应权限。权限改变后可能需要完全重启 Gang Chat。
+
+没有服务端时，先启动模拟服务端，再按 [配置客户端](#配置客户端) 中的环境变量运行：
+
+```bash
+node tool/js/mock_server/server.mjs --port 21116
+```
+
+账号 `demo` / `demo1234`，验证码固定为 `123456`。模拟服务端没有 LiveKit，语音频道会按预期连不上媒体服务器。
+
+### Android
+
+在 `android/` 目录下构建、安装并启动 debug 包（Windows PowerShell 中写作 `.\gradlew`）：
+
+```bash
+./gradlew :app:installDebug
+adb shell am start -n com.gangchat.client/.MainActivity
+```
+
+也可以在 Android Studio 中打开 `android/` 后运行 `app`。debug 包使用调试签名，但 applicationId 与正式版相同（`com.gangchat.client`），设备上已装正式版时需要先卸载才能安装 debug 包，卸载会清除本地登录和设置。
+
+排查日志：
+
+```bash
+adb logcat -s GangChat
+```
+
+应用日志（`debugPrint`）的 tag 是 `GangChat`；LiveKit 和 WebRTC 使用各自的 tag，需要时去掉 `-s` 过滤查看完整 logcat。
+
+屏幕共享、后台服务、安装 APK、系统通知和 FCM 必须在 Android 真机上验证；Robolectric 测试无法替代这些平台路径。
+
+## 构建
+
+### Windows
+
+```bash
+npm run dist:win -w @gang-chat/desktop
+```
+
+输出在 `apps/desktop/dist/`：
+
+```text
+GangChat_v<version>.exe             NSIS 安装程序
+GangChat_v<version>.exe.blockmap    差分更新数据
+latest.yml                          electron-updater 更新源
+GangChat-<version>-windows.zip      便携 ZIP
+win-unpacked/GangChat.exe           未打包的程序目录
+```
+
+版本号取 `apps/desktop/package.json` 的 `version`，本地为 `1.0.0`。设置 `CSC_LINK` / `CSC_KEY_PASSWORD` 时 electron-builder 用该证书签名，否则生成未签名的包。只编译不打包用根目录的 `npm run build`（输出 `apps/desktop/out/`）；`npm run dist:dir -w @gang-chat/desktop` 只生成当前平台未打包的程序目录。
 
 ### macOS
 
 ```bash
-flutter run -d macos
+npm run dist:mac -w @gang-chat/desktop
 ```
 
-第一次使用摄像头、麦克风或屏幕共享时，在“系统设置 → 隐私与安全性”授予对应权限。权限改变后可能需要完全重启 Gang Chat。
-
-### Android
-
-```powershell
-flutter run -d <device-id>
-```
-
-查看设备 ID：
-
-```powershell
-flutter devices
-```
-
-排查原生日志：
-
-```powershell
-adb logcat | Select-String -Pattern "GangChat|flutter|LiveKit|WebRTC"
-```
-
-屏幕共享、后台服务、安装 APK、系统通知和 FCM 必须在 Android 真机上验证；普通 Widget 测试无法替代这些平台测试。
-
-## 构建
-
-### Windows Release
-
-```powershell
-flutter build windows --release
-```
-
-输出目录：
-
-```text
-build/windows/x64/runner/Release/
-```
-
-入口程序名为 `GangChat.exe`。正式 GitHub Actions 还会使用 NSIS 生成 `GangChat_v<version>.exe`，并生成便携 ZIP。
-
-### macOS Release
-
-```bash
-flutter build macos --release
-```
-
-输出应用：
-
-```text
-build/macos/Build/Products/Release/client.app
-```
-
-正式发布流程会将 App 打包为 `GangChat_v<version>.dmg`。签名资料完整时还会执行 Developer ID 签名、公证和 stapling。
+输出 universal 的 `apps/desktop/dist/GangChat_v<version>.dmg`，应用本体在 `apps/desktop/dist/mac-universal/GangChat.app`。`CFBundleVersion` 由 `apps/desktop/scripts/package.mjs` 按 `major * 1,000,000 + minor * 1,000 + patch` 设置，与 Android 的 versionCode 相同。没有 Developer ID 时，`apps/desktop/scripts/after_pack.cjs` 做 ad-hoc 签名，因为 Sparkle 不接受代码签名无效的更新；Developer ID 签名和公证在发布工作流中配置。
 
 ### Android Debug APK
 
-```powershell
-flutter build apk --debug
+```bash
+cd android
+./gradlew :app:assembleDebug
 ```
 
 输出：
 
 ```text
-build/app/outputs/flutter-apk/app-debug.apk
+android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-本地默认版本为 `1.0.0+1`，所以普通 Android/Windows Debug 界面显示 `1.0.0`。
+`versionName` 取 `android/version.properties`（仓库中为 `1.0.0`），`versionCode = major * 1,000,000 + minor * 1,000 + patch` 由 `android/app/build.gradle.kts` 计算，所以本地构建显示 `1.0.0`。
 
 ### Android Release APK
 
-```powershell
-flutter build apk --release
+```bash
+cd android
+./gradlew :app:assembleRelease
 ```
 
-如果没有提供完整的正式签名环境变量，本地构建可以使用项目的调试签名回退；GitHub Release 工作流不允许这种回退，缺少正式签名会直接失败。
+输出 `android/app/build/outputs/apk/release/app-release.apk`。
 
 发布签名环境变量：
 
@@ -840,71 +898,109 @@ flutter build apk --release
 - `ANDROID_KEY_ALIAS`
 - `ANDROID_KEY_PASSWORD`
 
-不要提交 keystore、`key.properties`、Firebase 配置或任何私钥。
+四个变量都设置时使用正式签名；都不设置时本地 release 构建回退到调试签名；只设置一部分会直接失败。GitHub Release 工作流始终提供正式 keystore，缺失或无效时失败。
+
+`android/app/google-services.json` 存在时构建才启用 Firebase（FCM）；没有该文件时 APK 照常构建，只是无法接收进程退出后的推送。
+
+不要提交 keystore、`key.properties`、`google-services.json` 或任何私钥。
 
 ## 测试与质量检查
 
 ### 快速检查
 
-```powershell
-dart tool/check_utf8.dart
-flutter analyze
-flutter test --no-pub
+```bash
+python3 tool/check_utf8.py
+npm run typecheck
+npm test
+cd android && ./gradlew :core:test :app:testDebugUnitTest
 ```
 
-### 按层运行测试
+### 桌面端
 
-```powershell
-flutter test --no-pub test/unit/app
-flutter test --no-pub test/unit/protocol
-flutter test --no-pub test/unit/live
-flutter test --no-pub test/unit/shell
-flutter test --no-pub test/widget/ui
-flutter test --no-pub test/widget/home
-flutter test --no-pub test/widget/settings
-flutter test --no-pub test/widget/shell
+- `npm run typecheck`：对 `packages/core`、`packages/ui` 和 `apps/desktop` 执行 `tsc --noEmit`（strict）。
+- `npm test`：vitest，运行 `packages/*/test/**/*.test.ts(x)` 和 `apps/*/test/**/*.test.ts`（见 `vitest.config.ts`）。
+- 模拟服务端自检：`node tool/js/mock_server/check.mjs`。
+
+聚焦运行：
+
+```bash
+npx vitest run packages/core/test/app/room_forms.test.ts
+npx vitest run packages/core/test/live
 ```
 
-### 平台探针
+### Android
 
-真实音频设备枚举：
+在 `android/` 目录下：
 
-```powershell
-flutter test integration_test/audio_enumeration_probe_test.dart -d windows
+```bash
+./gradlew :core:test                    # 纯 JVM 的 JUnit 测试（android/core/src/test）
+./gradlew :app:testDebugUnitTest        # Robolectric 上的 Android、Compose UI 测试（android/app/src/test）
+./gradlew :core:test --tests 'com.gangchat.client.app.RoomFormsTest'
+./gradlew :app:testDebugUnitTest --tests 'com.gangchat.client.ui.SegmentedControlTest'
 ```
 
-屏幕共享画质探针：
+测试固定在 UTC 时区运行。失败报告在 `android/core/build/reports/tests/` 和 `android/app/build/reports/tests/`。
 
-```powershell
-flutter test integration_test/screen_share_quality_probe_test.dart -d windows
+### 截图测试（Roborazzi）
+
+```bash
+cd android
+./gradlew :app:recordRoborazziDebug
+./gradlew :app:recordRoborazziDebug --tests 'com.gangchat.client.ui.UiGalleryScreenshotTest'
 ```
 
-探针依赖真实操作系统、权限、设备和插件运行时，不属于默认快速回归套件。
+截图测试用 Roborazzi 在 Robolectric 上渲染界面，PNG 输出到 `android/app/build/outputs/roborazzi/`。仓库不提交截图基线；截图用于对照 Dart 原尺寸和桌面端截图 `docs/js-port-screenshots/`（Android 宽屏布局与桌面端同源）。
+
+### 端到端测试（模拟服务端）
+
+Android 有一个默认跳过的端到端测试 `GangAppEndToEndTest`，只在设置 `GANG_E2E_API_BASE_URL` 时运行：
+
+```bash
+node tool/js/mock_server/server.mjs --port 21116
+# 另开一个终端，在 android/ 目录下：
+GANG_E2E_API_BASE_URL=http://127.0.0.1:21116/api/v1 \
+  ./gradlew :app:recordRoborazziDebug --tests 'com.gangchat.client.GangAppEndToEndTest'
+```
+
+它启动真实的 `MainActivity`、OkHttp 和 SSE 实时流，走完登录、房间列表、打开房间、发送消息、他人消息经 SSE 到达、通知、设置和退出登录，手机与平板各输出 8 张截图（`e2e_phone_*`、`e2e_tablet_*`）。测试会往模拟服务端写入消息，重新运行前重启服务端以恢复种子数据；`GANG_E2E_ASSET_BASE_URL` 默认取 API 地址去掉 `/api/v1`。
+
+桌面端用同一个模拟服务端做冒烟测试：按 [运行与调试](#运行与调试) 启动后手动走一遍主要流程，并与 `docs/js-port-screenshots/` 对照。
+
+### 真机验证
+
+Robolectric、截图测试和模拟服务端覆盖不到以下路径，涉及时必须在真实设备上确认：
+
+- Android：LiveKit 入会、发布/订阅音视频和自动重连；AudioSwitch 的听筒、扬声器、蓝牙路由；MediaProjection 屏幕共享和播放捕获的共享声音；Android Keystore 加密的凭据存储，以及从 Flutter 版覆盖安装后的数据读取；FCM 推送、通知点击跳转、数字角标、前台服务和任务划除；APK 后台下载与系统安装器。清单见 [Android 移植状态](docs/android-port-status.md) 的“需要真机确认”。
+- 桌面端：真实音频设备枚举与切换、屏幕共享声音（Windows 回环、macOS ScreenCaptureKit）、electron-updater / Sparkle 更新和安装包签名，需要在真实的 Windows、macOS 上验证。
+
+验证时记录系统版本、设备型号和网络环境。
 
 ### 测试目录规则
 
-- 不创建 Flutter Widget 树的纯逻辑测试放在 `test/unit/<module>/`。
-- 布局、焦点、鼠标、触屏、选择、菜单和渲染测试放在 `test/widget/<module>/`。
-- 依赖真实设备、摄像头、音频硬件、系统权限或原生插件的场景放在 `integration_test/`。
+- 桌面端：测试放 `packages/<包>/test/<目录>/<文件名>.test.ts`，目录与 `src/` 对应；共享替身（`fake_platform`、`fake_http_client`、`fake_audio_player`）放 `packages/core/test/support/`。
+- Android：纯逻辑测试放 `android/core/src/test/kotlin/com/gangchat/client/<目录>/<名字>Test.kt`；需要 Android、LiveKit 或 Compose 的测试放 `android/app/src/test/kotlin/com/gangchat/client/<目录>/`；共享的 `GangTestRule`、`MockClient` 在 `android/core/src/testFixtures`。
+- 从 Dart 移植的用例保持原用例名，便于对照。
 - 缺陷修复应先添加最小复现，再覆盖相邻边界和异步销毁安全。
-- 修改跨层功能时，除聚焦测试外还应执行全量 `flutter analyze` 和 `flutter test --no-pub`。
+- 行为改动要在两端都补测试；跨层改动除聚焦测试外，还应执行全量 `npm run typecheck`、`npm test` 和 `./gradlew :core:test :app:testDebugUnitTest`。
 
 ## 发布流程
 
 `.github/workflows/release.yml` 在推送 `v*` Tag 或手动输入版本时执行：
 
-1. 校验 `major.minor.patch` 版本格式。
-2. 生成 Android `versionCode = major * 1,000,000 + minor * 1,000 + patch`。
-3. 更新构建中的版本和发行时间元数据。
-4. 并行构建 Windows、macOS 和 Android。
-5. 校验签名状态与 Android APK 签名。
-6. 发布 GitHub Release 和全部安装资产。
+1. 校验 `major.minor.patch` 版本格式，计算 `versionCode = major * 1,000,000 + minor * 1,000 + patch`，记录发行时间。
+2. 并行构建三端：
+   - macOS 和 Windows：`npm ci` 后把版本写进 `apps/desktop/package.json`，用 electron-builder 打包；macOS 还会核对 `CFBundleVersion`、校验代码签名，并用 Sparkle 私钥签名 DMG、生成 `appcast.xml`。
+   - Android：执行 `python3 tool/check_utf8.py`，把版本和发行时间写进 `android/version.properties`，执行 `./gradlew :app:assembleRelease`，再用 `apksigner` 校验签名、用 `aapt2 dump badging` 核对 versionCode 和 versionName。
+3. 汇总签名状态，发布 GitHub Release 和全部安装资产：`GangChat_v<version>.exe`、`.exe.blockmap`、`latest.yml`、`GangChat-<version>-windows.zip`、`GangChat_v<version>.dmg`、`appcast.xml` 和 `GangChat_v<version>.apk`。
+
+发布后再把这些文件同步到对象存储的 `releases/` 目录；`appcast.xml` 指向 DMG，必须最后上传。相关路径有推送或 Pull Request 时，`.github/workflows/desktop-electron.yml` 和 `.github/workflows/android.yml` 分别检查桌面端和 Android，并把未签名的桌面测试包和 debug APK 上传为工作流产物。
 
 ### 签名策略
 
-- Windows：配置完整证书时执行 Authenticode 签名和时间戳；完全未配置时允许明确标记的未签名构建；只配置一部分则失败。
-- macOS：配置完整 Developer ID 和 App Store Connect API Key 时执行签名、公证和 stapling；完全未配置时允许明确标记的未签名构建；部分配置则失败。
-- Android：正式发布必须提供固定 release keystore，缺失或无效时失败，防止发布无法覆盖升级的临时签名 APK。
+- Windows：配置 `WINDOWS_CERTIFICATE_BASE64` 和 `WINDOWS_CERTIFICATE_PASSWORD` 时，electron-builder 对 `GangChat.exe`、安装程序和卸载程序做 Authenticode 签名并校验；完全未配置时允许明确标记的未签名构建；只配置一部分则失败。
+- macOS：配置完整 Developer ID 和 App Store Connect API Key 时执行签名和公证；完全未配置时做 ad-hoc 签名、不公证，并明确标记；部分配置则失败。
+- macOS 更新：`SPARKLE_ED_PRIVATE_KEY` 必须配置，并与 `apps/desktop/electron-builder.yml` 中的 `SUPublicEDKey` 对应；发布前用 `tool/verify_sparkle_signature.swift` 校验签名，缺失或不匹配时失败。
+- Android：正式发布必须提供固定的 release keystore（`ANDROID_KEYSTORE_BASE64` 等四个 Secret），缺失或无效时失败，防止发布无法覆盖升级的临时签名 APK。
 - Android FCM：`FIREBASE_GOOGLE_SERVICES_JSON_BASE64` 可选；缺失时 APK 仍可使用，但进程退出后的 FCM 推送不可用。
 
 完整 Secret 名称、签名命令和验证方法见 [Release workflow](docs/release-workflow.md)。
@@ -917,12 +1013,13 @@ flutter test integration_test/screen_share_quality_probe_test.dart -d windows
 
 ### 敏感本地数据
 
-- Refresh Token 等敏感凭据保存在 `flutter_secure_storage`。
+- 桌面端：Refresh Token 等敏感凭据用 Electron `safeStorage`（macOS 钥匙串 / Windows DPAPI）加密后，保存在用户数据目录的 `secure-storage.json`（`apps/desktop/src/main/storage.ts`）。Flutter 桌面版把凭据存在系统钥匙串/凭据管理器中，因此切换到 Electron 版后需要重新登录一次。
+- Android：按 Flutter 版 `flutter_secure_storage` 的格式保存（Android Keystore 包装的密钥 + AES-GCM 数据，`FlutterSecureStorageStore`），从 Flutter 版 APK 覆盖安装后保留登录状态。Keystore 密钥不可用时（例如备份恢复到新设备）会清空安全存储，需要重新登录一次。
 - 不要在日志、测试 fixture、截图、Issue 或提交中暴露真实 Token、密码、证书和生产数据库内容。
 
 ### 非敏感本地偏好
 
-以下内容使用 `shared_preferences` 或平台偏好存储：
+以下内容保存在非敏感偏好中：桌面端是用户数据目录中的 `preferences.json`（键名与 Flutter 版相同），Android 是 Flutter 版 `shared_preferences` 使用的 `FlutterSharedPreferences` 文件（`flutter.` 键前缀和值编码按原插件复现，`FlutterSharedPreferencesStore`）。
 
 - API/界面相关的本地选择。
 - 输入/输出设备签名。
@@ -936,14 +1033,14 @@ flutter test integration_test/screen_share_quality_probe_test.dart -d windows
 
 ### Android 权限
 
-Android 清单声明的主要权限包括：
+`android/app/src/main/AndroidManifest.xml` 声明的主要权限包括：
 
 - 网络访问和网络状态。
 - 摄像头。
 - 麦克风和音频设置。
 - Bluetooth/附近设备音频连接。
 - 通知。
-- 前台数据同步、远程消息和麦克风服务。
+- 前台数据同步、远程消息、麦克风和屏幕录制（MediaProjection）服务。
 - 请求安装 APK。
 
 摄像头不是强制硬件；没有摄像头的设备仍可以使用文字、语音收听和其他功能。权限只应在功能实际需要时请求。
@@ -961,7 +1058,7 @@ Android 清单声明的主要权限包括：
 1. 设置 → 偏好设置 → 系统通知已开启。
 2. Android 系统设置已允许 Gang Chat 通知。
 3. 对应房间的消息策略是“全部”，不是“接收但不提醒”或“屏蔽”。
-4. 安装包构建时包含与 `com.gangchat.client` 匹配的 Firebase 配置。
+4. 安装包构建时包含与 `com.gangchat.client` 匹配的 Firebase 配置（`android/app/google-services.json`，正式发布由 `FIREBASE_GOOGLE_SERVICES_JSON_BASE64` 写入）。
 5. 服务端配置了同一 Firebase 项目的服务账号。
 6. 手机具备可工作的 Google Play 服务且没有被厂商后台策略完全限制。
 
@@ -974,9 +1071,16 @@ OPPO 等无 Google 服务的国内机型无法仅靠 FCM 在进程结束后接�
 - 没有通知权限时重新打开 Gang Chat，客户端会检查已完成下载并再次启动安装流程。
 - 某些系统的安装器会在“正在准备”停留一段时间；APK 已经过基本完整性检查，但系统仍会执行自己的包解析和安全扫描。
 
+### 从 Flutter 版升级后需要重新登录吗
+
+- Android：不需要。applicationId、签名和 versionCode 规则不变，安全存储和偏好按 Flutter 插件的格式读写，覆盖安装后保留登录状态和设置；只有 Keystore 密钥不可用时才需要重新登录。
+- Windows / macOS：需要重新登录一次，因为 Electron 版改用 `safeStorage` 保存凭据。
+
 ### Windows/macOS 提示安装包不受信任
 
-发布流程允许在完全没有桌面签名 Secret 时生成明确标记的未签名产物。请优先使用已签名的正式版本，并按 [发布文档](docs/release-workflow.md) 验证签名。不要在不确认来源的情况下绕过系统安全提示。
+发布流程允许在没有桌面签名 Secret 时生成明确标记的产物：Windows 为未签名，macOS 为 ad-hoc 签名且未公证。请优先使用已签名的正式版本，并按 [发布文档](docs/release-workflow.md) 验证签名。不要在不确认来源的情况下绕过系统安全提示。
+
+macOS 的 ad-hoc 签名在每次发布时都会变化，所以每次更新后系统会再次询问麦克风、摄像头、屏幕录制和钥匙串权限；配置 Developer ID 签名可以避免这一问题。
 
 ### 语音频道没有声音或不能说话
 
@@ -990,10 +1094,10 @@ OPPO 等无 Google 服务的国内机型无法仅靠 FCM 在进程结束后接�
 
 - 部分 DRM/受保护内容禁止系统捕获音频。
 - Android 只有允许 Playback Capture 的应用声音可以被捕获。
-- Windows/macOS 需要系统授予屏幕录制和音频相关权限。
-- 屏幕音频使用独立辅助连接，网络或 LiveKit 发布失败时可能只有画面；日志中搜索 `screen-audio` 可查看原因。
+- macOS 需要 14.2 或更高版本，并授予屏幕录制权限；Windows 使用系统回环采集。
+- 屏幕音频使用独立辅助连接，网络或 LiveKit 发布失败时可能只有画面。日志中搜索 `screen-audio` 可查看原因：桌面端在开发者工具控制台，Android 在 `adb logcat -s GangChat`。
 
-### Android 真机无法被 Flutter 发现
+### Android 真机不在 `adb devices` 中，或 Gradle 安装失败
 
 ```powershell
 adb kill-server
@@ -1002,6 +1106,8 @@ adb devices
 ```
 
 然后重新插拔 USB、确认 USB 调试授权和驱动。仅安装 OPPO 互联等文件互传应用不会自动开启 ADB 调试。
+
+`./gradlew :app:installDebug` 报 `INSTALL_FAILED_UPDATE_INCOMPATIBLE` 时，说明设备上已装了不同签名（通常是正式版）的 Gang Chat。执行 `adb uninstall com.gangchat.client` 后再安装；卸载会清除本地登录和设置。
 
 ### 修改了歌单，但语音频道音乐盒仍显示旧内容
 
@@ -1016,60 +1122,75 @@ adb devices
 
 ### 模块依赖
 
-推荐依赖方向：
+两套代码内部采用相同的分层，上层可以依赖下层，反之不行：
 
 ```text
-protocol/config
-  -> app
-  -> shell/live adapters
-  -> feature UI (home/settings)
-  -> reusable ui
+界面：功能界面（home / settings / shell 界面）、可复用 ui
+  ↓
+适配层：shell 服务、live（LiveKit）
+  ↓
+app：业务规则、状态、controller、display helper
+  ↓
+protocol / auth / config
+  ↓
+运行时对等层：TypeScript 的 lib/、platform/；Kotlin 的 foundation/、plugins/
 ```
 
 关键要求：
 
-- `lib/src/app` 保持 Flutter UI 和平台插件无关。
-- UI 不直接拼 API 请求，不直接操作 secure storage、文件选择器或 LiveKit 原生类型。
-- 平台能力通过 `lib/src/shell` 或 `lib/src/live` 的小接口注入。
-- 可复用控件进入 `lib/src/ui`，只属于单个功能的大块 UI 留在对应 feature 文件。
-- 不在页面 Widget 中复制已有 controller 的搜索、权限、排序和状态同步规则。
+- `packages/core` 不依赖 React、DOM 专属 API 或 Electron；所有原生能力经 `platform()`（`packages/core/src/platform/platform.ts`），接口不够用时扩展接口并在 `apps/desktop` 中实现。
+- `packages/ui` 只依赖 `@gang-chat/core`；`apps/desktop` 实现 `Platform` 并组装界面。
+- `android/core` 是纯 Kotlin（JVM）模块，不能依赖 Android SDK、Compose 或 LiveKit，编译期即保证；需要它们的文件放进 `android/app`，包名仍按原 Dart 目录。
+- 界面不直接拼 API 请求，不直接操作安全存储、文件选择器或 LiveKit 原生类型；LiveKit 类型只出现在桌面端的 `packages/core/src/live`、`packages/ui/src/live`，以及 Android 的 `live/`、`platform/webrtc/`。
+- 平台能力通过 shell 或 live 的小接口注入。
+- 可复用控件进入 `ui/`，只属于单个功能的大块 UI 留在对应功能文件。
+- 不在页面组件中复制已有 controller 的搜索、权限、排序和状态同步规则。
+- 两套代码不共用源码：新功能和缺陷修复要在两端分别实现，文件名、标识符和中文文案保持对应。
 
 ### 依赖和锁文件
 
-- `pubspec.yaml` 中依赖使用精确版本，避免 `pub get` 静默升级。
-- 有意升级依赖时才同时更新 `pubspec.yaml` 和 `pubspec.lock`。
-- 普通功能修改不要无原因重写 `pubspec.lock`。
-- 本地 override 是当前平台兼容实现的一部分，升级前必须审计差异。
+- npm：根 `package.json` 用 workspaces 管理 `packages/core`、`packages/ui`、`apps/desktop`。依赖使用精确版本（`peerDependencies` 除外），`package-lock.json` 提交到仓库，CI 用 `npm ci` 安装。
+- 有意升级依赖时才同时修改 `package.json` 和 `package-lock.json`；普通功能修改不要无原因重写锁文件。
+- `.npmrc` 中的 `legacy-peer-deps=true` 是为了让 npm 10 能安装 vitest 4，不要删除。
+- Gradle：依赖和插件版本集中在 `android/gradle/libs.versions.toml`，构建脚本通过 `libs.*` 引用，不在 `build.gradle.kts` 中写版本号；Gradle 版本由 wrapper 固定。
+- `protobuf-javalite` 必须与 LiveKit Android SDK 自带的版本一致，升级 LiveKit 时一起核对。
+- 升级 `livekit-client`、LiveKit Android SDK、Electron 或 Compose BOM 前，必须审计变化并做完整的音视频、重连、屏幕共享和界面回归。
 
 ### 跨平台和响应式要求
 
-- 新功能必须考虑 Windows、macOS、Android 三端。
-- Android 专属修复使用明确的平台边界，不能改变桌面行为。
+- 新功能必须考虑 Windows、macOS、Android 三端，并在桌面端和 Android 两套代码中分别实现。
+- 桌面端里只属于 Windows 或 macOS 的行为用 `HostPlatform` 明确区分，不能改变另一端。
 - 窄屏不能依赖固定像素凑布局；使用真实约束决定换行、缩放、滚动或收起。
-- 所有异步回调、Timer、Animation 和 Pointer 监听在 Widget 销毁后不得调用 `setState`。
+- 所有异步回调、定时器、动画和指针监听在组件销毁后不得再更新状态（检查 `mounted` / `context.mounted`）。
 - 鼠标、键盘、触屏、长按和文本选择要分别覆盖，不能把“长按”简单模拟成永久悬停。
 - 修改语音、摄像头、屏幕共享或本地试听时，必须检查资源释放、重连、应用失焦/聚焦和任务退出。
 
 ### 提交前建议
 
-```powershell
-dart format --output=none --set-exit-if-changed lib test
-dart tool/check_utf8.dart
-flutter analyze
-flutter test --no-pub
+```bash
+python3 tool/check_utf8.py
+npm run typecheck
+npm test
+(cd android && ./gradlew :core:test :app:testDebugUnitTest)
 git diff --check
 ```
 
 涉及服务端协议时还应在相邻的 `gang-chat-server` 仓库运行相应 Go 测试；涉及官网发布链接时在 `gang-chat-homepage` 运行：
 
-```powershell
+```bash
 npm test
 ```
 
 ## 进一步阅读
 
-- [解耦后的模块化开发指南](docs/modular-development-guide.md)
+- [桌面端（Electron）说明](apps/desktop/README.md)
+- [Flutter → TypeScript 移植约定](docs/js-port-conventions.md)
+- [TypeScript / Electron 移植状态](docs/js-port-status.md)
+- [Flutter → Android 原生移植约定](docs/android-port-conventions.md)
+- [Android 原生移植状态](docs/android-port-status.md)
+- [模块化开发指南](docs/modular-development-guide.md)
+- [UI 设计规范](docs/ui-design-system.md)
 - [新音乐盒完整实现方案](docs/music-box-next-generation-design.md)
 - [音乐盒客户端 API 契约](docs/music-box-api.md)
 - [Release workflow](docs/release-workflow.md)
-- [Windows 屏幕共享音频独立轨道移植指南](docs/windows-screen-audio-port.md)
+- [模拟服务端](tool/js/mock_server/README.md)

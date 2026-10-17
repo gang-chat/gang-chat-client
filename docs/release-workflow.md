@@ -145,12 +145,13 @@ small Node-API module the main process uses to drive it
    ```
 
 2. Put the printed public key in `SUPublicEDKey` in
-   `apps/desktop/electron-builder.yml` and commit it. It is public and belongs in the repository.
+   `apps/desktop/electron-builder.yml` and commit it. It is public and belongs
+   in the repository.
 3. Export the private key and add the file's contents as the repository secret
    `SPARKLE_ED_PRIVATE_KEY`:
 
    ```bash
-   macos/Pods/Sparkle/bin/generate_keys -x sparkle_private_key
+   ./bin/generate_keys -x sparkle_private_key
    ```
 
    Back the private key up in the secret manager, then delete the exported
