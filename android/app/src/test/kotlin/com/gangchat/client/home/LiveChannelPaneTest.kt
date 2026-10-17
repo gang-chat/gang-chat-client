@@ -70,12 +70,11 @@ import com.gangchat.client.ui.textColor
 import com.gangchat.client.ui.textLayout
 import com.gangchat.client.widgets.EdgeInsets
 import com.gangchat.client.widgets.Text
-import kotlin.math.abs
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -1414,21 +1413,17 @@ class LiveChannelPaneTest {
         search.assertIsFocused()
     }
 
+    // From test/widget/shell/gang_app_shell_test_parts/live_hover_widget_tests.dart:
+    // a pure rule of this pane, so it needs no home shell.
     @Test
-    fun `live stage track resolution prefers the selection and falls back to a local share`() {
-        // Dart exposes `resolveLiveStageTrackForTest` for this pure rule.
-        val localShare = liveVideoTrack(identity = "current_user", isScreenShare = true, isLocal = true)
-        val remoteCamera = liveVideoTrack(identity = "phabe", isScreenShare = false, isLocal = false)
-        val tracks = listOf(remoteCamera, localShare)
-        assertEquals(localShare, resolveLiveStageTrackForTest(tracks, selection = null))
-        assertNull(resolveLiveStageTrackForTest(tracks, selection = LiveStageSelection.none()))
-        assertEquals(remoteCamera, resolveLiveStageTrackForTest(tracks, LiveStageSelection.track("phabe", isScreenShare = false)))
-        assertNull(resolveLiveStageTrackForTest(tracks, LiveStageSelection.track("phabe", isScreenShare = true)))
-        assertNotNull(liveStageTrackLabel(null, remoteCamera))
-        assertEquals("摄像头", liveStageTrackLabel(null, remoteCamera))
-        assertEquals("屏幕共享", liveStageTrackLabel(null, localShare))
-    }
+    fun `live stage defaults collapsed except local screen share`() {
+        val remoteCamera = liveVideoTrack(identity = "user-2", isScreenShare = false, isLocal = false)
+        val localCamera = liveVideoTrack(identity = "user-1", isScreenShare = false, isLocal = true)
+        val localShare = liveVideoTrack(identity = "user-1", isScreenShare = true, isLocal = true)
 
-    @Suppress("unused")
-    private fun near(a: Float, b: Float, tolerance: Float) = abs(a - b) <= tolerance
+        assertNull(resolveLiveStageTrackForTest(listOf(remoteCamera, localCamera), selection = null))
+        assertSame(localShare, resolveLiveStageTrackForTest(listOf(remoteCamera, localCamera, localShare), selection = null))
+        assertSame(remoteCamera, resolveLiveStageTrackForTest(listOf(remoteCamera, localShare), selection = LiveStageSelection.fromTrack(remoteCamera)))
+        assertNull(resolveLiveStageTrackForTest(listOf(localShare), selection = LiveStageSelection.none()))
+    }
 }
