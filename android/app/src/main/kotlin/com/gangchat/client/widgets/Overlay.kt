@@ -126,3 +126,15 @@ fun Modifier.offstage(): Modifier =
         measurable.measure(constraints)
         layout(0, 0) {}
     }
+
+/**
+ * Keeps the layout size but neither places, draws nor hit-tests the content.
+ * Use it for Flutter's `IgnorePointer` over interactive content that is fully
+ * hidden, so taps reach whatever is underneath ([ignorePointer] would absorb
+ * them instead).
+ */
+fun Modifier.unplaced(): Modifier =
+    this.layout { measurable, constraints ->
+        val placeable = measurable.measure(constraints)
+        layout(placeable.width, placeable.height) {}
+    }

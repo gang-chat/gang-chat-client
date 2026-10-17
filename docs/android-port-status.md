@@ -88,6 +88,17 @@ Android 客户端正在从 Flutter 一比一移植为原生 Kotlin + Jetpack Com
 - 只编译、未在设备上运行过的部分：真实 Room 连接与反射钩子、AudioSwitch、MediaProjection 与前台服务、
   播放捕获、屏幕声音发布、麦克风/扬声器测试、视频渲染、TTS。
 
+### 通知中心与房间管理（`:app` home）
+
+- 日历的手动输入用 `KeyboardType.Phone`（Compose 没有日期键盘）；Android 上手动输入模式隐藏月历，与 Dart 一致。
+- 通知行的同步布局用 `SubcomposeLayout` 和固有尺寸测量实现，测量时两种行变体都会短暂组合一次。
+- 移植中修正的组件库问题：点击 `DialogFrame` 面板上的文字会穿透到遮罩、把对话框关掉；
+  `BadgeDot` 上的 `ignorePointer()` 让小红点变成 48dp 的触摸区域，挡住了带角标的分段（如"新成员"）
+  和按钮的点击。两处都加了回归测试。
+- 框架层：`ignorePointer()` 是 Flutter `AbsorbPointer` 的语义（吞掉点击）。Flutter `IgnorePointer`
+  的两处用法改为让点击穿透：表情包悬停遮罩不再挂指针修饰符；全屏控制条淡出后改为 `unplaced()`，
+  点击才能落到下面的画面上把控制条唤出。
+
 ### 语音频道页与音乐盒（`:app` home）
 
 - 音乐盒列表改为惰性列表，屏幕外的行会被释放（分组、歌单等状态保存在列表外，不会丢失）；

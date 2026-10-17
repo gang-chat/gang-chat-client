@@ -395,7 +395,14 @@ suspend fun <T> showDialog(
         .push(DialogRoute<T>(barrierDismissible, barrierColor, useSafeArea, builder))
         .await()
 
-/** Blocks pointer input for the subtree (Flutter's `IgnorePointer`/`AbsorbPointer`). */
+/**
+ * Flutter's `AbsorbPointer`: the subtree gets no pointer input, and the region
+ * swallows touches (it is a hit target, widened to the 48dp minimum touch size
+ * when smaller). For Flutter's `IgnorePointer`, where touches must pass through:
+ * add nothing over purely visual content (nodes without pointer input are
+ * already invisible to hit testing), and use [unplaced] for hidden interactive
+ * content.
+ */
 fun Modifier.ignorePointer(ignoring: Boolean = true): Modifier =
     if (!ignoring) {
         this

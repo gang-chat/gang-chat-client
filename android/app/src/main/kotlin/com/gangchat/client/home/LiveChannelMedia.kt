@@ -83,6 +83,7 @@ import com.gangchat.client.widgets.Text
 import com.gangchat.client.widgets.ViewState
 import com.gangchat.client.widgets.decoration
 import com.gangchat.client.widgets.ignorePointer
+import com.gangchat.client.widgets.unplaced
 import com.gangchat.client.widgets.rememberBuildContext
 import com.gangchat.client.widgets.startTimer
 import kotlin.time.Duration.Companion.seconds
@@ -664,7 +665,16 @@ private fun _FullScreenHoverReveal(visible: Boolean, tag: String, modifier: Modi
         modifier
             .testTag(tag)
             .semantics { liveOpacity = if (visible) 1f else 0f }
-            .ignorePointer(!visible)
+            // Flutter's IgnorePointer(ignoring: !visible): once faded out the
+            // controls are left unplaced so taps reach the stage underneath
+            // (which brings them back); during the fade they only absorb.
+            .then(
+                when {
+                    visible -> Modifier
+                    opacity <= 0f -> Modifier.unplaced()
+                    else -> Modifier.ignorePointer()
+                },
+            )
             .alpha(opacity),
     ) {
         child()

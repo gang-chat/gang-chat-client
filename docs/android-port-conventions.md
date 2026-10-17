@@ -284,7 +284,8 @@ flutter_secure_storage 的存储），这样 Flutter 版用户原地升级后不
 | `LayoutBuilder` | `BoxWithConstraints`（`maxWidth`/`maxHeight` 是 dp） |
 | `ClipRRect(borderRadius)` | `Modifier.clip(RoundedCornerShape(r.dp))` |
 | `Opacity` / `AnimatedOpacity` / `AnimatedContainer` | `Modifier.alpha` / `animateFloatAsState` / `animate*AsState`；时长、曲线取 `UiMotion` / `Curves.xxx`（`widgets/Curves.kt`，与 Flutter 控制点相同） |
-| `IgnorePointer` / `AbsorbPointer` | `Modifier.ignorePointer()` |
+| `AbsorbPointer` | `Modifier.ignorePointer()`（吞掉点击；小于 48dp 时会被扩大成 48dp 的触摸区域） |
+| `IgnorePointer` | 纯视觉内容什么都不加（没有指针输入的节点本来就不参与命中测试）；隐藏的可交互内容用 `Modifier.unplaced()`，点击才能落到下面 |
 | `Offstage` | `Modifier.offstage()` |
 | `SafeArea` / `MediaQuery.removePadding` | `SafeArea { }` / `MediaQueryRemovePadding { }` |
 | `GestureDetector(onTap)` / `InkWell` | `Modifier.clickable(interactionSource, indication = null)` / 需要水波纹时用默认 indication；长按/双击用 `combinedClickable` 或 `pointerInput { detectTapGestures }` |

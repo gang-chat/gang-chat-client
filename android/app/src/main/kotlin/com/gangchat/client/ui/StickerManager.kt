@@ -1539,8 +1539,11 @@ private class _StickerPreviewImageState : ViewState<_StickerPreviewImageWidget>(
                         loadingBuilder = { _ -> _buildPlaceholder() },
                         errorBuilder = { _, _ -> _buildPlaceholder(error = true) },
                     )
+                    // Flutter's IgnorePointer over a purely visual overlay: a node
+                    // without pointer input is already invisible to hit testing,
+                    // so taps reach the tile underneath.
                     Box(
-                        Modifier.matchParentSize().ignorePointer().graphicsLayer { alpha = hoverOpacity },
+                        Modifier.matchParentSize().graphicsLayer { alpha = hoverOpacity },
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(Icons.Filled.Search, color = Color.White.copy(alpha = 0.92f), size = 36.dp)
