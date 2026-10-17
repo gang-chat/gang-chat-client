@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -54,6 +55,13 @@ import kotlin.time.Duration.Companion.milliseconds
 
 /** Flutter's `TooltipTriggerMode`. */
 enum class TooltipTriggerMode { manual, longPress, tap }
+
+/**
+ * The app-wide default trigger mode (Flutter's `TooltipTheme(triggerMode:)`
+ * above the navigator); a tooltip's own `triggerMode` wins. Null keeps
+ * Flutter's default, a long press.
+ */
+val LocalTooltipTriggerMode = staticCompositionLocalOf<TooltipTriggerMode?> { null }
 
 /** Semantics key carrying a [UiTooltip] message (Flutter's `Semantics(tooltip:)`, `find.byTooltip`). */
 val TooltipSemanticsKey = SemanticsPropertyKey<String>("Tooltip")
@@ -150,8 +158,9 @@ private const val _fadeOutMillis = 75
 
 /**
  * Material `Tooltip` as the kit uses it (Dart's `UiTooltip`, which also gave
- * each tooltip its own semantics container). On Android a long press shows
- * the bubble (with haptic feedback) for 1.5 s after release; a mouse hover
+ * each tooltip its own semantics container). By default a long press shows
+ * the bubble (with haptic feedback) for 1.5 s after release; the app root
+ * turns touch triggers off ([LocalTooltipTriggerMode] manual). A mouse hover
  * shows it after the theme's wait. The bubble follows `uiTheme()`'s tooltip
  * theme and Flutter's `positionDependentBox` placement (24 dp below the
  * anchor's centre, above when it does not fit).
@@ -182,7 +191,7 @@ fun UiTooltip(
     state?.controller = controller
     DisposableEffect(controller) { onDispose { controller.dispose() } }
     val haptics = LocalHapticFeedback.current
-    val mode = triggerMode ?: TooltipTriggerMode.longPress
+    val mode = triggerMode ?: LocalTooltipTriggerMode.current ?: TooltipTriggerMode.longPress
     val density = LocalDensity.current
     val touchSlopPx = with(density) { kTouchSlop.dp.toPx() }
 

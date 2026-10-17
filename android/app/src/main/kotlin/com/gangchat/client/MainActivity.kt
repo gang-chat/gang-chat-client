@@ -34,8 +34,9 @@ import kotlinx.coroutines.launch
  * Starts with `LaunchTheme` (manifest) and switches to `NormalTheme`; draws
  * edge-to-edge; is portrait-only on phones (manifest) until
  * [GangChatStartup.main] applies the `AppOrientationController` default
- * (tablets rotate freely). The launch screen stays up until the UI root is
- * ready, as the Flutter splash stayed until the first frame.
+ * (tablets rotate freely). The launch screen stays up until the UI root has
+ * decided between the login page and the restored session (as Dart kept the
+ * desktop window hidden until then).
  */
 class MainActivity : ComponentActivity() {
     private var appContent: (@Composable () -> Unit)? by mutableStateOf(null)
@@ -57,17 +58,21 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             try {
                 val config = GangChatStartup.main()
-                appContent = prepareGangApp(config)
+                appContent = prepareGangApp(config, showInitialWindow = ::showInitialWindow)
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 // Like an uncaught error in Flutter's main(): reported, and
                 // the launch screen stays.
                 AppCoroutines.uncaughtErrorHandler(error)
-                return@launch
             }
-            uiReady = true
-            window.decorView.invalidate()
         }
+    }
+
+    /** Removes the launch screen; the UI root calls it once it has decided what to show. */
+    private fun showInitialWindow() {
+        if (uiReady) return
+        uiReady = true
+        window.decorView.invalidate()
     }
 
     private fun keepLaunchScreenUntilReady() {

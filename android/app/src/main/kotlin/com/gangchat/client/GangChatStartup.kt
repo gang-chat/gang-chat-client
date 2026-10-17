@@ -4,6 +4,7 @@ import com.gangchat.client.config.AppConfig
 import com.gangchat.client.foundation.Uri
 import com.gangchat.client.foundation.http.OkHttpClientAdapter
 import com.gangchat.client.shell.AppOrientationController
+import com.gangchat.client.shell.LocalPreferencesMigration
 import kotlinx.coroutines.CancellationException
 
 /**
@@ -45,11 +46,12 @@ object GangChatStartup {
     }
 
     /**
-     * Hook for `LocalPreferencesMigration().migrate()`
-     * (`shell/local_preferences_migration.dart`), which is ported separately:
-     * call it here once it exists.
+     * `LocalPreferencesMigration().migrate()`
+     * (`shell/local_preferences_migration.dart`): a no-op on Android, where
+     * Dart migrates only the Windows preference file.
      */
     suspend fun migrateLocalPreferences() {
+        LocalPreferencesMigration().migrate()
     }
 
     /**

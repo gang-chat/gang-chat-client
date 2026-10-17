@@ -1,34 +1,31 @@
 package com.gangchat.client
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import com.gangchat.client.auth.TokenStore
 import com.gangchat.client.config.AppConfig
+import com.gangchat.client.shell.GangApp
 
 /**
- * THE entry point for the app's UI root (`shell/gang_app.dart`'s `GangApp`).
+ * THE entry point for the app's UI root: the rest of `main()` after
+ * [GangChatStartup.main], which returns the `runApp(GangApp(...))` content.
  *
- * `MainActivity` calls this after [GangChatStartup.main] and installs the
- * returned composable as its content; the launch screen stays up until then,
- * like the Flutter splash until the first frame.
- *
- * When `GangApp` is ported, replace the body with the rest of `main()`:
- * ```
- * val tokenStore = TokenStore()
- * val hasStoredSession = tokenStore.readRefreshToken()?.isNotEmpty() ?: false
- * return { GangApp(config = config, tokenStore = tokenStore, startsAuthenticated = hasStoredSession) }
- * ```
+ * `MainActivity` installs the returned composable as its content and keeps
+ * its launch screen up until [showInitialWindow] is called: once the auth
+ * gate has decided between the login page and the restored session (Dart
+ * kept the desktop window hidden until then), or 4 s into a stored-session
+ * restore that has not finished, when the loading page shows instead.
  */
-@Suppress("UNUSED_PARAMETER", "RedundantSuspendModifier")
-suspend fun prepareGangApp(config: AppConfig): @Composable () -> Unit {
-    return { GangAppPlaceholder() }
-}
-
-/** Shown until `GangApp` is ported: the launch background colour. */
-@Composable
-private fun GangAppPlaceholder() {
-    Box(Modifier.fillMaxSize().background(Color(0xFF181C24)))
+suspend fun prepareGangApp(config: AppConfig, showInitialWindow: () -> Unit): @Composable () -> Unit {
+    // Pre-read the refresh token so the auth gate knows whether a session is
+    // being restored (loading page) or the login page can show at once.
+    val tokenStore = TokenStore()
+    val hasStoredSession = tokenStore.readRefreshToken()?.isNotEmpty() ?: false
+    return {
+        GangApp(
+            config = config,
+            tokenStore = tokenStore,
+            startsAuthenticated = hasStoredSession,
+            showInitialWindow = showInitialWindow,
+        )
+    }
 }
