@@ -1,7 +1,11 @@
 package com.gangchat.client.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -163,10 +167,32 @@ private class _UiContextMenuTriggerRegionState : ViewState<UiContextMenuTriggerR
                     }
                 }
                 .pointerInput(widget.onTap != null) {
-                    detectTapGestures(
-                        onTap = if (widget.onTap != null) { _ -> widget.onTap?.invoke() } else null,
-                        onLongPress = { offset -> _trigger(window(offset), androidLongPress = true) },
-                    )
+                    if (widget.onTap != null) {
+                        detectTapGestures(
+                            onTap = { _ -> widget.onTap?.invoke() },
+                            onLongPress = { offset -> _trigger(window(offset), androidLongPress = true) },
+                        )
+                    } else {
+                        // Flutter's gesture arena: a lone long-press recognizer
+                        // never claims a quick tap, so an ancestor's tap (a
+                        // profile card around a message avatar) still gets it;
+                        // only a completed long press keeps the pointer.
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            val ended =
+                                withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                                    waitForUpOrCancellation()
+                                    true
+                                }
+                            if (ended != null) return@awaitEachGesture
+                            _trigger(window(down.position), androidLongPress = true)
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                event.changes.forEach { it.consume() }
+                                if (event.changes.none { it.pressed }) break
+                            }
+                        }
+                    }
                 },
             propagateMinConstraints = true,
         ) {
