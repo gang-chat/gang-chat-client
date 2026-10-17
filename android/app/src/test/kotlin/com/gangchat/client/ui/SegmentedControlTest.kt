@@ -327,5 +327,36 @@ class SegmentedControlTest {
         assertTrue(center.second >= third.top && center.second <= third.bottom)
     }
 
+    /**
+     * Port regression: the press highlight rebuilds the control between the
+     * down and the up of a tap (a frame always passes on a device); the tap
+     * must still select.
+     */
+    @Test
+    fun `tap selects a segment when the control rebuilds during the press`() {
+        var selected by mutableStateOf("a")
+        compose.mainClock.autoAdvance = false
+        compose.setUiContent { _ ->
+            Box(Modifier.width(320.dp)) {
+                SegmentedControl(
+                    expanded = true,
+                    value = selected,
+                    segments = listOf(Segment("a", "第一项"), Segment("b", "第二项")),
+                    onChanged = { selected = it },
+                )
+            }
+        }
+        compose.waitForIdle()
+
+        compose.onNodeWithTag(segmentedControlSegmentTag(1)).performTouchInput { down(center) }
+        compose.waitForIdle()
+        repeat(3) { compose.mainClock.advanceTimeByFrame() }
+        compose.waitForIdle()
+        compose.onNodeWithTag(segmentedControlSegmentTag(1)).performTouchInput { up() }
+        compose.waitForIdle()
+
+        assertEquals("b", selected)
+    }
+
     private fun DpRect.center() = centerX() to centerY()
 }

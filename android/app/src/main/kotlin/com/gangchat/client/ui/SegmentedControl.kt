@@ -34,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -508,6 +509,10 @@ private fun <T> _SegmentHitTarget(
             else -> UiColors.textSecondary
         }
     val iconColor = foreground
+    // The press itself rebuilds the control (onPressedChanged), so the tap
+    // detector must not restart when it receives new callbacks.
+    val currentOnTap by rememberUpdatedState(onTap)
+    val currentOnPressedChanged by rememberUpdatedState(onPressedChanged)
     Box(
         Modifier
             .testTag(segmentedControlSegmentTag(index))
@@ -525,14 +530,14 @@ private fun <T> _SegmentHitTarget(
                     }
                 }
             }
-            .pointerInput(onTap) {
+            .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = {
-                        onPressedChanged(true)
+                        currentOnPressedChanged(true)
                         tryAwaitRelease()
-                        onPressedChanged(false)
+                        currentOnPressedChanged(false)
                     },
-                    onTap = { onTap() },
+                    onTap = { currentOnTap() },
                 )
             }
             .height(height)
