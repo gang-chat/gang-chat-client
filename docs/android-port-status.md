@@ -13,7 +13,7 @@ Android 客户端正在从 Flutter 一比一移植为原生 Kotlin + Jetpack Com
 | 业务控制器 | `:core` app | 进行中（无依赖的底层文件已完成） |
 | 平台服务（通知、前台服务、FCM、更新安装、存储） | `:app` platform | 完成 |
 | LiveKit 语音、摄像头、屏幕共享 | `:app` live | 未开始 |
-| 界面组件库 | `:app` ui | 进行中 |
+| 界面组件库 | `:app` ui | 完成（93 个测试含 12 组截图） |
 | 主界面、设置、登录 | `:app` home / settings / shell | 未开始 |
 
 ## 与 Flutter 版的差异
@@ -49,6 +49,23 @@ Android 客户端正在从 Flutter 一比一移植为原生 Kotlin + Jetpack Com
 - IO 与 ContentResolver 操作移到 `Dispatchers.IO`（Flutter 宿主里在主线程）。
 - 安全存储两次读取都失败时返回 `null`（插件返回字符串 "Data has been reset"）。
 - 平板判断读当前窗口尺寸（Flutter 在 `main()` 里读视图尺寸，可能还是 0）。
+
+### 界面组件库（`:app` ui）
+
+- 中文行高：Android 的后备字体行距让中文行比 Flutter 的 `height` 高几个像素（14sp/1.4 在 xxhdpi 下
+  63px 对 59px），Compose 没有公开开关。`Input` 按拉丁和中文两种行高中较高的那个留白以保持 40dp；
+  其他中文文本可能比 Flutter 高几个像素。
+- 按钮：Compose 默认收缩，Flutter 在有界宽度里撑满；`Button(width = Dp.Infinity)` 撑满，
+  `DialogFrame` 的按钮行通过 `LocalButtonFillsBoundedWidth` 得到 Flutter 的行为。
+- 去掉了只在桌面上有意义的部分：输入框/只读文本的右键选区保护、桌面光学偏移、Windows 间距、
+  `SettingsList` 的 physics 参数；`GangScrollBehavior` 在 Android 上是空操作（Dart 在 Android 上也是）。
+- Tooltip 用 Compose `Popup`，按 Flutter 的 `positionDependentBox` 定位。
+- 输入框的文本菜单用 Compose 1.12 的 `TextContextMenuProvider` 画组件库自己的面板，位置对齐
+  Flutter 的 Android 工具栏；"全选"后菜单保持打开。
+- 给可点击表面和按钮补了点击/角色/选中的无障碍语义。
+- 部分边框动画做了简化；计时器改用跟随 Compose 时钟的计时器，便于测试控制。
+- 未移植的桌面专用 widget 测试：输入框右键 7 个、桌面优化偏移、Windows 间距、对话框按钮行的
+  Windows 用例、右键菜单的 Windows 用例、滚动条边距 4 个。
 
 ### 业务逻辑（`:core` app / shell）
 
