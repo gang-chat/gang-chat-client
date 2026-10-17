@@ -213,7 +213,9 @@ private class _MusicBoxTrackRowState : ViewState<_MusicBoxTrackRowWidget>() {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.width(_musicBoxRowLeadingWidth.dp), contentAlignment = Alignment.Center) { widget.leading() }
                 Spacer(Modifier.width(8.dp))
-                Box(Modifier.weight(1f)) {
+                // Dart's Expanded hands the anchor a tight width, so the whole
+                // text slot (not just the glyphs) opens the song card.
+                Box(Modifier.weight(1f), propagateMinConstraints = true) {
                     val cardBuilder = widget.cardBuilder
                     if (cardBuilder == null) {
                         text()

@@ -900,7 +900,8 @@ private fun _InlineMusicBox(
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 _VinylRecord(spinning = spinning, label = current?.title, size = 26.0)
                 Spacer(Modifier.width(8.dp))
-                Box(Modifier.weight(1f)) {
+                // Dart's Expanded: the anchor gets the slot's tight width.
+                Box(Modifier.weight(1f), propagateMinConstraints = true) {
                     if (current == null) {
                         _InlineMusicBoxIdentity(current = null)
                     } else {
