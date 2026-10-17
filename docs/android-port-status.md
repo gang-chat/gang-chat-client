@@ -10,7 +10,7 @@ Android 客户端正在从 Flutter 一比一移植为原生 Kotlin + Jetpack Com
 | Dart 运行时对等物（async、Stream、JSON、DateTime、Uri、http、插件门面） | `:core` foundation / plugins | 完成 |
 | Flutter 框架层对等物（ViewState、BuildContext、Navigator、Overlay、Dialog、文本、MediaQuery） | `:app` widgets | 完成 |
 | 协议、鉴权、配置 | `:core` protocol / auth / config | 完成（118 个移植用例通过） |
-| 业务控制器 | `:core` app | 进行中（无依赖的底层文件已完成） |
+| 业务控制器 | `:core` / `:app` app | 完成（`authenticated_app_services` 随主界面一起移植） |
 | 平台服务（通知、前台服务、FCM、更新安装、存储） | `:app` platform | 完成 |
 | LiveKit 语音、摄像头、屏幕共享 | `:app` live | 完成（86 个测试；SDK 路径需真机验证） |
 | 界面组件库 | `:app` ui | 完成（93 个测试含 12 组截图） |
@@ -49,6 +49,18 @@ Android 客户端正在从 Flutter 一比一移植为原生 Kotlin + Jetpack Com
 - IO 与 ContentResolver 操作移到 `Dispatchers.IO`（Flutter 宿主里在主线程）。
 - 安全存储两次读取都失败时返回 `null`（插件返回字符串 "Data has been reset"）。
 - 平板判断读当前窗口尺寸（Flutter 在 `main()` 里读视图尺寸，可能还是 0）。
+
+### 录音、更新、试听（`:app` app / shell / platform）
+
+- 语音消息录音替换 `record` 插件（按 record 7.1 / record_android 2.1.1 源码移植）：AAC-LC 64 kbps、
+  44.1 kHz 单声道、`MediaMuxer` 写 MPEG-4（`.m4a` / `audio/mp4`），文件名 `voice_<微秒时间戳>.m4a`。
+  编码器在录音线程同步运行；权限请求走 activity result registry；Android 11 及以下等待蓝牙耳机连接
+  最多 5 秒（插件无限等待）；新录音会等上一个取消的录音结束（插件有竞态）；编码器卡住时有 2 秒保护。
+  未移植应用没用到的暂停/恢复、流式、选择输入设备等接口。录音开始时把麦克风切到蓝牙耳机、取消时清除
+  通信设备，这与插件一致，但在语音通话中取消录音可能影响通话的音频路由（Flutter 版同样如此）。
+- 应用内更新：只保留 Android 路径（下载 APK 交给系统安装器），与 Dart 一样不支持断点续传，失败或
+  取消时删除未完成的文件。
+- 试听直接调用 `AndroidMusicPreviewPlayer`（原来经 `gang_chat/music_preview` 通道）。
 
 ### 语音、视频、屏幕共享（`:app` live / platform/webrtc）
 
