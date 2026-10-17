@@ -53,11 +53,12 @@ object GangChatStartup {
     }
 
     /**
-     * Hook for `initializeAndroidWebRtcAudio()`
-     * (`live/android_audio_initialization.dart`): the LiveKit port configures
-     * the WebRTC audio attributes here, before any room is created.
+     * `initializeAndroidWebRtcAudio()` (`live/android_audio_initialization.dart`):
+     * configures the WebRTC audio attributes and starts the audio switch,
+     * before any room is created.
      */
     suspend fun initializeAndroidWebRtcAudio() {
+        com.gangchat.client.live.initializeAndroidWebRtcAudio()
     }
 
     /**

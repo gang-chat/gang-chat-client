@@ -9,6 +9,8 @@ activity-compose = "1.12.4"
 core-ktx = "1.17.0"
 lifecycle = "2.10.0"
 livekit = "2.29.0"
+# The protobuf runtime LiveKit 2.29.0 ships with (its protocol types are read directly).
+protobuf-javalite = "3.25.9"
 firebase-bom = "34.16.0"
 google-services = "4.5.0"
 coil = "3.3.0"
@@ -42,6 +44,7 @@ core-ktx = { module = "androidx.core:core-ktx", version.ref = "core-ktx" }
 lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }
 lifecycle-process = { module = "androidx.lifecycle:lifecycle-process", version.ref = "lifecycle" }
 livekit-android = { module = "io.livekit:livekit-android", version.ref = "livekit" }
+protobuf-javalite = { module = "com.google.protobuf:protobuf-javalite", version.ref = "protobuf-javalite" }
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebase-bom" }
 firebase-messaging = { module = "com.google.firebase:firebase-messaging" }
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
