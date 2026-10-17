@@ -23,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -385,6 +386,12 @@ class LiveChannelPaneWidget(
 )
 
 private class _LiveChannelPaneState : ViewState<LiveChannelPaneWidget>() {
+    // A ViewState without mutable fields is inferred stable by the Compose
+    // compiler, so build() and the slot lambdas capturing this state would
+    // skip when the parent passes a new widget. Flutter always rebuilds.
+    @Suppress("unused")
+    private var _rebuildWithParent = true
+
     private fun _resolveStageTrack(): LiveVideoTrack? =
         _resolveLiveStageTrack(tracks = widget.videoTracks, selection = widget.stageSelection)
 
@@ -604,6 +611,12 @@ private class _LiveChannelBodyLayoutWidget(
 )
 
 private class _LiveChannelBodyLayoutState : ViewState<_LiveChannelBodyLayoutWidget>() {
+    // A ViewState without mutable fields is inferred stable by the Compose
+    // compiler, so build() and the slot lambdas capturing this state would
+    // skip when the parent passes a new widget. Flutter always rebuilds.
+    @Suppress("unused")
+    private var _rebuildWithParent = true
+
     private val _bodyKey = _LiveBoundsHandle()
     private val _musicBoxAnchorKey = _LiveBoundsHandle()
     private val _musicBoxPortal = OverlayPortalController()
@@ -730,11 +743,20 @@ internal fun Modifier.liveBounds(handle: _LiveBoundsHandle): Modifier =
         this.onGloballyPositioned { coords ->
             handle.coordinates = coords
             val root = coords.findRootCoordinates()
-            val box = root.localBoundingBoxOf(coords, clipBounds = false)
+            // Dart's `localToGlobal` of both corners (also defined for the
+            // zero-size music box anchor, unlike a bounding box).
+            val topLeft = root.localPositionOf(coords, Offset.Zero)
+            val bottomRight = root.localPositionOf(coords, Offset(coords.size.width.toFloat(), coords.size.height.toFloat()))
             with(density) {
                 handle.size = DpSize(coords.size.width.toDp(), coords.size.height.toDp())
                 handle.rootSize = DpSize(root.size.width.toDp(), root.size.height.toDp())
-                val rect = DpRect(box.left.toDp(), box.top.toDp(), box.right.toDp(), box.bottom.toDp())
+                val rect =
+                    DpRect(
+                        minOf(topLeft.x, bottomRight.x).toDp(),
+                        minOf(topLeft.y, bottomRight.y).toDp(),
+                        maxOf(topLeft.x, bottomRight.x).toDp(),
+                        maxOf(topLeft.y, bottomRight.y).toDp(),
+                    )
                 if (handle.rect != rect) handle.rect = rect
             }
         }

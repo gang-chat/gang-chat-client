@@ -44,6 +44,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -82,9 +83,9 @@ import com.gangchat.client.widgets.FittedBox
 import com.gangchat.client.widgets.Icon
 import com.gangchat.client.widgets.StatefulWidget
 import com.gangchat.client.widgets.Text
+import kotlin.math.floor
 import com.gangchat.client.widgets.ViewState
 import com.gangchat.client.widgets.decoration
-import com.gangchat.client.widgets.ignorePointer
 import com.gangchat.client.widgets.rememberBuildContext
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -133,12 +134,16 @@ internal fun _LiveMemberStage(
 
         val maxWidthValue = maxWidth.value.toDouble()
         val twoColumnCardWidth = (maxWidthValue - _memberCardSpacing) / 2
-        val cardDimension =
+        val logicalCardDimension =
             if (twoColumnCardWidth >= _memberCardMinTwoColumnWidth) {
                 twoColumnCardWidth.coerceIn(_memberCardMinTwoColumnWidth, _memberCardWidth)
             } else {
                 maxWidthValue.coerceIn(0.0, _memberCardWidth)
             }
+        // Flutter's Wrap lays out fractional sizes; Compose rounds each card
+        // to whole pixels, so snap down to keep two cards on one row.
+        val pixelRatio = LocalDensity.current.density.toDouble()
+        val cardDimension = floor(logicalCardDimension * pixelRatio) / pixelRatio
         val minHeight = maxHeight
 
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -300,6 +305,7 @@ private fun _LiveMemberCard(
             }
         _ScaledSurface(dimension) {
             PressableSurface(
+                modifier = Modifier.testTag(liveMemberCardTag(participant.user.id)),
                 width = _memberCardWidth.dp,
                 height = _memberCardWidth.dp,
                 borderRadius = UiRadii.lg,
@@ -358,10 +364,11 @@ private fun _LiveMemberCard(
                         }
                     }
                     statusRow(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 8.dp))
+                    // Dart's IgnorePointer border overlay: a Compose node without
+                    // pointer input is already transparent to hit testing.
                     Box(
                         Modifier
                             .matchParentSize()
-                            .ignorePointer()
                             .decoration(shape = RoundedCornerShape(UiRadii.lg), borderColor = borderColor),
                     )
                 }
@@ -371,6 +378,7 @@ private fun _LiveMemberCard(
     }
     _ScaledSurface(dimension) {
         PressableSurface(
+            modifier = Modifier.testTag(liveMemberCardTag(participant.user.id)),
             width = _memberCardWidth.dp,
             height = _memberCardWidth.dp,
             borderRadius = UiRadii.lg,
@@ -668,7 +676,6 @@ private class _LiveMemberVideoState : ViewState<_LiveMemberVideoWidget>() {
             Box(
                 Modifier
                     .matchParentSize()
-                    .ignorePointer()
                     .testTag("live-member:video-hover:${track.identity}:${track.isScreenShare}")
                     .semantics { liveOpacity = if (_hovered) 1f else 0f }
                     .alpha(opacity)

@@ -437,12 +437,23 @@ private class _LiveFullScreenStageState : ViewState<LiveFullScreenStageWidget>()
                 // pointer event shows the controls and restarts the timeout.
                 .pointerInput(Unit) {
                     awaitPointerEventScope {
+                        // Compose re-sends the last hover position after a
+                        // relayout (hover changes report no previous position
+                        // of their own); Flutter's onPointerHover only fires for
+                        // real movement, so skip moves that land where the
+                        // previous event was.
+                        var lastPosition: Offset? = null
                         while (true) {
                             val event = awaitPointerEvent(PointerEventPass.Initial)
+                            val position = event.changes.firstOrNull()?.position
+                            val moved = position != lastPosition
+                            lastPosition = position
                             when (event.type) {
-                                PointerEventType.Press, PointerEventType.Move, PointerEventType.Release,
+                                PointerEventType.Press, PointerEventType.Release,
                                 PointerEventType.Enter, PointerEventType.Scroll,
                                 -> _showControlsAndRestartTimer()
+                                PointerEventType.Move ->
+                                    if (moved || event.changes.any { it.pressed }) _showControlsAndRestartTimer()
                                 else -> Unit
                             }
                         }

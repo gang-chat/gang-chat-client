@@ -108,7 +108,6 @@ import com.gangchat.client.widgets.TextEditingController
 import com.gangchat.client.widgets.ViewState
 import com.gangchat.client.widgets.boxShadow
 import com.gangchat.client.widgets.decoration
-import com.gangchat.client.widgets.ignorePointer
 import com.gangchat.client.widgets.renderBox
 import kotlin.math.floor
 import kotlin.math.max
@@ -889,6 +888,12 @@ internal fun _VinylRecord(spinning: Boolean, modifier: Modifier = Modifier, labe
 private class _VinylRecordWidget(val spinning: Boolean, val label: String?, val size: Double, val modifier: Modifier)
 
 private class _VinylRecordState : ViewState<_VinylRecordWidget>() {
+    // A ViewState without mutable fields is inferred stable by the Compose
+    // compiler, so build() and the slot lambdas capturing this state would
+    // skip when the parent passes a new widget. Flutter always rebuilds.
+    @Suppress("unused")
+    private var _rebuildWithParent = true
+
     // The controller's value in turns (Dart's `AnimationController`, 6 s per turn).
     private val _turns = mutableFloatStateOf(0f)
 
@@ -911,7 +916,7 @@ private class _VinylRecordState : ViewState<_VinylRecordWidget>() {
         Box(widget.modifier.size(widget.size.dp)) {
             Canvas(Modifier.matchParentSize().graphicsLayer { rotationZ = _turns.floatValue * 360f }) { _paintVinyl() }
             // The light catching the grooves stays put while the disc turns.
-            Canvas(Modifier.matchParentSize().ignorePointer()) { _paintVinylSheen() }
+            Canvas(Modifier.matchParentSize()) { _paintVinylSheen() }
         }
     }
 }
