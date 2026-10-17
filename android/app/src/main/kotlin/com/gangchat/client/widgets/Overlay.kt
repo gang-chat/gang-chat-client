@@ -28,6 +28,9 @@ class OverlayEntry(
     internal var overlay: OverlayState? = null
     internal val revision = mutableIntStateOf(0)
 
+    /** [OverlayPortal] children shown above this entry, bottom to top. */
+    internal val portals = mutableStateListOf<OverlayPortalSlot>()
+
     val mounted: Boolean get() = overlay != null
 
     /** Removes this entry from its overlay. */
@@ -77,6 +80,9 @@ class OverlayState {
 
 val LocalOverlay = staticCompositionLocalOf<OverlayState?> { null }
 
+/** The [OverlayEntry] whose subtree this is (where an [OverlayPortal] shows its child). */
+val LocalOverlayEntry = staticCompositionLocalOf<OverlayEntry?> { null }
+
 /**
  * Flutter's `Overlay`: stacks the entries bottom to top. Entries below the
  * topmost opaque entry are not built unless they `maintainState`, in which
@@ -98,8 +104,15 @@ fun Overlay(state: OverlayState, modifier: Modifier = Modifier) {
                 key(entry) {
                     Box(Modifier.fillMaxSize().then(if (onstage[index]) Modifier else Modifier.offstage())) {
                         entry.revision.intValue
-                        val context = rememberBuildContext()
-                        entry.builder(context)
+                        CompositionLocalProvider(LocalOverlayEntry provides entry) {
+                            val context = rememberBuildContext()
+                            entry.builder(context)
+                        }
+                        // Like Flutter's OverlayPortal, portal children paint
+                        // right above their entry, below any later entry.
+                        for (slot in entry.portals.toList()) {
+                            key(slot) { Box(Modifier.matchParentSize()) { slot.Content() } }
+                        }
                     }
                 }
             }

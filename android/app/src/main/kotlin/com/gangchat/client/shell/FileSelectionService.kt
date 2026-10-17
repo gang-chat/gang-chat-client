@@ -82,21 +82,21 @@ class SaveFileLocation(val path: String, val documentUri: String? = null) {
  * and saves through the system "save as" dialog (a document URI plus a
  * private staging path) or into public Downloads.
  */
-class FileSelectionService(
+open class FileSelectionService(
     val androidSystemService: AndroidSystemService = AndroidSystemService(),
 ) {
-    suspend fun openFile(acceptedTypeGroups: List<FileTypeGroup> = emptyList()): SelectedFile? {
+    open suspend fun openFile(acceptedTypeGroups: List<FileTypeGroup> = emptyList()): SelectedFile? {
         val file = FileSelector.openFile(extensions = _selectorExtensions(acceptedTypeGroups))
         return if (file == null) null else SelectedFile._fromPickedFile(file)
     }
 
-    suspend fun openFiles(acceptedTypeGroups: List<FileTypeGroup> = emptyList()): List<SelectedFile> {
+    open suspend fun openFiles(acceptedTypeGroups: List<FileTypeGroup> = emptyList()): List<SelectedFile> {
         val files = FileSelector.openFiles(extensions = _selectorExtensions(acceptedTypeGroups))
         return files.map(SelectedFile::_fromPickedFile)
     }
 
     @Suppress("UNUSED_PARAMETER")
-    suspend fun getSaveLocation(
+    open suspend fun getSaveLocation(
         suggestedName: String,
         acceptedTypeGroups: List<FileTypeGroup> = emptyList(),
         confirmButtonText: String? = null,
@@ -114,14 +114,14 @@ class FileSelectionService(
         }
     }
 
-    fun filesFromPaths(paths: Iterable<String>): List<SelectedFile> = paths.map(SelectedFile::fromPath)
+    open fun filesFromPaths(paths: Iterable<String>): List<SelectedFile> = paths.map(SelectedFile::fromPath)
 
     @Suppress("UNUSED_PARAMETER")
-    suspend fun saveBytesToPath(bytes: ByteArray, path: String, filename: String, mimeType: String? = null) {
+    open suspend fun saveBytesToPath(bytes: ByteArray, path: String, filename: String, mimeType: String? = null) {
         withContext(Dispatchers.IO) { File(path).writeBytes(bytes) }
     }
 
-    suspend fun saveBytesToLocation(
+    open suspend fun saveBytesToLocation(
         bytes: ByteArray,
         location: SaveFileLocation,
         filename: String,
@@ -135,12 +135,12 @@ class FileSelectionService(
         saveBytesToPath(bytes = bytes, path = location.path, filename = filename, mimeType = mimeType)
     }
 
-    suspend fun commitLocation(location: SaveFileLocation) {
+    open suspend fun commitLocation(location: SaveFileLocation) {
         val documentUri = location.documentUri ?: return
         androidSystemService.commitDocumentFile(uri = documentUri, stagingPath = location.path)
     }
 
-    suspend fun discardLocation(location: SaveFileLocation) {
+    open suspend fun discardLocation(location: SaveFileLocation) {
         if (!location.requiresCommit) return
         androidSystemService.discardDocumentFile(location.path)
     }
@@ -148,7 +148,7 @@ class FileSelectionService(
     /** Browser downloads only exist on the web; always false on Android. */
     val savesAsBrowserDownload: Boolean get() = false
 
-    suspend fun saveBytesToDownloads(bytes: ByteArray, filename: String, mimeType: String? = null): String? {
+    open suspend fun saveBytesToDownloads(bytes: ByteArray, filename: String, mimeType: String? = null): String? {
         return androidSystemService.saveToDownloads(
             filename = filename,
             bytes = bytes,
