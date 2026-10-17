@@ -156,6 +156,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
 
     implementation(libs.livekit.android)
+    implementation(libs.protobuf.javalite)
     implementation(libs.coil.compose)
     implementation(libs.coil.gif)
     implementation(libs.media3.exoplayer)

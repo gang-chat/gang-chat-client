@@ -18,6 +18,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission
         android:name="android.permission.BLUETOOTH"
         android:maxSdkVersion="30" />
@@ -46,6 +47,12 @@
             android:exported="false"
             android:foregroundServiceType="dataSync|remoteMessaging|microphone"
             android:stopWithTask="false" />
+        <!-- Screen sharing: the MediaProjection foreground service of the
+             Flutter build's flutter_webrtc fork. -->
+        <service
+            android:name=".platform.webrtc.ScreenCaptureForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection|microphone" />
         <service
             android:name=".platform.GangChatFirebaseMessagingService"
             android:exported="false">
