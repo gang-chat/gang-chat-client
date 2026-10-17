@@ -42,6 +42,8 @@ class GangChatApplication : Application() {
                 "GANG_API_BASE_URL" to BuildConfig.GANG_API_BASE_URL,
                 "GANG_ASSET_BASE_URL" to BuildConfig.GANG_ASSET_BASE_URL,
                 "GANG_RELEASE_BUCKET_URL" to BuildConfig.GANG_RELEASE_BUCKET_URL,
+                "GANG_CHAT_VERSION" to BuildConfig.VERSION_NAME,
+                "GANG_CHAT_RELEASE_TIMESTAMP" to BuildConfig.GANG_CHAT_RELEASE_TIMESTAMP,
             )
 
         // path_provider_android's directories.

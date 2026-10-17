@@ -63,6 +63,8 @@ android {
         for (name in listOf("GANG_API_BASE_URL", "GANG_ASSET_BASE_URL", "GANG_RELEASE_BUCKET_URL")) {
             buildConfigField("String", name, "\"${System.getenv(name).orEmpty()}\"")
         }
+        // Settings > About shows this (Flutter's gangChatClientReleaseTimestamp).
+        buildConfigField("String", "GANG_CHAT_RELEASE_TIMESTAMP", "\"${versionProperties.getProperty("releasedAt").orEmpty()}\"")
     }
 
     compileOptions {
