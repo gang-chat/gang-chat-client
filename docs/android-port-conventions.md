@@ -253,7 +253,9 @@ flutter_secure_storage 的存储），这样 Flutter 版用户原地升级后不
   }
   ```
   State 的字段是普通 Kotlin 属性；只有 `setState` 或监听的 `Listenable` 触发重建，与 Flutter 相同。
-  （编译器关闭了 strong skipping：父级重建时子级一定重建，和 Flutter 一致。）
+  （编译器关闭了 strong skipping：父级重建时子级一定重建，和 Flutter 一致。`widget` 本身是快照状态，
+  `build()` 读到它就会在父级传入新 widget 或 `setState` 时重建——没有自有字段、被编译器推断为
+  stable 的 State 也不例外，不需要为此加占位字段。）
 - `Key` / `ValueKey(id)` → 在调用处包 `key(id) { Foo(...) }`；`GlobalKey` 用于取位置时改用 `RenderBoxHandle`。
 - 监听：`ListenableBuilder(listenable:, builder:)` → `ListenableBuilder(listenable) { ... }`；
   `ValueListenableBuilder` 同名；在 composable 里直接 `listen(controller)` 也会订阅。
