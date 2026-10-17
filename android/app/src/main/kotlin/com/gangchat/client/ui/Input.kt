@@ -52,6 +52,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.contentType
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
@@ -547,6 +548,14 @@ internal fun _EditableTextField(
     onChanged: ((String) -> Unit)? = null,
     inputFormatters: List<TextInputFormatter>? = null,
     textAlign: TextAlign = TextAlign.Start,
+    /**
+     * Display-only styling of the controller's text (Dart's
+     * `TextEditingController.buildTextSpan` override); ignored with
+     * [obscureText].
+     */
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    /** The laid-out text, for hit-testing styled spans (Dart's span recognizers). */
+    onTextLayout: (TextLayoutResult) -> Unit = {},
     decorationBox: @Composable (innerTextField: @Composable () -> Unit) -> Unit,
 ) {
     listen(controller)
@@ -653,7 +662,8 @@ internal fun _EditableTextField(
             singleLine = singleLine,
             maxLines = maxLines ?: Int.MAX_VALUE,
             minLines = minLines.coerceAtMost(maxLines ?: Int.MAX_VALUE),
-            visualTransformation = if (obscureText) PasswordVisualTransformation() else VisualTransformation.None,
+            visualTransformation = if (obscureText) PasswordVisualTransformation() else visualTransformation,
+            onTextLayout = onTextLayout,
             cursorBrush = SolidColor(if (showCursor) uiTheme().cursorColor else Color.Transparent),
             decorationBox = decorationBox,
         )
