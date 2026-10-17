@@ -9,6 +9,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -59,6 +62,30 @@ class WidgetsSmokeTest {
         }
         compose.onNodeWithText("taps: 0").performClick()
         compose.onNodeWithText("taps: 1").assertExists()
+    }
+
+    private class LabelWidget(val label: String)
+
+    // No fields of its own: the Compose compiler infers this class as stable,
+    // so a plain dispatch-receiver call to build() would be skipped when only
+    // the widget changes.
+    private class FieldlessState : ViewState<LabelWidget>() {
+        @Composable
+        override fun build() {
+            Text(widget.label)
+        }
+    }
+
+    @Test
+    fun fieldlessViewStateRebuildsWhenParentPassesNewWidget() {
+        var label by mutableStateOf("first")
+        compose.setContent {
+            StatefulWidget(LabelWidget(label)) { FieldlessState() }
+        }
+        compose.onNodeWithText("first").assertExists()
+        label = "second"
+        compose.waitForIdle()
+        compose.onNodeWithText("second").assertExists()
     }
 
     @Test

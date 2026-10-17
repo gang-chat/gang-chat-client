@@ -3,6 +3,9 @@ package com.gangchat.client.widgets
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.RememberObserver
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.neverEqualPolicy
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.remember
 
 /**
@@ -35,13 +38,24 @@ import androidx.compose.runtime.remember
  * rebuild, exactly like Flutter.
  */
 abstract class ViewState<W : Any> : RememberObserver {
-    private var currentWidget: W? = null
+    // The widget lives in snapshot state (never equal, so every new widget
+    // object counts as a change) and reading it also reads [revision]. A
+    // build() that reads `widget` is therefore invalidated directly when the
+    // parent passes a new widget or setState runs. Relying on the host's call
+    // to build() is not enough: the Compose compiler infers a state class with
+    // no fields of its own as stable and skips build() for an unchanged
+    // receiver.
+    private val currentWidget = mutableStateOf<W?>(null, neverEqualPolicy())
     private var initialized = false
     private var disposed = false
     internal val revision = mutableIntStateOf(0)
 
     /** Flutter's `widget`: the latest configuration from the parent. */
-    val widget: W get() = currentWidget ?: throw IllegalStateException("ViewState has no widget yet")
+    val widget: W
+        get() {
+            revision.intValue
+            return currentWidget.value ?: throw IllegalStateException("ViewState has no widget yet")
+        }
 
     /** Flutter's `context`. */
     lateinit var context: BuildContext
@@ -71,8 +85,8 @@ abstract class ViewState<W : Any> : RememberObserver {
 
     internal fun update(widget: W, context: BuildContext) {
         this.context = context
-        val old = currentWidget
-        currentWidget = widget
+        val old = Snapshot.withoutReadObservation { currentWidget.value }
+        currentWidget.value = widget
         if (!initialized) {
             initialized = true
             initState()
