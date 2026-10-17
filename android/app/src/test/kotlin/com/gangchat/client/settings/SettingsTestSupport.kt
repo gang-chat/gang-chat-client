@@ -1,6 +1,19 @@
 package com.gangchat.client.settings
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasScrollToIndexAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
+import com.gangchat.client.shell.pump
+import com.gangchat.client.widgets.EdgeInsets
+import com.gangchat.client.widgets.LocalMediaQuery
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -91,19 +104,93 @@ fun settingsApi(
  */
 fun ComposeContentTestRule.setSettingsContent(
     cache: MediaCacheController = testMediaCacheController(),
+    viewInsets: (() -> EdgeInsets)? = null,
     content: @Composable (BuildContext) -> Unit,
 ) {
     setContent {
         UiTheme {
             WindowMediaQuery {
-                MediaCacheScope(cache) {
-                    AppNotificationHost {
-                        RootNavigator { context -> content(context) }
+                val app: @Composable () -> Unit = {
+                    MediaCacheScope(cache) {
+                        AppNotificationHost {
+                            RootNavigator { context -> content(context) }
+                        }
                     }
+                }
+                if (viewInsets == null) {
+                    app()
+                } else {
+                    // Dart's `tester.view.viewInsets` (the on-screen keyboard).
+                    val media = LocalMediaQuery.current.copy(viewInsets = viewInsets())
+                    CompositionLocalProvider(LocalMediaQuery provides media) { app() }
                 }
             }
         }
     }
+}
+
+/** Whether a node shows [text] (Dart's `find.text(text)` finding something). */
+fun ComposeContentTestRule.hasTextNode(text: String, substring: Boolean = false): Boolean =
+    onAllNodes(hasText(text, substring = substring)).fetchSemanticsNodes().isNotEmpty()
+
+/** How many nodes show [text] (Dart's `find.text(text)` count). */
+fun ComposeContentTestRule.textCount(text: String, substring: Boolean = false): Int =
+    onAllNodes(hasText(text, substring = substring)).fetchSemanticsNodes().size
+
+/**
+ * Dart's `tester.widget<Button>(find.widgetWithText(Button, label)).onPressed
+ * != null`: the (last, i.e. top-most) button whose merged label is [label].
+ */
+fun ComposeContentTestRule.buttonWithTextEnabled(label: String): Boolean {
+    val node =
+        onAllNodes(
+            hasText(label) and
+                (SemanticsMatcher.keyIsDefined(SemanticsProperties.Disabled) or SemanticsMatcher.keyIsDefined(SemanticsActions.OnClick)),
+        ).fetchSemanticsNodes().last()
+    return node.config.getOrNull(SemanticsProperties.Disabled) == null && node.config.getOrNull(SemanticsActions.OnClick) != null
+}
+
+/**
+ * Dart's `tester.ensureVisible(finder)` on the section list: scrolls the
+ * page's vertical lazy list until a node matching [matcher] is composed and
+ * then brings it into view.
+ */
+fun ComposeContentTestRule.scrollSectionTo(matcher: SemanticsMatcher) {
+    if (onAllNodes(matcher).fetchSemanticsNodes().isEmpty()) {
+        val list =
+            onNode(hasScrollToIndexAction() and SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange))
+        val count = list.fetchSemanticsNode().config[SemanticsProperties.CollectionInfo].rowCount
+        for (index in 0 until count) {
+            list.performScrollToIndex(index)
+            waitForIdle()
+            if (onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()) break
+        }
+    }
+    onAllNodes(matcher).onFirst().performScrollTo()
+    pump()
+}
+
+/**
+ * Pumps until [condition] holds (Dart's `_pumpUntilFound`), sleeping between
+ * frames so work that hops to the I/O dispatcher (file caches) can finish.
+ */
+fun ComposeContentTestRule.pumpUntil(
+    timeoutMillis: Long = 5_000,
+    condition: () -> Boolean,
+) {
+    val deadline = System.currentTimeMillis() + timeoutMillis
+    while (!condition()) {
+        check(System.currentTimeMillis() < deadline) { "condition not met within ${timeoutMillis}ms" }
+        Thread.sleep(10)
+        pump(16)
+    }
+}
+
+/** The colour painted at ([x], [y]) dp inside [node]. */
+fun ComposeContentTestRule.pixelAt(node: SemanticsNodeInteraction, x: Float, y: Float): Color {
+    val pixels = onRoot().captureToImage().toPixelMap()
+    val bounds = node.fetchSemanticsNode().boundsInRoot
+    return pixels[(bounds.left + x * density.density).toInt(), (bounds.top + y * density.density).toInt()]
 }
 
 /**
