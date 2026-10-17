@@ -16,7 +16,7 @@ Android 客户端正在从 Flutter 一比一移植为原生 Kotlin + Jetpack Com
 | 界面组件库 | `:app` ui | 完成（93 个测试含 12 组截图） |
 | 登录、邮箱验证、找回密码、更新提示 | `:app` shell | 完成（41 个测试 + 16 张截图） |
 | 聊天、语音频道、通知、房间管理、设置 | `:app` home / settings | 完成 |
-| 主框架（home_shell）与应用入口（gang_app） | `:app` home / shell | 进行中 |
+| 主框架（home_shell）与应用入口（gang_app） | `:app` home / shell | 完成（应用入口 16 个测试 + 1 个启动画面用例；另有对模拟服务器的端到端测试） |
 
 ## 与 Flutter 版的差异
 
@@ -166,6 +166,35 @@ Android 客户端正在从 Flutter 一比一移植为原生 Kotlin + Jetpack Com
 - `AppUpdateGate` 检查更新时先让出一次，避免在构建过程中回调父组件。
 - 修正组件库 `SegmentedControl` 的一个缺陷：控件重建会重启点击检测，按下分段本身又会触发重建，
   导致真机上点击（包括登录/注册切换）被丢掉；改用 `rememberUpdatedState`，并加了回归测试。
+
+### 应用入口（`:app` shell `GangApp`、`MainActivity`）
+
+- `GangApp`（`shell/GangApp.kt`）按 `MaterialApp` 的层次组装：`AppConfigScope` → `UiTheme`（主题与根
+  `DefaultTextStyle`）→ `WindowMediaQuery` → 全应用关闭触摸触发的 tooltip（新增的 `LocalTooltipTriggerMode`，
+  对应 Dart 的 `TooltipTheme(triggerMode: manual)`；单个 `UiTooltip` 自己的 `triggerMode` 仍然优先）→
+  `AppNotificationHost` → `RootNavigator`，首页是认证门 `_AuthGate`。
+- 启动顺序：`GangChatApplication`（进程级安装）→ `MainActivity.onCreate` → `GangChatStartup.main()`
+  （偏好迁移、方向、WebRTC 音频、`AppConfig.load`、自有主机直连）→ `prepareGangApp(config, showInitialWindow)`
+  预读刷新令牌得到 `startsAuthenticated` → `GangApp`。`migrateLocalPreferences()` 接上了
+  `LocalPreferencesMigration().migrate()`（Android 上为空操作）。
+- 桌面窗口控制器未移植（在 Android 上本来就是空操作），只保留“显示窗口”：认证门在 Dart 调用
+  `showInitialWindow()` 的位置调用 `GangApp(showInitialWindow =)`，`MainActivity` 的启动画面（取消绘制的
+  pre-draw 监听）保持到那时。没有保存的会话时，恢复检查结束即显示登录页；有保存的会话时，恢复成功并渲染
+  一帧后再等 120 ms 显示主页，恢复失败显示登录页，4 秒内恢复没有结束则先撤掉启动画面、显示加载页（Dart
+  桌面版的保险定时器）。Flutter 的 Android 版在第一帧就撤掉启动画面，加载页会立即出现。
+- Android 上没有全应用的 `SelectionArea`（与 Dart 相同），`SelectionContainer.disabled` 因此没有作用，未移植。
+- 测试接缝：`GangApp` 多了 `authClientFactory`、`homePage` 两个参数（默认是真实的鉴权客户端与 `HomePage`），
+  供 `GangAppTest` 接入假鉴权服务器和主框架的假 API；`MainActivity.holdsLaunchScreen` 让在 Compose 测试时钟下
+  运行的测试关掉启动画面（Robolectric 会立即重跑被取消的绘制，活动永远启动不完）。
+- 未移植的 Dart 断言：登录入口用例里标题的鼠标指针样式（桌面）；冒烟用例里主题光标颜色与“没有
+  `SelectionArea`”的检查。两个 `auth_widget_tests` 用例和四个 `auth_smoke_widget_tests` 用例改为在真实
+  `GangApp` 上运行（原先在 `LoginPageWidgetTest` 里直接托管 `LoginPage`）。
+- 端到端测试 `GangAppEndToEndTest`（设置 `GANG_E2E_API_BASE_URL` 时才运行，对 `tool/js/mock_server`）：真实的
+  `MainActivity` 启动、OkHttp 与 SSE 实时流；登录、房间列表、打开房间、发送消息、他人消息经 SSE 到达、通知、
+  设置、退出登录，手机与平板各 8 张截图，与 `docs/js-port-screenshots/` 对照一致。测试里图片用 BitmapFactory
+  解码（Robolectric 没有 `ImageDecoder`），安全存储用内存实现（没有 Android Keystore）。服务器在本机、几乎
+  没有延迟时，打开房间后已读回执的 SSE 回声会早于下一帧到达，“未读消息”分隔线于是不显示（Dart 的执行顺序
+  相同）；服务器加 `--latency 40` 时分隔线正常出现。
 
 ### 界面组件库（`:app` ui）
 
