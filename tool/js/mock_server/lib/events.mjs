@@ -2,7 +2,7 @@
 // posting messages, system messages and notifications, and fanning the
 // resulting realtime events out over SSE.
 //
-// Event payloads follow lib/src/home/home_shell_realtime.dart:
+// Event payloads follow packages/ui/src/home/home_shell_realtime.ts:
 //   room_updated / room_added   -> RoomCard snapshot (account-scoped) + update_reason
 //   room_deleted                -> { room_id }
 //   live_participant_*          -> { live: LiveState, participant_count, preview: [UserSummary] }
@@ -34,7 +34,7 @@ export function emitRoomDeleted(app, roomId, userIds) {
   app.hub.sendToUsers(userIds, 'room_deleted', roomId, { room_id: roomId });
 }
 
-/** `type` is one of the live snapshot event names (see realtime_live_events.dart). */
+/** `type` is one of the live snapshot event names (see realtime_live_events.ts). */
 export function emitLiveSnapshot(app, room, type, extra = {}) {
   const live = app.store.liveState(room);
   app.hub.sendToUsers(memberIds(room), type, room.id, {

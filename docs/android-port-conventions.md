@@ -1,6 +1,10 @@
 # Flutter → Android 原生（Kotlin + Compose）移植约定
 
 Android 客户端从 Flutter 一比一移植为原生 Kotlin 应用，界面用 Jetpack Compose。
+
+> Flutter 客户端已从仓库移除。本文提到的 Dart 源码（`lib/`、`test/` 等）以提交 `fcf2fdd` 为准，
+> 可用 `git show fcf2fdd:lib/src/<路径>` 查看。
+
 本文是硬性约定：每个 Dart 文件都按同一套规则翻译，不同人（或不同 agent）分别移植的
 模块才能不用协商就互相引用。**行为以 Dart 源码为准**；`packages/core`（TypeScript 版）
 是另一份一比一移植，遇到 Dart 写法不好直译时可以参考它的处理方式，但不以它为准。

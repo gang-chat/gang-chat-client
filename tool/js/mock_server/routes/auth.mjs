@@ -1,4 +1,4 @@
-// Auth endpoints (lib/src/auth/auth_client.dart): login/register/refresh/logout,
+// Auth endpoints (packages/core/src/auth/auth_client.ts): login/register/refresh/logout,
 // email verification and password reset (the code is always 123456), sessions
 // and password change.
 //

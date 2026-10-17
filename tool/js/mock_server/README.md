@@ -2,11 +2,16 @@
 
 A self-contained fake of the Gang Chat backend (`/api/v1/...` plus the
 `/me/stream` SSE channel) for end-to-end smoke tests of the Electron desktop
-client when the real server is not reachable. It speaks the protocol the
-Flutter client defines: endpoints from `lib/src/protocol/api_client.dart` and
-`lib/src/auth/auth_client.dart`, JSON shapes from the `fromJson` factories in
-`lib/src/protocol/models.dart`, and realtime events from
-`lib/src/live/live_stream_client.dart` / `lib/src/home/home_shell_realtime.dart`.
+client and the native Android client when the real server is not reachable.
+It speaks the protocol both clients implement (ported from the former Flutter
+client): endpoints from `packages/core/src/protocol/api_client.ts` and
+`packages/core/src/auth/auth_client.ts`, JSON shapes from the `fromJson`
+factories in `packages/core/src/protocol/models.ts`, and realtime events from
+`packages/core/src/live/live_stream_client.ts` /
+`packages/ui/src/home/home_shell_realtime.ts`. The Kotlin equivalents live
+under `android/core/src/main/kotlin/com/gangchat/client/{protocol,auth,live}`
+and `android/app/src/main/kotlin/com/gangchat/client/home/HomeShellRealtime.kt`.
+The Android end-to-end test (`GangAppEndToEndTest`) runs against this server.
 
 Plain Node.js ESM, no dependencies (Node 22+). State is in memory and reseeded
 on every start.
@@ -31,6 +36,19 @@ npm run build -w @gang-chat/desktop
 GANG_API_BASE_URL=http://127.0.0.1:21116/api/v1 \
 GANG_ASSET_BASE_URL=http://127.0.0.1:21116 \
 npm run dev -w @gang-chat/desktop
+```
+
+For the Android client, pass the same variables to Gradle (run in `android/`).
+A device or emulator reaches the server through `adb reverse`, which keeps
+`127.0.0.1` valid on the device, including in the asset URLs the server hands
+out (otherwise start it with `--host 0.0.0.0 --public-url http://<lan-ip>:21116`
+and use that address):
+
+```sh
+adb reverse tcp:21116 tcp:21116
+GANG_API_BASE_URL=http://127.0.0.1:21116/api/v1 \
+GANG_ASSET_BASE_URL=http://127.0.0.1:21116 \
+./gradlew :app:installDebug
 ```
 
 | Option | Default | Meaning |

@@ -27,10 +27,14 @@
         android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
+    <!-- usesCleartextTraffic: the Flutter build's Dart HttpClient ignored Android's
+         cleartext policy, so http:// and ws:// addresses (a self-hosted LiveKit,
+         a local server) worked; OkHttp and LiveKit enforce it, so allow it. -->
     <application
         android:name=".GangChatApplication"
         android:label="Gang Chat"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
         <!-- Same authority and paths as the Flutter build: release APKs in
              cache/release-updates/ and copied clipboard images. -->
         <provider

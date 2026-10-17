@@ -1,8 +1,12 @@
 # Flutter → TypeScript 移植约定
 
 桌面端从 Flutter 一比一移植到 Electron，界面用 React（DOM）。逻辑层
-`@gang-chat/core` 保持平台无关，以后移动端用 React Native 时直接复用；移动端界面
-另用 React Native 原生组件编写，不与桌面共用组件。Android 目前仍用 Flutter。
+`@gang-chat/core` 保持平台无关。Android 另行一比一移植为原生 Kotlin + Jetpack Compose
+（`android/`，约定见 `docs/android-port-conventions.md`），不与桌面共用代码。
+
+> Flutter 客户端已从仓库移除。本文提到的 Dart 源码（`lib/`、`test/` 等）以提交 `fcf2fdd` 为准，
+> 可用 `git show fcf2fdd:lib/src/<路径>` 查看。
+
 
 本文是移植时的硬性约定：每个 Dart 文件都按同一套规则翻译，不同人（或不同
 agent）分别移植的模块才能不用协商就互相引用。
@@ -15,7 +19,7 @@ packages/core/src/      @gang-chat/core：纯 TypeScript，不依赖 React、DOM
   platform/             Platform 接口（宿主应用实现）与 HttpClient
   config/ protocol/ auth/ app/ live/ lifecycle/
   shell/                lib/src/shell 里的非界面服务（剪贴板、文件、窗口、更新……）
-packages/ui/src/        @gang-chat/ui：桌面端 React DOM 组件（也可用于浏览器版）
+packages/ui/src/        @gang-chat/ui：桌面端 React DOM 组件
   lib/                  useListenable、ViewState、Flutter 风格的布局组件（layout.tsx）
   ui/ home/ settings/
   shell/                lib/src/shell 里的界面（登录页、更新提示、密码找回流程……）

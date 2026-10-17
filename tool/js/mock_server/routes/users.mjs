@@ -146,7 +146,7 @@ function userProfile(c) {
   return { profile: { user: c.store.userSummary(user, { commonRoomsFor: c.user.id }) } };
 }
 
-// Push devices (Android FCM in the Flutter app; accepted and ignored here) -----
+// Push devices (Android FCM; accepted and ignored here) -----
 
 function pushDeviceKey(c) {
   return `${c.user.id}:${c.params.provider}:${c.params.installationId}`;

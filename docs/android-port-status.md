@@ -1,7 +1,11 @@
 # Android 原生移植状态
 
-Android 客户端正在从 Flutter 一比一移植为原生 Kotlin + Jetpack Compose，代码在 `android/`。
-移植约定见 `docs/android-port-conventions.md`。本文记录各模块进度，以及与 Flutter 版的差异。
+Android 客户端已从 Flutter 一比一移植为原生 Kotlin + Jetpack Compose，代码在 `android/`；
+Flutter 工程随后从仓库移除。移植约定见 `docs/android-port-conventions.md`。本文记录各模块进度、
+与 Flutter 版的差异，以及需要真机确认的部分。
+
+> Flutter 客户端已从仓库移除。本文提到的 Dart 源码（`lib/`、`test/` 等）以提交 `fcf2fdd` 为准，
+> 可用 `git show fcf2fdd:lib/src/<路径>` 查看。
 
 ## 进度
 
@@ -17,6 +21,39 @@ Android 客户端正在从 Flutter 一比一移植为原生 Kotlin + Jetpack Com
 | 登录、邮箱验证、找回密码、更新提示 | `:app` shell | 完成（41 个测试 + 16 张截图） |
 | 聊天、语音频道、通知、房间管理、设置 | `:app` home / settings | 完成 |
 | 主框架（home_shell）与应用入口（gang_app） | `:app` home / shell | 完成（应用入口 16 个测试 + 1 个启动画面用例；另有对模拟服务器的端到端测试） |
+
+## 移除 Flutter
+
+- 删除了 `lib/`、`test/`、`integration_test/`、`ios/`、`linux/`、`macos/`、`windows/`、`web/`、
+  `third_party/`、`installer/`、`deploy/`、`pubspec.*` 和 Dart 脚本。Windows / macOS 由 Electron 版
+  （`apps/desktop`）发布，**Web 版不再构建和部署**（`release.yml` 的 `deploy-web` 已删除）。
+- `tool/check_utf8.dart` 改为 `tool/check_utf8.py`（同样的检查，另加一个乱码特征 `鏂囦欢`）。
+- CI：`.github/workflows/android.yml` 跑 UTF-8 检查、`:core:test :app:testDebugUnitTest` 并打 debug APK；
+  `release.yml` 的 `build-android` 改用 Gradle：按 tag 写 `android/version.properties`，
+  `:app:assembleRelease`，再用 `aapt2 dump badging` 核对 versionCode / versionName。签名、FCM 配置、
+  产物文件名与 Flutter 版相同。
+- 原地升级：applicationId、签名、versionCode 规则不变，`shared_preferences` 与
+  `flutter_secure_storage` 的存储格式按原插件复现，从 Flutter 版覆盖安装后保留登录状态和设置。
+
+## 需要真机确认
+
+本仓库的验证环境没有模拟器，界面和逻辑用 Robolectric + Roborazzi 截图测试覆盖，并对模拟服务端
+（`tool/js/mock_server`）跑过端到端测试（手机、平板各一遍：登录、房间列表、聊天收发、实时消息、
+通知、设置、退出）。以下路径只能在真机上验证：
+
+- LiveKit 入会、发布/订阅音视频、自动重连；AudioSwitch 的听筒/扬声器/蓝牙路由。
+- 屏幕共享（MediaProjection 授权、前台服务类型）和播放捕获的共享声音。
+- Android Keystore 加密的凭据存储，以及从 Flutter 版覆盖安装后的数据读取。
+- FCM 推送、通知点击跳转、数字角标、前台服务与任务划除通知。
+- 启动画面到首帧的衔接、APK 后台下载与系统安装器。
+
+## 待决定：沿用 Flutter 版行为的问题
+
+下面三处在 Flutter 版里就是这样，原生版一比一保留，是否修正需要产品决定：
+
+1. 新消息提示音在 Android 上不响（见“平台层”）。
+2. 进入/离开语音频道的提示音以及其后的语音播报不响（见“语音、视频、屏幕共享”第 5 条）。
+3. 取消语音消息录音会清除通信设备，通话中取消录音可能打乱通话的音频路由（见“录音、更新、试听”）。
 
 ## 与 Flutter 版的差异
 
@@ -35,6 +72,9 @@ Android 客户端正在从 Flutter 一比一移植为原生 Kotlin + Jetpack Com
 
 ### 平台层（`:app` platform / shell）
 
+- 允许明文 HTTP（`android:usesCleartextTraffic="true"`）：Flutter 的 Dart `HttpClient` 不受 Android
+  明文流量策略约束，`http://` / `ws://` 地址（自建 LiveKit、本地服务器）都能连；OkHttp 和 LiveKit
+  SDK 遵守该策略，不打开就会在 Android 9+ 上拒绝连接。
 - MethodChannel 层已删除，原来经通道调用的原生代码改为直接调用。通知渠道 id、通知 id、请求码、
   intent extra、偏好文件名、FileProvider authority 与 Flutter 版保持一致；启动 Activity 仍是
   `com.gangchat.client.MainActivity`。前台服务与 FCM 服务移到 `platform` 包（没有持久化数据引用它们的类名）。

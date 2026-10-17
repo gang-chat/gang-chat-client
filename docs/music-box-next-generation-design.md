@@ -16,7 +16,7 @@
 | 上一首、下一首、四种模式、优先播放 | 已实现主体 | selector/manager/player 与客户端控制均已存在，并覆盖优先播放连接复用、历史和暂停边界测试。 |
 | 点歌队列与已保存歌单独立快照 | 已实现主体 | 服务端持久化 `queue_scope` / `snapshot_id` / `active_source_type`；客户端可独立查看来源并从指定歌曲起播。 |
 | 个人/房间歌单、合并、批量添加、克隆、分享 | 已实现主体 | 客户端、服务端 API 和数据库测试已覆盖 CRUD、分页、去重、容量与事务边界。 |
-| 三端音乐盒 UI、歌曲/歌单名片与本地试听 | 已实现主体 | Flutter 共享 UI 与 Windows、macOS、Android widget 测试已覆盖主要宽窄屏、名片和选择流程。 |
+| 三端音乐盒 UI、歌曲/歌单名片与本地试听 | 已实现主体 | 原 Flutter 共享 UI 与 Windows、macOS、Android widget 测试已覆盖主要宽窄屏、名片和选择流程；Electron 与原生 Android 客户端按一比一移植保留了这些界面和测试。 |
 | 歌曲添加到个人/房间歌单的跨作用域目标 | 已实现 | 房间歌单管理页会同时加载当前房间歌单与当前用户的“我的歌单”，并按目标作用域调用对应接口。 |
 | 从指定来源显式起播 | 已实现 | 顶部播放按钮只负责播放/暂停当前来源。起播的单位始终是一首歌：歌单里的歌曲以 `start_item_id` 原子激活所属歌单；正在播放已保存歌单时，点歌队列里的歌曲以 `temporary` 与自身 `start_item_id` 把房间切回点歌队列。不存在“播放整个歌单”或“播放整个队列”的入口。 |
 | 精简进度事件 | 已实现兼容阶段 | 新增 `music_box_progress`；客户端仅在 room/revision/current item 匹配时应用。默认仍保留旧完整心跳；客户端会把同 revision、同歌曲、同播放状态的完整心跳约简为纯进度更新，避免覆盖个性化权限和重复 GET。开启 `music_box_compact_progress_only` 后才停止逐秒全快照和逐秒位置写库。 |
@@ -172,26 +172,28 @@ types.go             领域类型和枚举
 
 ### 5.2 客户端
 
-遵守 `modular-development-guide.md` 的依赖边界：
+遵守 `modular-development-guide.md` 的依赖边界。下列各层在桌面端位于 `packages/core/src/<层>`
+（界面层在 `packages/ui/src/<层>`），在 Android 端位于 `android/core` / `android/app` 中
+`com.gangchat.client.<层>` 包：
 
-- `lib/src/protocol`
+- `protocol`
   - 扩展 API、SSE 事件和数据模型。
   - 兼容缺失字段和未知播放模式。
-- `lib/src/app`
+- `app`
   - 扩展 `MusicBoxController`。
   - 增加播放模式、控制按钮状态、revision 接收规则等纯逻辑。
-  - 不依赖 Flutter、LiveKit 或平台插件。
-- `lib/src/home`
+  - 不依赖界面框架、LiveKit 或平台插件。
+- `home`
   - 渲染上一首、播放/暂停、下一首和模式按钮。
   - 展示歌单、队列、加载、失败和空状态。
   - 只调用 controller，不拼 API body。
-- `lib/src/live`
+- `live`
   - 继续只负责识别音乐机器人音轨和设置本地监听音量。
   - Android 在音乐机器人音轨处于订阅且未静音状态时，保持 `inCommunication`
     模式以保留麦克风路由与回声消除，但把系统音量控制流切换为媒体音量；音轨停止、
     取消订阅或会话断开时恢复标准通信音量流。Windows 与 macOS 不执行这一路由切换。
   - 不承担播放顺序、歌单或随机规则。
-- `lib/src/ui`
+- `ui`
   - 只在确有跨页面复用需求时增加通用歌单/菜单组件。
 
 三端共享同一套协议和业务规则。平台差异只允许出现在响应式布局、输入方式和本地音频输出适配中。
@@ -1075,7 +1077,7 @@ FFmpeg。播放器从选中当前项到实际打开文件期间由当前项引�
 - 临时歌单的模式菜单只显示“顺序播放”和“单曲循环”；已保存歌单显示全部四种模式。
 - 当前为临时歌单且用户是普通成员时，不显示或禁用播放/暂停、上一首、下一首和模式控制，只保留点歌、切换歌单和删除本人条目的入口。
 - 当前为自己的个人歌单或房间歌单时，普通成员显示完整播放控制、重排和全部模式；当前为其他成员个人歌单时，仅在服务端 capabilities 允许的管理员界面显示这些控制。
-- 按钮状态由 `lib/src/app` 的纯 display/helper 计算。
+- 按钮状态由 `app` 层的纯 display/helper 计算。
 - 控制请求进行中只禁用会冲突的按钮，不冻结整个音乐盒。
 - 收到更高 revision 后解除 pending 状态。
 - 窄屏时允许缩为图标，但必须保留 tooltip、语义标签和触屏可用热区。

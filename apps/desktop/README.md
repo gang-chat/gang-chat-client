@@ -1,11 +1,11 @@
 # Gang Chat 桌面端（Electron）
 
-Windows / macOS 桌面客户端，从 Flutter 版一比一移植而来。Android 暂时仍用仓库根目录的
-Flutter 工程。
+Windows / macOS 桌面客户端，从已移除的 Flutter 版一比一移植而来。Android 是 `android/` 下的
+原生 Kotlin 工程（见 `docs/android-port-status.md`），两者不共用代码，只共用 `assets/` 和服务端。
 
 | 目录 | 内容 |
 | --- | --- |
-| `packages/core` | 协议、鉴权、业务控制器、LiveKit 会话（`livekit-client`）、平台服务；不依赖界面，未来 React Native 移动端直接复用 |
+| `packages/core` | 协议、鉴权、业务控制器、LiveKit 会话（`livekit-client`）、平台服务；不依赖界面 |
 | `packages/ui` | React（DOM）界面，按 Flutter Widget 一比一移植 |
 | `apps/desktop` | Electron 主进程、preload、渲染进程入口和 `Platform` 接口的桌面实现 |
 | `tool/js/mock_server` | 本地模拟服务端，用于没有真实服务器时联调 |
@@ -24,8 +24,8 @@ npm run typecheck           # core + ui + desktop 的 TypeScript 检查
 npm test                    # vitest 单元测试
 ```
 
-服务器地址默认取 `assets/config/app_config.json`（与 Flutter 版共用）。构建时可用环境变量覆盖，
-对应 Flutter 的 `--dart-define`：
+服务器地址默认取 `assets/config/app_config.json`（与 Android 版共用）。构建时可用环境变量覆盖
+（变量名与 Android 版的 Gradle 构建相同）：
 
 ```bash
 GANG_API_BASE_URL=http://127.0.0.1:21116/api/v1 \
@@ -50,7 +50,7 @@ npm run dist:mac -w @gang-chat/desktop    # GangChat_v<version>.dmg
 ```
 
 版本号取 `apps/desktop/package.json` 的 `version`；macOS 的 `CFBundleVersion` 由
-`scripts/package.mjs` 算成 `主*1000000 + 次*1000 + 补丁`，和 Flutter macOS 版、Android 一致。
+`scripts/package.mjs` 算成 `主*1000000 + 次*1000 + 补丁`，和原 Flutter macOS 版、Android 一致。
 macOS 打包前 `scripts/prepare_sparkle.mjs` 会下载固定版本、校验过的 Sparkle 并编译
 `native/sparkle/sparkle.mm`（需要 Xcode 命令行工具）。CI 工作流
 `.github/workflows/desktop-electron.yml` 在每次推送时做类型检查、单元测试，并打出测试包；

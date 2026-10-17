@@ -10,10 +10,11 @@ The `.github/workflows/release.yml` workflow publishes these assets for each
 - `GangChat_v<version>.apk`
 
 The desktop builds are the Electron client (`apps/desktop`, packaged with
-electron-builder). Android and the web client are still built from the
-Flutter project. The release version is written into
-`apps/desktop/package.json` before packaging, so the installers, the About
-page and the macOS build number all follow the tag.
+electron-builder). The APK is the native Kotlin client (`android/`, built with
+Gradle). The release version is written into `apps/desktop/package.json` and
+`android/version.properties` before packaging, so the installers, the APK, the
+About page and the build numbers all follow the tag. The Flutter client has
+been removed, and with it the web client: no web build is deployed any more.
 
 Desktop signing is optional while certificates are being provisioned. When all
 secrets for a desktop platform are absent, the workflow publishes an unsigned
@@ -21,12 +22,6 @@ artifact and adds warnings to the job summary and GitHub Release notes. When
 all required secrets are present, signing and verification are mandatory.
 Partially configured or invalid signing settings fail the affected job so a
 misconfigured release cannot be mistaken for a signed one.
-
-After the GitHub Release is published, the `deploy-web` job builds the web
-client and deploys it to `https://ky-z.com/gang-chat/app/`. It follows the same
-rule: with none of `WEB_DEPLOY_SSH`, `WEB_DEPLOY_SSH_KEY` and
-`WEB_DEPLOY_KNOWN_HOSTS` set it is skipped with a warning, and with only some of
-them set it fails. Setup is described in `docs/web-spike.md` (部署).
 
 ## Windows signing
 
@@ -139,17 +134,18 @@ small Node-API module the main process uses to drive it
 
 ### One-time setup
 
-1. Build macOS once so CocoaPods installs Sparkle's tools, then create the
-   update-signing key pair. `generate_keys` keeps the private key in your login
-   keychain and prints the public key:
+1. Download the Sparkle release pinned in
+   `apps/desktop/scripts/prepare_sparkle.mjs` (`Sparkle-<version>.tar.xz` from
+   the Sparkle GitHub releases), unpack it and create the update-signing key
+   pair. `generate_keys` keeps the private key in your login keychain and
+   prints the public key:
 
    ```bash
-   macos/Pods/Sparkle/bin/generate_keys
+   ./bin/generate_keys
    ```
 
 2. Put the printed public key in `SUPublicEDKey` in
-   `apps/desktop/electron-builder.yml` (and `macos/Runner/Info.plist` for the
-   Flutter app) and commit it. It is public and belongs in the repository.
+   `apps/desktop/electron-builder.yml` and commit it. It is public and belongs in the repository.
 3. Export the private key and add the file's contents as the repository secret
    `SPARKLE_ED_PRIVATE_KEY`:
 
@@ -223,18 +219,25 @@ passwords backed up securely; losing them prevents future in-place upgrades.
 After building, the workflow uses Android SDK `apksigner` to verify that the APK
 is signed and that at least one signer certificate is present.
 
-The APK uses the workflow input as its Android `versionName`. Its numeric
+The workflow writes the release version and release time into
+`android/version.properties`, which the Gradle build reads, so the APK uses the
+workflow input as its Android `versionName`. Its numeric
 `versionCode` is deterministic: `major * 1,000,000 + minor * 1,000 + patch`
 (for example, `1.2.3` becomes `1002003`). Minor and patch components must each
 fit in the range `0..999`, and the final value must fit Android's supported
 positive version-code range. Version components use canonical decimal notation
 without leading zeroes.
 
-For local development, `flutter build apk --release` keeps the existing debug
-signing fallback unless all four signing environment variables are provided.
-The project's local/default build version is `1.0.0+1`, so ordinary Android
-and Windows debug builds both report `1.0.0`; release builds override it with
-the workflow input.
+After building, `aapt2 dump badging` checks that the APK carries exactly that
+`versionName` and `versionCode`.
+
+For local development, `./gradlew :app:assembleRelease` (run in `android/`)
+falls back to the debug signing key unless all four signing environment
+variables (`ANDROID_KEYSTORE_PATH`, `ANDROID_KEYSTORE_PASSWORD`,
+`ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`) are provided; setting only some
+of them fails the build. The committed `android/version.properties` says
+`1.0.0`, so local Android builds report `1.0.0`; release builds override it
+with the workflow input.
 The keystore itself must never be committed; Android keystore file extensions
 and `key.properties` are already ignored by `android/.gitignore`.
 

@@ -1,7 +1,7 @@
 {
   "name": "gang-chat-js",
   "private": true,
-  "description": "Gang Chat TypeScript clients: the Electron desktop app plus the shared core and UI packages a future React Native mobile app reuses.",
+  "description": "Gang Chat TypeScript client: the Electron desktop app and its core and UI packages. Android is the native Kotlin project under android/.",
   "workspaces": [
     "packages/core",
     "packages/ui",

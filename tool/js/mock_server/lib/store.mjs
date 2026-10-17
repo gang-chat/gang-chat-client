@@ -1,6 +1,6 @@
 // In-memory state plus the serializers that turn it into the JSON shapes the
-// client's `fromJson` factories read (lib/src/protocol/models.dart). Field
-// names here are the contract: keep them snake_case and in sync with Dart.
+// client's `fromJson` factories read (packages/core/src/protocol/models.ts). Field
+// names here are the contract: keep them snake_case and in sync with the clients.
 import { forbidden, notFound } from './http.mjs';
 import { DAY, iso, nextId, randomToken, unixSeconds } from './util.mjs';
 

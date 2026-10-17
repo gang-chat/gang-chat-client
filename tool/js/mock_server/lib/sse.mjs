@@ -1,6 +1,6 @@
 // Server-sent events for `GET /api/v1/me/stream`.
 //
-// Wire format (what lib/src/live/live_stream_client.dart parses):
+// Wire format (what packages/core/src/live/live_stream_client.ts parses):
 //   event: <type>
 //   data: {"type":"<type>","room_id":"<id>","data":{...}}
 //   <blank line>

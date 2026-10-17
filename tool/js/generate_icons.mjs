@@ -1,14 +1,27 @@
 // Regenerates packages/ui/src/ui/icons.ts from the Material Icons codepoints.
 //
-// The table holds every `Icons.*` name the shared UI uses (the Flutter
+// The table holds every `Icons.*` name the shared UI uses (the former Flutter
 // client's names, so ported code keeps writing `Icons.mic_off_rounded`).
-// Add a name to EXTRA_ICONS, or use it in lib/ or packages/ui/src, then run:
+// Add a name to EXTRA_ICONS, or use it in packages/ui/src, then run:
 //   node tool/js/generate_icons.mjs
 import fs from 'node:fs';
 import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
-const EXTRA_ICONS = [];
+// Names the table has always carried that no source spells as `Icons.x`:
+// looked up by string (composerAttachmentGlyph) or used only by the removed
+// Flutter client, which this script used to scan as well.
+const EXTRA_ICONS = [
+  'audiotrack_outlined', 'auto_awesome', 'auto_awesome_outlined',
+  'bolt_outlined', 'call_outlined', 'celebration_outlined',
+  'chat_bubble_outline', 'coffee_outlined', 'dashboard_customize_outlined',
+  'favorite_border', 'folder_open_outlined', 'headset_mic_outlined',
+  'lightbulb_outline', 'local_fire_department_outlined', 'movie_outlined',
+  'nightlight_round', 'notifications_active_outlined', 'open_in_new',
+  'public_outlined', 'push_pin_outlined', 'sentiment_satisfied_alt', 'tag',
+  'vertical_align_center_outlined', 'waving_hand_outlined',
+  'workspace_premium_outlined',
+];
 
 const scss = fs.readFileSync(path.join(root, 'node_modules/material-icons/css/_codepoints.scss'), 'utf8');
 const codepoints = new Map([...scss.matchAll(/"([a-z0-9_]+)": ([0-9a-f]+)/g)].map((m) => [m[1], m[2]]));
@@ -24,7 +37,7 @@ function walk(dir, exts, out = []) {
 }
 
 const names = new Set(EXTRA_ICONS);
-for (const file of [...walk(path.join(root, 'lib'), ['.dart']), ...walk(path.join(root, 'packages/ui/src'), ['.ts', '.tsx'])]) {
+for (const file of walk(path.join(root, 'packages/ui/src'), ['.ts', '.tsx'])) {
   for (const m of fs.readFileSync(file, 'utf8').matchAll(/\bIcons\.([a-z][a-z0-9_]*)/g)) names.add(m[1]);
 }
 

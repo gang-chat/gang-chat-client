@@ -2,8 +2,9 @@
 
 本文档描述客户端当前的视觉语言与版式。主界面沿用原有版式，组件、token、
 字体与图标使用 Signal 设计；设置页和音乐盒为重新设计的版式。界面代码只通过
-`lib/src/ui/tokens.dart` 中的 token 取色、圆角、字体、阴影和动效，不在
-feature 代码里写死颜色值。
+token 文件取色、圆角、字体、阴影和动效——桌面端是 `packages/ui/src/ui/tokens.ts`，
+Android 是 `android/app/src/main/kotlin/com/gangchat/client/ui/Tokens.kt`，两者取值一致——
+不在 feature 代码里写死颜色值。
 
 ## 1. 设计理念
 
@@ -160,7 +161,7 @@ Signal 把客户端当成一台"信号接收器"：近乎纯黑的画布上，�
 
 ## 9. 平台适配
 
-- **macOS**：原生红绿灯由 `MainFlutterWindow.swift` 居中在 44px 的标题栏带内，
-  Flutter 标题栏左侧预留 80px（`window_chrome.dart`），登录页标识居中显示，
+- **macOS**：原生红绿灯由 Electron 主进程（`apps/desktop/src/main/window.ts`）居中在 44px 的
+  标题栏带内，标题栏左侧预留 80px（`packages/ui/src/ui/window_chrome.ts`），登录页标识居中显示，
   不与红绿灯重叠。
-- **Windows / Linux**：标题栏右侧为自绘窗口按钮。
+- **Windows**：标题栏右侧为自绘窗口按钮。

@@ -2,7 +2,7 @@
 // Self-check for the mock server: spawns server.mjs on a random port and walks
 // the client flow (login -> rooms -> messages -> SSE ready -> send -> SSE
 // event, plus live, uploads, refresh, ...). Response shapes are validated
-// against the fields lib/src/protocol/models.dart reads with non-null casts.
+// against the fields packages/core/src/protocol/models.ts reads with non-null casts.
 //
 //   node tool/js/mock_server/check.mjs
 //
@@ -130,7 +130,7 @@ function makeApi(apiBase) {
   };
 }
 
-/** Parses the stream exactly like lib/src/live/live_stream_client.dart. */
+/** Parses the stream exactly like packages/core/src/live/live_stream_client.ts. */
 class SseClient {
   events = [];
   pings = 0;

@@ -1,14 +1,17 @@
 # TypeScript / Electron 移植状态
 
-桌面端（Windows、macOS）从 Flutter 一比一移植到 Electron + React；Android 暂时保持
-Flutter。约定见 `docs/js-port-conventions.md`。本文记录各模块的移植状态，以及与 Flutter
+桌面端（Windows、macOS）从 Flutter 一比一移植到 Electron + React；Android 另行移植为原生
+Kotlin（见 `docs/android-port-status.md`）。约定见 `docs/js-port-conventions.md`。本文记录各模块的移植状态，以及与 Flutter
 实现有意不同的地方（代码里以 `// PORT:` 注释标出）。
+
+> Flutter 客户端已从仓库移除。本文提到的 Dart 源码（`lib/`、`test/` 等）以提交 `fcf2fdd` 为准，
+> 可用 `git show fcf2fdd:lib/src/<路径>` 查看。
 
 ## 架构
 
 | 层 | 位置 | 说明 |
 | --- | --- | --- |
-| 逻辑层 | `packages/core` | 协议、鉴权、业务控制器、LiveKit 会话（`livekit-client`）、平台服务。平台无关，未来 React Native 移动端直接复用 |
+| 逻辑层 | `packages/core` | 协议、鉴权、业务控制器、LiveKit 会话（`livekit-client`）、平台服务。平台无关 |
 | 界面层 | `packages/ui` | React DOM 组件，按 Flutter Widget 一比一移植 |
 | 桌面壳 | `apps/desktop` | Electron main / preload / renderer；实现 `Platform` 接口 |
 | 联调用模拟服务端 | `tool/js/mock_server` | 本地模拟 `/api/v1`，用于无法连接真实服务器时的冒烟测试 |
@@ -63,7 +66,7 @@ Flutter。约定见 `docs/js-port-conventions.md`。本文记录各模块的移�
   所以不需要 `SUEnableInstallerLauncherService`。未签名的包会被 `scripts/after_pack.cjs` 做 ad-hoc
   签名，否则 Sparkle 拒绝安装。开发版没有 Sparkle，退回在浏览器中下载 DMG。
 - 偏好迁移：保留 Flutter 版的迁移逻辑；音量类键一律按 double 写入（JSON 里 1.0 和 1 无法区分）。
-- Android 专用服务（推送、屏幕旋转、系统 UI）在桌面端是空实现，Android 仍用 Flutter 版。
+- Android 专用服务（推送、屏幕旋转、系统 UI）在桌面端是空实现，Android 由原生客户端实现。
 
 ### 应用层：账号、设置、文件传输、语音录制（`packages/core/src/app`）
 

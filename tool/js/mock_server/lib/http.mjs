@@ -10,7 +10,7 @@ export const MAX_BODY_BYTES = 64 * 1024 * 1024;
  * Thrown by handlers; rendered as `{ "error": { code, message, request_id }, ...extra }`,
  * the shape `ApiException.fromResponse` / `AuthException.fromResponse` parse.
  * Messages are English on purpose: the client maps known phrases and codes to
- * its own Chinese copy (lib/src/protocol/error_messages.dart).
+ * its own Chinese copy (packages/core/src/protocol/error_messages.ts).
  */
 export class ApiError extends Error {
   constructor(status, code, message, extra = {}) {

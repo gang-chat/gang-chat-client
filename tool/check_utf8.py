@@ -26,7 +26,7 @@ MOJIBAKE_MARKERS = [
     "浣犵", "娴佺", "鍥藉", "涓嶇", "鐗堟", "鏂囦欢",
 ]
 
-SELF = {"tool/check_utf8.py", "tool/check_utf8.dart"}
+SELF = {"tool/check_utf8.py"}
 
 
 def main() -> int:
