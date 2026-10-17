@@ -15,6 +15,7 @@ on:
     paths:
       - 'android/**'
       - 'assets/**'
+      - 'tool/check_utf8.py'
       - '.github/workflows/android.yml'
   workflow_dispatch:
 

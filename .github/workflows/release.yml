@@ -481,7 +481,9 @@ jobs:
           AAPT2="$(find "$ANDROID_SDK_ROOT/build-tools" \
             -mindepth 2 -maxdepth 2 -type f -name aapt2 \
             | sort -V | tail -n 1)"
-          BADGING="$("$AAPT2" dump badging "$APK" | head -n 1)"
+          # sed reads the whole dump; `head -n 1` would close the pipe early and
+          # the SIGPIPE would fail this step under pipefail.
+          BADGING="$("$AAPT2" dump badging "$APK" | sed -n '1p')"
           echo "$BADGING"
           if ! printf '%s' "$BADGING" | grep -q "versionCode='${{ needs.prepare.outputs.android_version_code }}'"; then
             echo "::error::APK versionCode does not match ${{ needs.prepare.outputs.android_version_code }}"
