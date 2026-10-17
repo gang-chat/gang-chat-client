@@ -1,14 +1,10 @@
 package com.gangchat.client.live
 
-import com.gangchat.client.foundation.future
-import com.gangchat.client.foundation.waitAll
-import com.gangchat.client.platform.AudioPlayer
-import com.gangchat.client.platform.BytesSource
-import com.gangchat.client.platform.PlayerMode
-import com.gangchat.client.platform.Source
+import android.media.AudioAttributes
+import com.gangchat.client.platform.SoundPoolCuePlayer
+import com.gangchat.client.platform.isInVoiceCall
 import com.gangchat.client.shell.SynthesizedToneNote
 import com.gangchat.client.shell.buildSynthesizedToneWav
-import kotlin.coroutines.cancellation.CancellationException
 
 enum class LivePresenceSound { joined, left }
 
@@ -24,56 +20,45 @@ interface LivePresenceSoundPlayer {
  * The tones are synthesized into WAV data so the cue is available on every
  * supported platform without another network request or a binary asset.
  *
- * Note: like the Flutter build on Android (audioplayers_android rejects byte
- * sources in low-latency mode), [play] fails with a `PlatformException`; see
- * [AudioPlayer].
+ * Fixed on Android (the Flutter build never sounded them: audioplayers_android
+ * rejected the byte source in low-latency mode, which also skipped the
+ * announcement chained after the cue). The cues go through
+ * [SoundPoolCuePlayer]: during a voice call as voice communication, so they
+ * play on the call's route (earpiece, speaker or Bluetooth headset) at the call
+ * volume; otherwise (a leave cue after the call ended) as media.
  */
 class LivePresenceSoundService(
-    joinedPlayer: AudioPlayer? = null,
-    leftPlayer: AudioPlayer? = null,
+    callCuePlayer: SoundPoolCuePlayer? = null,
+    mediaCuePlayer: SoundPoolCuePlayer? = null,
+    private val isInCall: () -> Boolean = { isInVoiceCall() },
 ) : LivePresenceSoundPlayer {
-    private val _joinedPlayer: AudioPlayer = joinedPlayer ?: AudioPlayer()
-    private val _leftPlayer: AudioPlayer = leftPlayer ?: AudioPlayer()
+    private val _callCuePlayer: SoundPoolCuePlayer =
+        callCuePlayer ?: SoundPoolCuePlayer(usage = AudioAttributes.USAGE_VOICE_COMMUNICATION)
+    private val _mediaCuePlayer: SoundPoolCuePlayer =
+        mediaCuePlayer ?: SoundPoolCuePlayer(usage = AudioAttributes.USAGE_MEDIA)
     private var _disposed = false
 
     override suspend fun play(sound: LivePresenceSound, volume: Double) {
         if (_disposed) return
         val normalizedVolume = volume.coerceIn(0.0, 1.0)
         if (normalizedVolume <= 0) return
-        val player = if (sound == LivePresenceSound.joined) _joinedPlayer else _leftPlayer
         val bytes = if (sound == LivePresenceSound.joined) _joinedTone else _leftTone
-        player.stop()
-        player.play(
-            _sourceFor(bytes),
-            volume = normalizedVolume,
-            mode = PlayerMode.lowLatency,
-        )
+        val player = if (isInCall()) _callCuePlayer else _mediaCuePlayer
+        player.play(cueName(sound), bytes, volume = normalizedVolume)
     }
-
-    private fun _sourceFor(bytes: ByteArray): Source = BytesSource(bytes, mimeType = "audio/wav")
 
     override suspend fun dispose() {
         if (_disposed) return
         _disposed = true
-        waitAll(
-            listOf(
-                future { _disposeQuietly(_joinedPlayer) },
-                future { _disposeQuietly(_leftPlayer) },
-            ),
-        )
+        _callCuePlayer.dispose()
+        _mediaCuePlayer.dispose()
     }
 
-    private suspend fun _disposeQuietly(player: AudioPlayer) {
-        try {
-            player.dispose()
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-        }
-    }
+    companion object {
+        internal fun cueName(sound: LivePresenceSound): String = "live_presence_${sound.name}"
 
-    private companion object {
-        val _joinedTone: ByteArray by lazy { buildLivePresenceTone(LivePresenceSound.joined) }
-        val _leftTone: ByteArray by lazy { buildLivePresenceTone(LivePresenceSound.left) }
+        private val _joinedTone: ByteArray by lazy { buildLivePresenceTone(LivePresenceSound.joined) }
+        private val _leftTone: ByteArray by lazy { buildLivePresenceTone(LivePresenceSound.left) }
     }
 }
 

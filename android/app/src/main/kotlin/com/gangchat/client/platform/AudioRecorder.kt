@@ -91,8 +91,10 @@ enum class RecordState { pause, record, stop }
  *   recording starts and abandoned when it stops; losing focus pauses the
  *   recording.
  * - A connected Bluetooth SCO headset becomes the communication device while
- *   recording (`manageBluetooth`); the route is released on [cancel] and
- *   [dispose], not on [stop].
+ *   recording (`manageBluetooth`). Unlike the plugin, the route is left alone
+ *   during a voice call, and releasing it (on [stop], [cancel] and [dispose];
+ *   the plugin kept it after [stop]) restores the previous device instead of
+ *   clearing the communication device, which reset a call's audio route.
  * - [stop] waits until the file is finalized and returns its path; [cancel]
  *   signals the recording thread, which deletes the file once it finishes.
  * - Calls are serialized, like the plugin's per-recorder semaphore. Failures
@@ -241,6 +243,8 @@ open class AudioRecorder(context: Context? = null) {
             session.finished.await()
             _onSessionStopped(session)
         }
+        _bluetooth?.stop()
+        _bluetooth = null
         return _lastPath
     }
 
@@ -470,9 +474,21 @@ open class AudioRecorder(context: Context? = null) {
         private var connected: CompletableDeferred<Unit>? = null
         private var startNotified = false
 
+        /** Whether this recorder changed the route and has to put it back. */
+        private var routed = false
+
+        /** The device this recorder made the communication device (API 31+). */
+        private var routedDevice: AudioDeviceInfo? = null
+
+        /** The communication device before that, restored on release (API 31+). */
+        private var previousDevice: AudioDeviceInfo? = null
+
         /** Routes capture to a connected SCO headset before recording starts. */
         suspend fun maybeStart() {
             if (receiver != null) return
+            // A voice call owns the route; recording captures from the call's
+            // device as it is.
+            if (isInVoiceCall(context)) return
             val waiter = CompletableDeferred<Unit>()
             connected = waiter
             val scoReceiver =
@@ -502,7 +518,7 @@ open class AudioRecorder(context: Context? = null) {
                         devices.removeAll(_filterSources(removedDevices.asList()).toSet())
                         val hasBluetoothSco = devices.any { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO }
                         if (!hasBluetoothSco && audioManager.isBluetoothScoAvailableOffCall) {
-                            _stopBluetoothSco()
+                            _releaseRoute()
                         }
                     }
                 }
@@ -514,16 +530,25 @@ open class AudioRecorder(context: Context? = null) {
             if (!hasBluetoothSco || !audioManager.isBluetoothScoAvailableOffCall) return
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 startNotified = true
+                val current = audioManager.communicationDevice
+                if (current?.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO) return
                 for (device in audioManager.availableCommunicationDevices) {
                     if (device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO) {
-                        audioManager.setCommunicationDevice(device)
+                        if (audioManager.setCommunicationDevice(device)) {
+                            routed = true
+                            routedDevice = device
+                            previousDevice = current
+                        }
                         return
                     }
                 }
                 return
             }
             @Suppress("DEPRECATION")
-            if (!audioManager.isBluetoothScoOn) audioManager.startBluetoothSco()
+            if (!audioManager.isBluetoothScoOn) {
+                audioManager.startBluetoothSco()
+                routed = true
+            }
             // The SCO link comes up asynchronously (the sticky broadcast also
             // reports one that is already connected). The plugin waited for it
             // indefinitely; give up after a few seconds and record anyway.
@@ -535,7 +560,7 @@ open class AudioRecorder(context: Context? = null) {
         }
 
         fun stop() {
-            _stopBluetoothSco()
+            _releaseRoute()
             deviceCallback?.let { audioManager.unregisterAudioDeviceCallback(it) }
             deviceCallback = null
             connected = null
@@ -549,9 +574,28 @@ open class AudioRecorder(context: Context? = null) {
             receiver = null
         }
 
-        private fun _stopBluetoothSco() {
+        /**
+         * Puts back the route this recorder changed. A voice call that started
+         * meanwhile owns the route, and so does anyone who changed the
+         * communication device after us.
+         */
+        private fun _releaseRoute() {
+            if (!routed) return
+            routed = false
+            val ours = routedDevice
+            val previous = previousDevice
+            routedDevice = null
+            previousDevice = null
+            if (isInVoiceCall(context)) return
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                audioManager.clearCommunicationDevice()
+                if (audioManager.communicationDevice?.id != ours?.id) return
+                val restorable =
+                    previous?.let { p -> audioManager.availableCommunicationDevices.firstOrNull { it.id == p.id } }
+                if (restorable != null) {
+                    audioManager.setCommunicationDevice(restorable)
+                } else {
+                    audioManager.clearCommunicationDevice()
+                }
             } else {
                 @Suppress("DEPRECATION")
                 if (audioManager.isBluetoothScoOn) audioManager.stopBluetoothSco()

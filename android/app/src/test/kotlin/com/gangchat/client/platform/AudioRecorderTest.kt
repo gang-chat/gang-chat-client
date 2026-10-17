@@ -334,28 +334,103 @@ class AudioRecorderTest {
             }
         }
 
+    /** A device with its own id (the builder leaves every id at 0). */
+    private fun device(type: Int, id: Int, source: Boolean = false): AudioDeviceInfo {
+        val device = AudioDeviceInfoBuilder.newBuilder().setType(type).build()
+        val port = ReflectionHelpers.getField<Any>(device, "mPort")
+        ReflectionHelpers.setField(ReflectionHelpers.getField<Any>(port, "mHandle"), "mId", id)
+        // The builder leaves the port role unset; capture devices are sources.
+        if (source) ReflectionHelpers.setField(port, "mRole", 1)
+        return device
+    }
+
+    private fun bluetoothHeadset(): AudioDeviceInfo {
+        val headset = device(AudioDeviceInfo.TYPE_BLUETOOTH_SCO, id = 7, source = true)
+        assertTrue(headset.isSource)
+        val shadowAudio = shadowOf(audioManager)
+        shadowAudio.setInputDevices(listOf(headset))
+        shadowAudio.setIsBluetoothScoAvailableOffCall(true)
+        return headset
+    }
+
     @Test
-    fun `a connected Bluetooth SCO headset becomes the communication device until cancel`() =
+    fun `a connected Bluetooth SCO headset becomes the communication device while recording`() =
         gang.runTest {
             grantMicrophone()
             installAacEncoder()
-            val headset = AudioDeviceInfoBuilder.newBuilder().setType(AudioDeviceInfo.TYPE_BLUETOOTH_SCO).build()
-            // The builder leaves the port role unset; capture devices are sources.
-            ReflectionHelpers.setField(ReflectionHelpers.getField<Any>(headset, "mPort"), "mRole", 1)
-            assertTrue(headset.isSource)
-            val shadowAudio = shadowOf(audioManager)
-            shadowAudio.setInputDevices(listOf(headset))
-            shadowAudio.setAvailableCommunicationDevices(listOf(headset))
-            shadowAudio.setIsBluetoothScoAvailableOffCall(true)
+            val headset = bluetoothHeadset()
+            shadowOf(audioManager).setAvailableCommunicationDevices(listOf(headset))
             withRecorder { recorder ->
                 recorder.start(voiceConfig, path = File(gang.tempDir, "voice_5.m4a").path)
                 assertEquals(headset, audioManager.communicationDevice)
 
+                // Fixed: the plugin kept the route after stopping.
                 recorder.stop()
-                // Stopping keeps the route; cancel releases it.
+                assertNull(audioManager.communicationDevice)
+
+                recorder.start(voiceConfig, path = File(gang.tempDir, "voice_6.m4a").path)
                 assertEquals(headset, audioManager.communicationDevice)
                 recorder.cancel()
                 assertNull(audioManager.communicationDevice)
+            }
+        }
+
+    @Test
+    fun `releasing the headset route restores the previous communication device`() =
+        gang.runTest {
+            grantMicrophone()
+            installAacEncoder()
+            val headset = bluetoothHeadset()
+            val speaker = device(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, id = 3)
+            shadowOf(audioManager).setAvailableCommunicationDevices(listOf(speaker, headset))
+            assertTrue(audioManager.setCommunicationDevice(speaker))
+            withRecorder { recorder ->
+                recorder.start(voiceConfig, path = File(gang.tempDir, "voice_7.m4a").path)
+                assertEquals(headset, audioManager.communicationDevice)
+
+                // The plugin cleared the communication device here.
+                recorder.cancel()
+                assertEquals(speaker, audioManager.communicationDevice)
+            }
+        }
+
+    @Test
+    fun `recording during a voice call leaves the call's route alone`() =
+        gang.runTest {
+            grantMicrophone()
+            installAacEncoder()
+            val headset = bluetoothHeadset()
+            val speaker = device(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, id = 3)
+            shadowOf(audioManager).setAvailableCommunicationDevices(listOf(speaker, headset))
+            audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+            assertTrue(audioManager.setCommunicationDevice(speaker))
+            withRecorder { recorder ->
+                recorder.start(voiceConfig, path = File(gang.tempDir, "voice_8.m4a").path)
+                assertEquals(speaker, audioManager.communicationDevice)
+
+                recorder.cancel()
+                assertEquals(speaker, audioManager.communicationDevice)
+            }
+        }
+
+    @Test
+    fun `without a headset, stopping or cancelling keeps the communication device`() =
+        gang.runTest {
+            grantMicrophone()
+            installAacEncoder()
+            val speaker = device(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, id = 3)
+            shadowOf(audioManager).setAvailableCommunicationDevices(listOf(speaker))
+            assertTrue(audioManager.setCommunicationDevice(speaker))
+            withRecorder { recorder ->
+                recorder.start(voiceConfig, path = File(gang.tempDir, "voice_9.m4a").path)
+                recorder.stop()
+                assertEquals(speaker, audioManager.communicationDevice)
+
+                recorder.start(voiceConfig, path = File(gang.tempDir, "voice_10.m4a").path)
+                // The plugin cleared the communication device on cancel, even
+                // though it never set one.
+                recorder.cancel()
+                assertEquals(speaker, audioManager.communicationDevice)
             }
         }
 

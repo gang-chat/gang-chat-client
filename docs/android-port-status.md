@@ -48,13 +48,21 @@ Flutter 工程随后从仓库移除。移植约定见 `docs/android-port-convent
 - FCM 推送、通知点击跳转、数字角标、前台服务与任务划除通知。
 - 启动画面到首帧的衔接、APK 后台下载与系统安装器。
 
-## 待决定：沿用 Flutter 版行为的问题
+## 修正了的 Flutter 版问题
 
-下面三处在 Flutter 版里就是这样，原生版一比一保留，是否修正需要产品决定：
+下面三处 Flutter 版在 Android 上有问题，原生版先一比一保留，确认后已修正（需真机验证听感和路由）：
 
-1. 新消息提示音在 Android 上不响（见“平台层”）。
-2. 进入/离开语音频道的提示音以及其后的语音播报不响（见“语音、视频、屏幕共享”第 5 条）。
-3. 取消语音消息录音会清除通信设备，通话中取消录音可能打乱通话的音频路由（见“录音、更新、试听”）。
+1. 新消息提示音不响：Flutter 版用 audioplayers 的低延迟模式播放内存里的音效，audioplayers_android
+   不支持，`play` 一直静默失败。现在经 `SoundPoolCuePlayer`（`SoundPool`，音效先写进缓存目录）按
+   通知事件（`USAGE_NOTIFICATION_EVENT`）播放：跟随通知音量和响铃模式，通话中走通话的设备，
+   不申请音频焦点，所以不会暂停其他应用的音乐。
+2. 进入/离开语音频道的提示音不响，链在其后的语音播报也因此被跳过：提示音同样改走 `SoundPoolCuePlayer`。
+   通话中按语音通话（`USAGE_VOICE_COMMUNICATION`）播放，与通话同一设备（听筒、扬声器或蓝牙耳机）、
+   同一音量；通话已结束时（离开后的提示音）按媒体播放。语音播报（TextToSpeech）用同样的规则设置
+   音频属性。
+3. 录语音消息时把麦克风切到蓝牙耳机，结束后清除通信设备，会打乱正在进行的通话的音频路由（插件
+   即使没切换过也会清除）。现在语音通话中录音不动路由；不在通话中时只撤销自己做的切换并恢复原来的
+   通信设备，停止录音时也会撤销（插件只在取消和释放时撤销，正常结束后一直占着蓝牙通话链路）。
 
 ## 与 Flutter 版的差异
 
@@ -84,8 +92,7 @@ Flutter 工程随后从仓库移除。移植约定见 `docs/android-port-convent
   旧版 Base64 列表、BigInteger）；`flutter_secure_storage` 10.3.1（AES-GCM 数据、RSA-OAEP 包装的密钥、
   旧 PKCS1+CBC 迁移）。Keystore 部分无法在本环境验证；密钥不可用时（例如备份恢复到新设备）
   与插件一样清空存储，用户重新登录一次。未移植应用从未启用过的 EncryptedSharedPreferences 导入和生物识别加密。
-- 消息提示音：Flutter 版在 Android 上 audioplayers 的低延迟模式不接受字节源，`play` 一直静默失败；
-  原生版保持静音行为（改成可播放只需一行，但会每条消息都抢占音频焦点，暂停其他应用的音乐）。
+- 消息提示音：Flutter 版在 Android 上从未响过，原生版已修正，见“修正了的 Flutter 版问题”第 1 条。
 - 文件路径类、仅 Web 的剪贴板/文件 API 在 Android 上是空操作；`saveBytesAsBrowserDownload` 删除。
 - 从通知启动时的房间 id 只能通过 `takeInitialNotificationRoomId()` 取一次，之后的点击走
   `selectedNotificationRoomIds`。
@@ -99,8 +106,8 @@ Flutter 工程随后从仓库移除。移植约定见 `docs/android-port-convent
   44.1 kHz 单声道、`MediaMuxer` 写 MPEG-4（`.m4a` / `audio/mp4`），文件名 `voice_<微秒时间戳>.m4a`。
   编码器在录音线程同步运行；权限请求走 activity result registry；Android 11 及以下等待蓝牙耳机连接
   最多 5 秒（插件无限等待）；新录音会等上一个取消的录音结束（插件有竞态）；编码器卡住时有 2 秒保护。
-  未移植应用没用到的暂停/恢复、流式、选择输入设备等接口。录音开始时把麦克风切到蓝牙耳机、取消时清除
-  通信设备，这与插件一致，但在语音通话中取消录音可能影响通话的音频路由（Flutter 版同样如此）。
+  未移植应用没用到的暂停/恢复、流式、选择输入设备等接口。录音开始时把麦克风切到蓝牙耳机，与插件一致；
+  结束后的路由处理已修正，见“修正了的 Flutter 版问题”第 3 条。
 - 应用内更新：只保留 Android 路径（下载 APK 交给系统安装器），与 Dart 一样不支持断点续传，失败或
   取消时删除未完成的文件。
 - 试听直接调用 `AndroidMusicPreviewPlayer`（原来经 `gang_chat/music_preview` 通道）。
@@ -123,8 +130,8 @@ Flutter 工程随后从仓库移除。移植约定见 `docs/android-port-convent
      所有重连按完整重连处理、所有离开按"离开"处理。
   3. 麦克风测试的电平改为对测试音轨采样计算 RMS（每 120 ms），不再走回环统计。
   4. 切换前后摄像头用 `switchCamera`。
-  5. 进入/离开语音频道的提示音：Flutter 版在 Android 上以低延迟模式播放字节会抛错，导致提示音和
-     链在其后的语音播报都不会播放；原生版保持这一行为（与消息提示音同一个问题，见平台层）。
+  5. 进入/离开语音频道的提示音和其后的语音播报：Flutter 版在 Android 上从未播放，原生版已修正，
+     见“修正了的 Flutter 版问题”第 2 条。
   6. LiveKit 自带的通话模式处理被关闭，音频模式由共享的 AudioSwitch 管理。
   7. 摄像头联播时 SDK 把优先级放在全分辨率层而不是 encodings[0]；屏幕共享是单层，不受影响。
 - 只编译、未在设备上运行过的部分：真实 Room 连接与反射钩子、AudioSwitch、MediaProjection 与前台服务、

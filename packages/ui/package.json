@@ -2,7 +2,7 @@
   "name": "@gang-chat/ui",
   "version": "1.0.0",
   "private": true,
-  "description": "Gang Chat desktop UI: React DOM components ported 1:1 from the Flutter widgets. Used by the Electron app (and usable by a browser build).",
+  "description": "Gang Chat UI: React DOM components ported 1:1 from the Flutter widgets. Used by the Electron desktop app and the web app.",
   "type": "module",
   "dependencies": {
     "@gang-chat/core": "1.0.0"

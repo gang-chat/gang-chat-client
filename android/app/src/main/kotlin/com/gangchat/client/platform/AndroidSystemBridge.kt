@@ -9,6 +9,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -579,6 +580,19 @@ class AndroidSystemBridge(context: Context) {
         }
         val tts = textToSpeech
             ?: throw PlatformException("tts_unavailable", "Android text-to-speech is unavailable.")
+        // Presence announcements follow the cue before them: on the call's
+        // route at the call volume during a voice call, as media otherwise.
+        tts.setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(
+                    if (isInVoiceCall(context)) {
+                        AudioAttributes.USAGE_VOICE_COMMUNICATION
+                    } else {
+                        AudioAttributes.USAGE_MEDIA
+                    },
+                ).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build(),
+        )
         val finalId = "gang-chat-${UUID.randomUUID()}"
         val done = CompletableDeferred<Unit>()
         pendingSpeech[finalId] = done

@@ -1,18 +1,20 @@
 package com.gangchat.client.shell
 
-import com.gangchat.client.platform.AudioPlayer
-import com.gangchat.client.platform.PlatformException
-import com.gangchat.client.platform.PlayerState
+import android.media.AudioAttributes
+import com.gangchat.client.platform.SoundPoolCuePlayer
+import com.gangchat.client.platform.playAndLoad
 import com.gangchat.client.testing.GangTestRule
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Assert.fail
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 /** Port of test/unit/shell/message_notification_sound_service_test.dart. */
@@ -46,23 +48,28 @@ class MessageNotificationSoundServiceTest {
     }
 
     @Test
-    fun `Android rejects the byte cue in low-latency mode like audioplayers_android`() =
+    fun `Android plays the cue through a notification-event SoundPool`() =
         gang.runTest {
-            val player = AudioPlayer()
-            val service = MessageNotificationSoundService(player)
+            val cues = SoundPoolCuePlayer(usage = AudioAttributes.USAGE_NOTIFICATION_EVENT)
+            val service = MessageNotificationSoundService(cues)
+            val name = MessageNotificationSoundService.cueName
 
-            try {
-                service.play(volume = 0.6)
-                fail("expected the plugin's AndroidAudioError")
-            } catch (error: PlatformException) {
-                assertEquals("AndroidAudioError", error.code)
-                assertEquals("Bytes sources are not supported on LOW_LATENCY mode yet.", error.message)
-            }
-            assertEquals(PlayerState.stopped, player.state)
+            // The Flutter build never sounded this cue on Android.
+            playAndLoad(cues, name) { service.play(volume = 0.6) }
+
+            val file = cues.cueFile(name)
+            assertArrayEquals(buildMessageNotificationTone(), file.readBytes())
+            val playbacks = shadowOf(cues.pool).getPathPlaybacks(file.path)
+            assertEquals(1, playbacks.size)
+            assertEquals(0.6f, playbacks[0].leftVolume, 0.0001f)
+
+            // Silent: nothing to play.
+            service.play(volume = 0.0)
+            assertEquals(1, shadowOf(cues.pool).getPathPlaybacks(file.path).size)
 
             service.dispose()
-            // Silent or disposed: nothing to play.
+            assertNull(cues.pool)
             service.play(volume = 1.0)
-            MessageNotificationSoundService(AudioPlayer()).play(volume = 0.0)
+            assertNull(cues.pool)
         }
 }

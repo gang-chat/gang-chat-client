@@ -1,10 +1,7 @@
 package com.gangchat.client.shell
 
-import com.gangchat.client.platform.AudioPlayer
-import com.gangchat.client.platform.BytesSource
-import com.gangchat.client.platform.PlayerMode
-import com.gangchat.client.platform.Source
-import kotlinx.coroutines.CancellationException
+import android.media.AudioAttributes
+import com.gangchat.client.platform.SoundPoolCuePlayer
 
 interface MessageNotificationSoundPlayer {
     suspend fun play(volume: Double)
@@ -16,40 +13,33 @@ interface MessageNotificationSoundPlayer {
  * Plays the short, locally synthesized cue for a realtime text-channel
  * message. No network request or packaged binary asset is required.
  *
- * Note: like the Flutter build on Android (audioplayers_android rejects byte
- * sources in low-latency mode), [play] fails with a `PlatformException`; the
- * caller ignores the error, so Android plays no cue. See [AudioPlayer].
+ * Fixed on Android (the Flutter build never sounded it: audioplayers_android
+ * rejected the byte source in low-latency mode). The cue goes through
+ * [SoundPoolCuePlayer] as a notification event, so it follows the
+ * notification volume and ringer mode, plays on the call route during a voice
+ * call, and does not pause other apps' audio.
  */
-class MessageNotificationSoundService(player: AudioPlayer? = null) : MessageNotificationSoundPlayer {
-    private val _player: AudioPlayer = player ?: AudioPlayer()
+class MessageNotificationSoundService(cuePlayer: SoundPoolCuePlayer? = null) : MessageNotificationSoundPlayer {
+    private val _cuePlayer: SoundPoolCuePlayer =
+        cuePlayer ?: SoundPoolCuePlayer(usage = AudioAttributes.USAGE_NOTIFICATION_EVENT)
     private var _disposed = false
 
     override suspend fun play(volume: Double) {
         if (_disposed) return
         val normalizedVolume = volume.coerceIn(0.0, 1.0)
         if (normalizedVolume <= 0) return
-        _player.stop()
-        _player.play(
-            _sourceFor(_tone),
-            volume = normalizedVolume,
-            mode = PlayerMode.lowLatency,
-        )
+        _cuePlayer.play(cueName, _tone, volume = normalizedVolume)
     }
-
-    private fun _sourceFor(bytes: ByteArray): Source = BytesSource(bytes, mimeType = "audio/wav")
 
     override suspend fun dispose() {
         if (_disposed) return
         _disposed = true
-        try {
-            _player.dispose()
-        } catch (error: Exception) {
-            if (error is CancellationException) throw error
-        }
+        _cuePlayer.dispose()
     }
 
-    private companion object {
-        val _tone: ByteArray by lazy { buildMessageNotificationTone() }
+    companion object {
+        internal const val cueName = "message_notification"
+        private val _tone: ByteArray by lazy { buildMessageNotificationTone() }
     }
 }
 
