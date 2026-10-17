@@ -1572,7 +1572,7 @@ private class _AccountHistoryItemState : ViewState<_AccountHistoryItemWidget>() 
                         _avatarDefaultKey = widget.record.defaultAvatarKey
                     },
             ) {
-                _AccountHistoryAvatar(
+                com.gangchat.client.ui.Avatar(
                     label = widget.record.login,
                     imageUrl = imageUrl,
                     defaultAvatarKey = widget.record.defaultAvatarKey,
@@ -1650,30 +1650,5 @@ private fun _PasswordVisibilityToggle(obscure: Boolean, enabled: Boolean, onPres
                 color = color,
             )
         }
-    }
-}
-
-/**
- * TODO(port): stand-in for `ui.Avatar(label:, imageUrl:, defaultAvatarKey:,
- * size:)`, which is being ported separately. Replace this call with
- * `com.gangchat.client.ui.Avatar` (same arguments) once it lands. Until then
- * it draws Avatar's fallback (initials on a neutral circle) and ignores
- * [imageUrl] and [defaultAvatarKey].
- */
-@Suppress("UNUSED_PARAMETER")
-@Composable
-private fun _AccountHistoryAvatar(label: String, imageUrl: String?, defaultAvatarKey: String?, size: Dp) {
-    val trimmed = label.trim()
-    val initials = if (trimmed.isEmpty()) "?" else trimmed.take(2).uppercase()
-    Box(
-        Modifier
-            .size(size)
-            .decoration(UiColors.surface, CircleShape, Color.White.copy(alpha = 0.06f)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            initials,
-            style = uiTextStyle(color = Color.White, fontSize = size.value * 0.36, fontWeight = FontWeight.W700),
-        )
     }
 }

@@ -88,6 +88,17 @@ Android 客户端正在从 Flutter 一比一移植为原生 Kotlin + Jetpack Com
 - 只编译、未在设备上运行过的部分：真实 Room 连接与反射钩子、AudioSwitch、MediaProjection 与前台服务、
   播放捕获、屏幕声音发布、麦克风/扬声器测试、视频渲染、TTS。
 
+### 头像、图片、表情包管理、侧边栏与资料卡片（`:app` ui / home）
+
+- 动图：GIF 在所有版本上播放；动态 WebP 在 API 28 以下只显示首帧（Coil 在 28 以下只解码 GIF 动画）。
+  图片切换时不保留 Flutter 的 gapless playback。
+- 滚动条用新的 `Modifier.rawScrollbar` 近似实现；侧边栏图标阴影只在 API 31+ 有模糊效果。
+- 资料卡片在 Android 上靠点按/长按打开（Flutter 在桌面上靠悬停）；可选中文字的右键菜单与
+  `copyStartOffset` 未移植，改用长按选择。依赖鼠标悬停或右键的测试用例未移植。
+- 图片预览只走 Android 沉浸式路径；`FutureBuilder` 的结果晚一帧送达。
+- `TapRegion` 与 Flutter 一致：所在路由被对话框盖住时不响应外部点击（否则在对话框里点击会关掉下面的卡片）。
+- 修正了两个移植时发现的问题：嵌套卡片在资料加载完成后不刷新；鼠标移出锚点时悬停卡片不一定关闭。
+
 ### 登录与更新提示（`:app` shell）
 
 - 去掉了桌面窗口相关的部分：登录窗口锁定尺寸、窗口控制按钮与拖拽区、Sparkle 分支。
