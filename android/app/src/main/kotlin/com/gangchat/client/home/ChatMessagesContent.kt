@@ -252,7 +252,7 @@ internal fun _MessageRow(
                 }
             }
             Spacer(Modifier.height(4.dp))
-            Box(Modifier.widthIn(max = _messageMaxWidth)) {
+            Box(Modifier.widthIn(max = _messageMaxWidth), propagateMinConstraints = true) {
                 _MessageBubble(
                     message = message,
                     outgoing = outgoing,
@@ -632,6 +632,12 @@ private class _MessageBubbleState : ViewState<_MessageBubbleWidget>() {
     private val _androidLongPressEnabled = true
     private var _textSelectionActiveAtPointerDown = false
     private var _androidLongPressHandled = false
+
+    // PORT: Dart's bubble GestureDetector(onLongPressStart) wins the gesture
+    // arena once the hold fires, so a descendant tap (the sticker's preview,
+    // a link) never runs on release. Compose's clickable fires on any release,
+    // so the release that ends a menu-opening hold is consumed here instead.
+    private var _consumeReleaseAfterLongPress = false
     private var _coordinates: LayoutCoordinates? = null
 
     override fun dispose() {
@@ -699,6 +705,7 @@ private class _MessageBubbleState : ViewState<_MessageBubbleWidget>() {
                                         }
                                         _textSelectionActiveAtPointerDown = _textSelectionActive
                                         _androidLongPressHandled = false
+                                        _consumeReleaseAfterLongPress = false
                                         tracker.handlePointerDown(change.id, window(change.position), change.type, enabled = _androidLongPressEnabled)
                                     }
                                 PointerEventType.Move ->
@@ -707,6 +714,8 @@ private class _MessageBubbleState : ViewState<_MessageBubbleWidget>() {
                                     for (change in event.changes) {
                                         if (change.pressed || !change.previousPressed) continue
                                         if (change.isConsumed) tracker.handlePointerCancel(change.id) else tracker.handlePointerUp(change.id)
+                                        if (_consumeReleaseAfterLongPress) change.consume()
+                                        _consumeReleaseAfterLongPress = false
                                         _androidLongPressHandled = false
                                     }
                                 else -> Unit
@@ -717,11 +726,14 @@ private class _MessageBubbleState : ViewState<_MessageBubbleWidget>() {
                 .decoration(animatedColor, RoundedCornerShape(UiRadii.lg), animatedBorder)
                 // AnimatedContainer insets its child by the 1 px border.
                 .padding(_messageBubblePadding + EdgeInsets.all(1.dp)),
+            // Flutter's container chain passes tight constraints through.
+            propagateMinConstraints = true,
         ) {
             Box(
                 Modifier
                     .testTag(messageBubbleContentTag(messageId))
                     .decoration(highlightColor, RoundedCornerShape(maxOf(0.dp, UiRadii.lg - 5.dp))),
+                propagateMinConstraints = true,
             ) {
                 ChatMessageContent(
                     message = widget.message,
@@ -765,6 +777,7 @@ private class _MessageBubbleState : ViewState<_MessageBubbleWidget>() {
             _textSelectionReset.value = _textSelectionReset.value + 1
         }
         removeAnyTextContextMenu()
+        _consumeReleaseAfterLongPress = true
         _showBubbleContextMenuAt(position, contentKind, textSelectionActive = _textSelectionActiveAtPointerDown)
     }
 
@@ -1559,7 +1572,7 @@ fun MessageBubbleForTest(
     showDetailedTimestamps: Boolean = false,
     currentUser: CurrentUser = _messageBubbleTestCurrentUser,
 ) {
-    Box(Modifier.widthIn(max = _messageMaxWidth)) {
+    Box(Modifier.widthIn(max = _messageMaxWidth), propagateMinConstraints = true) {
         _MessageBubble(
             message = message,
             outgoing = outgoing,

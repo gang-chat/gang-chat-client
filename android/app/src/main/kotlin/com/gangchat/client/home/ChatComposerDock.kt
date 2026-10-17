@@ -158,6 +158,9 @@ const val stickerPanelUploadFirstPersonalTag = "sticker-panel-upload-first-perso
 const val stickerPanelUploadFirstRoomTag = "sticker-panel-upload-first-room"
 const val composerMentionPanelTag = "composer-mention-panel"
 
+/** Test tag of the dock's composer (Dart finds it as `find.byType(ChatComposer)`). */
+const val chatComposerTag = "chat-composer"
+
 @Composable
 internal fun _ComposerDock(
     controller: TextEditingController,
@@ -221,6 +224,7 @@ internal fun _ComposerDock(
                     },
                 ) {
                     ChatComposer(
+                        modifier = Modifier.testTag(chatComposerTag),
                         controller = controller,
                         composerController = composerController,
                         hintText = "写点什么…",
@@ -726,8 +730,12 @@ private fun _StickerTile(sticker: Sticker, onPressed: () -> Unit) {
                 if (imageUrl == null) {
                     Icon(Icons.Outlined.ImageNotSupported, color = UiColors.textMuted, size = 20.dp)
                 } else {
+                    // PORT: Flutter sized the unsized image by its pixels as
+                    // logical pixels, shrunk to fit; filling the tile with
+                    // `contain` gives the same result for stickers of 42+ px.
                     CachedAssetImage(
                         url = imageUrl,
+                        modifier = Modifier.fillMaxSize(),
                         filename = sticker.asset.filename,
                         mimeType = sticker.asset.mimeType,
                         expectedBytes = sticker.asset.sizeBytes,
