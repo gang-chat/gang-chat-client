@@ -96,115 +96,7 @@ import kotlin.math.ceil
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [35], qualifiers = "w800dp-h600dp-xxhdpi", shadows = [ShadowNoOpMagnifier::class])
-class HomeShellWidgetTest {
-    @get:Rule
-    val compose = createAndroidComposeRule<ComponentActivity>()
-
-    private val loop = ShellTestLoop()
-
-    @Before
-    fun setUp() {
-        SharedPreferences.setMockInitialValues(emptyMap())
-        loop.start()
-        installTestImageLoader()
-        compose.mainClock.autoAdvance = false
-    }
-
-    @After
-    fun tearDown() = loop.finish()
-
-    // --- Finders and gestures -------------------------------------------------
-
-    private fun tag(tag: String): SemanticsNodeInteraction = compose.onNodeWithTag(tag, useUnmergedTree = true)
-
-    private fun tagExists(tag: String): Boolean = compose.exists(hasTestTag(tag))
-
-    private fun isSelected(node: SemanticsNodeInteraction): Boolean =
-        node.fetchSemanticsNode().config.getOrNull(SemanticsProperties.Selected) == true
-
-    /** Dart's `ButtonIcon.selected`: the surface under the tagged button reports it. */
-    private fun buttonSelected(tag: String): Boolean =
-        compose.exists(
-            (hasTestTag(tag) or hasAnyAncestor(hasTestTag(tag))) and
-                SemanticsMatcher("selected") { it.config.getOrNull(SemanticsProperties.Selected) == true },
-        )
-
-    private fun tapText(text: String) {
-        compose.onNode(hasText(text) and _notInSearchField).performClick()
-        compose.settleShell()
-    }
-
-    private val _notInSearchField: SemanticsMatcher = SemanticsMatcher("not editable") { node ->
-        node.config.getOrNull(SemanticsProperties.EditableText) == null
-    }
-
-    private fun tapTag(tag: String) {
-        tag(tag).performClick()
-        compose.settleShell()
-    }
-
-    private fun tapTooltip(tooltip: String) {
-        compose.onTooltip(tooltip).performClick()
-        compose.settleShell()
-    }
-
-    private fun inTag(ancestorTag: String, matcher: SemanticsMatcher): SemanticsMatcher = matcher and hasAnyAncestor(hasTestTag(ancestorTag))
-
-    private fun dockHasText(text: String): Boolean = compose.exists(inTag(homeTitleLiveRoomTag, hasText(text)))
-
-    private fun dockHasIcon(icon: androidx.compose.ui.graphics.vector.ImageVector): Boolean =
-        compose.exists(inTag(homeTitleLiveRoomTag, hasIcon(icon)))
-
-    private fun dockHasAvatar(roomName: String): Boolean = dockHasText(avatarInitials(roomName))
-
-    private fun openLiveChannelFromHeader() {
-        tag(chatHeaderLiveButtonTag).assertExists()
-        tapTag(chatHeaderLiveButtonTag)
-    }
-
-    private fun joinLive() = tapTag("live-control:join")
-
-    private fun openAlphaAndJoinLive() {
-        tapText("Alpha Room")
-        openLiveChannelFromHeader()
-        joinLive()
-    }
-
-    private fun enterSearch(text: String) {
-        compose.textFieldIn(homeTitleSearchTag).performTextReplacement(text)
-        compose.pumpShell(320)
-        compose.settleShell()
-    }
-
-    private fun searchResultsOpen(): Boolean = tagExists(homeTitleSearchResultsTag)
-
-    private fun widthOf(tag: String): Dp = tag(tag).rect().let { it.right - it.left }
-
-    /**
-     * Dart's `ensureVisible` inside the room settings form: scrolls the lazy
-     * form list to [matcher] with the clock running just for the scroll.
-     */
-    private fun scrollFormTo(matcher: SemanticsMatcher) {
-        val list = compose.onAllNodes(hasScrollToNodeAction() and hasAnyDescendant(hasTestTag(roomSettingsNameInputTag))).onFirst()
-        val manual = !compose.mainClock.autoAdvance
-        compose.mainClock.autoAdvance = true
-        try {
-            list.performScrollToNode(matcher)
-        } finally {
-            compose.mainClock.autoAdvance = !manual
-        }
-        compose.settleShell()
-    }
-
-    /** Dart's `find.byType(LiveChannelPane)`: the pane's controls are on screen. */
-    private fun livePaneShown(): Boolean =
-        compose.exists(SemanticsMatcher("live control") { node -> node.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("live-control:") == true })
-
-    private fun pressBack() {
-        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
-        compose.settleShell()
-    }
-
+class HomeShellWidgetTest : HomeShellTestBase() {
     // --- home_widget_tests.dart -----------------------------------------------
 
     @Test
@@ -726,7 +618,7 @@ class HomeShellWidgetTest {
 
         // Dart tapped outside at (740, 100) to close the cards, then
         // refocused the search field.
-        compose.onRoot().performTouchInput { click(Offset(740.dp.toPx(), 100.dp.toPx())) }
+        tapAt(740.dp, 100.dp)
         compose.settleShell()
         compose.textFieldIn(homeTitleSearchTag).performClick()
         compose.settleShell()
@@ -760,7 +652,7 @@ class HomeShellWidgetTest {
         assertTrue(compose.textNodes("Beta Room") >= 1)
 
         // Closing the dropdown hides the results panel; reopening restores it.
-        compose.onRoot().performTouchInput { click(Offset(740.dp.toPx(), 100.dp.toPx())) }
+        tapAt(740.dp, 100.dp)
         compose.settleShell()
         assertFalse(searchResultsOpen())
 
@@ -774,7 +666,6 @@ class HomeShellWidgetTest {
         assertFalse(compose.exists(inTag(homeTitleSearchResultsTag, hasTestTag(myRoomActionTag("server-beta")))))
     }
 
-    private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.onRoot() = onNode(SemanticsMatcher("root") { it.parent == null })
 
     @Test
     fun `superuser global search replaces public rooms with user settings`() {
