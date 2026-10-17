@@ -9,7 +9,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.gangchat.client.widgets.decoration
-import com.gangchat.client.widgets.ignorePointer
 
 @Composable
 fun BadgeDot(
@@ -18,9 +17,13 @@ fun BadgeDot(
     color: Color = UiColors.danger,
     borderColor: Color = UiColors.surface,
 ) {
+    // Dart wraps the dot in IgnorePointer. A Compose node without pointer
+    // input is already invisible to hit testing; `ignorePointer()` would
+    // instead make this small dot a hit target (Compose widens it to the
+    // 48 dp minimum touch target) whose Initial-pass consumption cancels
+    // taps on the segment or button carrying the badge.
     Box(
         modifier
-            .ignorePointer()
             .size(size)
             .decoration(color, CircleShape, borderColor, borderWidth = 1.4.dp),
     )
