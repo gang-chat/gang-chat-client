@@ -15,7 +15,8 @@ Android 客户端正在从 Flutter 一比一移植为原生 Kotlin + Jetpack Com
 | LiveKit 语音、摄像头、屏幕共享 | `:app` live | 完成（86 个测试；SDK 路径需真机验证） |
 | 界面组件库 | `:app` ui | 完成（93 个测试含 12 组截图） |
 | 登录、邮箱验证、找回密码、更新提示 | `:app` shell | 完成（41 个测试 + 16 张截图） |
-| 主界面、聊天、语音频道、通知、房间管理、设置 | `:app` home / settings | 进行中 |
+| 聊天、语音频道、通知、房间管理、设置 | `:app` home / settings | 完成 |
+| 主框架（home_shell）与应用入口（gang_app） | `:app` home / shell | 进行中 |
 
 ## 与 Flutter 版的差异
 
@@ -87,6 +88,15 @@ Android 客户端正在从 Flutter 一比一移植为原生 Kotlin + Jetpack Com
   7. 摄像头联播时 SDK 把优先级放在全分辨率层而不是 encodings[0]；屏幕共享是单层，不受影响。
 - 只编译、未在设备上运行过的部分：真实 Room 连接与反射钩子、AudioSwitch、MediaProjection 与前台服务、
   播放捕获、屏幕声音发布、麦克风/扬声器测试、视频渲染、TTS。
+
+### 设置页（`:app` settings）
+
+- 去掉了"关闭方式"分组（桌面托盘/关闭行为；仍然读写对应的存储）；搜索只收录 Android 上的条目，
+  "偏好设置"卡片摘要只显示语言。去掉了 Sparkle、DMG 下载、桌面安装程序启动后退出等桌面路径。
+- 系统通知分组只在 `isSupported` 时显示；应用回到前台时重新读取通知设置。
+- "关于"里的更新与 Dart 设置页一致：`AppUpdatePage` → `ReleaseUpdateService.downloadUpdate`（进度、取消）
+  → 系统安装器。
+- 移植中修正：歌单卡片的点击检测在每次重建时重启（可能丢点击）；音量滑块拖动时一直用第一次构建时的回调。
 
 ### 通知中心与房间管理（`:app` home）
 
