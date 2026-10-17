@@ -88,6 +88,17 @@ Android 客户端正在从 Flutter 一比一移植为原生 Kotlin + Jetpack Com
 - 只编译、未在设备上运行过的部分：真实 Room 连接与反射钩子、AudioSwitch、MediaProjection 与前台服务、
   播放捕获、屏幕声音发布、麦克风/扬声器测试、视频渲染、TTS。
 
+### 聊天页（`:app` home）
+
+- 消息列表改用以 `clientMessageId` 为键的反向 `LazyColumn`；消息少时用排列方式顶到上方
+  （Dart 用测量出的占位）；保存的滚动位置是"条目索引 + 偏移"而不是像素；尚未布局的行先按估算高度
+  定位再校正；可见区下方的行变化时为保持位置可能打断正在进行的惯性滚动。
+- 长按打开菜单后，结束长按的那次抬起被消费掉（对应 Dart 里长按在手势竞争中胜出），
+  否则长按表情包会同时打开图片预览。
+- `TextOverflow.fade` 改为裁剪（Compose 没有渐隐）。
+- 图标按钮保留 48dp 的 Material 点击区域，歌单/歌曲卡片因此略高；不画 Material 按下遮罩。
+- 去掉了桌面拖放用的 `composerDropKey`；桌面悬停/右键的测试改为点按/长按，Windows/macOS 变体未移植。
+
 ### 头像、图片、表情包管理、侧边栏与资料卡片（`:app` ui / home）
 
 - 动图：GIF 在所有版本上播放；动态 WebP 在 API 28 以下只显示首帧（Coil 在 28 以下只解码 GIF 动画）。
