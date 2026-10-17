@@ -646,6 +646,10 @@ fun DialogFrame(
         Column(
             modifier
                 .widthIn(max = maxWidth)
+                // The panel takes pointer hits like Flutter's dialog `Material`:
+                // a tap on its text or padding must not reach the dismissing
+                // barrier below the route's page.
+                .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }
                 .boxShadow(UiShadows.dialog, shape)
                 .decoration(UiColors.surfaceLow, shape, UiColors.borderStrong)
                 .padding(start = 22.dp, top = 20.dp, end = 22.dp, bottom = 20.dp),
