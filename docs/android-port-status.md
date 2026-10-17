@@ -89,6 +89,21 @@ Android 客户端正在从 Flutter 一比一移植为原生 Kotlin + Jetpack Com
 - 只编译、未在设备上运行过的部分：真实 Room 连接与反射钩子、AudioSwitch、MediaProjection 与前台服务、
   播放捕获、屏幕声音发布、麦克风/扬声器测试、视频渲染、TTS。
 
+### 主框架（`:app` home）
+
+- 系统返回键：主框架内容包在 `PopScope` 里，按 Dart 的顺序依次处理更新下载锁定、全屏直播、展开的搜索、
+  设置、侧边面板、窄屏内容页回到房间列表；都不适用时交给 Activity（退出）。
+- 通知点击打开对应房间；房间列表还没加载完时先记下，加载后再打开。启动和每次回到前台时检查
+  `takeInitialNotificationRoomId`。
+- 生命周期映射与 Flutter 的 Android 嵌入一致（pause → inactive、stop → hidden + paused、
+  start → hidden + inactive、resume → resumed），进入后台时启动前台服务，回到前台时停止并同步推送注册。
+- 系统划掉任务时：离开直播（断开 900 ms 超时 + 离开接口）与停止实时连接并行，然后退出会话。
+- 前台收到"全部提醒"房间的新消息播放提示音（耳机静音时音量为 0）；在后台改为系统通知；
+  图标角标同步，已读房间的通知会被取消。
+- 去掉了窗口控制器、桌面关闭/托盘路径；`suspendStageVideo` 恒为 false（Dart 里只用于 Windows）。
+- 组件库修正：没有 `onTap` 的 `UiContextMenuTriggerRegion` 不再吞掉快速点击，只消费完成的长按
+  （对应 Flutter 手势竞争）；之前点消息头像不会打开资料卡片。
+
 ### 设置页（`:app` settings）
 
 - 去掉了"关闭方式"分组（桌面托盘/关闭行为；仍然读写对应的存储）；搜索只收录 Android 上的条目，
