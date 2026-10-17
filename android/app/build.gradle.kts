@@ -112,6 +112,14 @@ android {
             all {
                 it.systemProperty("user.timezone", "UTC")
                 it.maxHeapSize = "2g"
+                // The opt-in end-to-end test (GangAppEndToEndTest) runs only
+                // with these set; as inputs they also keep a run without them
+                // from being reused from the build cache.
+                for (name in listOf("GANG_E2E_API_BASE_URL", "GANG_E2E_ASSET_BASE_URL")) {
+                    val value = System.getenv(name).orEmpty()
+                    it.inputs.property(name, value)
+                    if (value.isNotEmpty()) it.environment(name, value)
+                }
             }
         }
     }

@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.media.AudioManager
 import android.os.Looper
+import android.view.View
 import android.net.Uri as AndroidUri
 import com.gangchat.client.foundation.http.OkHttpClientAdapter
 import com.gangchat.client.platform.AndroidAudioRoute
@@ -61,6 +62,27 @@ class MainActivityTest {
             assertSame(activity, GangChatPlatform.activity)
             assertEquals(setOf("ky-z.com", "os.ky-z.com"), OkHttpClientAdapter.directHosts)
             assertEquals(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT, activity.requestedOrientation)
+        }
+
+    /**
+     * The launch screen is a pre-draw listener that cancels every draw until
+     * the UI root (GangApp's auth gate, see GangAppTest) reports its first
+     * screen through `showInitialWindow`.
+     */
+    @Test
+    fun `the launch screen holds drawing until the app root shows its first screen`() =
+        gang.runTest {
+            val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+            val content = activity.findViewById<View>(android.R.id.content)
+
+            assertFalse(activity.uiReady)
+            assertTrue(content.viewTreeObserver.dispatchOnPreDraw())
+            assertTrue(content.viewTreeObserver.dispatchOnPreDraw())
+
+            activity.showInitialWindow()
+
+            assertTrue(activity.uiReady)
+            assertFalse(content.viewTreeObserver.dispatchOnPreDraw())
         }
 
     @Test

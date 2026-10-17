@@ -15,6 +15,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import com.gangchat.client.foundation.AppCoroutines
+import com.gangchat.client.foundation.VisibleForTesting
 import com.gangchat.client.platform.AndroidAudioRoute
 import com.gangchat.client.platform.AndroidMusicPreviewPlayer
 import com.gangchat.client.platform.AndroidSystemBridge
@@ -40,7 +41,9 @@ import kotlinx.coroutines.launch
  */
 class MainActivity : ComponentActivity() {
     private var appContent: (@Composable () -> Unit)? by mutableStateOf(null)
-    private var uiReady = false
+    /** Whether the launch screen is gone (the UI root has shown its first screen). */
+    internal var uiReady = false
+        private set
 
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(R.style.NormalTheme)
@@ -53,7 +56,7 @@ class MainActivity : ComponentActivity() {
         AndroidAudioRoute.applyVolumeControlStream(this)
         AndroidSystemBridge.instance.onActivityCreated(this)
 
-        keepLaunchScreenUntilReady()
+        if (holdsLaunchScreen) keepLaunchScreenUntilReady()
         setContent { appContent?.invoke() }
         lifecycleScope.launch {
             try {
@@ -69,7 +72,7 @@ class MainActivity : ComponentActivity() {
     }
 
     /** Removes the launch screen; the UI root calls it once it has decided what to show. */
-    private fun showInitialWindow() {
+    internal fun showInitialWindow() {
         if (uiReady) return
         uiReady = true
         window.decorView.invalidate()
@@ -141,5 +144,13 @@ class MainActivity : ComponentActivity() {
 
         /** Intent extra set on the "update ready" notification's launch intent. */
         const val pendingUpdateInstallExtra = "gang_chat_pending_update_install"
+
+        /**
+         * Tests that run the activity under Compose's test clock turn the
+         * launch screen off: Robolectric re-runs each draw the launch screen
+         * cancels at once, so the activity's start would never settle.
+         */
+        @VisibleForTesting
+        internal var holdsLaunchScreen = true
     }
 }
