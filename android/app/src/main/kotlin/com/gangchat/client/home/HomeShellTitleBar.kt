@@ -986,7 +986,15 @@ private fun _SearchCategoryTabs(
     BoxWithConstraints(Modifier.fillMaxWidth().padding(8.dp)) {
         val compact = maxWidth < 380.dp
         val columns = if (compact) 2 else 4
-        val itemWidth = ((maxWidth - 6.dp * (columns - 1)) / columns).coerceIn(0.dp, maxWidth)
+        // Whole pixels: Flutter's Wrap fits `columns` items of this width
+        // exactly, while Compose rounds each width and the gaps to pixels, so
+        // the fractional width would push the last item of a row onto the next.
+        val density = LocalDensity.current
+        val itemWidth =
+            with(density) {
+                val gapPx = 6.dp.roundToPx()
+                ((constraints.maxWidth - gapPx * (columns - 1)) / columns).coerceIn(0, constraints.maxWidth).toDp()
+            }
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
