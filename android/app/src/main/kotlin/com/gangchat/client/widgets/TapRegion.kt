@@ -19,8 +19,14 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.DpOffset
 
-/** The pointer-down event a [TapRegion] reports (Flutter's `PointerDownEvent`), in window dp. */
-class PointerDownEvent(val position: DpOffset, val kind: PointerType)
+/**
+ * The pointer-down event a [TapRegion] reports (Flutter's `PointerDownEvent`),
+ * in window dp. [pointer] identifies the pointer for [TapRegionRegistry.addPointerRoute].
+ */
+class PointerDownEvent(val position: DpOffset, val kind: PointerType, val pointer: Long = 0L)
+
+/** A later event of a routed pointer (Flutter's `PointerMoveEvent` / `PointerUpEvent`). */
+class PointerRouteEvent(val pointer: Long, val position: DpOffset, val isUp: Boolean)
 
 /**
  * Flutter's `TapRegionSurface` (installed by `MaterialApp`): watches every
@@ -64,8 +70,31 @@ class TapRegionRegistry internal constructor() {
         globalPointerDownListeners.remove(listener)
     }
 
-    internal fun dispatchDown(windowPosition: Offset, kind: PointerType, density: Density) {
-        val event = with(density) { PointerDownEvent(DpOffset(windowPosition.x.toDp(), windowPosition.y.toDp()), kind) }
+    private val pointerRoutes = mutableMapOf<Long, MutableList<(PointerRouteEvent) -> Unit>>()
+
+    /**
+     * Flutter's `GestureBinding.pointerRouter.addRoute(pointer, route)`:
+     * [route] receives [pointer]'s later moves and its up (or cancel) anywhere
+     * on the surface, whoever handles them.
+     */
+    fun addPointerRoute(pointer: Long, route: (PointerRouteEvent) -> Unit) {
+        pointerRoutes.getOrPut(pointer) { mutableListOf() }.add(route)
+    }
+
+    fun removePointerRoute(pointer: Long, route: (PointerRouteEvent) -> Unit) {
+        val routes = pointerRoutes[pointer] ?: return
+        routes.remove(route)
+        if (routes.isEmpty()) pointerRoutes.remove(pointer)
+    }
+
+    internal fun dispatchRoute(pointer: Long, windowPosition: Offset, isUp: Boolean, density: Density) {
+        val routes = pointerRoutes[pointer] ?: return
+        val event = with(density) { PointerRouteEvent(pointer, DpOffset(windowPosition.x.toDp(), windowPosition.y.toDp()), isUp) }
+        for (route in routes.toList()) route(event)
+    }
+
+    internal fun dispatchDown(windowPosition: Offset, kind: PointerType, density: Density, pointer: Long = 0L) {
+        val event = with(density) { PointerDownEvent(DpOffset(windowPosition.x.toDp(), windowPosition.y.toDp()), kind, pointer) }
         for (listener in globalPointerDownListeners.toList()) listener(event)
         val active = regions.filter { it.enabled }
         val hitGroups = HashSet<Any>()
@@ -100,11 +129,14 @@ fun TapRegionSurface(modifier: Modifier = Modifier, content: @Composable () -> U
                         // The initial pass runs before any descendant can consume.
                         val event = awaitPointerEvent(PointerEventPass.Initial)
                         for (change in event.changes) {
-                            if (!change.changedToDownIgnoreConsumed()) continue
                             val coords = holder[0]
                             val windowPosition =
                                 if (coords != null && coords.isAttached) coords.localToWindow(change.position) else change.position
-                            registry.dispatchDown(windowPosition, change.type, density)
+                            if (change.changedToDownIgnoreConsumed()) {
+                                registry.dispatchDown(windowPosition, change.type, density, change.id.value)
+                            } else if (change.pressed || change.previousPressed) {
+                                registry.dispatchRoute(change.id.value, windowPosition, isUp = !change.pressed, density = density)
+                            }
                         }
                     }
                 }
