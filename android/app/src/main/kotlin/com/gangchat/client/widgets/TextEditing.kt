@@ -10,7 +10,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import com.gangchat.client.foundation.ChangeNotifier
 import com.gangchat.client.foundation.ValueListenable
@@ -22,7 +24,7 @@ import com.gangchat.client.foundation.ValueListenable
  * programmatic edits (`controller.text = ...`) update the field and notify
  * listeners synchronously, like Flutter.
  */
-class TextEditingController(text: String = "") : ChangeNotifier(), ValueListenable<TextFieldValue> {
+open class TextEditingController(text: String = "") : ChangeNotifier(), ValueListenable<TextFieldValue> {
     private var current by mutableStateOf(TextFieldValue(text, TextRange(text.length)))
 
     override var value: TextFieldValue
@@ -51,6 +53,13 @@ class TextEditingController(text: String = "") : ChangeNotifier(), ValueListenab
     fun clear() {
         value = TextFieldValue("")
     }
+
+    /**
+     * Flutter's `buildTextSpan` override point: the styled text a field shows
+     * for [text] (spans over the field's [style]). Null, the default, shows
+     * the text plain.
+     */
+    open fun buildTextSpan(text: String, style: TextStyle): AnnotatedString? = null
 
     /** `onValueChange` handler for `BasicTextField`. */
     fun updateFromField(newValue: TextFieldValue) {

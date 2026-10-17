@@ -57,7 +57,9 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -662,7 +664,18 @@ internal fun _EditableTextField(
             singleLine = singleLine,
             maxLines = maxLines ?: Int.MAX_VALUE,
             minLines = minLines.coerceAtMost(maxLines ?: Int.MAX_VALUE),
-            visualTransformation = if (obscureText) PasswordVisualTransformation() else visualTransformation,
+            visualTransformation =
+                when {
+                    obscureText -> PasswordVisualTransformation()
+                    visualTransformation !== VisualTransformation.None -> visualTransformation
+                    // A controller that styles its own text (Dart's
+                    // `TextEditingController.buildTextSpan` override).
+                    controller.buildTextSpan(controller.text, style) != null ->
+                        VisualTransformation { original ->
+                            TransformedText(controller.buildTextSpan(original.text, style) ?: original, OffsetMapping.Identity)
+                        }
+                    else -> VisualTransformation.None
+                },
             onTextLayout = onTextLayout,
             cursorBrush = SolidColor(if (showCursor) uiTheme().cursorColor else Color.Transparent),
             decorationBox = decorationBox,
