@@ -23,6 +23,9 @@ import androidx.compose.material.icons.automirrored.rounded.Login
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.Circle
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -130,7 +133,10 @@ class RoomHoverCardWidget(
 )
 
 private class _RoomHoverCardState : ViewState<RoomHoverCardWidget>() {
-    private var _resolved: PublicRoom? = null
+    // Snapshot state: the card in the overlay reads it directly, so it
+    // follows a resolution even when the overlay composes before this anchor
+    // (the anchor may sit in a lazily measured sub-composition).
+    private var _resolved: PublicRoom? by mutableStateOf(null)
     private var _resolveFuture: Deferred<Unit>? = null
 
     private val _displayRoom: PublicRoom get() = _resolved ?: widget.room
@@ -264,7 +270,8 @@ suspend fun showUserProfileCardAtPosition(
 }
 
 private class _UserHoverCardState : ViewState<UserHoverCardWidget>() {
-    private var _resolved: UserSummary? = null
+    // Snapshot state read by the overlay card (see _RoomHoverCardState).
+    private var _resolved: UserSummary? by mutableStateOf(null)
     private var _resolveFuture: Deferred<Unit>? = null
 
     private val _displayUser: UserSummary get() = _resolved ?: widget.user
@@ -321,7 +328,6 @@ private class _UserHoverCardState : ViewState<UserHoverCardWidget>() {
 
     @Composable
     override fun build() {
-        val displayUser = _displayUser
         HoverCardAnchor(
             modifier = widget.modifier,
             resetKey =
@@ -338,6 +344,7 @@ private class _UserHoverCardState : ViewState<UserHoverCardWidget>() {
                 ),
             onBeforeOpen = if (widget.user.isDeleted || widget.onResolveProfile == null) null else ({ _resolveProfile() }),
             cardBuilder = { _ ->
+                val displayUser = _displayUser
                 _UserProfileCard(
                     user = displayUser,
                     currentUser = widget.currentUser,
@@ -378,7 +385,7 @@ private class _UserProfileCardPopupRoute(
         Layout(
             modifier = Modifier.fillMaxSize(),
             content = {
-                AnchoredPanel(width = hoverCardDefaultWidth) {
+                AnchoredPanel(width = hoverCardDefaultWidth, modifier = Modifier.testTag(hoverCardPanelTag)) {
                     _ResolvingUserProfileCard(
                         user = user,
                         currentUser = currentUser,

@@ -14,6 +14,7 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Constraints
@@ -55,6 +56,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 
 val hoverCardDefaultWidth: Dp = 248.dp
+
+/** Test tag of a card's panel (Dart's tests find it as the card's `AnchoredPanel`). */
+const val hoverCardPanelTag = "hover-card-panel"
 val hoverCardDefaultGap: Dp = 10.dp
 
 typealias HoverCardBuilder = @Composable (context: BuildContext) -> Unit
@@ -527,7 +531,7 @@ private class _HoverCardAnchorState : ViewState<HoverCardAnchorWidget>() {
                         .mouseHover(onEnter = ::_enterCard, onExit = ::_exitCard),
                     propagateMinConstraints = true,
                 ) {
-                    AnchoredPanel(width = cardWidth, modifier = Modifier.renderBox(_cardKey)) {
+                    AnchoredPanel(width = cardWidth, modifier = Modifier.testTag(hoverCardPanelTag).renderBox(_cardKey)) {
                         CompositionLocalProvider(
                             _LocalHoverCardChainScope provides _HoverCardChainScopeData(this@_HoverCardAnchorState, _coordinator, _tapRegionGroup),
                             LocalHoverCardTapRegionScope provides HoverCardTapRegionScopeData(_tapRegionGroup, ::_handleOverlayActivityChanged),
@@ -607,18 +611,29 @@ private class _HoverCardAnchorState : ViewState<HoverCardAnchorWidget>() {
     }
 }
 
-/** Flutter's `MouseRegion(onEnter:, onExit:)` for a mouse pointer. */
+/**
+ * Flutter's `MouseRegion(onEnter:, onExit:)` for a mouse pointer. Like the
+ * mouse tracker, it also reports an exit when a mouse move lands outside the
+ * region (a pointer that left without a Compose `Exit` event).
+ */
 private fun Modifier.mouseHover(onEnter: () -> Unit, onExit: () -> Unit): Modifier =
     this.pointerInput(Unit) {
         awaitPointerEventScope {
+            var inside = false
             while (true) {
                 val event = awaitPointerEvent(PointerEventPass.Initial)
-                if (event.changes.none { it.type == PointerType.Mouse }) continue
-                when (event.type) {
-                    PointerEventType.Enter -> onEnter()
-                    PointerEventType.Exit -> onExit()
-                    else -> Unit
-                }
+                val change = event.changes.firstOrNull { it.type == PointerType.Mouse } ?: continue
+                val nowInside =
+                    when (event.type) {
+                        PointerEventType.Enter -> true
+                        PointerEventType.Exit -> false
+                        else ->
+                            change.position.x >= 0f && change.position.y >= 0f &&
+                                change.position.x < size.width && change.position.y < size.height
+                    }
+                if (nowInside == inside) continue
+                inside = nowInside
+                if (inside) onEnter() else onExit()
             }
         }
     }
