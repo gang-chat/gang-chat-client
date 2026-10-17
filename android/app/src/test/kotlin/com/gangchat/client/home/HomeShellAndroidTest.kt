@@ -7,6 +7,8 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.RadioButtonChecked
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -595,6 +597,31 @@ class HomeShellAndroidTest : HomeShellTestBase() {
         } finally {
             android.dispose()
         }
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h740dp-xxhdpi")
+    fun `Android chat composer rises above the keyboard`() {
+        var keyboard by androidx.compose.runtime.mutableStateOf(0.dp)
+        compose.setHomePage(
+            app = homeTestAppContext(),
+            viewInsets = { com.gangchat.client.widgets.EdgeInsets.only(bottom = keyboard) },
+        )
+        compose.settleShell()
+        tapText("Alpha Room")
+        val restingBottom = tag(chatComposerTag).rect().bottom
+
+        // The scaffold resizes for the on-screen keyboard (no music box open).
+        keyboard = 300.dp
+        compose.settleShell()
+        val composer = tag(chatComposerTag).rect()
+        assertTrue(composer.bottom <= 740.dp - 300.dp + 0.5.dp)
+        assertTrue(composer.bottom < restingBottom)
+        assertTrue(tagExists(chatHeaderRoomTitleTag))
+
+        keyboard = 0.dp
+        compose.settleShell()
+        assertDpEquals(restingBottom, tag(chatComposerTag).rect().bottom)
     }
 
     @Test
