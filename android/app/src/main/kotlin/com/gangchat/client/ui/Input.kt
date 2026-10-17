@@ -430,7 +430,15 @@ private class _InputState : ViewState<InputWidget>() {
     }
 
     private fun _contentPaddingFor(reserveClearButton: Boolean): EdgeInsets {
-        val lineHeight = TextPainter(" ", widget.style).layout(context).preferredLineHeight
+        // Flutter's line is exactly fontSize × height. Android grows lines that
+        // use the CJK fallback font past that (fallback line spacing), so pad
+        // for the taller of a Latin and a CJK line; the field's minimum height
+        // keeps it at [InputWidget.height] either way.
+        val lineHeight =
+            max(
+                TextPainter(" ", widget.style).layout(context).preferredLineHeight,
+                TextPainter("中", widget.style).layout(context).preferredLineHeight,
+            )
         val verticalPadding = max(0.0, (widget.height.value - lineHeight) / 2)
         // Android text metrics are centred without the desktop face
         // compensation (Dart's `_verticalOffsetFor` is 0 on Android), and

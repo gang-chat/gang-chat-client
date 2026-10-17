@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -240,8 +241,10 @@ private class _UiSliderState : ViewState<UiSliderWidget>() {
             if (showHoverLabel) {
                 Box(
                     Modifier
-                        .testTag(uiSliderHoverLabelTag)
                         .offset(x = hoverLabelLeft, y = -(_hoverLabelGap + _hoverLabelHeight))
+                        // Positioned: its own size, even past the 14 dp track box.
+                        .wrapContentSize(Alignment.TopStart, unbounded = true)
+                        .testTag(uiSliderHoverLabelTag)
                         .size(_hoverLabelWidth, _hoverLabelHeight)
                         .decoration(UiColors.surfaceHover, RoundedCornerShape(UiRadii.sm), UiColors.borderStrong),
                     contentAlignment = Alignment.Center,

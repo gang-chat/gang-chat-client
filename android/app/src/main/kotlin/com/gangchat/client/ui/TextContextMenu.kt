@@ -48,6 +48,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntOffset
@@ -426,99 +427,28 @@ private class _TextFieldContextMenuState : ViewState<_TextFieldContextMenuWidget
         )
     }
 
-    private fun itemOfType(data: TextContextMenuData, key: Any): TextContextMenuItem? =
-        data.components.firstOrNull { it.key == key } as? TextContextMenuItem
-
     private fun TextContextMenuItem.action(): () -> Unit = { onClick(widget.session) }
 
-    private val _hasSelection: Boolean
-        get() {
-            val selection = widget.field.controller.value.selection
-            return !selection.collapsed
-        }
-
     private fun _sectionsFor(data: TextContextMenuData): List<_ContextMenuSection> {
-        if (widget.menu.readOnly) return _readOnlySectionsFor(data)
-
-        val editItems = mutableListOf<_ContextMenuItemData>()
-        val selected = _hasSelection
-        val pasteItem = itemOfType(data, TextContextMenuKeys.PasteKey)
-        // Compose only offers paste when the clipboard holds text (Flutter's
-        // `ClipboardStatus.pasteable`).
-        val canPasteText = pasteItem != null
-        val canPasteNonText = _canPasteNonText && widget.menu.canPasteNonText != null
-        val canPaste = canPasteText || canPasteNonText
-        // Always route editable composer paste through the paste action when it
-        // provides a non-text checker. On Android the system menu can be tapped
-        // before the asynchronous clipboard probe finishes; invoking the native
-        // paste button directly in that window inserts the readable fallback text
-        // and bypasses structured song/playlist restoration. The composer action
-        // falls back to the normal text paste when nothing was consumed.
-        val pasteAction: (() -> Unit)? =
-            if (widget.menu.canPasteNonText != null) _pasteIntentAction(pasteItem) else pasteItem?.action()
-        val selectAllAction = itemOfType(data, TextContextMenuKeys.SelectAllKey)?.action() ?: _selectAllFallback
-
-        if (selected) {
-            if (widget.menu.allowCut) {
-                editItems.add(_entry("剪切", _ShortcutKind.cut, itemOfType(data, TextContextMenuKeys.CutKey)?.action()))
-            }
-            if (widget.menu.allowCopy) {
-                editItems.add(_entry("复制", _ShortcutKind.copy, itemOfType(data, TextContextMenuKeys.CopyKey)?.action()))
-            }
-            if (canPaste) editItems.add(_entry("粘贴", _ShortcutKind.paste, pasteAction))
-            if (selectAllAction != null) editItems.add(_entry("全选", _ShortcutKind.selectAll, selectAllAction))
-        } else {
-            if (canPaste) editItems.add(_entry("粘贴", _ShortcutKind.paste, pasteAction))
-            if (selectAllAction != null) editItems.add(_entry("全选", _ShortcutKind.selectAll, selectAllAction))
+        val platformActions = LinkedHashMap<Any, () -> Unit>()
+        for (component in data.components) {
+            if (component is TextContextMenuItem) platformActions[component.key] = component.action()
         }
-
-        val historyItems = mutableListOf<_ContextMenuItemData>()
-        val undoController = _undoController
-        if (undoController != null) {
-            if (undoController.value.canUndo) historyItems.add(_entry("撤销", _ShortcutKind.undo) { undoController.undo() })
-            if (undoController.value.canRedo) historyItems.add(_entry("重做", _ShortcutKind.redo) { undoController.redo() })
-        }
-
-        return buildList {
-            if (editItems.isNotEmpty()) add(_ContextMenuSection(editItems))
-            if (historyItems.isNotEmpty()) add(_ContextMenuSection(historyItems))
-        }
+        val field = widget.field
+        return textContextMenuSections(
+            menu = widget.menu,
+            value = field.controller.value,
+            platformActions = platformActions,
+            canPasteNonText = _canPasteNonText,
+            pasteIntent = { _pasteIntentAction(platformActions[TextContextMenuKeys.PasteKey]) },
+            selectAll = { field.controller.selection = TextRange(0, field.controller.text.length) },
+            copySelection = field.copySelection,
+        ).map { section -> _ContextMenuSection(section.map { _entry(it.label, it.kind, it.action) }) }
     }
-
-    private fun _readOnlySectionsFor(data: TextContextMenuData): List<_ContextMenuSection> {
-        val editItems = mutableListOf<_ContextMenuItemData>()
-        if (_hasSelection) {
-            editItems.add(
-                _entry("复制", _ShortcutKind.copy, itemOfType(data, TextContextMenuKeys.CopyKey)?.action() ?: _copySelectionFallback),
-            )
-        }
-        if (widget.menu.showReadOnlySelectAll) {
-            val selectAllAction = itemOfType(data, TextContextMenuKeys.SelectAllKey)?.action() ?: _selectAllFallback
-            if (selectAllAction != null) editItems.add(_entry("全选", _ShortcutKind.selectAll, selectAllAction))
-        }
-        return if (editItems.isNotEmpty()) listOf(_ContextMenuSection(editItems)) else emptyList()
-    }
-
-    private val _selectAllFallback: (() -> Unit)?
-        get() {
-            val value = widget.field.controller.value
-            if (value.text.isEmpty()) return null
-            val start = value.selection.min
-            val end = value.selection.max
-            if (start == 0 && end == value.text.length) return null
-            return { widget.field.controller.selection = TextRange(0, widget.field.controller.text.length) }
-        }
-
-    private val _copySelectionFallback: (() -> Unit)?
-        get() {
-            val value = widget.field.controller.value
-            if (value.selection.collapsed) return null
-            return { widget.field.copySelection() }
-        }
 
     /** Dart's `Actions.maybeInvoke(context, PasteTextIntent)`. */
-    private fun _pasteIntentAction(pasteItem: TextContextMenuItem?): () -> Unit = {
-        val defaultPaste: () -> Unit = pasteItem?.action() ?: widget.field.pasteClipboardText
+    private fun _pasteIntentAction(defaultItemAction: (() -> Unit)?) {
+        val defaultPaste: () -> Unit = defaultItemAction ?: widget.field.pasteClipboardText
         val override = widget.pasteAction
         if (override != null) override(defaultPaste) else defaultPaste()
     }
@@ -539,6 +469,84 @@ private class _TextFieldContextMenuState : ViewState<_TextFieldContextMenuWidget
                     }
                 },
         )
+    }
+}
+
+/** One entry of the text context menu, before it is bound to the open menu. */
+internal class TextContextMenuEntry(val label: String, val kind: _ShortcutKind, val action: (() -> Unit)?) {
+    val shortcut: String get() = _shortcutLabel(kind)
+}
+
+/**
+ * Dart's `_sectionsFor` / `_readOnlySectionsFor`: the entries the kit's text
+ * menu shows for [value], given the actions Compose offers for the field
+ * ([platformActions], keyed by `TextContextMenuKeys`: cut/copy/paste only
+ * when possible, paste only with text on the clipboard) and whether the
+ * non-text paste probe succeeded.
+ */
+internal fun textContextMenuSections(
+    menu: TextFieldContextMenu,
+    value: TextFieldValue,
+    platformActions: Map<Any, () -> Unit>,
+    canPasteNonText: Boolean,
+    pasteIntent: () -> Unit,
+    selectAll: () -> Unit,
+    copySelection: () -> Unit,
+): List<List<TextContextMenuEntry>> {
+    val selected = !value.selection.collapsed
+    val selectAllFallback: (() -> Unit)? =
+        run {
+            if (value.text.isEmpty()) return@run null
+            if (value.selection.min == 0 && value.selection.max == value.text.length) return@run null
+            selectAll
+        }
+    if (menu.readOnly) {
+        val editItems = mutableListOf<TextContextMenuEntry>()
+        if (selected) {
+            editItems.add(TextContextMenuEntry("复制", _ShortcutKind.copy, platformActions[TextContextMenuKeys.CopyKey] ?: copySelection))
+        }
+        if (menu.showReadOnlySelectAll) {
+            val selectAllAction = platformActions[TextContextMenuKeys.SelectAllKey] ?: selectAllFallback
+            if (selectAllAction != null) editItems.add(TextContextMenuEntry("全选", _ShortcutKind.selectAll, selectAllAction))
+        }
+        return if (editItems.isNotEmpty()) listOf(editItems) else emptyList()
+    }
+
+    val editItems = mutableListOf<TextContextMenuEntry>()
+    val pasteItem = platformActions[TextContextMenuKeys.PasteKey]
+    // Compose only offers paste when the clipboard holds text (Flutter's
+    // `ClipboardStatus.pasteable`).
+    val canPasteText = pasteItem != null
+    val canPaste = canPasteText || (canPasteNonText && menu.canPasteNonText != null)
+    // Always route editable composer paste through the paste action when it
+    // provides a non-text checker. On Android the system menu can be tapped
+    // before the asynchronous clipboard probe finishes; invoking the native
+    // paste button directly in that window inserts the readable fallback text
+    // and bypasses structured song/playlist restoration. The composer action
+    // falls back to the normal text paste when nothing was consumed.
+    val pasteAction: (() -> Unit)? = if (menu.canPasteNonText != null) pasteIntent else pasteItem
+    val selectAllAction = platformActions[TextContextMenuKeys.SelectAllKey] ?: selectAllFallback
+
+    if (selected) {
+        if (menu.allowCut) editItems.add(TextContextMenuEntry("剪切", _ShortcutKind.cut, platformActions[TextContextMenuKeys.CutKey]))
+        if (menu.allowCopy) editItems.add(TextContextMenuEntry("复制", _ShortcutKind.copy, platformActions[TextContextMenuKeys.CopyKey]))
+        if (canPaste) editItems.add(TextContextMenuEntry("粘贴", _ShortcutKind.paste, pasteAction))
+        if (selectAllAction != null) editItems.add(TextContextMenuEntry("全选", _ShortcutKind.selectAll, selectAllAction))
+    } else {
+        if (canPaste) editItems.add(TextContextMenuEntry("粘贴", _ShortcutKind.paste, pasteAction))
+        if (selectAllAction != null) editItems.add(TextContextMenuEntry("全选", _ShortcutKind.selectAll, selectAllAction))
+    }
+
+    val historyItems = mutableListOf<TextContextMenuEntry>()
+    val undoController = menu.undoController
+    if (undoController != null) {
+        if (undoController.value.canUndo) historyItems.add(TextContextMenuEntry("撤销", _ShortcutKind.undo) { undoController.undo() })
+        if (undoController.value.canRedo) historyItems.add(TextContextMenuEntry("重做", _ShortcutKind.redo) { undoController.redo() })
+    }
+
+    return buildList {
+        if (editItems.isNotEmpty()) add(editItems)
+        if (historyItems.isNotEmpty()) add(historyItems)
     }
 }
 
@@ -613,7 +621,7 @@ private class _ContextMenuSection(val items: List<_ContextMenuItemData>)
 
 private class _ContextMenuItemData(val label: String, val shortcut: String, val onPressed: (() -> Unit)?)
 
-private enum class _ShortcutKind { cut, copy, paste, selectAll, undo, redo }
+internal enum class _ShortcutKind { cut, copy, paste, selectAll, undo, redo }
 
 private fun _shortcutLabel(shortcut: _ShortcutKind): String =
     when (shortcut) {

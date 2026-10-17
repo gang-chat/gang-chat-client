@@ -4,6 +4,14 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.horizontalDrag
+import androidx.compose.ui.input.pointer.isPrimaryPressed
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.platform.LocalContext
+import kotlin.math.roundToInt
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -245,6 +253,7 @@ private class _SegmentedControlState<T> : ViewState<SegmentedControlWidget<T>>()
                     .weight(1f)
                     .clipToBounds()
                     .testTag(segmentedControlScrollViewTag)
+                    ._overflowPointerScrolling(scrollState, LocalContext.current)
                     .horizontalScroll(scrollState),
             ) {
                 Box(Modifier.size(_sum(segmentWidths), widget.height)) {
@@ -382,14 +391,17 @@ private class _SegmentedControlState<T> : ViewState<SegmentedControlWidget<T>>()
         val viewportWidth = (controller.viewportSize / density).dp - futureJumpButtonSpace
         val maxScroll = controller.maxValue / density
         val target = (((start + end) / 2) - (viewportWidth.coerceAtLeast(0.dp) / 2)).value.coerceIn(0f, maxScroll)
-        if (abs(target - controller.value / density) < 0.5f) return
-        scope?.launch { _animateToCenteredPosition(target, index) }
+        // Compose scroll offsets are whole pixels: compare (and scroll) in
+        // pixels, or a sub-pixel target would never be reached.
+        val targetPx = (target * density).roundToInt().coerceIn(0, controller.maxValue)
+        if (abs(target - controller.value / density) < 0.5f || targetPx == controller.value) return
+        scope?.launch { _animateToCenteredPosition(targetPx, index) }
     }
 
-    private suspend fun _animateToCenteredPosition(target: Float, index: Int) {
+    private suspend fun _animateToCenteredPosition(targetPx: Int, index: Int) {
         val controller = _scrollController ?: return
         try {
-            controller.animateScrollTo((target * density).toInt(), tween(_durationMillis, easing = Curves.easeOutCubic))
+            controller.animateScrollTo(targetPx, tween(_durationMillis, easing = Curves.easeOutCubic))
         } catch (_: Exception) {
             return
         }
@@ -555,6 +567,50 @@ private fun <T> _SegmentHitTarget(
             }
         }
     }
+}
+
+/**
+ * The overflow track's extra pointer scrolling: a mouse wheel scrolls it
+ * horizontally (horizontal delta first, else the vertical one; Dart's
+ * `_handlePointerSignal`), and a primary-button mouse drag scrolls it like a
+ * touch drag (Dart adds `PointerDeviceKind.mouse` to the drag devices;
+ * Compose's scrollable ignores mouse drags).
+ */
+private fun Modifier._overflowPointerScrolling(scrollState: ScrollState, context: android.content.Context): Modifier {
+    val viewConfiguration = android.view.ViewConfiguration.get(context)
+    val horizontalFactor = viewConfiguration.scaledHorizontalScrollFactor
+    val verticalFactor = viewConfiguration.scaledVerticalScrollFactor
+    return this
+        .pointerInput(scrollState) {
+            awaitPointerEventScope {
+                while (true) {
+                    // Before the scrollable's own wheel handling.
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    if (event.type != PointerEventType.Scroll) continue
+                    val change = event.changes.firstOrNull() ?: continue
+                    val horizontal = change.scrollDelta.x * horizontalFactor
+                    val delta = if (abs(horizontal) > 0f) horizontal else change.scrollDelta.y * verticalFactor
+                    if (delta == 0f) continue
+                    scrollState.dispatchRawDelta(delta)
+                    event.changes.forEach { it.consume() }
+                }
+            }
+        }
+        .pointerInput(scrollState) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                if (down.type != PointerType.Mouse || !currentEvent.buttons.isPrimaryPressed) return@awaitEachGesture
+                val drag =
+                    awaitHorizontalTouchSlopOrCancellation(down.id) { change, overSlop ->
+                        change.consume()
+                        scrollState.dispatchRawDelta(-overSlop)
+                    } ?: return@awaitEachGesture
+                horizontalDrag(drag.id) { change ->
+                    scrollState.dispatchRawDelta(-change.positionChange().x)
+                    change.consume()
+                }
+            }
+        }
 }
 
 /** Flutter's `FittedBox(fit: BoxFit.scaleDown)`: shrinks the child to fit, never grows it. */
