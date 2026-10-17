@@ -12,7 +12,7 @@ Android 客户端正在从 Flutter 一比一移植为原生 Kotlin + Jetpack Com
 | 协议、鉴权、配置 | `:core` protocol / auth / config | 完成（118 个移植用例通过） |
 | 业务控制器 | `:core` app | 进行中（无依赖的底层文件已完成） |
 | 平台服务（通知、前台服务、FCM、更新安装、存储） | `:app` platform | 完成 |
-| LiveKit 语音、摄像头、屏幕共享 | `:app` live | 未开始 |
+| LiveKit 语音、摄像头、屏幕共享 | `:app` live | 完成（86 个测试；SDK 路径需真机验证） |
 | 界面组件库 | `:app` ui | 完成（93 个测试含 12 组截图） |
 | 主界面、设置、登录 | `:app` home / settings / shell | 未开始 |
 
@@ -49,6 +49,31 @@ Android 客户端正在从 Flutter 一比一移植为原生 Kotlin + Jetpack Com
 - IO 与 ContentResolver 操作移到 `Dispatchers.IO`（Flutter 宿主里在主线程）。
 - 安全存储两次读取都失败时返回 `null`（插件返回字符串 "Data has been reset"）。
 - 平板判断读当前窗口尺寸（Flutter 在 `main()` 里读视图尺寸，可能还是 0）。
+
+### 语音、视频、屏幕共享（`:app` live / platform/webrtc）
+
+改用 LiveKit Android SDK；Flutter 版依赖的 `flutter_webrtc` / `livekit_client` 分支在 Android 上的行为
+移植到 `platform/webrtc`：
+
+- 进程级音频路由：LiveKit 每个 Room 有自己的音频设备模块，Flutter 版是全进程一个 AudioSwitch。
+  现在所有 Room 通过自定义 `AudioHandler` 共享一个引用计数的 `AudioSwitchManager`（通话模式、
+  VOICE_COMMUNICATION、输出优先级 蓝牙 > 有线耳机 > 扬声器 > 听筒，设备 id 不变）。
+- 本地麦克风增益（分支里的 AudioProcessingAdapter）移植为采集后处理器。
+- 屏幕共享：MediaProjection 授权走 `activityResultRegistry`；前台服务渠道 `gang_chat_screen_capture`、
+  类型 `mediaProjection|microphone`；按真实屏幕尺寸、30 fps 单层发布。共享声音用 AudioPlaybackCapture
+  （排除本应用 UID），在独立音频模块、独立的 `<id>--screen-audio` 参与者里发布。
+- 差异：
+  1. 共享过程中调整画质后，新的分辨率不会重新上报（SDK 没有对应接口）；码率和帧率缩放仍然生效。
+  2. 断线续连（resume）检测和每个参与者的离开原因依赖反射 SDK 内部的 RTCEngine 回调；反射失败时
+     所有重连按完整重连处理、所有离开按"离开"处理。
+  3. 麦克风测试的电平改为对测试音轨采样计算 RMS（每 120 ms），不再走回环统计。
+  4. 切换前后摄像头用 `switchCamera`。
+  5. 进入/离开语音频道的提示音：Flutter 版在 Android 上以低延迟模式播放字节会抛错，导致提示音和
+     链在其后的语音播报都不会播放；原生版保持这一行为（与消息提示音同一个问题，见平台层）。
+  6. LiveKit 自带的通话模式处理被关闭，音频模式由共享的 AudioSwitch 管理。
+  7. 摄像头联播时 SDK 把优先级放在全分辨率层而不是 encodings[0]；屏幕共享是单层，不受影响。
+- 只编译、未在设备上运行过的部分：真实 Room 连接与反射钩子、AudioSwitch、MediaProjection 与前台服务、
+  播放捕获、屏幕声音发布、麦克风/扬声器测试、视频渲染、TTS。
 
 ### 界面组件库（`:app` ui）
 
