@@ -43,6 +43,16 @@ class TapRegionRegistry internal constructor() {
     ) {
         var coordinates: LayoutCoordinates? = null
 
+        /**
+         * The route the region was built in. Like Flutter's `TapRegion`
+         * (`ModalRoute.isCurrentOf`), a region whose route is covered by
+         * another route (a dialog, say) gets no outside taps.
+         */
+        var route: Route<*>? = null
+
+        val onTapOutsideIfCurrent: ((PointerDownEvent) -> Unit)?
+            get() = if (route?.isCurrent == false) null else onTapOutside
+
         fun contains(windowPosition: Offset): Boolean {
             val coords = coordinates ?: return false
             if (!coords.isAttached) return false
@@ -107,7 +117,7 @@ class TapRegionRegistry internal constructor() {
         }
         for (region in active) {
             val inside = region in hitRegions || (region.groupId != null && region.groupId in hitGroups)
-            if (inside) region.onTapInside?.invoke(event) else region.onTapOutside?.invoke(event)
+            if (inside) region.onTapInside?.invoke(event) else region.onTapOutsideIfCurrent?.invoke(event)
         }
     }
 }
@@ -178,6 +188,7 @@ fun Modifier.tapRegion(
     region.enabled = enabled
     region.onTapOutside = onTapOutside
     region.onTapInside = onTapInside
+    region.route = LocalModalRoute.current
     DisposableEffect(registry, region) {
         registry?.register(region)
         onDispose { registry?.unregister(region) }
