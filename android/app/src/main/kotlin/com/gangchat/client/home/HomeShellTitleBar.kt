@@ -54,6 +54,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -599,7 +604,22 @@ private class _TitleSearchFieldState : ViewState<_TitleSearchFieldWidget>() {
                         tapRegionGroupId = widget.tapRegionGroup,
                         onOpenChanged = widget.onContextMenuOpenChanged,
                     ),
-                modifier = Modifier.weight(1f),
+                // Dart's `TextField.onTap`: a tap on the (possibly already
+                // focused) field reopens the results.
+                modifier =
+                    Modifier.weight(1f).then(
+                        if (widget.enabled) {
+                            Modifier.pointerInput(Unit) {
+                                awaitEachGesture {
+                                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                                    val up = waitForUpOrCancellation(PointerEventPass.Initial)
+                                    if (up != null && widget.enabled) widget.onActivated()
+                                }
+                            }
+                        } else {
+                            Modifier
+                        },
+                    ),
                 enabled = widget.enabled,
                 textInputAction = ImeAction.Search,
                 maxLines = 1,

@@ -198,6 +198,8 @@ internal fun _HomeShellState._buildContentPane(onNavigateBack: (() -> Unit)? = n
     if (_contentMode == _ContentMode.superuserUserSettings && superuserTarget != null) {
         val target = superuserTarget
         key("superuser-user-settings-${target.id}") {
+          // Dart's `ValueKey('superuser-user-settings-...')`, which tests find.
+          Box(Modifier.fillMaxSize().testTag("superuser-user-settings-${target.id}"), propagateMinConstraints = true) {
             SettingsPage(
                 isSubWindow = true,
                 api = _services.api,
@@ -261,6 +263,7 @@ internal fun _HomeShellState._buildContentPane(onNavigateBack: (() -> Unit)? = n
                     }
                 },
             )
+          }
         }
         return
     }

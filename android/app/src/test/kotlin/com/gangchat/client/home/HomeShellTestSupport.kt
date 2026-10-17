@@ -5,7 +5,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
@@ -444,6 +447,7 @@ open class FakeHomeAndroidSystemService(
 fun ComposeContentTestRule.setHomeShellContent(
     viewPadding: (() -> EdgeInsets)? = null,
     viewInsets: (() -> EdgeInsets)? = null,
+    size: (() -> DpSize?)? = null,
     content: @Composable () -> Unit,
 ) {
     setContent {
@@ -456,7 +460,14 @@ fun ComposeContentTestRule.setHomeShellContent(
                 if (insets != null) media = media.copy(viewInsets = insets)
                 CompositionLocalProvider(LocalMediaQuery provides media) {
                     AppNotificationHost {
-                        RootNavigator { _ -> Box(Modifier.fillMaxSize(), propagateMinConstraints = true) { content() } }
+                        RootNavigator { _ ->
+                            // Dart's `SizedBox(width:, height:)` around the page.
+                            val pageSize = size?.invoke()
+                            val pageModifier = if (pageSize == null) Modifier.fillMaxSize() else Modifier.requiredSize(pageSize)
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopStart) {
+                                Box(pageModifier, propagateMinConstraints = true) { content() }
+                            }
+                        }
                     }
                 }
             }
@@ -485,8 +496,9 @@ fun ComposeContentTestRule.setHomePage(
     onDetectedAppUpdateShown: (() -> Unit)? = null,
     viewPadding: (() -> EdgeInsets)? = null,
     viewInsets: (() -> EdgeInsets)? = null,
+    size: (() -> DpSize?)? = null,
 ) {
-    setHomeShellContent(viewPadding = viewPadding, viewInsets = viewInsets) {
+    setHomeShellContent(viewPadding = viewPadding, viewInsets = viewInsets, size = size) {
         HomePage(
             app = app,
             realtime = realtime,
