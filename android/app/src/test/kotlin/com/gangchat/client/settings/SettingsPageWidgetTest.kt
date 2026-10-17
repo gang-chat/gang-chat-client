@@ -182,7 +182,8 @@ class SettingsPageWidgetTest {
         compose.pumpAndSettle()
     }
 
-    private fun exists(tag: String) = compose.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().isNotEmpty()
+    /** Dart's `find.byKey(key)` finding something (tags inside a text field merge away in the merged tree). */
+    private fun exists(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
 
     private fun jsonBody(request: HttpRequest): Map<String, Any?> {
         @Suppress("UNCHECKED_CAST")

@@ -205,6 +205,8 @@ private fun _VolumeSlider(value: Double, onChanged: ((Double) -> Unit)?, modifie
     val thumbColor = if (enabled) _textPrimary else UiColors.text.copy(alpha = 0.38f)
     val overlayColor = _cyan.copy(alpha = 0.14f)
     val dragging = remember { mutableStateOf(false) }
+    // The drag detector outlives rebuilds; it reads the latest callback.
+    val currentOnChanged = androidx.compose.runtime.rememberUpdatedState(onChanged)
     val clamped = value.coerceIn(0.0, 1.0)
     BoxWithConstraints(
         modifier
@@ -229,7 +231,7 @@ private fun _VolumeSlider(value: Double, onChanged: ((Double) -> Unit)?, modifie
                     fun emit(x: Float) {
                         val travel = size.width - inset * 2
                         if (travel <= 0f) return
-                        onChanged?.invoke(((x - inset) / travel).toDouble().coerceIn(0.0, 1.0))
+                        currentOnChanged.value?.invoke(((x - inset) / travel).toDouble().coerceIn(0.0, 1.0))
                     }
                     awaitPointerEventScope {
                         while (true) {

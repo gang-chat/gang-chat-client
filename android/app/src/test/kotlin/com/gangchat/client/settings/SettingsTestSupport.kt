@@ -166,7 +166,23 @@ fun ComposeContentTestRule.scrollSectionTo(matcher: SemanticsMatcher) {
             if (onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()) break
         }
     }
-    onAllNodes(matcher).onFirst().performScrollTo()
+    scrollIntoView(onAllNodes(matcher).onFirst())
+}
+
+/**
+ * `performScrollTo()` for tests that drive the clock by hand: the scroll
+ * semantics action animates, and `performScrollTo` keeps re-checking the
+ * node's position, so with a paused clock it would never finish. The clock
+ * runs on its own just for the scroll.
+ */
+fun ComposeContentTestRule.scrollIntoView(node: SemanticsNodeInteraction) {
+    val manual = !mainClock.autoAdvance
+    mainClock.autoAdvance = true
+    try {
+        node.performScrollTo()
+    } finally {
+        mainClock.autoAdvance = !manual
+    }
     pump()
 }
 

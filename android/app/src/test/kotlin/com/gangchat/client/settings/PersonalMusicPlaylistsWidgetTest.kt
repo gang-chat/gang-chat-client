@@ -27,7 +27,6 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performMouseInput
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
@@ -288,8 +287,7 @@ class PersonalMusicPlaylistsWidgetTest {
             // Narrow settings pages show the numbered section tiles as a
             // horizontally scrolling strip; the open section stays reachable
             // there.
-            playlistsTile.performScrollTo()
-            compose.pump()
+            compose.scrollIntoView(playlistsTile)
         }
         assertTrue(compose.hasTextNode("我的歌单"))
         playlistsTile.assertExists()

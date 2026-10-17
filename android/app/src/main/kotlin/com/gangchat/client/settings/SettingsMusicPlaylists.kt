@@ -2178,6 +2178,10 @@ private fun _ManagementCardTapTarget(
     modifier: Modifier = Modifier,
     child: @Composable () -> Unit,
 ) {
+    // Keyed on enablement only: a rebuild (which hands over a new callback)
+    // must not restart the detector and drop a tap that is in flight, as
+    // Flutter's recognizer survives rebuilds.
+    val currentOnTap = androidx.compose.runtime.rememberUpdatedState(onTap)
     Box(
         modifier
             .semantics {
@@ -2191,9 +2195,9 @@ private fun _ManagementCardTapTarget(
                     }
                 }
             }
-            .pointerInput(onTap) {
-                if (onTap == null) return@pointerInput
-                detectTapGestures(onTap = { onTap() })
+            .pointerInput(onTap != null) {
+                if (currentOnTap.value == null) return@pointerInput
+                detectTapGestures(onTap = { currentOnTap.value?.invoke() })
             },
         propagateMinConstraints = true,
     ) {
