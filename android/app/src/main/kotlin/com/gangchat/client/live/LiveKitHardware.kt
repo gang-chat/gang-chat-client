@@ -37,7 +37,14 @@ class LkMediaDevice(
  * (`speaker`, `earpiece`, `wired-headset`, `bluetooth`).
  */
 class LiveKitHardware private constructor() {
-    val onDeviceChange: StreamController<List<LkMediaDevice>> = StreamController.broadcast()
+    private val _onDeviceChange: StreamController<List<LkMediaDevice>> = StreamController.broadcast()
+
+    /** Device topology changes (the reconciled device list after each change). */
+    val onDeviceChange: StreamController<List<LkMediaDevice>>
+        get() {
+            _ensureInitialized()
+            return _onDeviceChange
+        }
 
     var selectedAudioInput: LkMediaDevice? = null
 
@@ -52,7 +59,7 @@ class LiveKitHardware private constructor() {
         if (_initialized) return
         _initialized = true
         try {
-            WebRtc.deviceChanges.listen({ unawaited { _onDeviceChange() } })
+            WebRtc.deviceChanges.listen({ unawaited { _handleDeviceChange() } })
         } catch (e: Exception) {
             debugPrint("Media-device change listener unavailable: $e")
         }
@@ -127,18 +134,18 @@ class LiveKitHardware private constructor() {
     /** Re-enumerates device topology and emits the reconciled selections. */
     suspend fun refreshDevices(): List<LkMediaDevice> {
         val devices = _refreshSelectedDevices()
-        onDeviceChange.add(devices)
+        _onDeviceChange.add(devices)
         return devices
     }
 
-    private suspend fun _onDeviceChange() {
+    private suspend fun _handleDeviceChange() {
         try {
             refreshDevices()
         } catch (error: Exception) {
             if (error is CancellationException) throw error
             debugPrint("Media-device refresh failed: $error")
             // Still emit a topology signal so platform-specific recovery can run.
-            onDeviceChange.add(emptyList())
+            _onDeviceChange.add(emptyList())
         }
     }
 
