@@ -1,9 +1,6 @@
 package com.gangchat.client.shell
 
 import androidx.activity.ComponentActivity
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.assertIsDisplayed
@@ -63,11 +60,11 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * `test/widget/shell/gang_app_shell_test_parts/{auth_widget_tests,
- * auth_smoke_widget_tests}.dart`. Flutter's test view is 800×600 logical
- * pixels and its default platform is Android, so the Dart cases without a
- * platform override already ran the Android layout. Cases that pumped
- * `GangApp` host [LoginPage] with the arguments `GangApp` passes on Android.
+ * `test/widget/shell/gang_app_shell_test_parts/auth_widget_tests.dart`.
+ * Flutter's test view is 800×600 logical pixels and its default platform is
+ * Android, so the Dart cases without a platform override already ran the
+ * Android layout. The cases that pumped `GangApp` (two here and the four of
+ * `auth_smoke_widget_tests.dart`) are in [GangAppTest].
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -155,19 +152,6 @@ class LoginPageWidgetTest {
 
     private fun rememberPassword() = compose.onNode(hasToggleableState and hasAnyAncestor(hasTestTag(authRememberPasswordHotZoneTag)))
 
-    private fun submitBottomGap() = compose.onNodeWithTag(authSurfaceTag).rect().bottom - compose.onNodeWithTag(authSubmitButtonTag).rect().bottom
-
-    /** Dart's `_expectSubmitButtonFullWidth`. */
-    private fun assertSubmitButtonFullWidth() {
-        val input = compose.onNodeWithTag(authIdentityInputTag).rect()
-        val submit = compose.onNodeWithTag(authSubmitButtonTag).rect()
-        assertDpEquals(input.left, submit.left)
-        assertDpEquals(input.right, submit.right)
-    }
-
-    private fun submitButton(label: String) =
-        compose.onNode(hasText(label) and hasAnyAncestor(hasTestTag(authSubmitButtonTag)))
-
     private fun inDropdown(text: String) =
         compose.onNode(hasText(text) and hasAnyAncestor(hasTestTag(authAccountHistoryDropdownTag)))
 
@@ -250,52 +234,6 @@ class LoginPageWidgetTest {
         assertRectCloseTo(surfaceRect, androidx.compose.ui.unit.DpRect(0.dp, 0.dp, 320.dp, 480.dp))
         assertTrue(compose.onNodeWithTag(authIdentityInputTag).rect().left > 0.dp)
         assertTrue(compose.onNodeWithTag(authIdentityInputTag).rect().right < 320.dp)
-    }
-
-    @Test
-    fun `app renders login entrypoint on real auth gate`() {
-        pumpLoginPage()
-
-        compose.onNodeWithText("Gang Chat").assertExists()
-        compose.onNodeWithText("登录用户名或邮箱地址").assertExists()
-        compose.onNodeWithText("密码").assertExists()
-        submitButton("登录").assertExists()
-        compose.onNodeWithText("注册").assertExists()
-        compose.onNodeWithText("记住密码").assertExists()
-        compose.onNodeWithText("忘记密码？").assertExists()
-        assertEquals(1, compose.onAllNodes(hasToggleableState).fetchSemanticsNodes().size)
-        assertEquals(1, tooltipCount("显示密码"))
-
-        val authSurfaceRect = compose.onNodeWithTag(authSurfaceTag).rect()
-        val modeSwitchRect = compose.onNodeWithTag(authModeSwitchTag).rect()
-        val titleRect = compose.onNodeWithText("Gang Chat").rect()
-        assertTrue(titleRect.bottom - titleRect.top >= 20.dp)
-        assertTrue(titleRect.bottom - titleRect.top <= 28.dp)
-        assertEquals(1, tagged("auth-brand-icon"))
-        assertDpEquals(82.dp, modeSwitchRect.top - authSurfaceRect.top)
-        assertSubmitButtonFullWidth()
-        assertFalse(exists("请输入账号和密码后继续"))
-        val normalSurfaceHeight = authSurfaceRect.bottom - authSurfaceRect.top
-        val normalBottomGap = submitBottomGap()
-        val normalSubmitRect = compose.onNodeWithTag(authSubmitButtonTag).rect()
-        val normalRememberRect = compose.onNodeWithText("记住密码").rect()
-        assertTrue(normalBottomGap >= 34.dp)
-
-        tapText("忘记密码？")
-
-        tapSubmit()
-
-        compose.onNodeWithText("请输入账号和密码后继续").assertExists()
-        val surface = compose.onNodeWithTag(authSurfaceTag).rect()
-        assertDpEquals(normalSurfaceHeight, surface.bottom - surface.top)
-        assertDpEquals(normalBottomGap, submitBottomGap())
-        assertRectCloseTo(compose.onNodeWithTag(authSubmitButtonTag).rect(), normalSubmitRect)
-        assertRectCloseTo(compose.onNodeWithText("记住密码").rect(), normalRememberRect)
-        val passwordRect = compose.field(authPasswordInputTag).rect()
-        val errorRect = compose.onNodeWithText("请输入账号和密码后继续").rect()
-        val rememberRect = compose.onNodeWithText("记住密码").rect()
-        assertTrue(errorRect.top > passwordRect.bottom)
-        assertTrue(errorRect.bottom < rememberRect.top)
     }
 
     @Test
@@ -633,39 +571,6 @@ class LoginPageWidgetTest {
         compose.pumpAndSettle()
     }
 
-    @Test
-    fun `register mode exposes full auth form`() {
-        pumpLoginPage()
-
-        assertTrue(submitBottomGap() >= 34.dp)
-
-        tapRegisterMode()
-
-        compose.onNodeWithText("登录用户名").assertExists()
-        compose.onNodeWithText("邮箱地址").assertExists()
-        compose.onNodeWithText("密码").assertExists()
-        compose.onNodeWithText("确认密码").assertExists()
-        assertEquals(2, tooltipCount("显示密码"))
-        submitButton("创建账号").assertExists()
-        assertTrue(submitBottomGap() >= 34.dp)
-        assertSubmitButtonFullWidth()
-        assertFalse(exists("请输入账号和密码后继续"))
-        val surface = compose.onNodeWithTag(authSurfaceTag).rect()
-        val normalSurfaceHeight = surface.bottom - surface.top
-
-        compose.onAllTooltips("显示密码")[0].performClick()
-        compose.pump()
-
-        assertEquals(1, tooltipCount("隐藏密码"))
-        assertEquals(1, tooltipCount("显示密码"))
-
-        tapSubmit()
-
-        compose.onNodeWithText("请输入账号和密码后继续").assertExists()
-        val after = compose.onNodeWithTag(authSurfaceTag).rect()
-        assertDpEquals(normalSurfaceHeight, after.bottom - after.top)
-    }
-
     /**
      * The Android-relevant part of the Dart case. Not ported: Ctrl+A select
      * all and the right-click (secondary mouse button) context menus, which
@@ -947,76 +852,6 @@ class LoginPageWidgetTest {
         compose.enterText(authEmailInputTag, "")
         compose.pump()
         assertEquals(0, tagged("auth-email-verification-button"))
-    }
-
-    // auth_smoke_widget_tests.dart
-
-    @Test
-    fun `auth login layout is stable across rebuilds`() {
-        var generation by mutableIntStateOf(0)
-        compose.mainClock.autoAdvance = false
-        compose.setUiContent(notifications = true) { _ ->
-            // A new LoginPage configuration on every rebuild, like pumping a new GangApp.
-            val current = generation
-            LoginPage(onSubmit = { _, _ -> check(current >= 0) })
-        }
-        compose.pump()
-
-        val regularSurfaceRect = compose.onNodeWithTag(authSurfaceTag).rect()
-        val regularModeSwitchRect = compose.onNodeWithTag(authModeSwitchTag).rect()
-        val regularInputRect = compose.onNodeWithTag(authIdentityInputTag).rect()
-        val regularSubmitRect = compose.onNodeWithTag(authSubmitButtonTag).rect()
-
-        generation += 1
-        compose.pump()
-
-        assertRectCloseTo(compose.onNodeWithTag(authSurfaceTag).rect(), regularSurfaceRect)
-        assertRectCloseTo(compose.onNodeWithTag(authModeSwitchTag).rect(), regularModeSwitchRect)
-        assertRectCloseTo(compose.onNodeWithTag(authIdentityInputTag).rect(), regularInputRect)
-        assertRectCloseTo(compose.onNodeWithTag(authSubmitButtonTag).rect(), regularSubmitRect)
-    }
-
-    @Test
-    fun `app renders auth entrypoint`() {
-        pumpLoginPage()
-
-        compose.onNodeWithText("Gang Chat").assertExists()
-        compose.onNodeWithText("登录用户名或邮箱地址").assertExists()
-        compose.onNodeWithText("密码").assertExists()
-        assertEquals(1, tooltipCount("显示密码"))
-        submitButton("登录").assertExists()
-
-        tapTooltip("显示密码")
-
-        assertEquals(1, tooltipCount("隐藏密码"))
-    }
-
-    @Test
-    fun `switching to register reveals additional fields`() {
-        pumpLoginPage()
-
-        tapRegisterMode()
-
-        compose.onNodeWithText("登录用户名").assertExists()
-        compose.onNodeWithText("邮箱地址").assertExists()
-        compose.onNodeWithText("确认密码").assertExists()
-        assertEquals(2, tooltipCount("显示密码"))
-        submitButton("创建账号").assertExists()
-
-        compose.onAllTooltips("显示密码")[0].performClick()
-        compose.pump()
-
-        assertEquals(1, tooltipCount("隐藏密码"))
-        assertEquals(1, tooltipCount("显示密码"))
-    }
-
-    @Test
-    fun `submitting empty form surfaces inline error`() {
-        pumpLoginPage()
-
-        tapSubmit()
-
-        compose.onNodeWithText("请输入账号和密码后继续").assertExists()
     }
 
     // Port-specific checks.
