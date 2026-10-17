@@ -14,7 +14,8 @@ Android 客户端正在从 Flutter 一比一移植为原生 Kotlin + Jetpack Com
 | 平台服务（通知、前台服务、FCM、更新安装、存储） | `:app` platform | 完成 |
 | LiveKit 语音、摄像头、屏幕共享 | `:app` live | 完成（86 个测试；SDK 路径需真机验证） |
 | 界面组件库 | `:app` ui | 完成（93 个测试含 12 组截图） |
-| 主界面、设置、登录 | `:app` home / settings / shell | 未开始 |
+| 登录、邮箱验证、找回密码、更新提示 | `:app` shell | 完成（41 个测试 + 16 张截图） |
+| 主界面、聊天、语音频道、通知、房间管理、设置 | `:app` home / settings | 进行中 |
 
 ## 与 Flutter 版的差异
 
@@ -86,6 +87,16 @@ Android 客户端正在从 Flutter 一比一移植为原生 Kotlin + Jetpack Com
   7. 摄像头联播时 SDK 把优先级放在全分辨率层而不是 encodings[0]；屏幕共享是单层，不受影响。
 - 只编译、未在设备上运行过的部分：真实 Room 连接与反射钩子、AudioSwitch、MediaProjection 与前台服务、
   播放捕获、屏幕声音发布、麦克风/扬声器测试、视频渲染、TTS。
+
+### 登录与更新提示（`:app` shell）
+
+- 去掉了桌面窗口相关的部分：登录窗口锁定尺寸、窗口控制按钮与拖拽区、Sparkle 分支。
+  `authWidgetSize()`（登录 430×368、注册 430×436）是 `desktop_window_controller.dart` 里唯一与 Android
+  有关的部分，保留给平板宽屏布局使用。
+- 账号历史在 store 不挂起时于 `initState` 同步载入（Dart 在首帧之后才填充）。
+- `AppUpdateGate` 检查更新时先让出一次，避免在构建过程中回调父组件。
+- 修正组件库 `SegmentedControl` 的一个缺陷：控件重建会重启点击检测，按下分段本身又会触发重建，
+  导致真机上点击（包括登录/注册切换）被丢掉；改用 `rememberUpdatedState`，并加了回归测试。
 
 ### 界面组件库（`:app` ui）
 
