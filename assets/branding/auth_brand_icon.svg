@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 144" width="36" height="36" fill="none">
+  <title>Gang Chat</title>
+  <!-- Vector twin of auth_brand_icon.png (the login page mark): the compact
+       mark from gang_chat_compact.svg on the square lime tile, placed to
+       match the bitmap so it stays sharp at every scale. -->
+  <rect width="144" height="144" fill="#CCF43A" />
+  <g
+    transform="translate(17 17) scale(1.72)"
+    stroke="#0A0B05"
+    stroke-width="4.4"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <path d="M7.6 30.5A24.4 22 0 0 1 56.4 30.5" />
+    <rect x="4" y="30.5" width="7.2" height="18" rx="3.6" />
+    <rect x="52.8" y="30.5" width="7.2" height="18" rx="3.6" />
+    <path d="M26 22.5H38A8 8 0 0 1 46 30.5V39.5A8 8 0 0 1 38 47.5H34L26 55.5V47.5A8 8 0 0 1 18 39.5V30.5A8 8 0 0 1 26 22.5Z" />
+    <path d="M25 32V38M32 29V41M39 32V38" />
+  </g>
+</svg>
