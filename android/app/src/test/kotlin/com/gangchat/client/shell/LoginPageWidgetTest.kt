@@ -857,16 +857,17 @@ class LoginPageWidgetTest {
     // Port-specific checks.
 
     @Test
-    fun `brand icon picks Flutter's resolution variant`() {
-        assertEquals(1.0, _assetVariantRatio(1.0), 0.0)
-        assertEquals(1.25, _assetVariantRatio(1.1), 0.0)
-        assertEquals(2.0, _assetVariantRatio(1.9), 0.0)
-        assertEquals(2.0, _assetVariantRatio(2.4), 0.0)
-        assertEquals(3.0, _assetVariantRatio(2.625), 0.0)
-        assertEquals(3.0, _assetVariantRatio(3.4), 0.0)
-        assertEquals(3.0, _assetVariantRatio(2.75), 0.0)
-        assertEquals(3.0, _assetVariantRatio(3.0), 0.0)
-        assertEquals(4.0, _assetVariantRatio(3.5 + 0.01), 0.0)
-        assertEquals(4.0, _assetVariantRatio(5.0), 0.0)
+    @Config(qualifiers = "w800dp-h600dp-420dpi")
+    fun `brand icon is a 36dp vector at a density between the old PNG variants`() {
+        pumpLoginPage()
+
+        // 2.625 sat between the 2.0x and 3.0x PNGs, which Flutter scaled with
+        // nearest-neighbour filtering; the vector is drawn at the exact size.
+        val pixels = compose.onNodeWithTag("auth-brand-icon").captureToImage().toPixelMap()
+        assertEquals(95, pixels.width)
+        assertEquals(95, pixels.height)
+        assertEquals(0xFFCCF43A.toInt(), pixels[2, 2].toArgb())
+        // The middle level bar of the speech bubble.
+        assertEquals(0xFF0A0B05.toInt(), pixels[47, 50].toArgb())
     }
 }

@@ -1,6 +1,5 @@
 package com.gangchat.client.home
 
-import android.graphics.BitmapFactory
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -55,16 +54,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.SubcomposeLayout
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -72,6 +68,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
+import com.gangchat.client.R
 import com.gangchat.client.app.RoomNotificationDateRange
 import com.gangchat.client.app.RoomNotificationFilter
 import com.gangchat.client.app.RoomNotificationItem
@@ -117,7 +114,6 @@ import com.gangchat.client.protocol.RoomApplication
 import com.gangchat.client.protocol.RoomEventNotification
 import com.gangchat.client.protocol.RoomInvite
 import com.gangchat.client.protocol.UserSummary
-import com.gangchat.client.shell._assetVariantRatio
 import com.gangchat.client.ui.Avatar
 import com.gangchat.client.ui.BadgeDot
 import com.gangchat.client.ui.Button
@@ -1738,40 +1734,17 @@ private fun _notificationUserAvatar(
 const val notificationBrandAvatarImageTag = "notification-brand-avatar-image"
 
 /**
- * `Image.asset('assets/branding/auth_brand_icon.png', fit: BoxFit.cover,
- * filterQuality: FilterQuality.medium)`, picking the resolution variant like
- * Flutter's `AssetImage`.
+ * `Image.asset('assets/branding/auth_brand_icon.png', fit: BoxFit.cover)`.
+ * PORT: the login page's vector mark, which stays sharp at every density.
  */
 @Composable
 private fun _NotificationBrandImage() {
-    val androidContext = LocalContext.current
-    val ratio = _assetVariantRatio(LocalDensity.current.density.toDouble())
-    val bitmap =
-        remember(ratio) {
-            val name = "auth_brand_icon.png"
-            val path = if (ratio == 1.0) "branding/$name" else "branding/${_brandRatioDirectory(ratio)}/$name"
-            try {
-                androidContext.assets.open(path).use { BitmapFactory.decodeStream(it) }?.asImageBitmap()
-            } catch (_: java.io.IOException) {
-                null
-            }
-        }
-    if (bitmap == null) {
-        Box(Modifier.testTag(notificationBrandAvatarImageTag))
-        return
-    }
     Image(
-        bitmap = bitmap,
+        painterResource(R.drawable.auth_brand_icon),
         contentDescription = null,
         modifier = Modifier.testTag(notificationBrandAvatarImageTag),
         contentScale = ContentScale.Crop,
-        filterQuality = FilterQuality.Medium,
     )
-}
-
-private fun _brandRatioDirectory(ratio: Double): String {
-    val text = if (ratio == Math.floor(ratio)) "${ratio.toInt()}.0" else ratio.toString()
-    return "${text}x"
 }
 
 /**

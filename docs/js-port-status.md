@@ -268,6 +268,8 @@
   四行的位置），注册 430×382，按钮下留 24px。Flutter 的 368/436 是按 Flutter 控件量的，这里按钮下会
   空出 70 多像素（`authContentBottom`，有测试保证两边一致）。标题“Gang Chat”的行高用 `normal` 而不是
   Flutter 的 1，否则单行文本按行框裁剪，会截掉 g 的下半部分。
+- 登录页和通知里的品牌标志用矢量的 `assets/branding/auth_brand_icon.svg`。Flutter 的 PNG 变体按
+  `image-rendering: pixelated` 最近邻缩放，标志落在非整数像素位置或缩放比为 1.25/1.5/1.75 时会失真。
 - 仅 Android 的路径（返回手势、系统安全区、软键盘、横竖屏）在桌面端不会触发，保留分支便于对照。
 - 设置页与更新提示共用一个 `ReleaseUpdateService`（`sharedReleaseUpdateService`），
   以便识别 electron-updater 找到的更新并走应用内下载安装。

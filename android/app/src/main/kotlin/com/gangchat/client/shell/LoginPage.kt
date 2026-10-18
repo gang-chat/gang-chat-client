@@ -1,6 +1,5 @@
 package com.gangchat.client.shell
 
-import android.graphics.BitmapFactory
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -59,17 +58,14 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.FilterQuality
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
@@ -87,6 +83,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import com.gangchat.client.R
 import com.gangchat.client.app.AuthRequest
 import com.gangchat.client.app.AuthSubmitState
 import com.gangchat.client.app.EmailVerificationController
@@ -1043,8 +1040,12 @@ private class _LoginPageState : ViewState<LoginPageWidget>() {
     private fun _buildTitleBar() {
         Box(Modifier.fillMaxWidth().height(_authTitleBarHeight), contentAlignment = Alignment.Center) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                _AssetImage(
-                    "assets/branding/auth_brand_icon.png",
+                // PORT: Flutter drew the PNG variants with FilterQuality.none,
+                // which looked distorted between variant densities; this is
+                // the same mark as a vector.
+                Image(
+                    painterResource(R.drawable.auth_brand_icon),
+                    contentDescription = null,
                     modifier = Modifier.testTag("auth-brand-icon").size(_authBrandIconSize),
                 )
                 Spacer(Modifier.width(_authBrandGap))
@@ -1071,61 +1072,6 @@ private fun _AnnotatedSystemUiOverlayStyle(style: SystemUiOverlayStyle) {
         SystemChrome.setSystemUIOverlayStyle(style)
         onDispose {}
     }
-}
-
-// Variants of the brand icon in `assets/branding/<ratio>x/` (Flutter's asset
-// manifest for `assets/branding/auth_brand_icon.png`).
-private val _assetVariantRatios = listOf(1.0, 1.25, 1.5, 1.75, 2.0, 3.0, 4.0)
-private const val _kLowDprLimit = 2.0
-
-/**
- * Flutter's `AssetImage._findBestVariant`: the exact ratio, else the nearer
- * neighbour, preferring the higher resolution below a 2.0 ratio.
- */
-internal fun _assetVariantRatio(devicePixelRatio: Double): Double {
-    if (_assetVariantRatios.contains(devicePixelRatio)) return devicePixelRatio
-    val lower = _assetVariantRatios.lastOrNull { it < devicePixelRatio }
-    val upper = _assetVariantRatios.firstOrNull { it > devicePixelRatio }
-    if (lower == null) return upper!!
-    if (upper == null) return lower
-    return if (devicePixelRatio < _kLowDprLimit || devicePixelRatio > (lower + upper) / 2) upper else lower
-}
-
-/**
- * `Image.asset(key, fit: BoxFit.contain, filterQuality: FilterQuality.none)`
- * for a bundled asset with resolution variants.
- */
-@Composable
-private fun _AssetImage(key: String, modifier: Modifier = Modifier) {
-    val androidContext = LocalContext.current
-    val ratio = _assetVariantRatio(LocalDensity.current.density.toDouble())
-    val bitmap =
-        remember(key, ratio) {
-            val directory = key.substringBeforeLast('/').removePrefix("assets/")
-            val name = key.substringAfterLast('/')
-            val path = if (ratio == 1.0) "$directory/$name" else "$directory/${_ratioDirectory(ratio)}/$name"
-            try {
-                androidContext.assets.open(path).use { BitmapFactory.decodeStream(it) }?.asImageBitmap()
-            } catch (_: java.io.IOException) {
-                null
-            }
-        }
-    if (bitmap == null) {
-        Box(modifier)
-        return
-    }
-    Image(
-        bitmap = bitmap,
-        contentDescription = null,
-        modifier = modifier,
-        contentScale = ContentScale.Fit,
-        filterQuality = FilterQuality.None,
-    )
-}
-
-private fun _ratioDirectory(ratio: Double): String {
-    val text = if (ratio == Math.floor(ratio)) "${ratio.toInt()}.0" else ratio.toString()
-    return "${text}x"
 }
 
 /** Reports mouse enter/exit (Flutter's `MouseRegion(onEnter:, onExit:)`). */
