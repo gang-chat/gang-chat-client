@@ -225,7 +225,9 @@ The workflow rejects missing or invalid signing settings instead of publishing
 an APK with a temporary CI debug certificate. Keep the original keystore and
 passwords backed up securely; losing them prevents future in-place upgrades.
 After building, the workflow uses Android SDK `apksigner` to verify that the APK
-is signed and that at least one signer certificate is present.
+carries both a v1 (JAR) and a v2 signature from the release key. Android 7+
+only needs v2, but some phones' install-time safety checks and third-party
+scanners only read the v1 files and report a v2-only APK as unsigned.
 
 The workflow writes the release version and release time into
 `android/version.properties`, which the Gradle build reads, so the APK uses the

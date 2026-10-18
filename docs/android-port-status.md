@@ -33,6 +33,10 @@ Flutter 工程随后从仓库移除。移植约定见 `docs/android-port-convent
   `release.yml` 的 `build-android` 改用 Gradle：按 tag 写 `android/version.properties`，
   `:app:assembleRelease`，再用 `aapt2 dump badging` 核对 versionCode / versionName。签名、FCM 配置、
   产物文件名与 Flutter 版相同。
+- 签名与 ABI：发布包同时带 v1（JAR）和 v2 签名（Flutter 版只有 v2；部分手机的安全安装检测和第三方
+  扫描只认 v1 文件，会把只有 v2 的包当成“没有签名”），`release.yml` 校验两者都在。原生库只打包
+  Flutter 版的三种 ABI（arm64-v8a、armeabi-v7a、x86_64）：JNA 经 LiveKit 带进来的 armeabi、mips、
+  mips64 和缺 LiveKit 库的 x86 不再打包。
 - 原地升级：applicationId、签名、versionCode 规则不变，`shared_preferences` 与
   `flutter_secure_storage` 的存储格式按原插件复现，从 Flutter 版覆盖安装后保留登录状态和设置。
 

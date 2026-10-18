@@ -57,6 +57,10 @@ android {
         versionCode = appVersionCode
         versionName = appVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // The ABIs the Flutter build shipped. JNA (through LiveKit) also
+        // brings armeabi, mips and mips64 copies of libjnidispatch, and the x86
+        // set lacks LiveKit's own library.
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
 
         // Flutter's --dart-define overrides (see AppConfig): set these
         // environment variables at build time to point a build elsewhere.
@@ -85,6 +89,11 @@ android {
                 storePassword = releaseKeystorePassword
                 keyAlias = releaseKeyAlias
                 keyPassword = releaseKeyPassword
+                // Android 7+ only needs v2, but some installers' safety checks
+                // and third-party scanners only look for the v1 (JAR) files
+                // and call a v2-only APK unsigned.
+                enableV1Signing = true
+                enableV2Signing = true
             }
         }
     }

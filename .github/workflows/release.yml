@@ -477,7 +477,18 @@ jobs:
             echo "apksigner not found under $ANDROID_SDK_ROOT/build-tools" >&2
             exit 1
           fi
-          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          # A min SDK below 24 makes apksigner check the v1 (JAR) signature too,
+          # which it skips for this app (minSdk 24); 18 is the first level that
+          # accepts its SHA-256 digests. Both schemes: some installers' safety
+          # checks only read the v1 files.
+          SIGNING="$("$APKSIGNER" verify --verbose --print-certs --min-sdk-version 18 "$APK")"
+          echo "$SIGNING"
+          for scheme in "v1 scheme (JAR signing)" "v2 scheme (APK Signature Scheme v2)"; do
+            if [[ "$SIGNING" != *"Verified using $scheme: true"* ]]; then
+              echo "::error::APK is not signed with the $scheme"
+              exit 1
+            fi
+          done
 
           AAPT2="$(find "$ANDROID_SDK_ROOT/build-tools" \
             -mindepth 2 -maxdepth 2 -type f -name aapt2 \
