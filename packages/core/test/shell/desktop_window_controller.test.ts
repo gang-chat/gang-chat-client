@@ -113,11 +113,12 @@ describe('DesktopWindowController (bridge mapping)', () => {
     vi.useRealTimers();
   });
 
-  test('keeps the Flutter window background and auth sizes', () => {
+  test('keeps the Flutter window background and fits the auth window to the page', () => {
     const controller = new DesktopWindowController();
     expect(appWindowBackground).toBe('#14171D');
-    expect(controller.authWidgetSize(false)).toEqual({ width: 430, height: 368 });
-    expect(controller.authWidgetSize(true)).toEqual({ width: 430, height: 436 });
+    // Room for the saved-accounts dropdown (the Flutter sizes were 368 / 436).
+    expect(controller.authWidgetSize(false)).toEqual({ width: 430, height: 333 });
+    expect(controller.authWidgetSize(true)).toEqual({ width: 430, height: 382 });
   });
 
   test('without a window bridge nothing is supported', async () => {
@@ -141,9 +142,9 @@ describe('DesktopWindowController (bridge mapping)', () => {
     await controller.restoreAppWindow();
 
     expect(window.calls.filter((call) => call.method === 'setLayout').map((call) => call.args[0])).toEqual([
-      { kind: 'auth', width: 430, height: 368, center: true },
+      { kind: 'auth', width: 430, height: 333, center: true },
       { kind: 'app', restore: false, width: 1180, height: 760, minWidth: 960, minHeight: 600 },
-      { kind: 'auth', width: 430, height: 436, center: true },
+      { kind: 'auth', width: 430, height: 382, center: true },
       { kind: 'auth', width: 500, height: 400, center: false },
       { kind: 'app', restore: true, width: 1180, height: 760, minWidth: 960, minHeight: 600 },
     ]);

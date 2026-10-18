@@ -260,6 +260,10 @@
 - 滚动条统一用全局细滚动条样式，不再逐处设置 Flutter `RawScrollbar` 的 7px 内边距。
 - 窗口拖拽区改用 CSS `-webkit-app-region`，拖拽区内的双击不一定能传到页面。Linux 下窗口无边框，
   登录页也显示自绘窗口按钮。
+- 登录/注册窗口（Web 版是居中的卡片）按 React 页面的实际内容定高：登录 430×333（留出保存账号下拉
+  四行的位置），注册 430×382，按钮下留 24px。Flutter 的 368/436 是按 Flutter 控件量的，这里按钮下会
+  空出 70 多像素（`authContentBottom`，有测试保证两边一致）。标题“Gang Chat”的行高用 `normal` 而不是
+  Flutter 的 1，否则单行文本按行框裁剪，会截掉 g 的下半部分。
 - 仅 Android 的路径（返回手势、系统安全区、软键盘、横竖屏）在桌面端不会触发，保留分支便于对照。
 - 设置页与更新提示共用一个 `ReleaseUpdateService`（`sharedReleaseUpdateService`），
   以便识别 electron-updater 找到的更新并走应用内下载安装。

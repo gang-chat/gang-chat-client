@@ -26,9 +26,21 @@ export const appWindowMinSize: Size = { width: 960, height: 600 };
 const _appWindowSize: Size = { width: 1180, height: 760 };
 const _authWidgetWidth = 430.0;
 const _authBottomBreathingRoom = 24.0;
-const _authBrandTitleExtraHeight = 53.0;
-const _loginWidgetHeight = 291.0 + _authBrandTitleExtraHeight + _authBottomBreathingRoom;
-const _registerWidgetHeight = 359.0 + _authBrandTitleExtraHeight + _authBottomBreathingRoom;
+// The login page's content (`authContentBottom` in @gang-chat/ui login_page)
+// ends 296px from the top, 358px when registering, and the saved-accounts
+// dropdown reaches 325px (`authAccountHistoryDropdownBottom`).
+//
+// PORT: the Flutter sizes (291 / 359 + 53 for the brand title, + 24) fit the
+// taller Flutter widgets and left about 70px empty under the button here.
+const _loginContentBottom = 296.0;
+const _registerContentBottom = 358.0;
+const _accountHistoryDropdownBottom = 325.0;
+const _accountHistoryDropdownMargin = 8.0;
+const _loginWidgetHeight = Math.max(
+  _loginContentBottom + _authBottomBreathingRoom,
+  _accountHistoryDropdownBottom + _accountHistoryDropdownMargin,
+);
+const _registerWidgetHeight = _registerContentBottom + _authBottomBreathingRoom;
 const _loginWidgetSize: Size = { width: _authWidgetWidth, height: _loginWidgetHeight };
 const _registerWidgetSize: Size = { width: _authWidgetWidth, height: _registerWidgetHeight };
 const _loginWindowSize = _loginWidgetSize;

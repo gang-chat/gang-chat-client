@@ -91,12 +91,37 @@ const _authRegisterFieldsCenter =
   _authSegmentedControlOuterHeight +
   _authModeGap +
   (_authInputOuterHeight * 4 + _authFieldGap * 3) / 2;
+
+/**
+ * Bottom of the page's last control (the submit button), measured from the top
+ * of the auth surface (the window top on desktop). `DesktopWindowController`
+ * sizes the auth window from these; a test keeps the two in step.
+ */
+export function authContentBottom(registering: boolean): number {
+  const top =
+    _authTitleBarTopInset + _authTitleBarHeight + _authTitleBarGap + _authSegmentedControlOuterHeight + _authModeGap;
+  const tail = registering
+    ? _authInputOuterHeight * 4 + _authFieldGap * 3 + _authPasswordErrorGap + _authErrorHeight
+    : _authInputOuterHeight * 2 +
+      _authFieldGap +
+      _authPasswordErrorGap +
+      _authErrorHeight +
+      _authErrorRememberGap +
+      _authRememberHeight;
+  return top + tail + _authActionGap + _authSubmitHeight;
+}
+
+/** Bottom of the saved-accounts dropdown at its full four rows, from the surface top. */
+export const authAccountHistoryDropdownBottom = _authTitleBarTopInset + _accountHistoryDropdownTop + 4 * _accountHistoryItemHeight;
+
 const _authTitleBarStyle: CSSProperties = {
   color: UiColors.text,
   fontFamily: kClientFontStack,
   fontSize: 22,
   fontWeight: 700,
-  lineHeight: 1,
+  // Not Flutter's height 1: a one-line Text clips to its line box, which cut
+  // off the descender of "g". The title is centred in its bar either way.
+  lineHeight: 'normal',
   letterSpacing: 0,
 };
 // PORT: `_androidAuthSystemUiOverlayStyle` (status/navigation bar colours)
