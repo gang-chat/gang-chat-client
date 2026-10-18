@@ -173,6 +173,34 @@ open class LiveSessionController(
 
     val outputVolume: Double get() = session.outputVolume
 
+    val inputVolumeBoost: Boolean get() = session.inputVolumeBoost
+
+    val outputVolumeBoost: Boolean get() = session.outputVolumeBoost
+
+    /** The 增强 switch on the input volume (Settings persists it itself, [persist] false). */
+    suspend fun setInputVolumeBoost(boost: Boolean, persist: Boolean = true) {
+        session.setInputVolumeBoost(boost)
+        if (!persist) return
+        try {
+            audioDeviceStore.writeInputVolumeBoost(boost)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            // A failed persist shouldn't undo the live change.
+        }
+    }
+
+    /** The 增强 switch on the output volume. */
+    suspend fun setOutputVolumeBoost(boost: Boolean, persist: Boolean = true) {
+        session.setOutputVolumeBoost(boost)
+        if (!persist) return
+        try {
+            audioDeviceStore.writeOutputVolumeBoost(boost)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            // A failed persist shouldn't undo the live change.
+        }
+    }
+
     fun participantVoiceVolume(userId: String): Double {
         return session.participantVoiceVolume(userId)
     }
@@ -361,10 +389,12 @@ open class LiveSessionController(
             // mute. The next process starts with mute controls open, so restoring
             // that zero would make the real media state contradict the UI. Heal the
             // legacy value once and keep persistence reserved for usable gains.
-            val inputVolume = restoredAudioVolume(stored.inputVolume)
-            val outputVolume = restoredAudioVolume(stored.outputVolume)
+            val inputVolume = restoredAudioVolume(stored.inputVolume, defaultInputVolume)
+            val outputVolume = restoredAudioVolume(stored.outputVolume, defaultOutputVolume)
             session.setInputVolume(inputVolume)
             session.setOutputVolume(outputVolume)
+            session.setInputVolumeBoost(stored.inputVolumeBoost)
+            session.setOutputVolumeBoost(stored.outputVolumeBoost)
             if (inputVolume != stored.inputVolume) {
                 try {
                     audioDeviceStore.writeInputVolume(inputVolume)

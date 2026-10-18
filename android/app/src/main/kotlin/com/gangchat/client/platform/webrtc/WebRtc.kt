@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import com.gangchat.client.app.audioVolumeBoostFactor
 import com.gangchat.client.foundation.Stream
 import com.gangchat.client.foundation.StreamController
 import com.gangchat.client.platform.GangChatPlatform
@@ -17,6 +18,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.Collections
 import java.util.WeakHashMap
+import kotlin.math.abs
 import livekit.org.webrtc.audio.JavaAudioDeviceModule
 
 /** flutter_webrtc's `MediaDeviceInfo` as the Android plugin reported it (`getSources`). */
@@ -320,9 +322,11 @@ object WebRtc {
 
 /**
  * The fork's `AudioProcessingAdapter` used as `capturePostProcessing`: scales
- * the captured microphone samples by the app-local input volume (0..1) after
- * WebRTC's own processing, so muting never touches the system input gain or
- * stops the shared input device.
+ * the captured microphone samples by the app-local input volume after WebRTC's
+ * own processing, so muting never touches the system input gain or stops the
+ * shared input device. The volume runs from 0 to [audioVolumeBoostFactor]: the
+ * 增强 switch amplifies past unity, and the amplified samples saturate at the
+ * edge of the 16-bit range instead of wrapping.
  */
 class LocalAudioInputVolumeProcessor : AudioProcessorInterface {
     @Volatile
@@ -332,7 +336,7 @@ class LocalAudioInputVolumeProcessor : AudioProcessorInterface {
 
     fun setProcessingVolume(volume: Double) {
         val value = if (volume.isNaN() || volume.isInfinite()) 1.0 else volume
-        processingVolume = value.coerceIn(0.0, 1.0)
+        processingVolume = value.coerceIn(0.0, audioVolumeBoostFactor)
     }
 
     override fun isEnabled(): Boolean = true
@@ -345,10 +349,17 @@ class LocalAudioInputVolumeProcessor : AudioProcessorInterface {
 
     override fun processAudio(numBands: Int, numFrames: Int, buffer: ByteBuffer) {
         val volume = processingVolume
-        if (volume < 0.999999) scaleFloatSamples(buffer, volume)
+        if (abs(volume - 1.0) > 0.000001) scaleFloatSamples(buffer, volume)
     }
 
     companion object {
+        /**
+         * WebRTC's `AudioBuffer` holds capture samples as floats in the 16-bit
+         * PCM range (`FloatS16`), so a boosted sample is clamped to it.
+         */
+        const val minFloatS16Sample = -32768.0f
+        const val maxFloatS16Sample = 32767.0f
+
         fun scaleFloatSamples(buffer: ByteBuffer, volume: Double) {
             // WebRTC exposes native float samples through a direct ByteBuffer. The
             // Java buffer's byte-order metadata is not guaranteed to match the
@@ -360,7 +371,8 @@ class LocalAudioInputVolumeProcessor : AudioProcessorInterface {
             while (offset < end) {
                 val sample = duplicate.getFloat(offset)
                 if (!sample.isNaN() && !sample.isInfinite()) {
-                    duplicate.putFloat(offset, (sample * volume).toFloat())
+                    val scaled = (sample * volume).toFloat()
+                    duplicate.putFloat(offset, scaled.coerceIn(minFloatS16Sample, maxFloatS16Sample))
                 } else {
                     duplicate.putFloat(offset, 0.0f)
                 }

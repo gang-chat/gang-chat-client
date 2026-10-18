@@ -138,11 +138,12 @@ import com.gangchat.client.app.audioOutputTestStopped
 import com.gangchat.client.app.audioOutputTestTooltip
 import com.gangchat.client.app.audioOutputVolumeChanged
 import com.gangchat.client.app.audioStoredVolumesApplied
-import com.gangchat.client.app.audioVolumePercentText
 import com.gangchat.client.app.avatarEmptyFileMessage
 import com.gangchat.client.app.avatarPickerOpenFailureMessage
 import com.gangchat.client.app.avatarReadFailureMessage
 import com.gangchat.client.app.avatarUploadFilename
+import com.gangchat.client.app.boostedAudioVolume
+import com.gangchat.client.app.boostedAudioVolumePercentText
 import com.gangchat.client.app.boundEmailForFeedback
 import com.gangchat.client.app.canEditUsername
 import com.gangchat.client.app.canSelectVisibleStickers
@@ -153,9 +154,10 @@ import com.gangchat.client.app.canStartStickerPrimaryAction
 import com.gangchat.client.app.canStartStickerSelectionAction
 import com.gangchat.client.app.canUseStickerManagementControl
 import com.gangchat.client.app.closeBehaviorFromStorageValue
-import com.gangchat.client.app.defaultAudioVolume
 import com.gangchat.client.app.defaultAutoUpdatePromptEnabled
 import com.gangchat.client.app.defaultCloseBehavior
+import com.gangchat.client.app.defaultInputVolume
+import com.gangchat.client.app.defaultOutputVolume
 import com.gangchat.client.app.defaultStickerPackName
 import com.gangchat.client.app.feedbackMailBody
 import com.gangchat.client.app.feedbackMailSubject
@@ -426,6 +428,8 @@ fun SettingsPage(
     onMusicPlaylistsChanged: (() -> Unit)? = null,
     onDeviceSelected: ((kind: String, deviceId: String) -> Unit)? = null,
     onVolumeChanged: ((kind: String, volume: Double) -> Unit)? = null,
+    /** The 增强 switch of "audioinput" / "audiooutput" changed (already persisted). */
+    onVolumeBoostChanged: ((kind: String, boost: Boolean) -> Unit)? = null,
     /**
      * Fired when the user picks a screen-share resolution, so a live session
      * can re-scale immediately. The choice is also persisted to
@@ -470,6 +474,7 @@ fun SettingsPage(
         onMusicPlaylistsChanged = onMusicPlaylistsChanged,
         onDeviceSelected = onDeviceSelected,
         onVolumeChanged = onVolumeChanged,
+        onVolumeBoostChanged = onVolumeBoostChanged,
         onScreenShareMaxHeightChanged = onScreenShareMaxHeightChanged,
         onScreenShareFrameRateChanged = onScreenShareFrameRateChanged,
         onAccountDeleted = onAccountDeleted,
@@ -513,6 +518,7 @@ class SettingsPageWidget(
     val onMusicPlaylistsChanged: (() -> Unit)?,
     val onDeviceSelected: ((kind: String, deviceId: String) -> Unit)?,
     val onVolumeChanged: ((kind: String, volume: Double) -> Unit)?,
+    val onVolumeBoostChanged: ((kind: String, boost: Boolean) -> Unit)?,
     val onScreenShareMaxHeightChanged: ((Int) -> Unit)?,
     val onScreenShareFrameRateChanged: ((Int) -> Unit)?,
     val onAccountDeleted: (suspend () -> Unit)?,
@@ -617,9 +623,11 @@ internal class _SettingsPageState : ViewState<SettingsPageWidget>() {
     private var _selectedInput: AudioDeviceInfo? = null
     private var _selectedOutput: AudioDeviceInfo? = null
     private var _busyDeviceId: String? = null
-    private var _inputVolume = defaultAudioVolume
-    private var _outputVolume = defaultAudioVolume
-    private var _lastOutputVolumeBeforeMute = defaultAudioVolume
+    private var _inputVolume = defaultInputVolume
+    private var _outputVolume = defaultOutputVolume
+    private var _inputVolumeBoost = false
+    private var _outputVolumeBoost = false
+    private var _lastOutputVolumeBeforeMute = defaultOutputVolume
     private var _inputLevel = 0.0
     private var _outputLevel = 0.0
     private var _testingInput = false
@@ -1308,10 +1316,10 @@ internal class _SettingsPageState : ViewState<SettingsPageWidget>() {
     }
 
     private fun _rememberOutputVolume(volume: Double) {
-        _lastOutputVolumeBeforeMute = rememberedAudioVolume(volume)
+        _lastOutputVolumeBeforeMute = rememberedAudioVolume(volume, defaultOutputVolume)
     }
 
-    private fun _restoredOutputVolume(): Double = restoredAudioVolume(_lastOutputVolumeBeforeMute)
+    private fun _restoredOutputVolume(): Double = restoredAudioVolume(_lastOutputVolumeBeforeMute, defaultOutputVolume)
 
     private fun _applyAudioTestStatePatch(patch: AudioTestStatePatch) {
         _testingInput = patch.testingInput
@@ -2881,9 +2889,20 @@ internal class _SettingsPageState : ViewState<SettingsPageWidget>() {
             if (!mounted) return
             val patch = audioStoredVolumesApplied(inputVolume = stored.inputVolume, outputVolume = stored.outputVolume)
             _rememberOutputVolume(patch.outputVolume)
-            setState { _applyAudioVolumePatch(patch) }
+            setState {
+                _applyAudioVolumePatch(patch)
+                // Boost belongs to the local device; a managed user keeps theirs.
+                if (!_isManagingUser) {
+                    _inputVolumeBoost = stored.inputVolumeBoost
+                    _outputVolumeBoost = stored.outputVolumeBoost
+                }
+            }
             widget.onVolumeChanged?.invoke("audioinput", patch.inputVolume)
             widget.onVolumeChanged?.invoke("audiooutput", patch.outputVolume)
+            if (!_isManagingUser) {
+                widget.onVolumeBoostChanged?.invoke("audioinput", stored.inputVolumeBoost)
+                widget.onVolumeBoostChanged?.invoke("audiooutput", stored.outputVolumeBoost)
+            }
             val platformFrameRateCap = androidScreenShareFrameRateCap
             setState {
                 _screenShareMaxHeight = stored.screenShareMaxHeight
@@ -3154,7 +3173,7 @@ internal class _SettingsPageState : ViewState<SettingsPageWidget>() {
             widget.onVolumeChanged?.invoke("audioinput", patch.inputVolume)
             unawaited { widget.audioDeviceStore.writeInputVolume(patch.inputVolume) }
             try {
-                inputTest?.setCaptureVolume(patch.inputVolume)
+                inputTest?.setCaptureVolume(boostedAudioVolume(patch.inputVolume, _inputVolumeBoost))
             } catch (e: Exception) {
                 _rethrowCancellation(e)
             }
@@ -3165,10 +3184,31 @@ internal class _SettingsPageState : ViewState<SettingsPageWidget>() {
             widget.onVolumeChanged?.invoke("audiooutput", patch.outputVolume)
             unawaited { widget.audioDeviceStore.writeOutputVolume(patch.outputVolume) }
             try {
-                outputTest?.setPlaybackVolume(patch.outputVolume)
+                outputTest?.setPlaybackVolume(boostedAudioVolume(patch.outputVolume, _outputVolumeBoost))
             } catch (e: Exception) {
                 _rethrowCancellation(e)
             }
+        }
+    }
+
+    private suspend fun _setVolumeBoost(kind: String, boost: Boolean) {
+        val input = kind == "audioinput"
+        if ((if (input) _inputVolumeBoost else _outputVolumeBoost) == boost) return
+        setState {
+            if (input) _inputVolumeBoost = boost else _outputVolumeBoost = boost
+        }
+        widget.onVolumeBoostChanged?.invoke(kind, boost)
+        val store = widget.audioDeviceStore
+        unawaited { if (input) store.writeInputVolumeBoost(boost) else store.writeOutputVolumeBoost(boost) }
+        try {
+            if (input) {
+                _inputTest?.setCaptureVolume(boostedAudioVolume(_inputVolume, boost))
+            } else {
+                _outputTest?.setPlaybackVolume(boostedAudioVolume(_outputVolume, boost))
+            }
+        } catch (e: Exception) {
+            _rethrowCancellation(e)
+            // The running test keeps its previous volume.
         }
     }
 
@@ -3198,7 +3238,7 @@ internal class _SettingsPageState : ViewState<SettingsPageWidget>() {
             handle =
                 _audioTestService.startInputTest(
                     inputDeviceId = _selectedInput?.deviceId,
-                    volume = _inputVolume,
+                    volume = boostedAudioVolume(_inputVolume, _inputVolumeBoost),
                     onLevel = { level ->
                         if (mounted) {
                             setState {
@@ -3248,7 +3288,7 @@ internal class _SettingsPageState : ViewState<SettingsPageWidget>() {
         try {
             handle =
                 _audioTestService.startOutputTest(
-                    volume = _outputVolume,
+                    volume = boostedAudioVolume(_outputVolume, _outputVolumeBoost),
                     onLevel = { level ->
                         if (mounted) {
                             setState {
@@ -3340,7 +3380,9 @@ internal class _SettingsPageState : ViewState<SettingsPageWidget>() {
                 } else {
                     "邮箱待验证"
                 },
-            SettingsSection.voice to "输入 ${audioVolumePercentText(_inputVolume)} · 输出 ${audioVolumePercentText(_outputVolume)}",
+            SettingsSection.voice to
+                "输入 ${boostedAudioVolumePercentText(_inputVolume, _inputVolumeBoost)} · " +
+                "输出 ${boostedAudioVolumePercentText(_outputVolume, _outputVolumeBoost)}",
             SettingsSection.stickers to if (stickerCount == 0) "上传与整理表情" else "$stickerCount 个表情",
             SettingsSection.playlists to "整理个人歌单",
             SettingsSection.about to appVersionNumberLabel(widget.appVersion),
@@ -4216,6 +4258,14 @@ internal class _SettingsPageState : ViewState<SettingsPageWidget>() {
                                                 testDisabled = managing,
                                                 onVolumeChanged = { value -> unawaited { _setInputVolume(value) } },
                                                 onToggleTest = { unawaited { _toggleInputTest() } },
+                                                boost = _inputVolumeBoost,
+                                                // A managed user's settings come from the server, which has no boost.
+                                                onBoostChanged =
+                                                    if (managing) {
+                                                        null
+                                                    } else {
+                                                        { value -> unawaited { _setVolumeBoost("audioinput", value) } }
+                                                    },
                                             )
                                         }
                                     },
@@ -4262,6 +4312,13 @@ internal class _SettingsPageState : ViewState<SettingsPageWidget>() {
                                                 testDisabled = managing,
                                                 onVolumeChanged = { value -> unawaited { _setOutputVolume(value) } },
                                                 onToggleTest = { unawaited { _toggleOutputTest() } },
+                                                boost = _outputVolumeBoost,
+                                                onBoostChanged =
+                                                    if (managing) {
+                                                        null
+                                                    } else {
+                                                        { value -> unawaited { _setVolumeBoost("audiooutput", value) } }
+                                                    },
                                             )
                                         }
                                     },

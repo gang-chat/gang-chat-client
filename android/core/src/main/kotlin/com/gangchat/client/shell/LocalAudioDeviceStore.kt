@@ -3,6 +3,8 @@ package com.gangchat.client.shell
 import com.gangchat.client.app.AudioDeviceStore
 import com.gangchat.client.app.StoredAudioDevices
 import com.gangchat.client.app.defaultAudioVolume
+import com.gangchat.client.app.defaultInputVolume
+import com.gangchat.client.app.defaultOutputVolume
 import com.gangchat.client.app.defaultParticipantVoiceVolume
 import com.gangchat.client.app.normalizedAudioVolume
 import com.gangchat.client.app.normalizedParticipantVoiceVolume
@@ -12,6 +14,7 @@ import com.gangchat.client.foundation.Uri
 import com.gangchat.client.live.normalizedScreenShareFrameRate
 import com.gangchat.client.live.normalizedScreenShareMaxHeight
 import com.gangchat.client.plugins.SharedPreferences
+import kotlin.math.abs
 
 /**
  * Persists audio device + volume preferences in [SharedPreferences].
@@ -25,6 +28,7 @@ import com.gangchat.client.plugins.SharedPreferences
 class LocalAudioDeviceStore : AudioDeviceStore() {
     override suspend fun read(): StoredAudioDevices {
         val prefs = SharedPreferences.getInstance()
+        _moveToUnityVolumeDefaults(prefs)
         return StoredAudioDevices(
             inputDeviceId =
                 storedAudioDeviceIdFromStorageValue(
@@ -50,8 +54,10 @@ class LocalAudioDeviceStore : AudioDeviceStore() {
                 storedAudioDeviceSignatureFromStorageValue(
                     prefs.getString(_outputDeviceGroupIdKey),
                 ),
-            inputVolume = _readVolume(prefs, _inputVolumeKey),
-            outputVolume = _readVolume(prefs, _outputVolumeKey),
+            inputVolume = _readVolume(prefs, _inputVolumeKey, defaultInputVolume),
+            outputVolume = _readVolume(prefs, _outputVolumeKey, defaultOutputVolume),
+            inputVolumeBoost = prefs.getBool(_inputVolumeBoostKey) ?: false,
+            outputVolumeBoost = prefs.getBool(_outputVolumeBoostKey) ?: false,
             musicBoxVolume = _readVolume(prefs, _musicBoxVolumeKey),
             screenShareVolume = _readVolume(prefs, _screenShareVolumeKey),
             screenShareMaxHeight =
@@ -119,6 +125,16 @@ class LocalAudioDeviceStore : AudioDeviceStore() {
         prefs.setDouble(_outputVolumeKey, normalizedAudioVolume(volume))
     }
 
+    override suspend fun writeInputVolumeBoost(boost: Boolean) {
+        val prefs = SharedPreferences.getInstance()
+        prefs.setBool(_inputVolumeBoostKey, boost)
+    }
+
+    override suspend fun writeOutputVolumeBoost(boost: Boolean) {
+        val prefs = SharedPreferences.getInstance()
+        prefs.setBool(_outputVolumeBoostKey, boost)
+    }
+
     override suspend fun writeMusicBoxVolume(volume: Double) {
         val prefs = SharedPreferences.getInstance()
         prefs.setDouble(_musicBoxVolumeKey, normalizedAudioVolume(volume))
@@ -162,9 +178,33 @@ class LocalAudioDeviceStore : AudioDeviceStore() {
         prefs.setDouble(key, normalized)
     }
 
-    private fun _readVolume(prefs: SharedPreferences, key: String): Double {
+    private fun _readVolume(
+        prefs: SharedPreferences,
+        key: String,
+        fallback: Double = defaultAudioVolume,
+    ): Double {
         val value = prefs.getDouble(key)
-        return if (value == null) defaultAudioVolume else normalizedAudioVolume(value)
+        return if (value == null) fallback else normalizedAudioVolume(value)
+    }
+
+    /**
+     * Once: an input or output volume still at the old 0.5 default moves to the
+     * unity default. Clients before 0.11.3 started at 0.5 and saved it with the
+     * first device or volume change, so 0.5 is almost always the default rather
+     * than a choice.
+     */
+    private suspend fun _moveToUnityVolumeDefaults(prefs: SharedPreferences) {
+        if (prefs.getBool(_unityVolumeDefaultsKey) == true) return
+        for ((key, unity) in listOf(
+            _inputVolumeKey to defaultInputVolume,
+            _outputVolumeKey to defaultOutputVolume,
+        )) {
+            val value = prefs.getDouble(key)
+            if (value != null && abs(value - defaultAudioVolume) < 0.000001) {
+                prefs.setDouble(key, unity)
+            }
+        }
+        prefs.setBool(_unityVolumeDefaultsKey, true)
     }
 
     private suspend fun _writeDevicePreference(
@@ -207,6 +247,9 @@ class LocalAudioDeviceStore : AudioDeviceStore() {
         const val _outputDeviceGroupIdKey = "gang.audioOutputDeviceGroupId"
         const val _inputVolumeKey = "gang.audioInputVolume"
         const val _outputVolumeKey = "gang.audioOutputVolume"
+        const val _inputVolumeBoostKey = "gang.audioInputVolumeBoost"
+        const val _outputVolumeBoostKey = "gang.audioOutputVolumeBoost"
+        const val _unityVolumeDefaultsKey = "gang.audioUnityVolumeDefaults"
         const val _musicBoxVolumeKey = "gang.musicBoxVolume"
         const val _screenShareVolumeKey = "gang.screenShareVolume"
         const val _screenShareMaxHeightKey = "gang.screenShareMaxHeight"

@@ -62,6 +62,8 @@ import com.gangchat.client.app.StickerPacksController
 import com.gangchat.client.app.StickerPanelLoadState
 import com.gangchat.client.app.VoiceRecorderController
 import com.gangchat.client.app.VoiceRecorderState
+import com.gangchat.client.app.defaultInputVolume
+import com.gangchat.client.app.defaultOutputVolume
 import com.gangchat.client.app.joinedLiveRoomSummary
 import com.gangchat.client.app.liveParticipantByUserId
 import com.gangchat.client.app.liveScreenShareViewers
@@ -366,8 +368,8 @@ internal class _HomeShellState : ViewState<HomeShellWidget>() {
     internal var _micMuted = false
     internal var _headphonesMuted = false
     internal val _liveStateRequests = LiveStateRequestQueue()
-    internal var _lastInputVolumeBeforeMute = _defaultLiveVolumeRestore
-    internal var _lastOutputVolumeBeforeMute = _defaultLiveVolumeRestore
+    internal var _lastInputVolumeBeforeMute = defaultInputVolume
+    internal var _lastOutputVolumeBeforeMute = defaultOutputVolume
     internal var _lastScreenShareVolumeBeforeMute = _defaultLiveVolumeRestore
     internal var _cameraOn = false
     internal var _screenSharing = false

@@ -231,8 +231,9 @@ class HomeShellLiveWidgetTest : HomeShellTestBase() {
         assertTrue(liveSession.micMutes.contains(true))
         assertTrue(tagHasIcon("live-control:mic", Icons.Filled.MicOff))
 
+        // The slider muted an already-muted mic, so unmuting falls back to the unity default.
         tapTag("live-control:mic")
-        assertEquals(0.5, liveSession.inputVolumes.last(), 1e-9)
+        assertEquals(1.0, liveSession.inputVolumes.last(), 1e-9)
         assertTrue(tagHasIcon("live-control:mic", Icons.Filled.Mic))
 
         mouseHover("live-control:headphones")

@@ -48,7 +48,7 @@ class LiveSessionRoomTest {
             assertFalse(room.roomOptions.defaultAudioCaptureOptions.stopAudioCaptureOnMute)
             assertNotNull(room.localParticipant.getTrackPublicationBySource(LkTrackSource.microphone))
             assertFalse(session.localMicMuted)
-            assertEquals(0.5, WebRtc.capturePostProcessing.volume, 0.0)
+            assertEquals(1.0, WebRtc.capturePostProcessing.volume, 0.0)
             assertEquals(mapOf("me" to false), session.micMutedByIdentity)
         } finally {
             session.dispose()
@@ -71,7 +71,76 @@ class LiveSessionRoomTest {
             assertEquals(mapOf("me" to true), session.micMutedByIdentity)
 
             session.setMicMuted(false)
-            assertEquals(0.5, WebRtc.capturePostProcessing.volume, 0.0)
+            assertEquals(1.0, WebRtc.capturePostProcessing.volume, 0.0)
+        } finally {
+            session.dispose()
+        }
+    }
+
+    @Test
+    fun `a disconnected session starts the microphone and playback at unity without the boost`() = gang.runTest {
+        val session = session()
+        try {
+            // Unity, not Dart's 0.5: the old default halved the microphone and playback.
+            assertEquals(1.0, session.inputVolume, 0.0)
+            assertEquals(1.0, session.outputVolume, 0.0)
+            assertFalse(session.inputVolumeBoost)
+            assertFalse(session.outputVolumeBoost)
+        } finally {
+            session.dispose()
+        }
+    }
+
+    @Test
+    fun `the boost switch multiplies the local microphone gain by 1_5`() = gang.runTest {
+        val session = session()
+        try {
+            session.join()
+
+            session.setInputVolumeBoost(true)
+            assertTrue(session.inputVolumeBoost)
+            assertEquals(1.5, WebRtc.capturePostProcessing.volume, 0.0)
+
+            session.setInputVolume(0.4)
+            assertEquals(0.6, WebRtc.capturePostProcessing.volume, 1e-9)
+
+            session.setMicMuted(true)
+            assertEquals(0.0, WebRtc.capturePostProcessing.volume, 0.0)
+            session.setMicMuted(false)
+
+            session.setInputVolumeBoost(false)
+            assertEquals(0.4, WebRtc.capturePostProcessing.volume, 1e-9)
+        } finally {
+            session.dispose()
+        }
+    }
+
+    @Test
+    fun `the boost switch boosts voice playback up to both maxima combined`() = gang.runTest {
+        val session = session()
+        try {
+            val room = session.join()
+            val voice = room.addRemote("user-2").addAudio()
+            val musicBox = room.addRemote("__musicbox__").addAudio()
+
+            session.setOutputVolumeBoost(true)
+            assertTrue(session.outputVolumeBoost)
+            assertEquals(1.5, voice.volume!!, 1e-9)
+
+            session.setParticipantVoiceVolume("user-2", 2.0)
+            assertEquals(3.0, voice.volume!!, 1e-9)
+
+            session.setOutputVolume(0.5)
+            assertEquals(1.5, voice.volume!!, 1e-9)
+
+            session.setOutputMuted(true)
+            assertEquals(0.0, voice.volume!!, 0.0)
+            session.setOutputMuted(false)
+
+            session.setOutputVolumeBoost(false)
+            assertEquals(1.0, voice.volume!!, 1e-9)
+            // The music box keeps its own knob; the output volume never touches it.
+            assertNull(musicBox.volume)
         } finally {
             session.dispose()
         }

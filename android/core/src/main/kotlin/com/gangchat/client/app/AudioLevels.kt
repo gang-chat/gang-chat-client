@@ -13,6 +13,19 @@ fun audioVolumePercentText(volume: Double): String {
     return "${(normalizedAudioVolume(volume) * 100).roundToLong()}%"
 }
 
+/** The 增强 switch on the input and output volume multiplies the gain by this. */
+const val audioVolumeBoostFactor = 1.5
+
+/** The gain for a 0..1 [volume] slider with the 增强 switch at [boost]. */
+fun boostedAudioVolume(volume: Double, boost: Boolean): Double {
+    val normalized = normalizedAudioVolume(volume)
+    return if (boost) normalized * audioVolumeBoostFactor else normalized
+}
+
+fun boostedAudioVolumePercentText(volume: Double, boost: Boolean): String {
+    return "${(boostedAudioVolume(volume, boost) * 100).roundToLong()}%"
+}
+
 const val defaultParticipantVoiceVolume = 1.0
 const val maxParticipantVoiceVolume = 2.0
 

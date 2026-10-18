@@ -198,7 +198,7 @@ fun audioStoredVolumesApplied(
 fun audioInputVolumeChanged(
     inputVolume: Double,
     outputVolume: Double,
-    restoreOutputVolume: Double = defaultAudioVolume,
+    restoreOutputVolume: Double = defaultOutputVolume,
 ): AudioVolumePatch {
     val input = normalizedAudioVolume(inputVolume)
     val output = normalizedAudioVolume(outputVolume)
@@ -206,7 +206,7 @@ fun audioInputVolumeChanged(
         inputVolume = input,
         outputVolume =
             if (input > 0 && output == 0.0) {
-                restoredAudioVolume(restoreOutputVolume)
+                restoredAudioVolume(restoreOutputVolume, defaultOutputVolume)
             } else {
                 output
             },
@@ -224,14 +224,15 @@ fun audioOutputVolumeChanged(
     )
 }
 
-fun rememberedAudioVolume(volume: Double): Double {
+/** [fallback] is the volume to come back to when [volume] is 0 (muted). */
+fun rememberedAudioVolume(volume: Double, fallback: Double = defaultAudioVolume): Double {
     val normalized = normalizedAudioVolume(volume)
-    return if (normalized > 0) normalized else defaultAudioVolume
+    return if (normalized > 0) normalized else fallback
 }
 
-fun restoredAudioVolume(volume: Double): Double {
+fun restoredAudioVolume(volume: Double, fallback: Double = defaultAudioVolume): Double {
     val normalized = normalizedAudioVolume(volume)
-    return if (normalized > 0) normalized else defaultAudioVolume
+    return if (normalized > 0) normalized else fallback
 }
 
 fun audioInputVolumeChangedEffects(

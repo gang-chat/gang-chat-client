@@ -178,6 +178,7 @@ internal fun _HomeShellState._buildContentPane(onNavigateBack: (() -> Unit)? = n
                 unawaited { liveSession.setScreenShareFrameRate(frameRate) }
             },
             onVolumeChanged = { kind, volume -> _syncSettingsAudioVolumeToLive(kind, volume) },
+            onVolumeBoostChanged = { kind, boost -> _syncSettingsAudioVolumeBoostToLive(kind, boost) },
             // The Settings picker already routes the native ADM (selectAudioInput/
             // Output). For inputs, also keep LiveSession's tracked capture device in
             // sync so a later mute/unmute republish stays on the chosen mic. Outputs

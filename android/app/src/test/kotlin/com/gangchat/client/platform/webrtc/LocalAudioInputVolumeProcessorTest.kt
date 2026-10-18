@@ -47,4 +47,47 @@ class LocalAudioInputVolumeProcessorTest {
         assertEquals(-0.1f, samples.getFloat(2 * java.lang.Float.BYTES), 0.000001f)
         assertEquals(-1.0f, samples.getFloat(3 * java.lang.Float.BYTES), 0.000001f)
     }
+
+    @Test
+    fun boostedVolumeSaturatesAtTheFloatS16Range() {
+        // WebRTC's AudioBuffer holds the capture samples as floats in the 16-bit range.
+        val samples = ByteBuffer.allocateDirect(4 * java.lang.Float.BYTES).order(ByteOrder.nativeOrder())
+        samples.putFloat(0, 1000.0f)
+        samples.putFloat(java.lang.Float.BYTES, -2000.0f)
+        samples.putFloat(2 * java.lang.Float.BYTES, 30000.0f)
+        samples.putFloat(3 * java.lang.Float.BYTES, -30000.0f)
+
+        LocalAudioInputVolumeProcessor.scaleFloatSamples(samples, 1.5)
+
+        assertEquals(1500.0f, samples.getFloat(0), 0.0f)
+        assertEquals(-3000.0f, samples.getFloat(java.lang.Float.BYTES), 0.0f)
+        assertEquals(32767.0f, samples.getFloat(2 * java.lang.Float.BYTES), 0.0f)
+        assertEquals(-32768.0f, samples.getFloat(3 * java.lang.Float.BYTES), 0.0f)
+    }
+
+    @Test
+    fun processingVolumeAllowsTheBoostAndLeavesUnityUntouched() {
+        val processor = LocalAudioInputVolumeProcessor()
+
+        processor.setProcessingVolume(1.5)
+        assertEquals(1.5, processor.volume, 0.0)
+        processor.setProcessingVolume(4.0)
+        assertEquals(1.5, processor.volume, 0.0)
+        processor.setProcessingVolume(-1.0)
+        assertEquals(0.0, processor.volume, 0.0)
+        processor.setProcessingVolume(Double.NaN)
+        assertEquals(1.0, processor.volume, 0.0)
+
+        val samples = ByteBuffer.allocateDirect(2 * java.lang.Float.BYTES).order(ByteOrder.nativeOrder())
+        samples.putFloat(0, 1200.0f)
+        samples.putFloat(java.lang.Float.BYTES, -800.0f)
+        processor.processAudio(1, 2, samples)
+        assertEquals(1200.0f, samples.getFloat(0), 0.0f)
+        assertEquals(-800.0f, samples.getFloat(java.lang.Float.BYTES), 0.0f)
+
+        processor.setProcessingVolume(1.5)
+        processor.processAudio(1, 2, samples)
+        assertEquals(1800.0f, samples.getFloat(0), 0.0f)
+        assertEquals(-1200.0f, samples.getFloat(java.lang.Float.BYTES), 0.0f)
+    }
 }

@@ -70,4 +70,18 @@ class AudioLevelsTest {
         assertTrue(broadVoice > singleSpike)
         assertEquals(1.0, audioLevelFromVisualizerBands(List(14) { 1.0 }), 0.0)
     }
+
+    @Test
+    fun `the boost switch multiplies the gain by 1_5`() {
+        assertEquals(1.5, audioVolumeBoostFactor, 0.0)
+        assertEquals(1.0, boostedAudioVolume(1.0, false), 0.0)
+        assertEquals(1.5, boostedAudioVolume(1.0, true), 0.0)
+        assertEquals(0.6, boostedAudioVolume(0.4, true), 1e-9)
+        // The slider value is clamped to 0..1 before the boost.
+        assertEquals(1.5, boostedAudioVolume(2.0, true), 0.0)
+        assertEquals(0.0, boostedAudioVolume(-1.0, true), 0.0)
+        assertEquals("100%", boostedAudioVolumePercentText(1.0, false))
+        assertEquals("150%", boostedAudioVolumePercentText(1.0, true))
+        assertEquals("75%", boostedAudioVolumePercentText(0.5, true))
+    }
 }
