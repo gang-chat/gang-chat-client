@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { StoredAudioDevices, defaultAudioVolume } from '../../src/app/audio_device_preferences';
+import {
+  StoredAudioDevices,
+  defaultAudioVolume,
+  defaultInputVolume,
+  defaultOutputVolume,
+} from '../../src/app/audio_device_preferences';
 import { AudioDeviceStore } from '../../src/app/audio_device_store';
 import { LiveSessionController } from '../../src/app/live_session_controller';
 import { ChangeNotifier } from '../../src/lib/change_notifier';
@@ -105,6 +110,8 @@ class FakeLiveSession extends ChangeNotifier {
   disconnects = 0;
   readonly inputVolumes: number[] = [];
   readonly outputVolumes: number[] = [];
+  readonly inputVolumeBoosts: boolean[] = [];
+  readonly outputVolumeBoosts: boolean[] = [];
   readonly participantVoiceVolumeWrites: string[] = [];
   readonly screenShareVolumes: number[] = [];
   readonly outputMutes: boolean[] = [];
@@ -120,8 +127,10 @@ class FakeLiveSession extends ChangeNotifier {
   connectedRoomName: string | null = null;
   connectedMicMuted: boolean | null = null;
   musicBoxVolume = defaultAudioVolume;
-  private _inputVolume = defaultAudioVolume;
-  private _outputVolume = defaultAudioVolume;
+  private _inputVolume = defaultInputVolume;
+  private _outputVolume = defaultOutputVolume;
+  inputVolumeBoost = false;
+  outputVolumeBoost = false;
   private _screenShareVolume = defaultAudioVolume;
   private _screenShareFrameRate = 30;
   private readonly _participantVoiceVolumes = new Map<string, number>();
@@ -180,6 +189,16 @@ class FakeLiveSession extends ChangeNotifier {
   async setOutputVolume(volume: number): Promise<void> {
     this._outputVolume = volume;
     this.outputVolumes.push(volume);
+  }
+
+  async setInputVolumeBoost(boost: boolean): Promise<void> {
+    this.inputVolumeBoost = boost;
+    this.inputVolumeBoosts.push(boost);
+  }
+
+  async setOutputVolumeBoost(boost: boolean): Promise<void> {
+    this.outputVolumeBoost = boost;
+    this.outputVolumeBoosts.push(boost);
   }
 
   async setParticipantVoiceVolume(userId: string, volume: number): Promise<void> {
@@ -407,10 +426,10 @@ describe('LiveSessionController', () => {
 
     await controller.restoreStoredAudioSettings();
 
-    expect(session.inputVolumes).toEqual([defaultAudioVolume]);
-    expect(session.outputVolumes).toEqual([defaultAudioVolume]);
-    expect(store.inputVolumeWrites).toEqual([defaultAudioVolume]);
-    expect(store.outputVolumeWrites).toEqual([defaultAudioVolume]);
+    expect(session.inputVolumes).toEqual([defaultInputVolume]);
+    expect(session.outputVolumes).toEqual([defaultOutputVolume]);
+    expect(store.inputVolumeWrites).toEqual([defaultInputVolume]);
+    expect(store.outputVolumeWrites).toEqual([defaultOutputVolume]);
   });
 
   it('legacy gain migration failure does not stop remaining restore', async () => {
@@ -432,8 +451,8 @@ describe('LiveSessionController', () => {
 
     await controller.restoreStoredAudioSettings();
 
-    expect(session.inputVolumes).toEqual([defaultAudioVolume]);
-    expect(session.outputVolumes).toEqual([defaultAudioVolume]);
+    expect(session.inputVolumes).toEqual([defaultInputVolume]);
+    expect(session.outputVolumes).toEqual([defaultOutputVolume]);
     expect(session.screenShareMaxHeights).toEqual([480]);
     expect(session.screenShareFrameRates).toEqual([30]);
     expect(restoredDevices).toBe(1);

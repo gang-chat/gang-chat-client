@@ -2,6 +2,8 @@ import { AudioDeviceStore } from '../app/audio_device_store';
 import {
   StoredAudioDevices,
   defaultAudioVolume,
+  defaultInputVolume,
+  defaultOutputVolume,
   storedAudioDeviceIdFromStorageValue,
   storedAudioDeviceSignatureFromStorageValue,
 } from '../app/audio_device_preferences';
@@ -40,6 +42,9 @@ export class LocalAudioDeviceStore extends AudioDeviceStore {
   private static readonly _outputDeviceGroupIdKey = 'gang.audioOutputDeviceGroupId';
   private static readonly _inputVolumeKey = 'gang.audioInputVolume';
   private static readonly _outputVolumeKey = 'gang.audioOutputVolume';
+  private static readonly _inputVolumeBoostKey = 'gang.audioInputVolumeBoost';
+  private static readonly _outputVolumeBoostKey = 'gang.audioOutputVolumeBoost';
+  private static readonly _unityVolumeDefaultsKey = 'gang.audioUnityVolumeDefaults';
   private static readonly _musicBoxVolumeKey = 'gang.musicBoxVolume';
   private static readonly _screenShareVolumeKey = 'gang.screenShareVolume';
   private static readonly _screenShareMaxHeightKey = 'gang.screenShareMaxHeight';
@@ -53,6 +58,7 @@ export class LocalAudioDeviceStore extends AudioDeviceStore {
   override async read(): Promise<StoredAudioDevices> {
     const prefs = this._prefs;
     const S = LocalAudioDeviceStore;
+    await this._moveToUnityVolumeDefaults(prefs);
     return new StoredAudioDevices({
       inputDeviceId: storedAudioDeviceIdFromStorageValue(prefs.getString(S._inputDeviceIdKey)),
       inputDeviceLabel: storedAudioDeviceSignatureFromStorageValue(prefs.getString(S._inputDeviceLabelKey)),
@@ -60,8 +66,10 @@ export class LocalAudioDeviceStore extends AudioDeviceStore {
       outputDeviceId: storedAudioDeviceIdFromStorageValue(prefs.getString(S._outputDeviceIdKey)),
       outputDeviceLabel: storedAudioDeviceSignatureFromStorageValue(prefs.getString(S._outputDeviceLabelKey)),
       outputDeviceGroupId: storedAudioDeviceSignatureFromStorageValue(prefs.getString(S._outputDeviceGroupIdKey)),
-      inputVolume: this._readVolume(prefs, S._inputVolumeKey),
-      outputVolume: this._readVolume(prefs, S._outputVolumeKey),
+      inputVolume: this._readVolume(prefs, S._inputVolumeKey, defaultInputVolume),
+      outputVolume: this._readVolume(prefs, S._outputVolumeKey, defaultOutputVolume),
+      inputVolumeBoost: prefs.getBool(S._inputVolumeBoostKey) ?? false,
+      outputVolumeBoost: prefs.getBool(S._outputVolumeBoostKey) ?? false,
       musicBoxVolume: this._readVolume(prefs, S._musicBoxVolumeKey),
       screenShareVolume: this._readVolume(prefs, S._screenShareVolumeKey),
       screenShareMaxHeight: normalizedScreenShareMaxHeight(prefs.getInt(S._screenShareMaxHeightKey)),
@@ -115,6 +123,14 @@ export class LocalAudioDeviceStore extends AudioDeviceStore {
     await this._prefs.setDouble(LocalAudioDeviceStore._outputVolumeKey, normalizedAudioVolume(volume));
   }
 
+  override async writeInputVolumeBoost(boost: boolean): Promise<void> {
+    await this._prefs.setBool(LocalAudioDeviceStore._inputVolumeBoostKey, boost);
+  }
+
+  override async writeOutputVolumeBoost(boost: boolean): Promise<void> {
+    await this._prefs.setBool(LocalAudioDeviceStore._outputVolumeBoostKey, boost);
+  }
+
   override async writeMusicBoxVolume(volume: number): Promise<void> {
     await this._prefs.setDouble(LocalAudioDeviceStore._musicBoxVolumeKey, normalizedAudioVolume(volume));
   }
@@ -148,9 +164,30 @@ export class LocalAudioDeviceStore extends AudioDeviceStore {
     await prefs.setDouble(key, normalized);
   }
 
-  private _readVolume(prefs: PreferencesStore, key: string): number {
+  private _readVolume(prefs: PreferencesStore, key: string, fallback: number = defaultAudioVolume): number {
     const value = prefs.getDouble(key);
-    return value == null ? defaultAudioVolume : normalizedAudioVolume(value);
+    return value == null ? fallback : normalizedAudioVolume(value);
+  }
+
+  /**
+   * Once: an input or output volume still at the old 0.5 default moves to the
+   * unity default. Clients before 0.11.3 started at 0.5 and saved it with the
+   * first device or volume change, so 0.5 is almost always the default rather
+   * than a choice.
+   */
+  private async _moveToUnityVolumeDefaults(prefs: PreferencesStore): Promise<void> {
+    const S = LocalAudioDeviceStore;
+    if (prefs.getBool(S._unityVolumeDefaultsKey) === true) return;
+    for (const [key, unity] of [
+      [S._inputVolumeKey, defaultInputVolume],
+      [S._outputVolumeKey, defaultOutputVolume],
+    ] as const) {
+      const value = prefs.getDouble(key);
+      if (value != null && Math.abs(value - defaultAudioVolume) < 0.000001) {
+        await prefs.setDouble(key, unity);
+      }
+    }
+    await prefs.setBool(S._unityVolumeDefaultsKey, true);
   }
 
   private async _writeDevicePreference(

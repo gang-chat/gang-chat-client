@@ -17,8 +17,10 @@ test('read returns defaults when nothing is stored', async () => {
 
   expect(stored.inputDeviceId).toBeNull();
   expect(stored.outputDeviceId).toBeNull();
-  expect(stored.inputVolume).toBe(0.5);
-  expect(stored.outputVolume).toBe(0.5);
+  expect(stored.inputVolume).toBe(1.0);
+  expect(stored.outputVolume).toBe(1.0);
+  expect(stored.inputVolumeBoost).toBe(false);
+  expect(stored.outputVolumeBoost).toBe(false);
   expect(stored.musicBoxVolume).toBe(0.5);
   expect(stored.screenShareVolume).toBe(0.5);
   expect(stored.screenShareMaxHeight).toBe(720);
@@ -53,6 +55,49 @@ test('writes round-trip through the preferences store', async () => {
   expect(stored.screenShareMaxHeight).toBe(720);
   expect(stored.screenShareFrameRate).toBe(30);
   expect(await store.readParticipantVoiceVolume('user/2')).toBeCloseTo(1.75, 9);
+});
+
+test('the 增强 switches round-trip', async () => {
+  const store = new LocalAudioDeviceStore();
+
+  await store.writeInputVolumeBoost(true);
+  await store.writeOutputVolumeBoost(false);
+  let stored = await store.read();
+  expect(stored.inputVolumeBoost).toBe(true);
+  expect(stored.outputVolumeBoost).toBe(false);
+
+  await store.writeInputVolumeBoost(false);
+  await store.writeOutputVolumeBoost(true);
+  stored = await store.read();
+  expect(stored.inputVolumeBoost).toBe(false);
+  expect(stored.outputVolumeBoost).toBe(true);
+  expect(fake.preferences.values.get('gang.audioInputVolumeBoost')).toBe(false);
+  expect(fake.preferences.values.get('gang.audioOutputVolumeBoost')).toBe(true);
+});
+
+test('input and output volumes left at the old 0.5 default move to unity once', async () => {
+  fake = installFakePlatform({
+    preferences: {
+      'gang.audioInputVolume': 0.5,
+      'gang.audioOutputVolume': 0.3,
+      'gang.musicBoxVolume': 0.5,
+      'gang.screenShareVolume': 0.5,
+    },
+  });
+  const store = new LocalAudioDeviceStore();
+
+  let stored = await store.read();
+  expect(stored.inputVolume).toBe(1.0);
+  // A chosen volume and the music box / screen share defaults stay.
+  expect(stored.outputVolume).toBeCloseTo(0.3, 9);
+  expect(stored.musicBoxVolume).toBe(0.5);
+  expect(stored.screenShareVolume).toBe(0.5);
+  expect(fake.preferences.values.get('gang.audioInputVolume')).toBe(1.0);
+
+  // After the move, 0.5 is a choice and stays.
+  await store.writeInputVolume(0.5);
+  stored = await store.read();
+  expect(stored.inputVolume).toBe(0.5);
 });
 
 test('keeps the Dart SharedPreferences keys', async () => {

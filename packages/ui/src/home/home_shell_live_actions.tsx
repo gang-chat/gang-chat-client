@@ -1,4 +1,5 @@
 import { rememberedAudioVolume, restoredAudioVolume } from '@gang-chat/core/app/audio_device_state';
+import { defaultInputVolume, defaultOutputVolume } from '@gang-chat/core/app/audio_device_preferences';
 import { normalizedAudioVolume } from '@gang-chat/core/app/audio_levels';
 import { userFacingErrorMessage } from '@gang-chat/core/app/error_display';
 import {
@@ -1001,20 +1002,31 @@ export const HomeShellLiveActions = {
     }
   },
 
+  /** Settings persisted the switch already; apply it to the session only. */
+  _syncSettingsAudioVolumeBoostToLive(this: HomeShellState, kind: string, boost: boolean): void {
+    if (kind === 'audioinput') {
+      unawaited(this._liveSessionController.setInputVolumeBoost(boost, { persist: false }));
+      return;
+    }
+    if (kind === 'audiooutput') {
+      unawaited(this._liveSessionController.setOutputVolumeBoost(boost, { persist: false }));
+    }
+  },
+
   _rememberInputVolume(this: HomeShellState, volume: number): void {
-    this._lastInputVolumeBeforeMute = rememberedAudioVolume(volume);
+    this._lastInputVolumeBeforeMute = rememberedAudioVolume(volume, defaultInputVolume);
   },
 
   _rememberOutputVolume(this: HomeShellState, volume: number): void {
-    this._lastOutputVolumeBeforeMute = rememberedAudioVolume(volume);
+    this._lastOutputVolumeBeforeMute = rememberedAudioVolume(volume, defaultOutputVolume);
   },
 
   _restoredInputVolume(this: HomeShellState): number {
-    return restoredAudioVolume(this._lastInputVolumeBeforeMute);
+    return restoredAudioVolume(this._lastInputVolumeBeforeMute, defaultInputVolume);
   },
 
   _restoredOutputVolume(this: HomeShellState): number {
-    return restoredAudioVolume(this._lastOutputVolumeBeforeMute);
+    return restoredAudioVolume(this._lastOutputVolumeBeforeMute, defaultOutputVolume);
   },
 
   async _joinLive(this: HomeShellState, source: string): Promise<void> {

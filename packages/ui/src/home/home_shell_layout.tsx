@@ -210,6 +210,7 @@ export const HomeShellLayout = {
             unawaited(this._liveSessionController.setScreenShareFrameRate(frameRate))
           }
           onVolumeChanged={(kind, volume) => this._syncSettingsAudioVolumeToLive(kind, volume)}
+          onVolumeBoostChanged={(kind, boost) => this._syncSettingsAudioVolumeBoostToLive(kind, boost)}
           // The Settings picker already routes the native ADM (selectAudioInput/
           // Output). For inputs, also keep LiveSession's tracked capture device in
           // sync so a later mute/unmute republish stays on the chosen mic. Outputs

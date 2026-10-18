@@ -32,6 +32,11 @@ export class AudioDeviceStore {
     throw new Error('AudioDeviceStore.writeOutputVolume must be implemented.');
   }
 
+  /** The 增强 switches. Stores that cannot keep them ignore them. */
+  async writeInputVolumeBoost(boost: boolean): Promise<void> {}
+
+  async writeOutputVolumeBoost(boost: boolean): Promise<void> {}
+
   writeMusicBoxVolume(volume: number): Promise<void> {
     throw new Error('AudioDeviceStore.writeMusicBoxVolume must be implemented.');
   }

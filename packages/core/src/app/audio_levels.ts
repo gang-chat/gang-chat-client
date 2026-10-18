@@ -10,6 +10,19 @@ export function audioVolumePercentText(volume: number): string {
   return `${Math.round(normalizedAudioVolume(volume) * 100)}%`;
 }
 
+/** The 增强 switch on the input and output volume multiplies the gain by this. */
+export const audioVolumeBoostFactor = 1.5;
+
+/** The gain for a 0..1 [volume] slider with the 增强 switch at [boost]. */
+export function boostedAudioVolume(volume: number, boost: boolean): number {
+  const normalized = normalizedAudioVolume(volume);
+  return boost ? normalized * audioVolumeBoostFactor : normalized;
+}
+
+export function boostedAudioVolumePercentText(volume: number, boost: boolean): string {
+  return `${Math.round(boostedAudioVolume(volume, boost) * 100)}%`;
+}
+
 export const defaultParticipantVoiceVolume = 1.0;
 export const maxParticipantVoiceVolume = 2.0;
 

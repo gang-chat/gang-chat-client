@@ -7,7 +7,7 @@ import type { ScreenAudioTokenProvider } from '../live/screen_audio_publisher';
 import { SystemAudioDevices } from '../live/system_audio_devices';
 import type { LiveJoinResult } from '../protocol/models';
 import { restoredAudioVolume } from './audio_device_state';
-import type { AudioDeviceStore } from './audio_device_store';
+import { defaultInputVolume, defaultOutputVolume, type AudioDeviceStore } from './audio_device_store';
 import { defaultParticipantVoiceVolume, normalizedParticipantVoiceVolume } from './audio_levels';
 
 export type AudioDeviceRestorer = (store: AudioDeviceStore) => Promise<string | null>;
@@ -197,6 +197,38 @@ export class LiveSessionController {
 
   get outputVolume(): number {
     return this.session.outputVolume;
+  }
+
+  get inputVolumeBoost(): boolean {
+    return this.session.inputVolumeBoost;
+  }
+
+  get outputVolumeBoost(): boolean {
+    return this.session.outputVolumeBoost;
+  }
+
+  /** The 增强 switch on the input volume (Settings persists it itself, [persist] false). */
+  async setInputVolumeBoost(boost: boolean, opts: { persist?: boolean } = {}): Promise<void> {
+    const { persist = true } = opts;
+    await this.session.setInputVolumeBoost(boost);
+    if (!persist) return;
+    try {
+      await this.audioDeviceStore.writeInputVolumeBoost(boost);
+    } catch {
+      // A failed persist shouldn't undo the live change.
+    }
+  }
+
+  /** The 增强 switch on the output volume. */
+  async setOutputVolumeBoost(boost: boolean, opts: { persist?: boolean } = {}): Promise<void> {
+    const { persist = true } = opts;
+    await this.session.setOutputVolumeBoost(boost);
+    if (!persist) return;
+    try {
+      await this.audioDeviceStore.writeOutputVolumeBoost(boost);
+    } catch {
+      // A failed persist shouldn't undo the live change.
+    }
   }
 
   participantVoiceVolume(userId: string): number {
@@ -392,10 +424,12 @@ export class LiveSessionController {
       // mute. The next process starts with mute controls open, so restoring
       // that zero would make the real media state contradict the UI. Heal the
       // legacy value once and keep persistence reserved for usable gains.
-      const inputVolume = restoredAudioVolume(stored.inputVolume);
-      const outputVolume = restoredAudioVolume(stored.outputVolume);
+      const inputVolume = restoredAudioVolume(stored.inputVolume, defaultInputVolume);
+      const outputVolume = restoredAudioVolume(stored.outputVolume, defaultOutputVolume);
       await this.session.setInputVolume(inputVolume);
       await this.session.setOutputVolume(outputVolume);
+      await this.session.setInputVolumeBoost(stored.inputVolumeBoost);
+      await this.session.setOutputVolumeBoost(stored.outputVolumeBoost);
       if (inputVolume !== stored.inputVolume) {
         try {
           await this.audioDeviceStore.writeInputVolume(inputVolume);
