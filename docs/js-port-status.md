@@ -147,6 +147,10 @@
 
 ### 语音（`packages/core/src/live`、`packages/ui/src/live`）
 
+- 输入、输出音量默认 100%（Dart 是 0.5，且直接当增益，默认发出和听到的声音都只有一半），设置页各有
+  “增强 +50%”开关（增益 × 1.5，`gang.audioInputVolumeBoost` / `gang.audioOutputVolumeBoost`，代管其他
+  用户的设置时不显示，服务端没有这一项）。存着旧默认 0.5 的输入、输出音量在第一次读取时改成 1.0，只做
+  一次（`gang.audioUnityVolumeDefaults`）。音乐盒和屏幕共享音量仍默认 50%。
 - LiveKit 换成官方 JS SDK `livekit-client`（`@livekit/react-native` 包装的也是它）。房间事件先转成
   `LiveRoomEvent`（`debugHandleRoomEvent` 的入参）再交给与 Dart 一致的处理函数。完整重连时
   `livekit-client` 先拆掉所有远端参与者、再发 `Reconnecting`，与 Flutter SDK 的顺序相反；事件按微任务
