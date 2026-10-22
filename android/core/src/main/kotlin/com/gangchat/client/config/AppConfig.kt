@@ -55,7 +55,7 @@ class AppConfig(
     companion object {
         private const val _fallbackApiBaseUrl = "http://127.0.0.1:21116/api/v1"
         private const val _fallbackAssetBaseUrl = "http://127.0.0.1:21116"
-        private const val _fallbackReleaseBucketUrl = "https://os.ky-z.com:9000/gang-chat"
+        private const val _fallbackReleaseBucketUrl = "https://data.ky-z.com:9000/gang-chat"
 
         private const val _assetPath = "assets/config/app_config.json"
 

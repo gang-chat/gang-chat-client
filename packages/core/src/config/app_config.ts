@@ -35,7 +35,7 @@ export class AppConfig {
 
   static readonly fallbackApiBaseUrl = 'http://127.0.0.1:21116/api/v1';
   static readonly fallbackAssetBaseUrl = 'http://127.0.0.1:21116';
-  static readonly fallbackReleaseBucketUrl = 'https://os.ky-z.com:9000/gang-chat';
+  static readonly fallbackReleaseBucketUrl = 'https://data.ky-z.com:9000/gang-chat';
 
   /** Resolve [path] (relative or absolute) against [assetBaseUrl]. */
   resolveAssetUrl(path: string | null | undefined): string | null {

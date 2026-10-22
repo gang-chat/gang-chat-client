@@ -28,7 +28,7 @@ afterPack: scripts/after_pack.cjs
 # from releases/appcast.xml instead, like the Flutter macOS app.
 publish:
   provider: generic
-  url: https://os.ky-z.com:9000/gang-chat/releases
+  url: https://data.ky-z.com:9000/gang-chat/releases
 electronLanguages:
   - zh-CN
   - zh-TW
@@ -92,7 +92,7 @@ mac:
     # Sparkle, as in macos/Runner/Info.plist: the same appcast and signing key,
     # so Flutter and Electron installs update from one feed. The app moves the
     # feed to its configured release bucket at runtime.
-    SUFeedURL: https://os.ky-z.com:9000/gang-chat/releases/appcast.xml
+    SUFeedURL: https://data.ky-z.com:9000/gang-chat/releases/appcast.xml
     SUPublicEDKey: qt5Xe3gI5E44p2fg3P+2o4VoK5wck2oy+WxpPFu/g3A=
     SUEnableAutomaticChecks: false
     SUShowReleaseNotes: false

@@ -767,7 +767,7 @@ adb devices
 {
   "api_base_url": "https://ky-z.com/gang-chat/api/v1",
   "asset_base_url": "https://ky-z.com/gang-chat",
-  "release_bucket_url": "https://os.ky-z.com:9000/gang-chat"
+  "release_bucket_url": "https://data.ky-z.com:9000/gang-chat"
 }
 ```
 
