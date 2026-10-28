@@ -22,13 +22,13 @@ extraResources:
 asar: true
 # Ad-hoc signs macOS builds so Sparkle accepts them (see the script).
 afterPack: scripts/after_pack.cjs
-# electron-updater feed (Windows): the workflow uploads latest.yml and the
-# blockmap next to the installer in the bucket's releases/ folder. The app sets
+# electron-updater feed (Windows): the server's release sync puts latest.yml and
+# the blockmap next to the installer in releases/. The app sets
 # the same URL at runtime from app_config.json. macOS updates through Sparkle
 # from releases/appcast.xml instead, like the Flutter macOS app.
 publish:
   provider: generic
-  url: https://data.ky-z.com:9000/gang-chat/releases
+  url: https://ky-z.com/gang-chat/assets/releases
 electronLanguages:
   - zh-CN
   - zh-TW
@@ -92,7 +92,7 @@ mac:
     # Sparkle, as in macos/Runner/Info.plist: the same appcast and signing key,
     # so Flutter and Electron installs update from one feed. The app moves the
     # feed to its configured release bucket at runtime.
-    SUFeedURL: https://data.ky-z.com:9000/gang-chat/releases/appcast.xml
+    SUFeedURL: https://ky-z.com/gang-chat/assets/releases/appcast.xml
     SUPublicEDKey: qt5Xe3gI5E44p2fg3P+2o4VoK5wck2oy+WxpPFu/g3A=
     SUEnableAutomaticChecks: false
     SUShowReleaseNotes: false

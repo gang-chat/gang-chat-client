@@ -130,7 +130,7 @@ function releaseBucketUrl(config: Record<string, unknown> | null): string {
   const override = __GANG_CONFIG_OVERRIDES__.releaseBucketUrl;
   if (override) return override;
   const value = config?.['release_bucket_url'];
-  return typeof value === 'string' && value.length > 0 ? value : 'https://data.ky-z.com:9000/gang-chat';
+  return typeof value === 'string' && value.length > 0 ? value : 'https://ky-z.com/gang-chat/assets';
 }
 
 let bootSnapshot: BootSnapshot | null = null;

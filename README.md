@@ -767,7 +767,7 @@ adb devices
 {
   "api_base_url": "https://ky-z.com/gang-chat/api/v1",
   "asset_base_url": "https://ky-z.com/gang-chat",
-  "release_bucket_url": "https://data.ky-z.com:9000/gang-chat"
+  "release_bucket_url": "https://ky-z.com/gang-chat/assets"
 }
 ```
 
@@ -783,7 +783,7 @@ adb devices
 | --- | --- |
 | `GANG_API_BASE_URL` | REST API 根地址，必须包含 `/api/v1` |
 | `GANG_ASSET_BASE_URL` | 头像、附件、表情等资源根地址 |
-| `GANG_RELEASE_BUCKET_URL` | 自动更新使用的对象存储 Bucket 地址 |
+| `GANG_RELEASE_BUCKET_URL` | 自动更新的根地址：`<它>/releases/` 下是安装包和更新源（`appcast.xml`、`latest.yml`），由服务器提供 |
 
 变量在构建时写入，修改后需要重新运行或重新构建。
 

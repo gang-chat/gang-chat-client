@@ -25,7 +25,7 @@ class AppConfig(
      */
     val assetBaseUrl: String,
     /**
-     * Public S3-compatible bucket URL used to discover and download releases.
+     * Where the server serves releases/ (installers and update feeds), used to discover and download releases.
      * Should not contain a trailing slash.
      */
     val releaseBucketUrl: String,
@@ -55,7 +55,7 @@ class AppConfig(
     companion object {
         private const val _fallbackApiBaseUrl = "http://127.0.0.1:21116/api/v1"
         private const val _fallbackAssetBaseUrl = "http://127.0.0.1:21116"
-        private const val _fallbackReleaseBucketUrl = "https://data.ky-z.com:9000/gang-chat"
+        private const val _fallbackReleaseBucketUrl = "https://ky-z.com/gang-chat/assets"
 
         private const val _assetPath = "assets/config/app_config.json"
 

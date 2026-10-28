@@ -60,7 +60,7 @@ class MainActivityTest {
             runUntil { OkHttpClientAdapter.directHosts.isNotEmpty() }
 
             assertSame(activity, GangChatPlatform.activity)
-            assertEquals(setOf("ky-z.com", "data.ky-z.com"), OkHttpClientAdapter.directHosts)
+            assertEquals(setOf("ky-z.com"), OkHttpClientAdapter.directHosts)
             assertEquals(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT, activity.requestedOrientation)
         }
 

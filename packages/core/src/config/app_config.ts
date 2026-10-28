@@ -30,12 +30,12 @@ export class AppConfig {
   /** Origin used to resolve relative asset URLs. No trailing slash. */
   readonly assetBaseUrl: string;
 
-  /** Public S3-compatible bucket URL used to discover releases. No trailing slash. */
+  /** Where the server serves releases/ (installers and update feeds). No trailing slash. */
   readonly releaseBucketUrl: string;
 
   static readonly fallbackApiBaseUrl = 'http://127.0.0.1:21116/api/v1';
   static readonly fallbackAssetBaseUrl = 'http://127.0.0.1:21116';
-  static readonly fallbackReleaseBucketUrl = 'https://data.ky-z.com:9000/gang-chat';
+  static readonly fallbackReleaseBucketUrl = 'https://ky-z.com/gang-chat/assets';
 
   /** Resolve [path] (relative or absolute) against [assetBaseUrl]. */
   resolveAssetUrl(path: string | null | undefined): string | null {
