@@ -147,6 +147,10 @@
 
 ### 语音（`packages/core/src/live`、`packages/ui/src/live`）
 
+- 输入、输出音量默认 100%（Dart 是 0.5，且直接当增益，默认发出和听到的声音都只有一半），设置页各有
+  “增强 +50%”开关（增益 × 1.5，`gang.audioInputVolumeBoost` / `gang.audioOutputVolumeBoost`，代管其他
+  用户的设置时不显示，服务端没有这一项）。存着旧默认 0.5 的输入、输出音量在第一次读取时改成 1.0，只做
+  一次（`gang.audioUnityVolumeDefaults`）。音乐盒和屏幕共享音量仍默认 50%。
 - LiveKit 换成官方 JS SDK `livekit-client`（`@livekit/react-native` 包装的也是它）。房间事件先转成
   `LiveRoomEvent`（`debugHandleRoomEvent` 的入参）再交给与 Dart 一致的处理函数。完整重连时
   `livekit-client` 先拆掉所有远端参与者、再发 `Reconnecting`，与 Flutter SDK 的顺序相反；事件按微任务
@@ -264,6 +268,8 @@
   四行的位置），注册 430×382，按钮下留 24px。Flutter 的 368/436 是按 Flutter 控件量的，这里按钮下会
   空出 70 多像素（`authContentBottom`，有测试保证两边一致）。标题“Gang Chat”的行高用 `normal` 而不是
   Flutter 的 1，否则单行文本按行框裁剪，会截掉 g 的下半部分。
+- 登录页和通知里的品牌标志用矢量的 `assets/branding/auth_brand_icon.svg`。Flutter 的 PNG 变体按
+  `image-rendering: pixelated` 最近邻缩放，标志落在非整数像素位置或缩放比为 1.25/1.5/1.75 时会失真。
 - 仅 Android 的路径（返回手势、系统安全区、软键盘、横竖屏）在桌面端不会触发，保留分支便于对照。
 - 设置页与更新提示共用一个 `ReleaseUpdateService`（`sharedReleaseUpdateService`），
   以便识别 electron-updater 找到的更新并走应用内下载安装。

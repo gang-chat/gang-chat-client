@@ -262,14 +262,27 @@ class FakeSettingsAudioDeviceStore(
     val inputVolume: Double = 0.35,
     val outputVolume: Double = 0.75,
     val screenShareMaxHeight: Int? = null,
+    val inputVolumeBoost: Boolean = false,
+    val outputVolumeBoost: Boolean = false,
 ) : AudioDeviceStore() {
     val writes = mutableListOf<String>()
 
     override suspend fun read(): StoredAudioDevices =
         if (screenShareMaxHeight == null) {
-            StoredAudioDevices(inputVolume = inputVolume, outputVolume = outputVolume)
+            StoredAudioDevices(
+                inputVolume = inputVolume,
+                outputVolume = outputVolume,
+                inputVolumeBoost = inputVolumeBoost,
+                outputVolumeBoost = outputVolumeBoost,
+            )
         } else {
-            StoredAudioDevices(inputVolume = inputVolume, outputVolume = outputVolume, screenShareMaxHeight = screenShareMaxHeight)
+            StoredAudioDevices(
+                inputVolume = inputVolume,
+                outputVolume = outputVolume,
+                inputVolumeBoost = inputVolumeBoost,
+                outputVolumeBoost = outputVolumeBoost,
+                screenShareMaxHeight = screenShareMaxHeight,
+            )
         }
 
     override suspend fun writeInputDeviceId(deviceId: String) {
@@ -286,6 +299,14 @@ class FakeSettingsAudioDeviceStore(
 
     override suspend fun writeOutputVolume(volume: Double) {
         writes.add("output-volume:$volume")
+    }
+
+    override suspend fun writeInputVolumeBoost(boost: Boolean) {
+        writes.add("input-volume-boost:$boost")
+    }
+
+    override suspend fun writeOutputVolumeBoost(boost: Boolean) {
+        writes.add("output-volume-boost:$boost")
     }
 
     override suspend fun writeScreenShareMaxHeight(height: Int) {

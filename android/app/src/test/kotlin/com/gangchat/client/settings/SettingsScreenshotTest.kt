@@ -235,7 +235,8 @@ class SettingsScreenshotTest {
                 api = api,
                 apiBaseUrl = "$baseUrl/${section.name}",
                 appVersion = "1.0.0",
-                audioDeviceStore = FakeSettingsAudioDeviceStore(inputVolume = 0.62, outputVolume = 0.8),
+                // The output's 增强 switch is on, so the voice captures show both states.
+                audioDeviceStore = FakeSettingsAudioDeviceStore(inputVolume = 0.62, outputVolume = 0.8, outputVolumeBoost = true),
                 audioDeviceService = FakeSettingsAudioDeviceService(devices = devices),
                 androidSystemService = FakeSettingsAndroidSystemService(supported = true, systemAllowsNotifications = true),
                 autoUpdatePromptStore = FakeSettingsAutoUpdatePromptStore(),
@@ -311,6 +312,9 @@ class SettingsScreenshotTest {
         pumpSettings()
         selectSection("语音和视频")
         capture("settings_phone_voice")
+        // The output group, whose 增强 switch is on.
+        compose.onNode(androidx.compose.ui.test.hasScrollToIndexAction()).performScrollToIndex(1)
+        capture("settings_phone_voice_output")
         scrollToEnd()
         capture("settings_phone_voice_screen_share")
     }

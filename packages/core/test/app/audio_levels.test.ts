@@ -4,7 +4,10 @@ import {
   activeAudioLevelSegmentCount,
   audioLevelFromVisualizerBands,
   audioLevelSegmentCount,
+  audioVolumeBoostFactor,
   audioVolumePercentText,
+  boostedAudioVolume,
+  boostedAudioVolumePercentText,
   normalizedAudioVolume,
   normalizedParticipantVoiceVolume,
   participantVoiceVolumePercentText,
@@ -51,5 +54,20 @@ describe('audio_levels', () => {
     expect(singleSpike).toBeLessThan(0.7);
     expect(broadVoice).toBeGreaterThan(singleSpike);
     expect(audioLevelFromVisualizerBands(new Array<number>(14).fill(1.0))).toBe(1);
+  });
+});
+
+describe('volume boost', () => {
+  test('the 增强 switch multiplies the gain by 1.5', () => {
+    expect(audioVolumeBoostFactor).toBe(1.5);
+    expect(boostedAudioVolume(1.0, false)).toBe(1.0);
+    expect(boostedAudioVolume(1.0, true)).toBe(1.5);
+    expect(boostedAudioVolume(0.4, true)).toBeCloseTo(0.6, 9);
+    // The slider value is clamped to 0..1 before the boost.
+    expect(boostedAudioVolume(2.0, true)).toBe(1.5);
+    expect(boostedAudioVolume(-1.0, true)).toBe(0.0);
+    expect(boostedAudioVolumePercentText(1.0, false)).toBe('100%');
+    expect(boostedAudioVolumePercentText(1.0, true)).toBe('150%');
+    expect(boostedAudioVolumePercentText(0.5, true)).toBe('75%');
   });
 });

@@ -45,6 +45,11 @@ open class AudioDeviceStore {
         )
     }
 
+    /** The 增强 switches. Stores that cannot keep them ignore them. */
+    open suspend fun writeInputVolumeBoost(boost: Boolean) {}
+
+    open suspend fun writeOutputVolumeBoost(boost: Boolean) {}
+
     open suspend fun writeMusicBoxVolume(volume: Double) {
         throw NotImplementedError(
             "AudioDeviceStore.writeMusicBoxVolume must be implemented.",

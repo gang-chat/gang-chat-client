@@ -1,8 +1,13 @@
 package com.gangchat.client.live
 
 import com.gangchat.client.app.AudioDeviceStore
+import com.gangchat.client.app.audioVolumeBoostFactor
+import com.gangchat.client.app.boostedAudioVolume
 import com.gangchat.client.app.defaultAudioVolume
+import com.gangchat.client.app.defaultInputVolume
+import com.gangchat.client.app.defaultOutputVolume
 import com.gangchat.client.app.defaultParticipantVoiceVolume
+import com.gangchat.client.app.maxParticipantVoiceVolume
 import com.gangchat.client.app.normalizedAudioVolume
 import com.gangchat.client.app.normalizedParticipantVoiceVolume
 import com.gangchat.client.foundation.ChangeNotifier
@@ -392,8 +397,10 @@ open class LiveSession(
     private var _reconnectRecoveryRevision = 0
     private var _reconnectRecoveryTail: Deferred<Unit> = completedFuture(Unit)
     private var _suppressAutomaticMicReconcile = false
-    private var _inputVolume = defaultAudioVolume
-    private var _outputVolume = defaultAudioVolume
+    private var _inputVolume = defaultInputVolume
+    private var _outputVolume = defaultOutputVolume
+    private var _inputVolumeBoost = false
+    private var _outputVolumeBoost = false
     private var _musicBoxVolume = defaultAudioVolume
     private var _androidMusicMediaRouteRequested = false
     private var _androidMusicMediaRouteApplied: Boolean? = null
@@ -497,6 +504,8 @@ open class LiveSession(
     open val canPublish: Boolean get() = _canPublish
     open val inputVolume: Double get() = _inputVolume
     open val outputVolume: Double get() = _outputVolume
+    open val inputVolumeBoost: Boolean get() = _inputVolumeBoost
+    open val outputVolumeBoost: Boolean get() = _outputVolumeBoost
 
     /**
      * Per-remote-user relative volume for ordinary voice audio. Defaults to
@@ -885,6 +894,20 @@ open class LiveSession(
 
     open suspend fun setOutputVolume(volume: Double) {
         _outputVolume = normalizedAudioVolume(volume)
+        _applyOutputVolume()
+    }
+
+    /** The 增强 switch: the microphone gain becomes the volume × [audioVolumeBoostFactor]. */
+    open suspend fun setInputVolumeBoost(boost: Boolean) {
+        if (_inputVolumeBoost == boost) return
+        _inputVolumeBoost = boost
+        _applyLocalMicrophoneState()
+    }
+
+    /** The 增强 switch: voice playback becomes the volume × [audioVolumeBoostFactor]. */
+    open suspend fun setOutputVolumeBoost(boost: Boolean) {
+        if (_outputVolumeBoost == boost) return
+        _outputVolumeBoost = boost
         _applyOutputVolume()
     }
 
@@ -2009,7 +2032,12 @@ open class LiveSession(
     private val _shouldMuteLocalMicrophone: Boolean get() = _micMuted || _inputVolume <= 0
 
     private val _effectiveInputVolume: Double
-        get() = if (!_canPublish || _shouldMuteLocalMicrophone) 0.0 else _inputVolume
+        get() =
+            if (!_canPublish || _shouldMuteLocalMicrophone) {
+                0.0
+            } else {
+                boostedAudioVolume(_inputVolume, _inputVolumeBoost)
+            }
 
     private fun _audioCaptureOptions(): LkAudioCaptureOptions {
         return LkAudioCaptureOptions(
@@ -2128,9 +2156,18 @@ open class LiveSession(
         _applyParticipantVoiceVolumeToParticipant(participant)
     }
 
+    /**
+     * A remote voice's playback gain: the output volume (× the 增强 factor)
+     * times that participant's own volume, at most both maxima combined.
+     */
+    private fun _voicePlaybackVolume(participantIdentity: String): Double {
+        val baseVolume = if (_outputMuted) 0.0 else boostedAudioVolume(_outputVolume, _outputVolumeBoost)
+        val volume = baseVolume * participantVoiceVolume(participantIdentity)
+        return volume.coerceIn(0.0, maxParticipantVoiceVolume * audioVolumeBoostFactor)
+    }
+
     private suspend fun _applyParticipantVoiceVolumeToParticipant(participant: LkRemoteParticipant) {
-        val baseVolume = if (_outputMuted) 0.0 else _outputVolume
-        val volume = normalizedParticipantVoiceVolume(baseVolume * participantVoiceVolume(participant.identity))
+        val volume = _voicePlaybackVolume(participant.identity)
         for (pub in participant.audioTrackPublications) {
             if (pub.source == LkTrackSource.screenShareAudio) continue
             val track = pub.track as? LkAudioTrack ?: continue

@@ -5,7 +5,16 @@ import com.gangchat.client.live.defaultScreenShareMaxHeight
 import java.util.Locale
 import kotlin.coroutines.cancellation.CancellationException
 
+/** Default music-box and screen-share listening volume. */
 const val defaultAudioVolume: Double = 0.5
+
+/**
+ * Default microphone and playback gain: unity, the slider at its end. The
+ * Flutter client started both at [defaultAudioVolume], which halved the voice
+ * that was sent and everything that was heard.
+ */
+const val defaultInputVolume: Double = 1.0
+const val defaultOutputVolume: Double = 1.0
 
 class StoredAudioDevices(
     val inputDeviceId: String? = null,
@@ -14,8 +23,11 @@ class StoredAudioDevices(
     val outputDeviceId: String? = null,
     val outputDeviceLabel: String? = null,
     val outputDeviceGroupId: String? = null,
-    val inputVolume: Double = defaultAudioVolume,
-    val outputVolume: Double = defaultAudioVolume,
+    val inputVolume: Double = defaultInputVolume,
+    val outputVolume: Double = defaultOutputVolume,
+    /** The 增强 switches: the gain is the volume × [audioVolumeBoostFactor]. */
+    val inputVolumeBoost: Boolean = false,
+    val outputVolumeBoost: Boolean = false,
     /**
      * Local listening volume for the music box bot's audio track. Independent of
      * [outputVolume] — it scales only the `__musicbox__` participant.
@@ -46,8 +58,10 @@ class StoredAudioDevices(
                 (outputDeviceId == null || outputDeviceId.isEmpty()) &&
                 (outputDeviceLabel == null || outputDeviceLabel.isEmpty()) &&
                 (outputDeviceGroupId == null || outputDeviceGroupId.isEmpty()) &&
-                inputVolume == defaultAudioVolume &&
-                outputVolume == defaultAudioVolume &&
+                inputVolume == defaultInputVolume &&
+                outputVolume == defaultOutputVolume &&
+                !inputVolumeBoost &&
+                !outputVolumeBoost &&
                 musicBoxVolume == defaultAudioVolume &&
                 screenShareVolume == defaultAudioVolume &&
                 screenShareMaxHeight == defaultScreenShareMaxHeight &&

@@ -620,7 +620,11 @@ test('a disconnected session reports the Dart defaults', () => {
   expect(session.connectedParticipantIdentities.size).toBe(0);
   expect(session.screenShareFor('u1')).toBeNull();
   expect(session.cameraFor('u1')).toBeNull();
-  expect(session.inputVolume).toBe(0.5);
+  // Unity, not Dart's 0.5: the old default halved the microphone and playback.
+  expect(session.inputVolume).toBe(1);
+  expect(session.outputVolume).toBe(1);
+  expect(session.inputVolumeBoost).toBe(false);
+  expect(session.outputVolumeBoost).toBe(false);
   expect(session.participantVoiceVolume('u1')).toBe(1);
   expect(session.screenShareMaxHeight).toBe(720);
   expect(session.screenShareFrameRate).toBe(30);

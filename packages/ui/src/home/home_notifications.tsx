@@ -1648,9 +1648,12 @@ function _useNotificationAvatarSize(): number {
 
 let _authBrandIconUrlCache: string | null = null;
 
-/** `assets/branding/auth_brand_icon.png`, bundled by Vite. */
+/**
+ * `assets/branding/auth_brand_icon.png`, bundled by Vite. PORT: its vector
+ * twin, which stays sharp at the avatar size on high-density screens.
+ */
 function _authBrandIconUrl(): string {
-  _authBrandIconUrlCache ??= new URL('../../../../assets/branding/auth_brand_icon.png', import.meta.url).href;
+  _authBrandIconUrlCache ??= new URL('../../../../assets/branding/auth_brand_icon.svg', import.meta.url).href;
   return _authBrandIconUrlCache;
 }
 

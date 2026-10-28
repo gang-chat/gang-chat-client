@@ -17,6 +17,8 @@ import com.gangchat.client.app.authoritativeLivePresenceChanges
 import com.gangchat.client.app.authoritativeLivePresenceUserIds
 import com.gangchat.client.app.canApplyPickedScreenShareSource
 import com.gangchat.client.app.canPatchSelectedLiveState
+import com.gangchat.client.app.defaultInputVolume
+import com.gangchat.client.app.defaultOutputVolume
 import com.gangchat.client.app.isBenignGoneLiveStatePatch
 import com.gangchat.client.app.joinedLiveRoomToDisconnectBeforeJoin
 import com.gangchat.client.app.liveOutputMuteToggled
@@ -904,17 +906,32 @@ internal fun _HomeShellState._syncSettingsAudioVolumeToLive(kind: String, volume
     }
 }
 
+/** Settings persisted the switch already; apply it to the session only. */
+internal fun _HomeShellState._syncSettingsAudioVolumeBoostToLive(kind: String, boost: Boolean) {
+    if (kind == "audioinput") {
+        val liveSession = _liveSessionController
+        unawaited { liveSession.setInputVolumeBoost(boost, persist = false) }
+        return
+    }
+    if (kind == "audiooutput") {
+        val liveSession = _liveSessionController
+        unawaited { liveSession.setOutputVolumeBoost(boost, persist = false) }
+    }
+}
+
 private fun _HomeShellState._rememberInputVolume(volume: Double) {
-    _lastInputVolumeBeforeMute = rememberedAudioVolume(volume)
+    _lastInputVolumeBeforeMute = rememberedAudioVolume(volume, defaultInputVolume)
 }
 
 private fun _HomeShellState._rememberOutputVolume(volume: Double) {
-    _lastOutputVolumeBeforeMute = rememberedAudioVolume(volume)
+    _lastOutputVolumeBeforeMute = rememberedAudioVolume(volume, defaultOutputVolume)
 }
 
-internal fun _HomeShellState._restoredInputVolume(): Double = restoredAudioVolume(_lastInputVolumeBeforeMute)
+internal fun _HomeShellState._restoredInputVolume(): Double =
+    restoredAudioVolume(_lastInputVolumeBeforeMute, defaultInputVolume)
 
-internal fun _HomeShellState._restoredOutputVolume(): Double = restoredAudioVolume(_lastOutputVolumeBeforeMute)
+internal fun _HomeShellState._restoredOutputVolume(): Double =
+    restoredAudioVolume(_lastOutputVolumeBeforeMute, defaultOutputVolume)
 
 internal suspend fun _HomeShellState._joinLive(source: String) {
     val room = _selectedRoom

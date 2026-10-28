@@ -113,11 +113,12 @@ import {
 } from '@gang-chat/core/app/audio_device_state';
 import {
   RestoredAudioDevices,
-  defaultAudioVolume,
+  defaultInputVolume,
+  defaultOutputVolume,
   storedAudioDeviceFrom,
   type AudioDeviceStore,
 } from '@gang-chat/core/app/audio_device_store';
-import { audioVolumePercentText, normalizedAudioVolume } from '@gang-chat/core/app/audio_levels';
+import { boostedAudioVolume, boostedAudioVolumePercentText, normalizedAudioVolume } from '@gang-chat/core/app/audio_levels';
 import {
   CloseBehavior,
   closeBehaviorDescription,
@@ -377,6 +378,8 @@ export interface SettingsPageProps {
   onMusicPlaylistsChanged?: (() => void) | null;
   onDeviceSelected?: ((kind: string, deviceId: string) => void) | null;
   onVolumeChanged?: ((kind: string, volume: number) => void) | null;
+  /** The 增强 switch of 'audioinput' / 'audiooutput' changed (already persisted). */
+  onVolumeBoostChanged?: ((kind: string, boost: boolean) => void) | null;
 
   /**
    * Fired when the user picks a screen-share resolution, so a live session can
@@ -474,6 +477,7 @@ function _settingsPageWidget(props: SettingsPageProps): _SettingsPageWidget {
     onMusicPlaylistsChanged: props.onMusicPlaylistsChanged ?? null,
     onDeviceSelected: props.onDeviceSelected ?? null,
     onVolumeChanged: props.onVolumeChanged ?? null,
+    onVolumeBoostChanged: props.onVolumeBoostChanged ?? null,
     onScreenShareMaxHeightChanged: props.onScreenShareMaxHeightChanged ?? null,
     onScreenShareFrameRateChanged: props.onScreenShareFrameRateChanged ?? null,
     onAccountDeleted: props.onAccountDeleted ?? null,
@@ -597,9 +601,11 @@ export class _SettingsPageState extends ViewState<_SettingsPageWidget> {
   _selectedInput: AudioDeviceInfo | null = null;
   _selectedOutput: AudioDeviceInfo | null = null;
   _busyDeviceId: string | null = null;
-  _inputVolume = defaultAudioVolume;
-  _outputVolume = defaultAudioVolume;
-  _lastOutputVolumeBeforeMute = defaultAudioVolume;
+  _inputVolume = defaultInputVolume;
+  _outputVolume = defaultOutputVolume;
+  _inputVolumeBoost = false;
+  _outputVolumeBoost = false;
+  _lastOutputVolumeBeforeMute = defaultOutputVolume;
   _inputLevel = 0.0;
   _outputLevel = 0.0;
   _testingInput = false;
@@ -1370,11 +1376,11 @@ export class _SettingsPageState extends ViewState<_SettingsPageWidget> {
   }
 
   _rememberOutputVolume(volume: number): void {
-    this._lastOutputVolumeBeforeMute = rememberedAudioVolume(volume);
+    this._lastOutputVolumeBeforeMute = rememberedAudioVolume(volume, defaultOutputVolume);
   }
 
   _restoredOutputVolume(): number {
-    return restoredAudioVolume(this._lastOutputVolumeBeforeMute);
+    return restoredAudioVolume(this._lastOutputVolumeBeforeMute, defaultOutputVolume);
   }
 
   _applyAudioTestStatePatch(patch: AudioTestStatePatch): void {
@@ -3202,9 +3208,20 @@ export class _SettingsPageState extends ViewState<_SettingsPageWidget> {
         outputVolume: stored.outputVolume,
       });
       this._rememberOutputVolume(patch.outputVolume);
-      this.setState(() => this._applyAudioVolumePatch(patch));
+      this.setState(() => {
+        this._applyAudioVolumePatch(patch);
+        // Boost belongs to the local device; a managed user keeps theirs.
+        if (!this._isManagingUser) {
+          this._inputVolumeBoost = stored.inputVolumeBoost;
+          this._outputVolumeBoost = stored.outputVolumeBoost;
+        }
+      });
       this.widget.onVolumeChanged?.('audioinput', patch.inputVolume);
       this.widget.onVolumeChanged?.('audiooutput', patch.outputVolume);
+      if (!this._isManagingUser) {
+        this.widget.onVolumeBoostChanged?.('audioinput', stored.inputVolumeBoost);
+        this.widget.onVolumeBoostChanged?.('audiooutput', stored.outputVolumeBoost);
+      }
       const platformFrameRateCap = this._platformFrameRateCap;
       this.setState(() => {
         this._screenShareMaxHeight = stored.screenShareMaxHeight;
@@ -3475,7 +3492,7 @@ export class _SettingsPageState extends ViewState<_SettingsPageWidget> {
       this.widget.onVolumeChanged?.('audioinput', patch.inputVolume);
       unawaited(this.widget.audioDeviceStore.writeInputVolume(patch.inputVolume));
       try {
-        await inputTest?.setCaptureVolume(patch.inputVolume);
+        await inputTest?.setCaptureVolume(boostedAudioVolume(patch.inputVolume, this._inputVolumeBoost));
       } catch {
         // The meter keeps scaling in app state.
       }
@@ -3486,10 +3503,28 @@ export class _SettingsPageState extends ViewState<_SettingsPageWidget> {
       this.widget.onVolumeChanged?.('audiooutput', patch.outputVolume);
       unawaited(this.widget.audioDeviceStore.writeOutputVolume(patch.outputVolume));
       try {
-        await outputTest?.setPlaybackVolume(patch.outputVolume);
+        await outputTest?.setPlaybackVolume(boostedAudioVolume(patch.outputVolume, this._outputVolumeBoost));
       } catch {
         // The test tone keeps its previous volume.
       }
+    }
+  }
+
+  async _setVolumeBoost(kind: 'audioinput' | 'audiooutput', boost: boolean): Promise<void> {
+    const input = kind === 'audioinput';
+    if ((input ? this._inputVolumeBoost : this._outputVolumeBoost) === boost) return;
+    this.setState(() => {
+      if (input) this._inputVolumeBoost = boost;
+      else this._outputVolumeBoost = boost;
+    });
+    this.widget.onVolumeBoostChanged?.(kind, boost);
+    const store = this.widget.audioDeviceStore;
+    unawaited(input ? store.writeInputVolumeBoost(boost) : store.writeOutputVolumeBoost(boost));
+    try {
+      if (input) await this._inputTest?.setCaptureVolume(boostedAudioVolume(this._inputVolume, boost));
+      else await this._outputTest?.setPlaybackVolume(boostedAudioVolume(this._outputVolume, boost));
+    } catch {
+      // The running test keeps its previous volume.
     }
   }
 
@@ -3533,7 +3568,7 @@ export class _SettingsPageState extends ViewState<_SettingsPageWidget> {
     try {
       handle = await this._audioTestService.startInputTest({
         inputDeviceId: this._selectedInput?.deviceId ?? null,
-        volume: this._inputVolume,
+        volume: boostedAudioVolume(this._inputVolume, this._inputVolumeBoost),
         onLevel: (level) => {
           if (!this.mounted) return;
           this.setState(() =>
@@ -3600,7 +3635,7 @@ export class _SettingsPageState extends ViewState<_SettingsPageWidget> {
     let handle: AudioTestHandle | null = null;
     try {
       handle = await this._audioTestService.startOutputTest({
-        volume: this._outputVolume,
+        volume: boostedAudioVolume(this._outputVolume, this._outputVolumeBoost),
         onLevel: (level) => {
           if (!this.mounted) return;
           this.setState(() =>
@@ -3711,7 +3746,8 @@ export class _SettingsPageState extends ViewState<_SettingsPageWidget> {
       [SettingsSection.security, email.length === 0 ? '未绑定邮箱' : this._accountEmailVerified ? '邮箱已验证' : '邮箱待验证'],
       [
         SettingsSection.voice,
-        `输入 ${audioVolumePercentText(this._inputVolume)} · ` + `输出 ${audioVolumePercentText(this._outputVolume)}`,
+        `输入 ${boostedAudioVolumePercentText(this._inputVolume, this._inputVolumeBoost)} · ` +
+          `输出 ${boostedAudioVolumePercentText(this._outputVolume, this._outputVolumeBoost)}`,
       ],
       [SettingsSection.stickers, stickerCount === 0 ? '上传与整理表情' : `${stickerCount} 个表情`],
       [SettingsSection.playlists, '整理个人歌单'],
@@ -4518,6 +4554,11 @@ export class _SettingsPageState extends ViewState<_SettingsPageWidget> {
                 testDisabled={this._isManagingUser}
                 onVolumeChanged={(value) => unawaited(this._setInputVolume(value))}
                 onToggleTest={() => unawaited(this._toggleInputTest())}
+                boost={this._inputVolumeBoost}
+                // A managed user's settings come from the server, which has no boost.
+                onBoostChanged={
+                  this._isManagingUser ? undefined : (value) => unawaited(this._setVolumeBoost('audioinput', value))
+                }
               />
             </_SettingsSubPanel>
           </_SettingsGroup>,
@@ -4547,6 +4588,10 @@ export class _SettingsPageState extends ViewState<_SettingsPageWidget> {
                 testDisabled={this._isManagingUser}
                 onVolumeChanged={(value) => unawaited(this._setOutputVolume(value))}
                 onToggleTest={() => unawaited(this._toggleOutputTest())}
+                boost={this._outputVolumeBoost}
+                onBoostChanged={
+                  this._isManagingUser ? undefined : (value) => unawaited(this._setVolumeBoost('audiooutput', value))
+                }
               />
             </_SettingsSubPanel>
           </_SettingsGroup>,

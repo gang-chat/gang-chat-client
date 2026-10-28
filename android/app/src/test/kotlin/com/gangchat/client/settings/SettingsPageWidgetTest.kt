@@ -125,6 +125,7 @@ class SettingsPageWidgetTest {
         releaseUpdateService: ReleaseUpdateService? = null,
         feedbackMailService: FeedbackMailService? = null,
         onVolumeChanged: ((String, Double) -> Unit)? = null,
+        onVolumeBoostChanged: ((String, Boolean) -> Unit)? = null,
         onScreenShareMaxHeightChanged: ((Int) -> Unit)? = null,
         onScreenShareFrameRateChanged: ((Int) -> Unit)? = null,
         generation: () -> Int = { 0 },
@@ -156,6 +157,7 @@ class SettingsPageWidgetTest {
                     closeBehaviorStore = MemorySettingsCloseBehaviorStore(),
                     languageStore = MemorySettingsLanguageStore(),
                     onVolumeChanged = onVolumeChanged,
+                    onVolumeBoostChanged = onVolumeBoostChanged,
                     onScreenShareMaxHeightChanged = onScreenShareMaxHeightChanged,
                     onScreenShareFrameRateChanged = onScreenShareFrameRateChanged,
                 )
@@ -658,10 +660,11 @@ class SettingsPageWidgetTest {
 
         setSlider("输入音量", 0.8f)
 
+        // A muted output comes back at the unity default (it was Dart's 0.5).
         assertEquals(0.8f, slider("输入音量").sliderValue(), 1e-4f)
-        assertEquals(0.5f, slider("输出音量").sliderValue(), 1e-4f)
+        assertEquals(1f, slider("输出音量").sliderValue(), 1e-4f)
         assertTrue(volumeChanges.contains("audioinput:0.80"))
-        assertTrue(volumeChanges.contains("audiooutput:0.50"))
+        assertTrue(volumeChanges.contains("audiooutput:1.00"))
 
         setSlider("输出音量", 0f)
 
@@ -670,6 +673,53 @@ class SettingsPageWidgetTest {
         assertTrue(volumeChanges.contains("audioinput:0.00"))
         assertTrue(volumeChanges.contains("audiooutput:0.00"))
     }
+
+    @Test
+    @Config(qualifiers = "w800dp-h1200dp-mdpi")
+    fun `settings boost switches raise the shown volume and report the change`() {
+        val store = FakeSettingsAudioDeviceStore(inputVolume = 1.0, outputVolume = 0.5, outputVolumeBoost = true)
+        val boostChanges = mutableListOf<String>()
+        pumpSettings(
+            audioDeviceStore = store,
+            onVolumeBoostChanged = { kind, boost -> boostChanges.add("$kind:$boost") },
+        )
+
+        compose.onAllNodesWithText("语音和视频").onFirst().performClick()
+        compose.pumpAndSettle()
+
+        // Settings reports the stored switches so a live session follows them.
+        assertEquals(listOf("audioinput:false", "audiooutput:true"), boostChanges)
+        val inputBoost = boostSwitch("输入音量")
+        val outputBoost = boostSwitch("输出音量")
+        assertFalse(inputBoost.isToggledOn())
+        assertTrue(outputBoost.isToggledOn())
+        assertEquals(1, compose.textCount("100%"))
+        assertEquals(1, compose.textCount("75%"))
+        assertEquals(2, compose.textCount("增强 +50%"))
+
+        inputBoost.performClick()
+        compose.pumpAndSettle()
+
+        assertTrue(inputBoost.isToggledOn())
+        assertEquals(listOf("audioinput:false", "audiooutput:true", "audioinput:true"), boostChanges)
+        assertEquals(listOf("input-volume-boost:true"), store.writes)
+        assertEquals(0, compose.textCount("100%"))
+        assertEquals(1, compose.textCount("150%"))
+
+        outputBoost.performClick()
+        compose.pumpAndSettle()
+
+        assertFalse(outputBoost.isToggledOn())
+        assertEquals("audiooutput:false", boostChanges.last())
+        assertEquals(listOf("input-volume-boost:true", "output-volume-boost:false"), store.writes)
+        assertEquals(1, compose.textCount("50%"))
+    }
+
+    private fun boostSwitch(title: String) =
+        compose.onNode(
+            (hasTestTag(settingsVolumeBoostTag(title)) or hasAnyAncestor(hasTestTag(settingsVolumeBoostTag(title)))) and
+                hasToggleableState,
+        )
 
     private fun hasAnyAncestorSlider(): SemanticsMatcher =
         SemanticsMatcher("is a volume slider") { node ->

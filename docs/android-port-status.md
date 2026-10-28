@@ -54,7 +54,7 @@ Flutter 工程随后从仓库移除。移植约定见 `docs/android-port-convent
 
 ## 修正了的 Flutter 版问题
 
-下面三处 Flutter 版在 Android 上有问题，原生版先一比一保留，确认后已修正（需真机验证听感和路由）：
+下面几处 Flutter 版在 Android 上有问题，原生版先一比一保留，确认后已修正（需真机验证听感和路由）：
 
 1. 新消息提示音不响：Flutter 版用 audioplayers 的低延迟模式播放内存里的音效，audioplayers_android
    不支持，`play` 一直静默失败。现在经 `SoundPoolCuePlayer`（`SoundPool`，音效先写进缓存目录）按
@@ -67,6 +67,15 @@ Flutter 工程随后从仓库移除。移植约定见 `docs/android-port-convent
 3. 录语音消息时把麦克风切到蓝牙耳机，结束后清除通信设备，会打乱正在进行的通话的音频路由（插件
    即使没切换过也会清除）。现在语音通话中录音不动路由；不在通话中时只撤销自己做的切换并恢复原来的
    通信设备，停止录音时也会撤销（插件只在取消和释放时撤销，正常结束后一直占着蓝牙通话链路）。
+4. 输入、输出音量默认 50%：Flutter 版（各端都是）把默认的 0.5 直接当增益，发出去的声音和听到的声音
+   默认都只有一半。现在两者默认 100%（滑块拉满），并各有一个“增强 +50%”开关，打开后增益为音量 × 1.5；
+   开关存为 `gang.audioInputVolumeBoost` / `gang.audioOutputVolumeBoost`。存着旧默认 0.5 的输入、输出
+   音量在第一次读取时改成 1.0（只做一次，记在 `gang.audioUnityVolumeDefaults`）；音乐盒和屏幕共享音量仍
+   默认 50%。桌面端和 Web 端同样修改。
+5. 登录页标志有点失真：Flutter 版从 1x–4x 几张 PNG 里挑最接近屏幕密度的一张，再用 `FilterQuality.none`
+   （最近邻）缩放，密度落在两档之间（2.625、2.75、3.5 等常见手机）时线条呈锯齿、粗细不匀。现在标志是
+   矢量图（`res/drawable/auth_brand_icon.xml`，与 `assets/branding/auth_brand_icon.svg` 同形），
+   通知里管理员头像用的同一个标志也一样，PNG 分辨率变体已删除。桌面端和 Web 端改用该 SVG。
 
 ## 与 Flutter 版的差异
 

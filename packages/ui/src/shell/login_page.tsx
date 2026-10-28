@@ -138,18 +138,14 @@ const _authModeSegments = [
   new Segment({ value: _AuthMode.register, label: '注册', icon: _personAddAlt1Outlined }),
 ];
 
-// `Image.asset('assets/branding/auth_brand_icon.png')` with its
-// resolution-aware variants.
-const _authBrandIcon = new URL('../../../../assets/branding/auth_brand_icon.png', import.meta.url).href;
-const _authBrandIconSrcSet = [
-  `${_authBrandIcon} 1x`,
-  `${new URL('../../../../assets/branding/1.25x/auth_brand_icon.png', import.meta.url).href} 1.25x`,
-  `${new URL('../../../../assets/branding/1.5x/auth_brand_icon.png', import.meta.url).href} 1.5x`,
-  `${new URL('../../../../assets/branding/1.75x/auth_brand_icon.png', import.meta.url).href} 1.75x`,
-  `${new URL('../../../../assets/branding/2.0x/auth_brand_icon.png', import.meta.url).href} 2x`,
-  `${new URL('../../../../assets/branding/3.0x/auth_brand_icon.png', import.meta.url).href} 3x`,
-  `${new URL('../../../../assets/branding/4.0x/auth_brand_icon.png', import.meta.url).href} 4x`,
-].join(', ');
+// `Image.asset('assets/branding/auth_brand_icon.png')`.
+//
+// PORT: the vector twin of the PNG. Flutter drew the bitmap variants with
+// FilterQuality.none; in the browser that nearest-neighbour scaling is only
+// crisp when the 36px box lands exactly on device pixels, so at a fractional
+// position or scale it dropped and doubled pixel rows and the mark looked
+// distorted. The SVG is rasterised at the device resolution instead.
+const _authBrandIcon = new URL('../../../../assets/branding/auth_brand_icon.svg', import.meta.url).href;
 
 const _noopAccountHistoryStore = new NoopLoginAccountHistoryStore();
 
@@ -982,7 +978,6 @@ function _buildTitleBar(windowController: DesktopWindowController | null): React
           <img
             data-testid="auth-brand-icon"
             src={_authBrandIcon}
-            srcSet={_authBrandIconSrcSet}
             width={_authBrandIconSize}
             height={_authBrandIconSize}
             alt=""
@@ -993,8 +988,6 @@ function _buildTitleBar(windowController: DesktopWindowController | null): React
               width: _authBrandIconSize,
               height: _authBrandIconSize,
               objectFit: 'contain',
-              // FilterQuality.none.
-              imageRendering: 'pixelated',
             }}
           />
           <SizedBox width={_authBrandGap} />

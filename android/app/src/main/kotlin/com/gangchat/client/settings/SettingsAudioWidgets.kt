@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
@@ -38,10 +39,12 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.gangchat.client.app.AudioDeviceInfo
@@ -52,7 +55,7 @@ import com.gangchat.client.app.audioDeviceInfoKind
 import com.gangchat.client.app.audioDeviceInfoLabel
 import com.gangchat.client.app.audioDeviceLabels
 import com.gangchat.client.app.audioLevelSegmentCount
-import com.gangchat.client.app.audioVolumePercentText
+import com.gangchat.client.app.boostedAudioVolumePercentText
 import com.gangchat.client.app.isSameAudioDevice
 import com.gangchat.client.live.androidScreenShareFrameRateCap
 import com.gangchat.client.live.normalizedScreenShareFrameRate
@@ -65,6 +68,7 @@ import com.gangchat.client.ui.Button
 import com.gangchat.client.ui.ButtonTone
 import com.gangchat.client.ui.PressableSurface
 import com.gangchat.client.ui.UiColors
+import com.gangchat.client.ui.UiSwitch
 import com.gangchat.client.ui.uiTextStyle
 import com.gangchat.client.widgets.EdgeInsets
 import com.gangchat.client.widgets.Icon
@@ -132,6 +136,9 @@ fun settingsVolumeSliderTag(title: String) = "settings-volume-slider:$title"
 /** Test tag of the level meter in the panel titled [title]. */
 fun settingsLevelMeterTag(title: String) = "settings-level-meter:$title"
 
+/** Test tag of the 增强 switch in the panel titled [title]. */
+fun settingsVolumeBoostTag(title: String) = "settings-volume-boost:$title"
+
 @Composable
 internal fun _AudioControlPanel(
     title: String,
@@ -144,6 +151,9 @@ internal fun _AudioControlPanel(
     onVolumeChanged: (Double) -> Unit,
     onToggleTest: () -> Unit,
     testDisabled: Boolean = false,
+    /** The 增强 switch (gain × 1.5); [onBoostChanged] null when the volume cannot be boosted. */
+    boost: Boolean = false,
+    onBoostChanged: ((Boolean) -> Unit)? = null,
 ) {
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -156,8 +166,34 @@ internal fun _AudioControlPanel(
                 overflow = TextOverflow.Ellipsis,
                 style = uiTextStyle(color = _textPrimary, fontSize = 15.0, fontWeight = FontWeight.W600),
             )
+            if (onBoostChanged != null) {
+                Text(
+                    "增强 +50%",
+                    softWrap = false,
+                    style =
+                        uiTextStyle(
+                            color = if (boost) _textPrimary else _textSecondary,
+                            fontSize = 12.0,
+                            fontWeight = FontWeight.W600,
+                        ),
+                )
+                Spacer(Modifier.width(8.dp))
+                UiSwitch(
+                    value = boost,
+                    onChanged = if (disabled) null else onBoostChanged,
+                    tooltip = "在当前音量上再放大 50%",
+                    modifier =
+                        Modifier
+                            .testTag(settingsVolumeBoostTag(title))
+                            .semantics { contentDescription = "${title}增强" },
+                )
+                Spacer(Modifier.width(14.dp))
+            }
             Text(
-                audioVolumePercentText(volume),
+                boostedAudioVolumePercentText(volume, boost),
+                modifier = Modifier.widthIn(min = 38.dp),
+                textAlign = TextAlign.End,
+                softWrap = false,
                 style = uiTextStyle(color = _textSecondary, fontSize = 13.0, fontWeight = FontWeight.W600),
             )
         }

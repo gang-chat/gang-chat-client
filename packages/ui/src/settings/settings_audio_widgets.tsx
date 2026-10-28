@@ -17,7 +17,11 @@ import {
   audioDeviceInfoKind,
   audioDeviceInfoLabel,
 } from '@gang-chat/core/app/audio_device_info';
-import { activeAudioLevelSegmentCount, audioLevelSegmentCount, audioVolumePercentText } from '@gang-chat/core/app/audio_levels';
+import {
+  activeAudioLevelSegmentCount,
+  audioLevelSegmentCount,
+  boostedAudioVolumePercentText,
+} from '@gang-chat/core/app/audio_levels';
 import { HostPlatform } from '@gang-chat/core/config/host_platform';
 import {
   androidScreenShareFrameRateCap,
@@ -38,6 +42,7 @@ import { useElementSize } from '../lib/use_element_size';
 import { Button, ButtonTone } from '../ui/button';
 import { Icon, Icons, type IconData } from '../ui/icon';
 import { PressableSurface } from '../ui/surface';
+import { UiSwitch } from '../ui/switch';
 import { UiColors, UiSpacing, withAlpha } from '../ui/tokens';
 import { _borderColor, _cyan, _primaryDark, _primaryDarkLow, _textMuted, _textPrimary, _textSecondary } from './settings_page';
 import { _SettingsEmptyState } from './settings_profile_widgets';
@@ -128,6 +133,9 @@ export interface _AudioControlPanelProps {
   onVolumeChanged: (value: number) => void;
   onToggleTest: () => void;
   testDisabled?: boolean;
+  /** The 增强 switch (gain × 1.5); omitted when the volume cannot be boosted. */
+  boost?: boolean;
+  onBoostChanged?: (value: boolean) => void;
 }
 
 export function _AudioControlPanel({
@@ -141,6 +149,8 @@ export function _AudioControlPanel({
   onVolumeChanged,
   onToggleTest,
   testDisabled = false,
+  boost = false,
+  onBoostChanged,
 }: _AudioControlPanelProps) {
   return (
     <Column crossAxisAlignment="start">
@@ -152,8 +162,26 @@ export function _AudioControlPanel({
             {title}
           </Text>
         </Expanded>
-        <Text softWrap={false} style={{ color: _textSecondary, fontSize: 13, fontWeight: 600 }}>
-          {audioVolumePercentText(volume)}
+        {onBoostChanged != null ? (
+          <>
+            <Text softWrap={false} style={{ color: boost ? _textPrimary : _textSecondary, fontSize: 12, fontWeight: 600 }}>
+              增强 +50%
+            </Text>
+            <SizedBox width={8} />
+            <UiSwitch
+              value={boost}
+              onChanged={disabled ? null : onBoostChanged}
+              tooltip="在当前音量上再放大 50%"
+              aria-label={`${title}增强`}
+            />
+            <SizedBox width={14} />
+          </>
+        ) : null}
+        <Text
+          softWrap={false}
+          style={{ color: _textSecondary, fontSize: 13, fontWeight: 600, minWidth: 38, textAlign: 'right' }}
+        >
+          {boostedAudioVolumePercentText(volume, boost)}
         </Text>
       </Row>
       <SizedBox height={8} />

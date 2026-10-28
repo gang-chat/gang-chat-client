@@ -51,9 +51,12 @@ import { ChangeNotifier } from '../lib/change_notifier';
 import { StreamController, type EventStream, type StreamSubscription } from '../lib/event_stream';
 import { HostPlatform } from '../config/host_platform';
 import { hasPlatform, platform } from '../platform/platform';
-import { defaultAudioVolume, type AudioDeviceStore } from '../app/audio_device_store';
+import { defaultAudioVolume, defaultInputVolume, defaultOutputVolume, type AudioDeviceStore } from '../app/audio_device_store';
 import {
   defaultParticipantVoiceVolume,
+  audioVolumeBoostFactor,
+  boostedAudioVolume,
+  maxParticipantVoiceVolume,
   normalizedAudioVolume,
   normalizedParticipantVoiceVolume,
 } from '../app/audio_levels';
@@ -728,8 +731,10 @@ export class LiveSession extends ChangeNotifier {
   private _reconnectRecoveryRevision = 0;
   private _reconnectRecoveryTail: Promise<void> = Promise.resolve();
   private _suppressAutomaticMicReconcile = false;
-  private _inputVolume = defaultAudioVolume;
-  private _outputVolume = defaultAudioVolume;
+  private _inputVolume = defaultInputVolume;
+  private _outputVolume = defaultOutputVolume;
+  private _inputVolumeBoost = false;
+  private _outputVolumeBoost = false;
   private _musicBoxVolume = defaultAudioVolume;
   private _androidMusicMediaRouteApplied: boolean | null = null;
   private _screenShareVolume = defaultAudioVolume;
@@ -854,6 +859,14 @@ export class LiveSession extends ChangeNotifier {
 
   get outputVolume(): number {
     return this._outputVolume;
+  }
+
+  get inputVolumeBoost(): boolean {
+    return this._inputVolumeBoost;
+  }
+
+  get outputVolumeBoost(): boolean {
+    return this._outputVolumeBoost;
   }
 
   /**
@@ -1297,6 +1310,20 @@ export class LiveSession extends ChangeNotifier {
 
   async setOutputVolume(volume: number): Promise<void> {
     this._outputVolume = normalizedAudioVolume(volume);
+    await this._applyOutputVolume();
+  }
+
+  /** The 增强 switch: the microphone gain becomes the volume × [audioVolumeBoostFactor]. */
+  async setInputVolumeBoost(boost: boolean): Promise<void> {
+    if (this._inputVolumeBoost === boost) return;
+    this._inputVolumeBoost = boost;
+    await this._applyLocalMicrophoneState();
+  }
+
+  /** The 增强 switch: voice playback becomes the volume × [audioVolumeBoostFactor]. */
+  async setOutputVolumeBoost(boost: boolean): Promise<void> {
+    if (this._outputVolumeBoost === boost) return;
+    this._outputVolumeBoost = boost;
     await this._applyOutputVolume();
   }
 
@@ -2261,8 +2288,17 @@ export class LiveSession extends ChangeNotifier {
       return isOwnAux || !isWatched ? 0.0 : this._screenShareVolume;
     }
     if (participantIdentity === musicBoxBotIdentity) return this._musicBoxVolume;
-    const baseVolume = this._outputMuted ? 0.0 : this._outputVolume;
-    return normalizedParticipantVoiceVolume(baseVolume * this.participantVoiceVolume(participantIdentity));
+    return this._voicePlaybackVolume(participantIdentity);
+  }
+
+  /**
+   * A remote voice's playback gain: the output volume (× the 增强 factor)
+   * times that participant's own volume, at most both maxima combined.
+   */
+  private _voicePlaybackVolume(participantIdentity: string): number {
+    const baseVolume = this._outputMuted ? 0.0 : boostedAudioVolume(this._outputVolume, this._outputVolumeBoost);
+    const volume = baseVolume * this.participantVoiceVolume(participantIdentity);
+    return Math.min(Math.max(volume, 0.0), maxParticipantVoiceVolume * audioVolumeBoostFactor);
   }
 
   private _detachRemoteAudio(track: RemoteTrack): void {
@@ -2698,7 +2734,9 @@ export class LiveSession extends ChangeNotifier {
   }
 
   private get _effectiveInputVolume(): number {
-    return !this._canPublish || this._shouldMuteLocalMicrophone ? 0.0 : this._inputVolume;
+    return !this._canPublish || this._shouldMuteLocalMicrophone
+      ? 0.0
+      : boostedAudioVolume(this._inputVolume, this._inputVolumeBoost);
   }
 
   private _audioCaptureOptions(): AudioCaptureOptions {
@@ -2875,8 +2913,7 @@ export class LiveSession extends ChangeNotifier {
   }
 
   private async _applyParticipantVoiceVolumeToParticipant(participant: RemoteParticipant): Promise<void> {
-    const baseVolume = this._outputMuted ? 0.0 : this._outputVolume;
-    const volume = normalizedParticipantVoiceVolume(baseVolume * this.participantVoiceVolume(participant.identity));
+    const volume = this._voicePlaybackVolume(participant.identity);
     for (const pub of participant.audioTrackPublications.values()) {
       if (pub.source === Track.Source.ScreenShareAudio) continue;
       _setRemoteAudioVolume(pub, volume);

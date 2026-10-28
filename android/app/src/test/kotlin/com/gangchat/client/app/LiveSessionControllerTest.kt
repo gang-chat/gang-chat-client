@@ -13,6 +13,7 @@ import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -209,10 +210,10 @@ class LiveSessionControllerTest {
 
         controller.restoreStoredAudioSettings()
 
-        assertEquals(listOf(defaultAudioVolume), session.inputVolumes)
-        assertEquals(listOf(defaultAudioVolume), session.outputVolumes)
-        assertEquals(listOf(defaultAudioVolume), store.inputVolumeWrites)
-        assertEquals(listOf(defaultAudioVolume), store.outputVolumeWrites)
+        assertEquals(listOf(defaultInputVolume), session.inputVolumes)
+        assertEquals(listOf(defaultOutputVolume), session.outputVolumes)
+        assertEquals(listOf(defaultInputVolume), store.inputVolumeWrites)
+        assertEquals(listOf(defaultOutputVolume), store.outputVolumeWrites)
     }
 
     @Test
@@ -239,11 +240,39 @@ class LiveSessionControllerTest {
 
         controller.restoreStoredAudioSettings()
 
-        assertEquals(listOf(defaultAudioVolume), session.inputVolumes)
-        assertEquals(listOf(defaultAudioVolume), session.outputVolumes)
+        assertEquals(listOf(defaultInputVolume), session.inputVolumes)
+        assertEquals(listOf(defaultOutputVolume), session.outputVolumes)
         assertEquals(listOf(480), session.screenShareMaxHeights)
         assertEquals(listOf(30), session.screenShareFrameRates)
         assertEquals(1, restoredDevices)
+    }
+
+    @Test
+    fun `stored boost switches are restored and persisted unless Settings already did`() = gang.runTest {
+        val session = FakeLiveSession()
+        val store = RecordingAudioDeviceStore(storedInputVolumeBoost = true)
+        val controller =
+            LiveSessionController(
+                apiBaseUrl = "https://api.example.test/api/v1",
+                session = session,
+                audioDeviceStore = store,
+                audioDeviceRestorer = { null },
+            )
+
+        controller.restoreStoredAudioSettings()
+
+        assertEquals(listOf(true), session.inputVolumeBoosts)
+        assertEquals(listOf(false), session.outputVolumeBoosts)
+        assertTrue(controller.inputVolumeBoost)
+        assertFalse(controller.outputVolumeBoost)
+
+        controller.setOutputVolumeBoost(true, persist = false)
+        controller.setInputVolumeBoost(false)
+
+        assertEquals(listOf(false, true), session.outputVolumeBoosts)
+        assertEquals(listOf(true, false), session.inputVolumeBoosts)
+        assertTrue(store.outputVolumeBoostWrites.isEmpty())
+        assertEquals(listOf(false), store.inputVolumeBoostWrites)
     }
 
     @Test
@@ -380,6 +409,8 @@ private class FakeLiveSession(
     var disconnects = 0
     val inputVolumes = mutableListOf<Double>()
     val outputVolumes = mutableListOf<Double>()
+    val inputVolumeBoosts = mutableListOf<Boolean>()
+    val outputVolumeBoosts = mutableListOf<Boolean>()
     val participantVoiceVolumeWrites = mutableListOf<String>()
     val screenShareVolumes = mutableListOf<Double>()
     val outputMutes = mutableListOf<Boolean>()
@@ -391,8 +422,10 @@ private class FakeLiveSession(
     var connectedUrl: String? = null
     var connectedRoomName: String? = null
     var connectedMicMuted: Boolean? = null
-    private var _fakeInputVolume = defaultAudioVolume
-    private var _fakeOutputVolume = defaultAudioVolume
+    private var _fakeInputVolume = defaultInputVolume
+    private var _fakeOutputVolume = defaultOutputVolume
+    private var _fakeInputVolumeBoost = false
+    private var _fakeOutputVolumeBoost = false
     private var _fakeScreenShareVolume = defaultAudioVolume
     private var _fakeScreenShareFrameRate = 30
     private val _fakeParticipantVoiceVolumes = LinkedHashMap<String, Double>()
@@ -404,6 +437,10 @@ private class FakeLiveSession(
     override val inputVolume: Double get() = _fakeInputVolume
 
     override val outputVolume: Double get() = _fakeOutputVolume
+
+    override val inputVolumeBoost: Boolean get() = _fakeInputVolumeBoost
+
+    override val outputVolumeBoost: Boolean get() = _fakeOutputVolumeBoost
 
     override fun participantVoiceVolume(userId: String): Double {
         return _fakeParticipantVoiceVolumes[userId] ?: 1.0
@@ -436,6 +473,16 @@ private class FakeLiveSession(
     override suspend fun setOutputVolume(volume: Double) {
         _fakeOutputVolume = volume
         outputVolumes.add(volume)
+    }
+
+    override suspend fun setInputVolumeBoost(boost: Boolean) {
+        _fakeInputVolumeBoost = boost
+        inputVolumeBoosts.add(boost)
+    }
+
+    override suspend fun setOutputVolumeBoost(boost: Boolean) {
+        _fakeOutputVolumeBoost = boost
+        outputVolumeBoosts.add(boost)
     }
 
     override suspend fun setParticipantVoiceVolume(userId: String, volume: Double) {
@@ -487,12 +534,16 @@ private class RecordingAudioDeviceStore(
     val storedScreenShareFrameRate: Int = 30,
     val storedInputVolume: Double = 0.35,
     val storedOutputVolume: Double = 0.75,
+    val storedInputVolumeBoost: Boolean = false,
+    val storedOutputVolumeBoost: Boolean = false,
     val failVolumeWrites: Boolean = false,
     storedParticipantVoiceVolumes: Map<String, Double> = emptyMap(),
 ) : AudioDeviceStore() {
     private val _storedParticipantVoiceVolumes = LinkedHashMap(storedParticipantVoiceVolumes)
     val inputVolumeWrites = mutableListOf<Double>()
     val outputVolumeWrites = mutableListOf<Double>()
+    val inputVolumeBoostWrites = mutableListOf<Boolean>()
+    val outputVolumeBoostWrites = mutableListOf<Boolean>()
     val participantVoiceVolumeWrites = mutableListOf<String>()
     val screenShareVolumeWrites = mutableListOf<Double>()
     val screenShareWrites = mutableListOf<Int>()
@@ -502,6 +553,8 @@ private class RecordingAudioDeviceStore(
         return StoredAudioDevices(
             inputVolume = storedInputVolume,
             outputVolume = storedOutputVolume,
+            inputVolumeBoost = storedInputVolumeBoost,
+            outputVolumeBoost = storedOutputVolumeBoost,
             screenShareVolume = 1.0,
             screenShareMaxHeight = storedScreenShareMaxHeight,
             screenShareFrameRate = storedScreenShareFrameRate,
@@ -516,6 +569,14 @@ private class RecordingAudioDeviceStore(
     override suspend fun writeOutputVolume(volume: Double) {
         if (failVolumeWrites) throw IllegalStateException("output volume write failed")
         outputVolumeWrites.add(volume)
+    }
+
+    override suspend fun writeInputVolumeBoost(boost: Boolean) {
+        inputVolumeBoostWrites.add(boost)
+    }
+
+    override suspend fun writeOutputVolumeBoost(boost: Boolean) {
+        outputVolumeBoostWrites.add(boost)
     }
 
     override suspend fun readParticipantVoiceVolume(userId: String): Double {

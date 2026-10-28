@@ -8,7 +8,16 @@ import {
 import { normalizedAudioVolume } from './audio_levels';
 import { defaultScreenShareFrameRate, defaultScreenShareMaxHeight } from '../live/screen_share_quality';
 
+/** Default music-box and screen-share listening volume. */
 export const defaultAudioVolume = 0.5;
+
+/**
+ * Default microphone and playback gain: unity, the slider at its end. The
+ * Flutter client started both at [defaultAudioVolume], which halved the voice
+ * that was sent and everything that was heard.
+ */
+export const defaultInputVolume = 1.0;
+export const defaultOutputVolume = 1.0;
 
 export class StoredAudioDevices {
   constructor(
@@ -21,6 +30,8 @@ export class StoredAudioDevices {
       outputDeviceGroupId?: string | null;
       inputVolume?: number;
       outputVolume?: number;
+      inputVolumeBoost?: boolean;
+      outputVolumeBoost?: boolean;
       musicBoxVolume?: number;
       screenShareVolume?: number;
       screenShareMaxHeight?: number;
@@ -33,8 +44,10 @@ export class StoredAudioDevices {
     this.outputDeviceId = opts.outputDeviceId ?? null;
     this.outputDeviceLabel = opts.outputDeviceLabel ?? null;
     this.outputDeviceGroupId = opts.outputDeviceGroupId ?? null;
-    this.inputVolume = opts.inputVolume ?? defaultAudioVolume;
-    this.outputVolume = opts.outputVolume ?? defaultAudioVolume;
+    this.inputVolume = opts.inputVolume ?? defaultInputVolume;
+    this.outputVolume = opts.outputVolume ?? defaultOutputVolume;
+    this.inputVolumeBoost = opts.inputVolumeBoost ?? false;
+    this.outputVolumeBoost = opts.outputVolumeBoost ?? false;
     this.musicBoxVolume = opts.musicBoxVolume ?? defaultAudioVolume;
     this.screenShareVolume = opts.screenShareVolume ?? defaultAudioVolume;
     this.screenShareMaxHeight = opts.screenShareMaxHeight ?? defaultScreenShareMaxHeight;
@@ -49,6 +62,10 @@ export class StoredAudioDevices {
   readonly outputDeviceGroupId: string | null;
   readonly inputVolume: number;
   readonly outputVolume: number;
+
+  /** The 增强 switches: the gain is the volume × [audioVolumeBoostFactor]. */
+  readonly inputVolumeBoost: boolean;
+  readonly outputVolumeBoost: boolean;
 
   /**
    * Local listening volume for the music box bot's audio track. Independent of
@@ -83,8 +100,10 @@ export class StoredAudioDevices {
       _isBlank(this.outputDeviceId) &&
       _isBlank(this.outputDeviceLabel) &&
       _isBlank(this.outputDeviceGroupId) &&
-      this.inputVolume === defaultAudioVolume &&
-      this.outputVolume === defaultAudioVolume &&
+      this.inputVolume === defaultInputVolume &&
+      this.outputVolume === defaultOutputVolume &&
+      !this.inputVolumeBoost &&
+      !this.outputVolumeBoost &&
       this.musicBoxVolume === defaultAudioVolume &&
       this.screenShareVolume === defaultAudioVolume &&
       this.screenShareMaxHeight === defaultScreenShareMaxHeight &&

@@ -26,8 +26,10 @@ class LocalAudioDeviceStoreTest {
 
         assertNull(stored.inputDeviceId)
         assertNull(stored.outputDeviceId)
-        assertEquals(0.5, stored.inputVolume, 0.0)
-        assertEquals(0.5, stored.outputVolume, 0.0)
+        assertEquals(1.0, stored.inputVolume, 0.0)
+        assertEquals(1.0, stored.outputVolume, 0.0)
+        assertEquals(false, stored.inputVolumeBoost)
+        assertEquals(false, stored.outputVolumeBoost)
         assertEquals(0.5, stored.musicBoxVolume, 0.0)
         assertEquals(0.5, stored.screenShareVolume, 0.0)
         assertEquals(720, stored.screenShareMaxHeight)
@@ -75,6 +77,52 @@ class LocalAudioDeviceStoreTest {
             store.readParticipantVoiceVolume("user/2"),
             1e-9,
         )
+    }
+
+    @Test
+    fun `the boost switches round-trip`() = gang.runTest {
+        val store = LocalAudioDeviceStore()
+
+        store.writeInputVolumeBoost(true)
+        store.writeOutputVolumeBoost(false)
+        var stored = store.read()
+        assertEquals(true, stored.inputVolumeBoost)
+        assertEquals(false, stored.outputVolumeBoost)
+
+        store.writeInputVolumeBoost(false)
+        store.writeOutputVolumeBoost(true)
+        stored = store.read()
+        assertEquals(false, stored.inputVolumeBoost)
+        assertEquals(true, stored.outputVolumeBoost)
+        val prefs = SharedPreferences.getInstance()
+        assertEquals(false, prefs.get("gang.audioInputVolumeBoost"))
+        assertEquals(true, prefs.get("gang.audioOutputVolumeBoost"))
+    }
+
+    @Test
+    fun `input and output volumes left at the old 0_5 default move to unity once`() = gang.runTest {
+        SharedPreferences.setMockInitialValues(
+            mapOf(
+                "gang.audioInputVolume" to 0.5,
+                "gang.audioOutputVolume" to 0.3,
+                "gang.musicBoxVolume" to 0.5,
+                "gang.screenShareVolume" to 0.5,
+            ),
+        )
+        val store = LocalAudioDeviceStore()
+
+        var stored = store.read()
+        assertEquals(1.0, stored.inputVolume, 0.0)
+        // A chosen volume and the music box / screen share defaults stay.
+        assertEquals(0.3, stored.outputVolume, 1e-9)
+        assertEquals(0.5, stored.musicBoxVolume, 0.0)
+        assertEquals(0.5, stored.screenShareVolume, 0.0)
+        assertEquals(1.0, SharedPreferences.getInstance().getDouble("gang.audioInputVolume"))
+
+        // After the move, 0.5 is a choice and stays.
+        store.writeInputVolume(0.5)
+        stored = store.read()
+        assertEquals(0.5, stored.inputVolume, 0.0)
     }
 
     @Test

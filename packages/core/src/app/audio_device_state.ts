@@ -6,7 +6,7 @@ import {
   audioDevicesByKind,
   selectedAudioDeviceFrom,
 } from './audio_device_display';
-import { defaultAudioVolume } from './audio_device_preferences';
+import { defaultAudioVolume, defaultOutputVolume } from './audio_device_preferences';
 import { normalizedAudioVolume } from './audio_levels';
 import { userFacingErrorMessage } from './error_display';
 
@@ -256,12 +256,12 @@ export function audioInputVolumeChanged(opts: {
   outputVolume: number;
   restoreOutputVolume?: number;
 }): AudioVolumePatch {
-  const { restoreOutputVolume = defaultAudioVolume } = opts;
+  const { restoreOutputVolume = defaultOutputVolume } = opts;
   const input = normalizedAudioVolume(opts.inputVolume);
   const output = normalizedAudioVolume(opts.outputVolume);
   return new AudioVolumePatch({
     inputVolume: input,
-    outputVolume: input > 0 && output === 0 ? restoredAudioVolume(restoreOutputVolume) : output,
+    outputVolume: input > 0 && output === 0 ? restoredAudioVolume(restoreOutputVolume, defaultOutputVolume) : output,
   });
 }
 
@@ -273,14 +273,15 @@ export function audioOutputVolumeChanged(opts: { inputVolume: number; outputVolu
   });
 }
 
-export function rememberedAudioVolume(volume: number): number {
+/** [fallback] is the volume to come back to when [volume] is 0 (muted). */
+export function rememberedAudioVolume(volume: number, fallback: number = defaultAudioVolume): number {
   const normalized = normalizedAudioVolume(volume);
-  return normalized > 0 ? normalized : defaultAudioVolume;
+  return normalized > 0 ? normalized : fallback;
 }
 
-export function restoredAudioVolume(volume: number): number {
+export function restoredAudioVolume(volume: number, fallback: number = defaultAudioVolume): number {
   const normalized = normalizedAudioVolume(volume);
-  return normalized > 0 ? normalized : defaultAudioVolume;
+  return normalized > 0 ? normalized : fallback;
 }
 
 export function audioInputVolumeChangedEffects(opts: {

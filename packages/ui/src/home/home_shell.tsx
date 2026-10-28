@@ -1,7 +1,7 @@
 import { createRef, useEffect, useLayoutEffect, useMemo, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 
 import type { AvailableAppUpdate } from '@gang-chat/core/app/app_update';
-import type { AudioDeviceStore } from '@gang-chat/core/app/audio_device_store';
+import { defaultInputVolume, defaultOutputVolume, type AudioDeviceStore } from '@gang-chat/core/app/audio_device_store';
 import { AndroidPushRegistrationController } from '@gang-chat/core/app/android_push_registration_controller';
 import { AuthenticatedAppServices } from '@gang-chat/core/app/authenticated_app_services';
 import type { AuthenticatedAppContext } from '@gang-chat/core/app/authenticated_app_context';
@@ -366,8 +366,8 @@ export class HomeShellState extends ViewState<ResolvedHomeShellProps> {
   _micMuted = false;
   _headphonesMuted = false;
   readonly _liveStateRequests = new LiveStateRequestQueue();
-  _lastInputVolumeBeforeMute = _defaultLiveVolumeRestore;
-  _lastOutputVolumeBeforeMute = _defaultLiveVolumeRestore;
+  _lastInputVolumeBeforeMute = defaultInputVolume;
+  _lastOutputVolumeBeforeMute = defaultOutputVolume;
   _lastScreenShareVolumeBeforeMute = _defaultLiveVolumeRestore;
   _cameraOn = false;
   _screenSharing = false;
